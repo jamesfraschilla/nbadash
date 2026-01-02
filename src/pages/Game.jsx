@@ -19,9 +19,13 @@ export default function Game() {
   const dateParam = params.get("d");
   const [segment, setSegment] = useState("all");
   const statsNavRef = useRef(null);
+  const boxScoreNavRef = useRef(null);
   const handleScrollToAdvanced = () => {
-    if (!statsNavRef.current) return;
-    const top = window.scrollY + statsNavRef.current.getBoundingClientRect().top;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const handleScrollToBoxScore = () => {
+    if (!boxScoreNavRef.current) return;
+    const top = window.scrollY + boxScoreNavRef.current.getBoundingClientRect().top;
     const header = document.querySelector("header");
     const offset = header?.getBoundingClientRect().height || 0;
     window.scrollTo({ top: Math.max(0, top - offset), behavior: "smooth" });
@@ -388,41 +392,13 @@ export default function Game() {
         </div>
       </section>
 
-        <div className={styles.navRow}>
-          <SegmentSelector value={segment} onChange={setSegment} />
-          <Link to={dateParam ? `/m/${gameId}?d=${dateParam}` : `/m/${gameId}`}>Minutes</Link>
-          <Link to={dateParam ? `/g/${gameId}/events?d=${dateParam}` : `/g/${gameId}/events`}>
-            Play-by-Play
-          </Link>
-          <button
-            type="button"
-            className={styles.navButton}
-            onClick={handleScrollToAdvanced}
-          >
-            Advanced
-          </button>
-        </div>
-
-      <section className={styles.boxScoreSection}>
-        <BoxScoreTable
-          teamLabel={awayTeam.teamTricode}
-          boxScore={{ players: awayPlayers, totals: awayTotals }}
-          currentPeriod={game.period}
-        />
-        <BoxScoreTable
-          teamLabel={homeTeam.teamTricode}
-          boxScore={{ players: homePlayers, totals: homeTotals }}
-          currentPeriod={game.period}
-        />
-      </section>
-
       <div className={`${styles.navRow} ${styles.navRowTight}`} ref={statsNavRef}>
         <SegmentSelector value={segment} onChange={setSegment} />
         <Link to={dateParam ? `/m/${gameId}?d=${dateParam}` : `/m/${gameId}`}>Minutes</Link>
         <Link to={dateParam ? `/g/${gameId}/events?d=${dateParam}` : `/g/${gameId}/events`}>
           Play-by-Play
         </Link>
-        <button type="button" className={styles.navButton} onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
+        <button type="button" className={styles.navButton} onClick={handleScrollToBoxScore}>
           Box Score
         </button>
       </div>
@@ -479,6 +455,34 @@ export default function Game() {
           homeAbr={homeTeam.teamTricode}
           awayAbr={awayTeam.teamTricode}
         />
+
+      <div className={styles.navRow} ref={boxScoreNavRef}>
+        <SegmentSelector value={segment} onChange={setSegment} />
+        <Link to={dateParam ? `/m/${gameId}?d=${dateParam}` : `/m/${gameId}`}>Minutes</Link>
+        <Link to={dateParam ? `/g/${gameId}/events?d=${dateParam}` : `/g/${gameId}/events`}>
+          Play-by-Play
+        </Link>
+        <button
+          type="button"
+          className={styles.navButton}
+          onClick={handleScrollToAdvanced}
+        >
+          Advanced
+        </button>
+      </div>
+
+      <section className={styles.boxScoreSection}>
+        <BoxScoreTable
+          teamLabel={awayTeam.teamTricode}
+          boxScore={{ players: awayPlayers, totals: awayTotals }}
+          currentPeriod={game.period}
+        />
+        <BoxScoreTable
+          teamLabel={homeTeam.teamTricode}
+          boxScore={{ players: homePlayers, totals: homeTotals }}
+          currentPeriod={game.period}
+        />
+      </section>
       </div>
     </div>
   );
