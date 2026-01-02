@@ -1,0 +1,93 @@
+.tableWrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  display: inline-block;
+}
+
+.table {
+  width: auto;
+  border-collapse: collapse;
+  font-size: 14px;
+  min-width: 720px;
+  color: var(--text);
+}
+
+.headerRow {
+  border-top: 2px solid var(--text);
+  border-bottom: 2px solid var(--text);
+}
+
+.table th,
+.table td {
+  padding: 5px 4px;
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.playerCol {
+  text-align: left;
+  min-width: 120px;
+  padding-left: 0;
+  padding-right: 8px;
+  position: sticky;
+  left: 0;
+  background-color: var(--bg);
+  z-index: 1;
+}
+
+.table th.playerCol {
+  z-index: 2;
+}
+
+.playerName {
+  display: inline-block;
+  margin-right: 6px;
+}
+
+.position {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.table tbody tr:hover {
+  background-color: var(--row-hover);
+}
+
+.shadedColumn {
+  background-color: var(--panel);
+}
+
+.table tbody tr:hover .shadedColumn {
+  background-color: var(--panel-hover);
+}
+
+.totalsRow {
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+
+.pfBlack {
+  color: var(--text);
+}
+
+.pfYellow {
+  color: var(--pf-yellow);
+  font-weight: 700;
+}
+
+.pfRed {
+  color: var(--pf-red);
+  font-weight: 700;
+}
+
+@media (max-width: 768px) {
+  .table {
+    min-width: 100%;
+    font-size: 12px;
+  }
+
+  .playerCol {
+    min-width: 100px;
+  }
+}

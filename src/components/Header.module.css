@@ -1,0 +1,134 @@
+.header {
+  background-color: var(--header-bg);
+  color: var(--header-text);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  overflow-x: auto;
+}
+
+.header::-webkit-scrollbar {
+  height: 8px;
+}
+
+.header::-webkit-scrollbar-track {
+  background: var(--header-scroll-track);
+}
+
+.header::-webkit-scrollbar-thumb {
+  background: var(--header-scroll-thumb);
+  border-radius: 4px;
+}
+
+.container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 16px;
+  min-width: max-content;
+  min-height: 48px;
+}
+
+.logoLink {
+  text-decoration: none;
+  color: inherit;
+  flex-shrink: 0;
+}
+
+.logo {
+  font-weight: 900;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.logoLine2 {
+  margin-top: -4px;
+}
+
+.datePickerWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.dateButton {
+  background-color: var(--header-button-bg);
+  border: 1px solid var(--header-button-border);
+  border-radius: 6px;
+  padding: 4px 12px;
+  color: var(--header-text);
+  font-size: 0.75rem;
+  cursor: pointer;
+  height: 28px;
+}
+
+.dateButton:hover {
+  background-color: var(--header-button-hover);
+  border-color: var(--header-button-border-hover);
+}
+
+.hiddenDateInput {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background-color: transparent;
+}
+
+.gamesWrapper {
+  display: flex;
+  flex: 1;
+}
+
+.gamesList {
+  display: flex;
+  gap: 12px;
+}
+
+.noGames {
+  color: var(--header-muted);
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+.themeToggle {
+  background-color: var(--header-button-bg);
+  border: 1px solid var(--header-button-border);
+  border-radius: 6px;
+  padding: 0;
+  color: var(--header-text);
+  font-size: 0.9rem;
+  cursor: pointer;
+  height: 28px;
+  width: 28px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.themeToggle:hover {
+  background-color: var(--header-button-hover);
+  border-color: var(--header-button-border-hover);
+}
+
+.modeGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.modeLabel {
+  font-size: 0.75rem;
+  color: var(--header-muted);
+}

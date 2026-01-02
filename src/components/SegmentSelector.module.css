@@ -1,0 +1,20 @@
+.dropdown {
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background-color: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s ease;
+  height: 32px;
+}
+
+.dropdown:hover {
+  border-color: var(--muted);
+}
+
+.dropdown:focus {
+  border-color: var(--highlight-text);
+}
