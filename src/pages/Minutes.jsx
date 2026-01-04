@@ -17,7 +17,7 @@ function StintCell({ stint, isLast, view }) {
   };
 
   const displayPlusMinus = (() => {
-    if (view === "home") return -(stint.plusMinus || 0);
+    if (view === "away") return -(stint.plusMinus || 0);
     if (view === "neutral") return Math.abs(stint.plusMinus || 0);
     return stint.plusMinus || 0;
   })();

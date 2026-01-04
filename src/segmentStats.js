@@ -86,6 +86,11 @@ function classifyShot(action) {
   return "mid";
 }
 
+function isPersonalFoul(action) {
+  const subtype = String(action.subType || "").toLowerCase();
+  return !subtype.includes("technical");
+}
+
 export function aggregateSegmentStats({
   actions,
   segment,
@@ -112,6 +117,19 @@ export function aggregateSegmentStats({
   const playerMap = new Map();
   const baseMap = new Map();
   basePlayers.forEach((player) => baseMap.set(player.personId, player));
+  const creditedBlocks = new Set();
+
+  const blockKey = (playerId, period, clock) =>
+    `${playerId}:${period || "na"}:${clock || "na"}`;
+
+  const creditBlock = (playerId, teamId, key) => {
+    if (!playerId || !teamId) return;
+    if (key && creditedBlocks.has(key)) return;
+    if (key) creditedBlocks.add(key);
+    const blocker = ensurePlayer(playerMap, playerId, baseMap.get(playerId));
+    blocker.blocks += 1;
+    if (teamTotals[teamId]) teamTotals[teamId].blocks += 1;
+  };
 
   const teamTotals = {
     [awayTeam.teamId]: {
@@ -125,6 +143,7 @@ export function aggregateSegmentStats({
       foulsPersonal: 0,
       transitionPoints: 0,
       transitionTurnovers: 0,
+      transitionPossessions: 0,
       secondChancePoints: 0,
       fieldGoalsMade: 0,
       fieldGoalsAttempted: 0,
@@ -156,6 +175,7 @@ export function aggregateSegmentStats({
       foulsPersonal: 0,
       transitionPoints: 0,
       transitionTurnovers: 0,
+      transitionPossessions: 0,
       secondChancePoints: 0,
       fieldGoalsMade: 0,
       fieldGoalsAttempted: 0,
@@ -194,7 +214,10 @@ export function aggregateSegmentStats({
 
     if (action.actionType === "2pt" || action.actionType === "3pt") {
       const description = `${action.description || ""} ${action.descriptor || ""}`.toLowerCase();
-      const isDriving = description.includes("driving");
+      const drivingKeywords = ["driving layup", "driving dunk", "driving float", "driving hook"];
+      const isDriving =
+        action.actionType === "2pt" &&
+        drivingKeywords.some((keyword) => description.includes(keyword));
       const isCutting = description.includes("cutting");
       const isPullup = /pull.?up/.test(description);
       const isCatchAndShoot3 = action.actionType === "3pt" && !isPullup;
@@ -205,6 +228,7 @@ export function aggregateSegmentStats({
 
       if (teamStats) {
         teamStats.fieldGoalsAttempted += 1;
+        if (isFastBreak) teamStats.transitionPossessions += 1;
         const shotType = classifyShot(action);
         if (shotType === "three") teamStats.threePointersAttempted += 1;
         if (shotType === "rim") teamStats.rimFieldGoalsAttempted += 1;
@@ -255,9 +279,9 @@ export function aggregateSegmentStats({
       }
 
       if (action.blockPersonId) {
-        const blocker = ensurePlayer(playerMap, action.blockPersonId, baseMap.get(action.blockPersonId));
-        blocker.blocks += 1;
-        if (teamStats) teamStats.blocks += 1;
+        const blockTeamId = isHome ? awayTeam.teamId : isAway ? homeTeam.teamId : null;
+        const key = blockKey(action.blockPersonId, action.period, action.clock);
+        creditBlock(action.blockPersonId, blockTeamId, key);
       }
     }
 
@@ -281,7 +305,7 @@ export function aggregateSegmentStats({
       const isOffensive = action.subType === "offensive";
       if (teamStats) {
         teamStats.reboundsTotal += 1;
-        if (isOffensive) teamStats.reboundsOffensive += 1;
+        if (isOffensive && action.personId) teamStats.reboundsOffensive += 1;
       }
       if (action.personId) {
         const player = ensurePlayer(playerMap, action.personId, baseMap.get(action.personId));
@@ -303,9 +327,8 @@ export function aggregateSegmentStats({
     }
 
     if (action.actionType === "block" && action.personId) {
-      const player = ensurePlayer(playerMap, action.personId, baseMap.get(action.personId));
-      player.blocks += 1;
-      if (teamStats) teamStats.blocks += 1;
+      const key = blockKey(action.personId, action.period, action.clock);
+      creditBlock(action.personId, action.teamId, key);
     }
 
     if (action.actionType === "turnover" && action.personId) {
@@ -316,14 +339,17 @@ export function aggregateSegmentStats({
         teamStats.turnovers += 1;
         if (qualifiers.includes("fromturnover") || qualifiers.includes("fastbreak")) {
           teamStats.transitionTurnovers += 1;
+          teamStats.transitionPossessions += 1;
         }
       }
     }
 
     if (action.actionType === "foul" && action.personId) {
-      const player = ensurePlayer(playerMap, action.personId, baseMap.get(action.personId));
-      player.foulsPersonal += 1;
-      if (teamStats) teamStats.foulsPersonal += 1;
+      if (isPersonalFoul(action)) {
+        const player = ensurePlayer(playerMap, action.personId, baseMap.get(action.personId));
+        player.foulsPersonal += 1;
+        if (teamStats) teamStats.foulsPersonal += 1;
+      }
     }
 
     if (action.actionType === "foul" && action.subType === "offensive") {

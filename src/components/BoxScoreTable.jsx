@@ -5,6 +5,7 @@ const columns = [
   "MIN",
   "PTS",
   "REB",
+  "OREB",
   "AST",
   "STL",
   "BLK",
@@ -23,6 +24,7 @@ function playerLine(player) {
     MIN: formatMinutes(player.minutes),
     PTS: player.points,
     REB: player.reboundsTotal,
+    OREB: player.reboundsOffensive,
     AST: player.assists,
     STL: player.steals,
     BLK: player.blocks,
@@ -107,6 +109,7 @@ export default function BoxScoreTable({ teamLabel, boxScore, currentPeriod }) {
               <td>{""}</td>
               <td>{boxScore.totals.points}</td>
               <td>{boxScore.totals.reboundsTotal}</td>
+              <td>{boxScore.totals.reboundsOffensive}</td>
               <td>{boxScore.totals.assists}</td>
               <td>{boxScore.totals.steals}</td>
               <td>{boxScore.totals.blocks}</td>

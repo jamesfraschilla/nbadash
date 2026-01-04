@@ -1,5 +1,5 @@
 import { Link, useSearchParams, useParams } from "react-router-dom";
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchGame, fetchMinutes, teamLogoUrl } from "../api.js";
 import { gameStatusLabel, normalizeClock } from "../utils.js";
@@ -13,11 +13,249 @@ import SegmentSelector from "../components/SegmentSelector.jsx";
 import { aggregateSegmentStats, computeKills, segmentPeriods } from "../segmentStats.js";
 import styles from "./Game.module.css";
 
+const SNAPSHOT_STORAGE_PREFIX = "nba-dashboard:snapshots:";
+const CORE_STAT_FIELDS = [
+  "points",
+  "reboundsTotal",
+  "reboundsOffensive",
+  "assists",
+  "blocks",
+  "steals",
+  "turnovers",
+  "foulsPersonal",
+  "fieldGoalsMade",
+  "fieldGoalsAttempted",
+  "threePointersMade",
+  "threePointersAttempted",
+  "freeThrowsMade",
+  "freeThrowsAttempted",
+  "rimFieldGoalsMade",
+  "rimFieldGoalsAttempted",
+  "midFieldGoalsMade",
+  "midFieldGoalsAttempted",
+];
+
+const reviveSnapshotEntry = (entry) => {
+  if (!entry?.snapshot) return entry;
+  const snapshot = entry.snapshot;
+  let playersMap = snapshot.players;
+  if (playersMap instanceof Map) {
+    return entry;
+  }
+  if (Array.isArray(playersMap)) {
+    playersMap = new Map(playersMap);
+  } else if (playersMap && typeof playersMap === "object") {
+    playersMap = new Map(Object.values(playersMap).map((player) => [player.personId, player]));
+  } else {
+    playersMap = new Map();
+  }
+  return {
+    ...entry,
+    snapshot: {
+      ...snapshot,
+      players: playersMap,
+    },
+  };
+};
+
+const serializeSnapshotEntry = (entry) => {
+  if (!entry?.snapshot) return entry;
+  const snapshot = entry.snapshot;
+  const players = snapshot.players instanceof Map
+    ? Array.from(snapshot.players.entries())
+    : snapshot.players;
+  return {
+    ...entry,
+    snapshot: {
+      ...snapshot,
+      players,
+    },
+  };
+};
+
+const loadSnapshots = (gameId) => {
+  if (typeof window === "undefined") return [];
+  const raw = window.localStorage.getItem(`${SNAPSHOT_STORAGE_PREFIX}${gameId}`);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map(reviveSnapshotEntry) : [];
+  } catch {
+    return [];
+  }
+};
+
+const saveSnapshots = (gameId, snapshots) => {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(
+    `${SNAPSHOT_STORAGE_PREFIX}${gameId}`,
+    JSON.stringify((snapshots || []).map(serializeSnapshotEntry))
+  );
+};
+
+const buildSnapshot = (boxScore) => {
+  if (!boxScore?.home || !boxScore?.away) return null;
+  const players = new Map();
+  [boxScore.home, boxScore.away].forEach((team) => {
+    (team.players || []).forEach((player) => {
+      players.set(player.personId, player);
+    });
+  });
+  return {
+    teams: {
+      [boxScore.home.teamId]: boxScore.home.totals,
+      [boxScore.away.teamId]: boxScore.away.totals,
+    },
+    players,
+  };
+};
+
+const diffStats = (start = {}, end = {}) => {
+  const diff = {};
+  CORE_STAT_FIELDS.forEach((field) => {
+    diff[field] = (end?.[field] || 0) - (start?.[field] || 0);
+  });
+  return diff;
+};
+
+const sumStats = (base = {}, delta = {}) => {
+  const sum = {};
+  CORE_STAT_FIELDS.forEach((field) => {
+    sum[field] = (base?.[field] || 0) + (delta?.[field] || 0);
+  });
+  return sum;
+};
+
+const diffSnapshots = (startSnapshot, endSnapshot, basePlayers) => {
+  if (!endSnapshot) return null;
+  const teamTotals = {};
+  Object.keys(endSnapshot.teams || {}).forEach((teamId) => {
+    teamTotals[teamId] = diffStats(startSnapshot?.teams?.[teamId], endSnapshot.teams[teamId]);
+  });
+  const playerMap = new Map();
+  basePlayers.forEach((player) => {
+    const start = startSnapshot?.players?.get(player.personId) || {};
+    const end = endSnapshot.players?.get(player.personId) || {};
+    const diff = diffStats(start, end);
+    playerMap.set(player.personId, {
+      personId: player.personId,
+      firstName: player.firstName || "",
+      familyName: player.familyName || "",
+      jerseyNum: player.jerseyNum || "",
+      position: player.position || "",
+      minutes: 0,
+      plusMinusPoints: 0,
+      ...diff,
+    });
+  });
+  return { teamTotals, playerMap };
+};
+
+const getPeriodEndKey = (period) => `period-end-${period}`;
+
+const buildChallengeCircles = (challenges) => {
+  const total = challenges?.challengesTotal ?? 0;
+  const won = challenges?.challengesWon ?? 0;
+
+  const circles = [];
+  if (total === 0) {
+    circles.push({ state: "available" });
+    return circles;
+  }
+
+  circles.push({ state: won >= 1 ? "won" : "lost" });
+
+  if (won >= 1) {
+    if (total >= 2) {
+      circles.push({ state: won >= 2 ? "won" : "lost" });
+    } else {
+      circles.push({ state: "available" });
+    }
+  }
+
+  return circles;
+};
+
+const getSegmentSnapshotBounds = (segment, snapshots, currentSnapshot, currentPeriod) => {
+  const snapshotEntries = snapshots || [];
+  const snapshotByKey = new Map(snapshotEntries.map((s) => [s.key, s]));
+  const periodEndEntry = (period) => snapshotByKey.get(getPeriodEndKey(period)) || null;
+  const periodEndSnapshot = (period) => periodEndEntry(period)?.snapshot || null;
+  const latestSnapshotEntry = snapshotEntries.reduce((latest, entry) => {
+    if (!entry?.actionNumber) return latest;
+    if (!latest || entry.actionNumber > latest.actionNumber) return entry;
+    return latest;
+  }, null);
+
+  const zeroSnapshot = { teams: {}, players: new Map() };
+
+  const isLivePeriod = (period) => currentPeriod === period;
+
+  switch (segment) {
+    case "all":
+      return {
+        start: zeroSnapshot,
+        startMeta: null,
+        end: currentSnapshot,
+        endIsLive: false,
+      };
+    case "q1":
+      return {
+        start: zeroSnapshot,
+        startMeta: null,
+        end: periodEndSnapshot(1) || (isLivePeriod(1) ? currentSnapshot : null),
+        endIsLive: isLivePeriod(1),
+      };
+    case "q2":
+      return {
+        start: periodEndSnapshot(1),
+        startMeta: periodEndEntry(1),
+        end: periodEndSnapshot(2) || (isLivePeriod(2) ? currentSnapshot : null),
+        endIsLive: isLivePeriod(2),
+      };
+    case "q3":
+      return {
+        start: periodEndSnapshot(2),
+        startMeta: periodEndEntry(2),
+        end: periodEndSnapshot(3) || (isLivePeriod(3) ? currentSnapshot : null),
+        endIsLive: isLivePeriod(3),
+      };
+    case "q4":
+      return {
+        start: periodEndSnapshot(3),
+        startMeta: periodEndEntry(3),
+        end: periodEndSnapshot(4) || (isLivePeriod(4) ? currentSnapshot : null),
+        endIsLive: isLivePeriod(4),
+      };
+    case "first-half":
+      return {
+        start: zeroSnapshot,
+        startMeta: null,
+        end:
+          periodEndSnapshot(2) ||
+          ((currentPeriod === 1 || currentPeriod === 2) ? currentSnapshot : null),
+        endIsLive: currentPeriod === 1 || currentPeriod === 2,
+      };
+    case "second-half":
+      return {
+        start: periodEndSnapshot(2),
+        startMeta: periodEndEntry(2),
+        end:
+          periodEndSnapshot(4) ||
+          ((currentPeriod === 3 || currentPeriod === 4) ? currentSnapshot : null),
+        endIsLive: currentPeriod === 3 || currentPeriod === 4,
+      };
+    default:
+      return null;
+  }
+};
+
 export default function Game() {
   const { gameId } = useParams();
   const [params] = useSearchParams();
   const dateParam = params.get("d");
   const [segment, setSegment] = useState("all");
+  const [snapshots, setSnapshots] = useState(() => loadSnapshots(gameId));
   const statsNavRef = useRef(null);
   const boxScoreNavRef = useRef(null);
   const handleScrollToAdvanced = () => {
@@ -36,44 +274,173 @@ export default function Game() {
     queryFn: () => fetchGame(gameId),
     enabled: Boolean(gameId),
     staleTime: 30_000,
+    refetchInterval: (data) => (data?.gameStatus === 3 ? false : 15_000),
+    refetchIntervalInBackground: true,
   });
 
   const { data: minutesData } = useQuery({
     queryKey: ["minutes", gameId],
     queryFn: () => fetchMinutes(gameId),
     enabled: Boolean(gameId),
+    refetchInterval: () => (game?.gameStatus === 3 ? false : 15_000),
+    refetchIntervalInBackground: true,
   });
 
-  if (isLoading) {
-    return <div className={styles.stateMessage}>Loading game details...</div>;
-  }
-
-  if (error || !game) {
-    return <div className={styles.stateMessage}>Failed to load game details.</div>;
-  }
-
-  const { homeTeam, awayTeam, teamStats, boxScore, officials, callsAgainst } = game;
-  const timeouts = game.timeouts;
-  const challenges = game.challenges;
-  const status = gameStatusLabel(game);
-  const isLive = game.gameStatus === 2;
-  const clock = isLive ? normalizeClock(game.gameClock) : null;
+  const { homeTeam, awayTeam, teamStats, boxScore, officials, callsAgainst } = game || {};
+  const timeouts = game?.timeouts;
+  const challenges = game?.challenges;
+  const status = game ? gameStatusLabel(game) : "";
+  const isLive = game?.gameStatus === 2;
+  const clock = isLive ? normalizeClock(game?.gameClock) : null;
 
   const basePlayers = [
     ...(boxScore?.away?.players || []),
     ...(boxScore?.home?.players || []),
   ];
 
-  const segmentStats = aggregateSegmentStats({
-    actions: game.playByPlayActions || [],
+  const currentSnapshot = useMemo(() => buildSnapshot(boxScore), [boxScore]);
+
+  useEffect(() => {
+    if (!gameId || !boxScore || !game) return;
+    const existing = loadSnapshots(gameId);
+    const existingKeys = new Set(existing.map((s) => s.key));
+    const additions = [];
+    const snapshot = buildSnapshot(boxScore);
+    if (!snapshot) return;
+
+    (game.playByPlayActions || []).forEach((action) => {
+      if (action.actionType === "period" && action.subType === "end") {
+        const key = getPeriodEndKey(action.period);
+        if (!existingKeys.has(key)) {
+          additions.push({
+            key,
+            type: "period-end",
+            period: action.period,
+            clock: action.clock,
+            actionNumber: action.actionNumber,
+            snapshot,
+            updatedAt: Date.now(),
+          });
+          existingKeys.add(key);
+        }
+      }
+      if (action.actionType === "timeout") {
+        const key = `timeout-${action.actionNumber}`;
+        if (!existingKeys.has(key)) {
+          additions.push({
+            key,
+            type: "timeout",
+            period: action.period,
+            clock: action.clock,
+            actionNumber: action.actionNumber,
+            snapshot,
+            updatedAt: Date.now(),
+          });
+          existingKeys.add(key);
+        }
+      }
+    });
+
+    if (additions.length) {
+      const nextSnapshots = [...existing, ...additions];
+      saveSnapshots(gameId, nextSnapshots);
+      setSnapshots(nextSnapshots);
+    }
+  }, [gameId, boxScore, game]);
+
+  useEffect(() => {
+    setSnapshots(loadSnapshots(gameId));
+  }, [gameId]);
+
+  const segmentStats = homeTeam?.teamId && awayTeam?.teamId
+    ? aggregateSegmentStats({
+      actions: game?.playByPlayActions || [],
+      segment,
+      minutesData,
+      homeTeam,
+      awayTeam,
+      basePlayers,
+    })
+    : { playerMap: new Map(), teamTotals: {} };
+
+  const snapshotBounds = useMemo(
+    () => getSegmentSnapshotBounds(segment, snapshots, currentSnapshot, game?.period),
+    [segment, snapshots, currentSnapshot, game?.period]
+  );
+  const snapshotLabel = useMemo(() => {
+    if (!snapshotBounds?.startMeta) return null;
+    const { type, period, clock } = snapshotBounds.startMeta;
+    const labelType = type === "period-end" ? "Period end" : "Timeout";
+    return `${labelType} (Q${period} ${clock})`;
+  }, [snapshotBounds]);
+  const snapshotStats = useMemo(() => {
+    if (!snapshotBounds || !snapshotBounds.end || !snapshotBounds.start) return null;
+    if (!homeTeam?.teamId || !awayTeam?.teamId) return null;
+    if (snapshotBounds.endIsLive && snapshotBounds.startMeta?.actionNumber != null) {
+      const filteredActions = (game?.playByPlayActions || []).filter(
+        (action) => action.actionNumber > snapshotBounds.startMeta.actionNumber
+      );
+      const deltaStats = aggregateSegmentStats({
+        actions: filteredActions,
+        segment,
+        minutesData,
+        homeTeam,
+        awayTeam,
+        basePlayers,
+      });
+
+      const teamTotals = {};
+      const teamIds = [homeTeam?.teamId, awayTeam?.teamId].filter(Boolean);
+      teamIds.forEach((teamId) => {
+        const base = snapshotBounds.start?.teams?.[teamId] || {};
+        const delta = deltaStats.teamTotals?.[teamId] || {};
+        teamTotals[teamId] = sumStats(base, delta);
+      });
+
+      const playerMap = new Map();
+      basePlayers.forEach((player) => {
+        const base = snapshotBounds.start?.players?.get(player.personId) || {};
+        const delta = deltaStats.playerMap?.get(player.personId) || {};
+        playerMap.set(player.personId, {
+          personId: player.personId,
+          firstName: player.firstName || "",
+          familyName: player.familyName || "",
+          jerseyNum: player.jerseyNum || "",
+          position: player.position || "",
+          minutes: delta.minutes ?? 0,
+          plusMinusPoints: delta.plusMinusPoints ?? 0,
+          ...sumStats(base, delta),
+        });
+      });
+
+      return { teamTotals, playerMap };
+    }
+
+    return diffSnapshots(snapshotBounds.start, snapshotBounds.end, basePlayers);
+  }, [
+    snapshotBounds,
+    basePlayers,
+    game?.playByPlayActions,
     segment,
     minutesData,
     homeTeam,
     awayTeam,
-    basePlayers,
-  });
+  ]);
 
-  const playerMap = segmentStats.playerMap;
+  const playerMap = useMemo(() => {
+    if (!snapshotStats) return segmentStats.playerMap;
+    const merged = new Map(segmentStats.playerMap);
+    snapshotStats.playerMap.forEach((snap, personId) => {
+      const base = merged.get(personId) || snap;
+      merged.set(personId, {
+        ...base,
+        ...snap,
+        minutes: base.minutes ?? snap.minutes,
+        plusMinusPoints: base.plusMinusPoints ?? snap.plusMinusPoints,
+      });
+    });
+    return merged;
+  }, [segmentStats.playerMap, snapshotStats]);
 
   const formatMinutesFromSeconds = (seconds) => {
     const safeSeconds = Math.max(0, Math.round(seconds || 0));
@@ -82,14 +449,29 @@ export default function Game() {
     return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   };
 
+  const parseDuration = (value) => {
+    if (!value) return null;
+    const match = /PT(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?/.exec(String(value));
+    if (!match) return null;
+    const minutes = Number(match[1] || 0);
+    const seconds = Number(match[2] || 0);
+    return Math.round(minutes * 60 + seconds);
+  };
+
   const buildPlayers = (players) =>
     players
       .map((player) => {
         const stats = playerMap.get(player.personId) || {};
+        const officialSeconds = segment === "all" ? parseDuration(player.minutes) : null;
+        const minutesSeconds =
+          segment === "all" && Number.isFinite(officialSeconds) ? officialSeconds : stats.minutes;
+        const plusMinusPoints =
+          segment === "all" && player.plusMinusPoints != null ? player.plusMinusPoints : stats.plusMinusPoints;
         return {
           ...player,
           ...stats,
-          minutes: formatMinutesFromSeconds(stats.minutes),
+          plusMinusPoints,
+          minutes: formatMinutesFromSeconds(minutesSeconds),
         };
       })
       .filter((player) => player.minutes !== "00:00" || player.points > 0 || player.reboundsTotal > 0);
@@ -97,8 +479,22 @@ export default function Game() {
   const awayPlayers = buildPlayers(boxScore?.away?.players || []);
   const homePlayers = buildPlayers(boxScore?.home?.players || []);
 
-  const awayTotals = segmentStats.teamTotals[awayTeam.teamId] || {};
-  const homeTotals = segmentStats.teamTotals[homeTeam.teamId] || {};
+  const baseAwayTotals = awayTeam?.teamId ? segmentStats.teamTotals[awayTeam.teamId] || {} : {};
+  const baseHomeTotals = homeTeam?.teamId ? segmentStats.teamTotals[homeTeam.teamId] || {} : {};
+  const awaySnapshotTotals = awayTeam?.teamId ? snapshotStats?.teamTotals?.[awayTeam.teamId] : null;
+  const homeSnapshotTotals = homeTeam?.teamId ? snapshotStats?.teamTotals?.[homeTeam.teamId] : null;
+  const awayTotals = awaySnapshotTotals ? { ...baseAwayTotals, ...awaySnapshotTotals } : baseAwayTotals;
+  const homeTotals = homeSnapshotTotals ? { ...baseHomeTotals, ...homeSnapshotTotals } : baseHomeTotals;
+  const advancedAwayTotals = baseAwayTotals;
+  const advancedHomeTotals = baseHomeTotals;
+
+  if (isLoading) {
+    return <div className={styles.stateMessage}>Loading game details...</div>;
+  }
+
+  if (error || !game) {
+    return <div className={styles.stateMessage}>Failed to load game details.</div>;
+  }
 
   const possessions = (teamTotals) =>
     (teamTotals.fieldGoalsAttempted || 0) +
@@ -110,32 +506,34 @@ export default function Game() {
 
   const ortgAway = useOfficialRatings
     ? Math.round(teamStats.away.offensiveRating)
-    : Math.round((awayTotals.points || 0) / Math.max(possessions(awayTotals), 1) * 100);
+    : Math.round((advancedAwayTotals.points || 0) / Math.max(possessions(advancedAwayTotals), 1) * 100);
   const ortgHome = useOfficialRatings
     ? Math.round(teamStats.home.offensiveRating)
-    : Math.round((homeTotals.points || 0) / Math.max(possessions(homeTotals), 1) * 100);
+    : Math.round((advancedHomeTotals.points || 0) / Math.max(possessions(advancedHomeTotals), 1) * 100);
   const netAway = useOfficialRatings
     ? Math.round(teamStats.away.netRating)
-    : ortgAway - Math.round((homeTotals.points || 0) / Math.max(possessions(homeTotals), 1) * 100);
+    : ortgAway - Math.round((advancedHomeTotals.points || 0) / Math.max(possessions(advancedHomeTotals), 1) * 100);
   const netHome = useOfficialRatings
     ? Math.round(teamStats.home.netRating)
-    : ortgHome - Math.round((awayTotals.points || 0) / Math.max(possessions(awayTotals), 1) * 100);
+    : ortgHome - Math.round((advancedAwayTotals.points || 0) / Math.max(possessions(advancedAwayTotals), 1) * 100);
 
   const officialAwayPossessions = teamStats?.away?.possessions;
   const officialHomePossessions = teamStats?.home?.possessions;
   const useOfficialPossessions = segment === "all" && officialAwayPossessions && officialHomePossessions;
 
   const awayPossessions = Math.max(
-    useOfficialPossessions ? officialAwayPossessions : possessions(awayTotals),
+    useOfficialPossessions ? officialAwayPossessions : possessions(advancedAwayTotals),
     1
   );
   const homePossessions = Math.max(
-    useOfficialPossessions ? officialHomePossessions : possessions(homeTotals),
+    useOfficialPossessions ? officialHomePossessions : possessions(advancedHomeTotals),
     1
   );
 
   const transitionStatsDerived = (teamTotals, possessionsCount) => ({
-    transitionRate: (teamTotals.transitionPoints || 0) ? ((teamTotals.transitionPoints || 0) / possessionsCount) * 100 : 0,
+    transitionRate: (teamTotals.transitionPossessions || 0)
+      ? ((teamTotals.transitionPossessions || 0) / possessionsCount) * 100
+      : 0,
     transitionPoints: teamTotals.transitionPoints || 0,
     transitionTurnovers: teamTotals.transitionTurnovers || 0,
     secondChancePoints: teamTotals.secondChancePoints || 0,
@@ -146,11 +544,20 @@ export default function Game() {
       : 0,
   });
 
-  const awayTransition = transitionStatsDerived(awayTotals, awayPossessions);
-  const homeTransition = transitionStatsDerived(homeTotals, homePossessions);
+  const useOfficialTransition = segment === "all"
+    && teamStats?.away?.transitionStats
+    && teamStats?.home?.transitionStats;
+  const awayTransitionDerived = transitionStatsDerived(advancedAwayTotals, awayPossessions);
+  const homeTransitionDerived = transitionStatsDerived(advancedHomeTotals, homePossessions);
+  const awayTransition = useOfficialTransition
+    ? { ...awayTransitionDerived, ...teamStats.away.transitionStats }
+    : awayTransitionDerived;
+  const homeTransition = useOfficialTransition
+    ? { ...homeTransitionDerived, ...teamStats.home.transitionStats }
+    : homeTransitionDerived;
 
-  const awayDefReb = (awayTotals.reboundsTotal || 0) - (awayTotals.reboundsOffensive || 0);
-  const homeDefReb = (homeTotals.reboundsTotal || 0) - (homeTotals.reboundsOffensive || 0);
+  const awayDefReb = (advancedAwayTotals.reboundsTotal || 0) - (advancedAwayTotals.reboundsOffensive || 0);
+  const homeDefReb = (advancedHomeTotals.reboundsTotal || 0) - (advancedHomeTotals.reboundsOffensive || 0);
 
   const efg = (fgm, fga, tpm) => (fga ? ((fgm + 0.5 * tpm) / fga) * 100 : 0);
   const tov = (to, fga, fta) => (fga || fta || to ? (to / (fga + 0.44 * fta + to)) * 100 : 0);
@@ -161,103 +568,103 @@ export default function Game() {
   const fourFactorRows = [
     {
       label: "eFG%",
-      awayValue: efg(awayTotals.fieldGoalsMade, awayTotals.fieldGoalsAttempted, awayTotals.threePointersMade),
-      homeValue: efg(homeTotals.fieldGoalsMade, homeTotals.fieldGoalsAttempted, homeTotals.threePointersMade),
+      awayValue: efg(advancedAwayTotals.fieldGoalsMade, advancedAwayTotals.fieldGoalsAttempted, advancedAwayTotals.threePointersMade),
+      homeValue: efg(advancedHomeTotals.fieldGoalsMade, advancedHomeTotals.fieldGoalsAttempted, advancedHomeTotals.threePointersMade),
       format: (v) => `${v.toFixed(1)}%`,
     },
     {
       label: "TOV%",
-      awayValue: tov(awayTotals.turnovers, awayTotals.fieldGoalsAttempted, awayTotals.freeThrowsAttempted),
-      homeValue: tov(homeTotals.turnovers, homeTotals.fieldGoalsAttempted, homeTotals.freeThrowsAttempted),
+      awayValue: tov(advancedAwayTotals.turnovers, advancedAwayTotals.fieldGoalsAttempted, advancedAwayTotals.freeThrowsAttempted),
+      homeValue: tov(advancedHomeTotals.turnovers, advancedHomeTotals.fieldGoalsAttempted, advancedHomeTotals.freeThrowsAttempted),
       format: (v) => `${v.toFixed(1)}%`,
     },
     {
       label: "ORB%",
-      awayValue: orb(awayTotals.reboundsOffensive, homeDefReb),
-      homeValue: orb(homeTotals.reboundsOffensive, awayDefReb),
+      awayValue: orb(advancedAwayTotals.reboundsOffensive, homeDefReb),
+      homeValue: orb(advancedHomeTotals.reboundsOffensive, awayDefReb),
       format: (v) => `${v.toFixed(1)}%`,
     },
     {
       label: "FTr",
-      awayValue: ftr(awayTotals.freeThrowsAttempted, awayTotals.fieldGoalsAttempted),
-      homeValue: ftr(homeTotals.freeThrowsAttempted, homeTotals.fieldGoalsAttempted),
+      awayValue: ftr(advancedAwayTotals.freeThrowsAttempted, advancedAwayTotals.fieldGoalsAttempted),
+      homeValue: ftr(advancedHomeTotals.freeThrowsAttempted, advancedHomeTotals.fieldGoalsAttempted),
       format: (v) => `${v.toFixed(1)}`,
     },
   ];
 
-  const totalFgaAway = awayTotals.fieldGoalsAttempted || 0;
-  const totalFgaHome = homeTotals.fieldGoalsAttempted || 0;
+  const totalFgaAway = advancedAwayTotals.fieldGoalsAttempted || 0;
+  const totalFgaHome = advancedHomeTotals.fieldGoalsAttempted || 0;
 
   const shotProfileRows = [
     {
       label: "Rim Rate",
-      awayValue: totalFgaAway ? ((awayTotals.rimFieldGoalsAttempted || 0) / totalFgaAway) * 100 : 0,
-      homeValue: totalFgaHome ? ((homeTotals.rimFieldGoalsAttempted || 0) / totalFgaHome) * 100 : 0,
+      awayValue: totalFgaAway ? ((advancedAwayTotals.rimFieldGoalsAttempted || 0) / totalFgaAway) * 100 : 0,
+      homeValue: totalFgaHome ? ((advancedHomeTotals.rimFieldGoalsAttempted || 0) / totalFgaHome) * 100 : 0,
       format: (v) => `${v.toFixed(1)}%`,
-      awayDetail: `${awayTotals.rimFieldGoalsMade || 0}/${awayTotals.rimFieldGoalsAttempted || 0}`,
-      homeDetail: `${homeTotals.rimFieldGoalsMade || 0}/${homeTotals.rimFieldGoalsAttempted || 0}`,
+      awayDetail: `${advancedAwayTotals.rimFieldGoalsMade || 0}/${advancedAwayTotals.rimFieldGoalsAttempted || 0}`,
+      homeDetail: `${advancedHomeTotals.rimFieldGoalsMade || 0}/${advancedHomeTotals.rimFieldGoalsAttempted || 0}`,
     },
     {
       label: "Mid Rate",
-      awayValue: totalFgaAway ? ((awayTotals.midFieldGoalsAttempted || 0) / totalFgaAway) * 100 : 0,
-      homeValue: totalFgaHome ? ((homeTotals.midFieldGoalsAttempted || 0) / totalFgaHome) * 100 : 0,
+      awayValue: totalFgaAway ? ((advancedAwayTotals.midFieldGoalsAttempted || 0) / totalFgaAway) * 100 : 0,
+      homeValue: totalFgaHome ? ((advancedHomeTotals.midFieldGoalsAttempted || 0) / totalFgaHome) * 100 : 0,
       format: (v) => `${v.toFixed(1)}%`,
-      awayDetail: `${awayTotals.midFieldGoalsMade || 0}/${awayTotals.midFieldGoalsAttempted || 0}`,
-      homeDetail: `${homeTotals.midFieldGoalsMade || 0}/${homeTotals.midFieldGoalsAttempted || 0}`,
+      awayDetail: `${advancedAwayTotals.midFieldGoalsMade || 0}/${advancedAwayTotals.midFieldGoalsAttempted || 0}`,
+      homeDetail: `${advancedHomeTotals.midFieldGoalsMade || 0}/${advancedHomeTotals.midFieldGoalsAttempted || 0}`,
     },
     {
       label: "3P Rate",
-      awayValue: totalFgaAway ? ((awayTotals.threePointersAttempted || 0) / totalFgaAway) * 100 : 0,
-      homeValue: totalFgaHome ? ((homeTotals.threePointersAttempted || 0) / totalFgaHome) * 100 : 0,
+      awayValue: totalFgaAway ? ((advancedAwayTotals.threePointersAttempted || 0) / totalFgaAway) * 100 : 0,
+      homeValue: totalFgaHome ? ((advancedHomeTotals.threePointersAttempted || 0) / totalFgaHome) * 100 : 0,
       format: (v) => `${v.toFixed(1)}%`,
-      awayDetail: `${awayTotals.threePointersMade || 0}/${awayTotals.threePointersAttempted || 0}`,
-      homeDetail: `${homeTotals.threePointersMade || 0}/${homeTotals.threePointersAttempted || 0}`,
+      awayDetail: `${advancedAwayTotals.threePointersMade || 0}/${advancedAwayTotals.threePointersAttempted || 0}`,
+      homeDetail: `${advancedHomeTotals.threePointersMade || 0}/${advancedHomeTotals.threePointersAttempted || 0}`,
     },
   ];
 
   const shotEffRows = [
     {
       label: "Rim FG%",
-      awayValue: awayTotals.rimFieldGoalsAttempted
-        ? (awayTotals.rimFieldGoalsMade / awayTotals.rimFieldGoalsAttempted) * 100
+      awayValue: advancedAwayTotals.rimFieldGoalsAttempted
+        ? (advancedAwayTotals.rimFieldGoalsMade / advancedAwayTotals.rimFieldGoalsAttempted) * 100
         : 0,
-      homeValue: homeTotals.rimFieldGoalsAttempted
-        ? (homeTotals.rimFieldGoalsMade / homeTotals.rimFieldGoalsAttempted) * 100
+      homeValue: advancedHomeTotals.rimFieldGoalsAttempted
+        ? (advancedHomeTotals.rimFieldGoalsMade / advancedHomeTotals.rimFieldGoalsAttempted) * 100
         : 0,
       format: (v) => `${v.toFixed(1)}%`,
-      awayDetail: `${awayTotals.rimFieldGoalsMade || 0}/${awayTotals.rimFieldGoalsAttempted || 0}`,
-      homeDetail: `${homeTotals.rimFieldGoalsMade || 0}/${homeTotals.rimFieldGoalsAttempted || 0}`,
+      awayDetail: `${advancedAwayTotals.rimFieldGoalsMade || 0}/${advancedAwayTotals.rimFieldGoalsAttempted || 0}`,
+      homeDetail: `${advancedHomeTotals.rimFieldGoalsMade || 0}/${advancedHomeTotals.rimFieldGoalsAttempted || 0}`,
     },
     {
       label: "Mid FG%",
-      awayValue: awayTotals.midFieldGoalsAttempted
-        ? (awayTotals.midFieldGoalsMade / awayTotals.midFieldGoalsAttempted) * 100
+      awayValue: advancedAwayTotals.midFieldGoalsAttempted
+        ? (advancedAwayTotals.midFieldGoalsMade / advancedAwayTotals.midFieldGoalsAttempted) * 100
         : 0,
-      homeValue: homeTotals.midFieldGoalsAttempted
-        ? (homeTotals.midFieldGoalsMade / homeTotals.midFieldGoalsAttempted) * 100
+      homeValue: advancedHomeTotals.midFieldGoalsAttempted
+        ? (advancedHomeTotals.midFieldGoalsMade / advancedHomeTotals.midFieldGoalsAttempted) * 100
         : 0,
       format: (v) => `${v.toFixed(1)}%`,
-      awayDetail: `${awayTotals.midFieldGoalsMade || 0}/${awayTotals.midFieldGoalsAttempted || 0}`,
-      homeDetail: `${homeTotals.midFieldGoalsMade || 0}/${homeTotals.midFieldGoalsAttempted || 0}`,
+      awayDetail: `${advancedAwayTotals.midFieldGoalsMade || 0}/${advancedAwayTotals.midFieldGoalsAttempted || 0}`,
+      homeDetail: `${advancedHomeTotals.midFieldGoalsMade || 0}/${advancedHomeTotals.midFieldGoalsAttempted || 0}`,
     },
     {
       label: "3P FG%",
-      awayValue: awayTotals.threePointersAttempted
-        ? (awayTotals.threePointersMade / awayTotals.threePointersAttempted) * 100
+      awayValue: advancedAwayTotals.threePointersAttempted
+        ? (advancedAwayTotals.threePointersMade / advancedAwayTotals.threePointersAttempted) * 100
         : 0,
-      homeValue: homeTotals.threePointersAttempted
-        ? (homeTotals.threePointersMade / homeTotals.threePointersAttempted) * 100
+      homeValue: advancedHomeTotals.threePointersAttempted
+        ? (advancedHomeTotals.threePointersMade / advancedHomeTotals.threePointersAttempted) * 100
         : 0,
       format: (v) => `${v.toFixed(1)}%`,
-      awayDetail: `${awayTotals.threePointersMade || 0}/${awayTotals.threePointersAttempted || 0}`,
-      homeDetail: `${homeTotals.threePointersMade || 0}/${homeTotals.threePointersAttempted || 0}`,
+      awayDetail: `${advancedAwayTotals.threePointersMade || 0}/${advancedAwayTotals.threePointersAttempted || 0}`,
+      homeDetail: `${advancedHomeTotals.threePointersMade || 0}/${advancedHomeTotals.threePointersAttempted || 0}`,
     },
   ];
 
   const awayDisruptions =
-    (awayTotals.steals || 0) + (awayTotals.blocks || 0) + (awayTotals.offensiveFoulsDrawn || 0);
+    (advancedAwayTotals.steals || 0) + (advancedAwayTotals.blocks || 0) + (advancedAwayTotals.offensiveFoulsDrawn || 0);
   const homeDisruptions =
-    (homeTotals.steals || 0) + (homeTotals.blocks || 0) + (homeTotals.offensiveFoulsDrawn || 0);
+    (advancedHomeTotals.steals || 0) + (advancedHomeTotals.blocks || 0) + (advancedHomeTotals.offensiveFoulsDrawn || 0);
   const buildCreatingStats = (teamTotals, fallback) => ({
     drivingFGMade: teamTotals.drivingFGMade ?? fallback?.drivingFGMade ?? 0,
     drivingFGAttempted: teamTotals.drivingFGAttempted ?? fallback?.drivingFGAttempted ?? 0,
@@ -268,8 +675,8 @@ export default function Game() {
     offensiveFoulsDrawn: teamTotals.offensiveFoulsDrawn ?? fallback?.offensiveFoulsDrawn ?? 0,
   });
 
-  const awayCreating = buildCreatingStats(awayTotals, teamStats?.away?.advancedStats);
-  const homeCreating = buildCreatingStats(homeTotals, teamStats?.home?.advancedStats);
+  const awayCreating = buildCreatingStats(advancedAwayTotals, teamStats?.away?.advancedStats);
+  const homeCreating = buildCreatingStats(advancedHomeTotals, teamStats?.home?.advancedStats);
 
   const parseClock = (clock) => {
     if (!clock) return 0;
@@ -339,7 +746,15 @@ export default function Game() {
             {timeouts && <div className={styles.teamMetaRow}>TO: {timeouts.away}</div>}
           {challenges && (
             <div className={styles.teamMetaRow}>
-              CC: {challenges.away?.challengesWon ?? 0}/{challenges.away?.challengesTotal ?? 0}
+              CC:
+              <span className={styles.challengeRow}>
+                {buildChallengeCircles(challenges.away).map((circle, index) => (
+                  <span
+                    key={`${circle.state}-${index}`}
+                    className={`${styles.challengeDot} ${styles[`challenge${circle.state[0].toUpperCase()}${circle.state.slice(1)}`]}`}
+                  />
+                ))}
+              </span>
             </div>
           )}
           <div className={styles.teamMetaRow}>
@@ -383,7 +798,15 @@ export default function Game() {
             {timeouts && <div className={styles.teamMetaRow}>TO: {timeouts.home}</div>}
           {challenges && (
             <div className={styles.teamMetaRow}>
-              CC: {challenges.home?.challengesWon ?? 0}/{challenges.home?.challengesTotal ?? 0}
+              CC:
+              <span className={styles.challengeRow}>
+                {buildChallengeCircles(challenges.home).map((circle, index) => (
+                  <span
+                    key={`${circle.state}-${index}`}
+                    className={`${styles.challengeDot} ${styles[`challenge${circle.state[0].toUpperCase()}${circle.state.slice(1)}`]}`}
+                  />
+                ))}
+              </span>
             </div>
           )}
           <div className={styles.teamMetaRow}>
@@ -394,6 +817,7 @@ export default function Game() {
 
       <div className={`${styles.navRow} ${styles.navRowTight}`} ref={statsNavRef}>
         <SegmentSelector value={segment} onChange={setSegment} />
+        {snapshotLabel ? <div className={styles.snapshotLabel}>{snapshotLabel}</div> : null}
         <Link to={dateParam ? `/m/${gameId}?d=${dateParam}` : `/m/${gameId}`}>Minutes</Link>
         <Link to={dateParam ? `/g/${gameId}/events?d=${dateParam}` : `/g/${gameId}/events`}>
           Play-by-Play

@@ -1,7 +1,7 @@
 .container {
   max-width: 1400px;
   margin: 0;
-  padding: 0 24px 40px;
+  padding: calc(16px + env(safe-area-inset-top)) 24px 40px;
 }
 
 .backRow {
@@ -27,6 +27,7 @@
   justify-content: center;
   align-items: flex-start;
   gap: 40px;
+  margin-top: calc(16px + env(safe-area-inset-top));
   margin-bottom: 16px;
 }
 
@@ -62,6 +63,37 @@
   font-weight: 400;
   color: var(--muted);
   line-height: 1.2;
+}
+
+.challengeRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 6px;
+}
+
+.challengeDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid #ffffff;
+  background-color: #ffffff;
+  display: inline-block;
+}
+
+.challengeAvailable {
+  background-color: #ffffff;
+  border-color: #ffffff;
+}
+
+.challengeWon {
+  background-color: #2e9b4f;
+  border-color: #2e9b4f;
+}
+
+.challengeLost {
+  background-color: #c94a3f;
+  border-color: #c94a3f;
 }
 
 .foulMax {
@@ -206,6 +238,18 @@
 
 .navButton:hover {
   border-color: var(--muted);
+}
+
+.snapshotLabel {
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1;
+  border: 1px dashed var(--muted);
+  border-radius: 4px;
+  color: var(--muted);
+  background-color: var(--bg);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .boxScoreSection {
