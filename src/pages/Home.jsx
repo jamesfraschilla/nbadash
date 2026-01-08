@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { fetchGamesByDate, teamLogoUrl } from "../api.js";
 import { formatDateInput, formatDateLabel, gameStatusLabel, normalizeClock, parseDateInput } from "../utils.js";
@@ -59,10 +59,10 @@ export default function Home() {
       const clock = isLive ? normalizeClock(game.gameClock) : "";
 
       return (
-        <a
+        <Link
           key={game.gameId}
           className={styles.gameCard}
-          href={`/g/${game.gameId}${dateParam ? `?d=${dateParam}` : ""}`}
+          to={`/g/${game.gameId}${dateParam ? `?d=${dateParam}` : ""}`}
         >
           <div className={styles.mainContent}>
             <div className={styles.teams}>
@@ -101,7 +101,7 @@ export default function Home() {
           <div className={styles.gameInfo}>
             <span className={styles.arena}>{game.arena?.arenaName || ""}</span>
           </div>
-        </a>
+        </Link>
       );
     });
 
