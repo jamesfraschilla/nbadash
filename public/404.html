@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NBA Dashboard</title>
+  </head>
+  <body>
+    <script>
+      // GitHub Pages SPA fallback: rewrite deep links to index.html.
+      var basePath = "/nbadash/";
+      var l = window.location;
+      var path = l.pathname.startsWith(basePath)
+        ? l.pathname.slice(basePath.length)
+        : l.pathname.slice(1);
+      var query = l.search ? l.search.slice(1).replace(/&/g, "~and~") : "";
+      var redirect =
+        basePath +
+        "?/" +
+        path +
+        (query ? "&" + query : "") +
+        l.hash;
+      l.replace(l.protocol + "//" + l.host + redirect);
+    </script>
+  </body>
+</html>
