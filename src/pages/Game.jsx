@@ -539,7 +539,7 @@ export default function Game() {
   const homeTransitionDerived = transitionStatsDerived(advancedHomeTotals, homePossessions);
   const mergeTransition = (derived, official) =>
     official
-      ? { ...derived, ...official, transitionRate: derived.transitionRate }
+      ? { ...derived, ...official }
       : derived;
   const awayTransition = useOfficialTransition
     ? mergeTransition(awayTransitionDerived, teamStats.away.transitionStats)
