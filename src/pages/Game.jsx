@@ -34,6 +34,28 @@ const CORE_STAT_FIELDS = [
   "midFieldGoalsMade",
   "midFieldGoalsAttempted",
 ];
+const SEGMENT_STAT_DEFAULTS = {
+  minutes: 0,
+  plusMinusPoints: 0,
+  points: 0,
+  reboundsTotal: 0,
+  reboundsOffensive: 0,
+  assists: 0,
+  blocks: 0,
+  steals: 0,
+  turnovers: 0,
+  foulsPersonal: 0,
+  fieldGoalsMade: 0,
+  fieldGoalsAttempted: 0,
+  threePointersMade: 0,
+  threePointersAttempted: 0,
+  freeThrowsMade: 0,
+  freeThrowsAttempted: 0,
+  rimFieldGoalsMade: 0,
+  rimFieldGoalsAttempted: 0,
+  midFieldGoalsMade: 0,
+  midFieldGoalsAttempted: 0,
+};
 
 const reviveSnapshotEntry = (entry) => {
   if (!entry?.snapshot) return entry;
@@ -116,14 +138,6 @@ const diffStats = (start = {}, end = {}) => {
     diff[field] = (end?.[field] || 0) - (start?.[field] || 0);
   });
   return diff;
-};
-
-const sumStats = (base = {}, delta = {}) => {
-  const sum = {};
-  CORE_STAT_FIELDS.forEach((field) => {
-    sum[field] = (base?.[field] || 0) + (delta?.[field] || 0);
-  });
-  return sum;
 };
 
 const diffSnapshots = (startSnapshot, endSnapshot, basePlayers) => {
@@ -245,6 +259,15 @@ const getSegmentSnapshotBounds = (segment, snapshots, currentSnapshot, currentPe
           ((currentPeriod === 3 || currentPeriod === 4) ? currentSnapshot : null),
         endIsLive: currentPeriod === 3 || currentPeriod === 4,
       };
+    case "q1-q3":
+      return {
+        start: zeroSnapshot,
+        startMeta: null,
+        end:
+          periodEndSnapshot(3) ||
+          ((currentPeriod === 1 || currentPeriod === 2 || currentPeriod === 3) ? currentSnapshot : null),
+        endIsLive: currentPeriod === 3,
+      };
     default:
       return null;
   }
@@ -292,6 +315,7 @@ export default function Game() {
   const status = game ? gameStatusLabel(game) : "";
   const isLive = game?.gameStatus === 2;
   const clock = isLive ? normalizeClock(game?.gameClock) : null;
+  const useSnapshots = isLive;
 
   const basePlayers = [
     ...(boxScore?.away?.players || []),
@@ -301,7 +325,7 @@ export default function Game() {
   const currentSnapshot = useMemo(() => buildSnapshot(boxScore), [boxScore]);
 
   useEffect(() => {
-    if (!gameId || !boxScore || !game) return;
+    if (!gameId || !boxScore || !game || !useSnapshots) return;
     const existing = loadSnapshots(gameId);
     const existingKeys = new Set(existing.map((s) => s.key));
     const additions = [];
@@ -346,7 +370,7 @@ export default function Game() {
       saveSnapshots(gameId, nextSnapshots);
       setSnapshots(nextSnapshots);
     }
-  }, [gameId, boxScore, game]);
+  }, [gameId, boxScore, game, useSnapshots]);
 
   useEffect(() => {
     setSnapshots(loadSnapshots(gameId));
@@ -363,10 +387,10 @@ export default function Game() {
     })
     : { playerMap: new Map(), teamTotals: {} };
 
-  const snapshotBounds = useMemo(
-    () => getSegmentSnapshotBounds(segment, snapshots, currentSnapshot, game?.period),
-    [segment, snapshots, currentSnapshot, game?.period]
-  );
+  const snapshotBounds = useMemo(() => {
+    if (!useSnapshots) return null;
+    return getSegmentSnapshotBounds(segment, snapshots, currentSnapshot, game?.period);
+  }, [useSnapshots, segment, snapshots, currentSnapshot, game?.period]);
   const snapshotLabel = useMemo(() => {
     if (!snapshotBounds?.startMeta) return null;
     const { type, period, clock } = snapshotBounds.startMeta;
@@ -376,56 +400,8 @@ export default function Game() {
   const snapshotStats = useMemo(() => {
     if (!snapshotBounds || !snapshotBounds.end || !snapshotBounds.start) return null;
     if (!homeTeam?.teamId || !awayTeam?.teamId) return null;
-    if (snapshotBounds.endIsLive && snapshotBounds.startMeta?.actionNumber != null) {
-      const filteredActions = (game?.playByPlayActions || []).filter(
-        (action) => action.actionNumber > snapshotBounds.startMeta.actionNumber
-      );
-      const deltaStats = aggregateSegmentStats({
-        actions: filteredActions,
-        segment,
-        minutesData,
-        homeTeam,
-        awayTeam,
-        basePlayers,
-      });
-
-      const teamTotals = {};
-      const teamIds = [homeTeam?.teamId, awayTeam?.teamId].filter(Boolean);
-      teamIds.forEach((teamId) => {
-        const base = snapshotBounds.start?.teams?.[teamId] || {};
-        const delta = deltaStats.teamTotals?.[teamId] || {};
-        teamTotals[teamId] = sumStats(base, delta);
-      });
-
-      const playerMap = new Map();
-      basePlayers.forEach((player) => {
-        const base = snapshotBounds.start?.players?.get(player.personId) || {};
-        const delta = deltaStats.playerMap?.get(player.personId) || {};
-        playerMap.set(player.personId, {
-          personId: player.personId,
-          firstName: player.firstName || "",
-          familyName: player.familyName || "",
-          jerseyNum: player.jerseyNum || "",
-          position: player.position || "",
-          minutes: delta.minutes ?? 0,
-          plusMinusPoints: delta.plusMinusPoints ?? 0,
-          ...sumStats(base, delta),
-        });
-      });
-
-      return { teamTotals, playerMap };
-    }
-
     return diffSnapshots(snapshotBounds.start, snapshotBounds.end, basePlayers);
-  }, [
-    snapshotBounds,
-    basePlayers,
-    game?.playByPlayActions,
-    segment,
-    minutesData,
-    homeTeam,
-    awayTeam,
-  ]);
+  }, [snapshotBounds, basePlayers, homeTeam, awayTeam]);
 
   const playerMap = useMemo(() => {
     if (!snapshotStats) return segmentStats.playerMap;
@@ -462,14 +438,24 @@ export default function Game() {
     players
       .map((player) => {
         const stats = playerMap.get(player.personId) || {};
+        const base = segment === "all"
+          ? player
+          : {
+            personId: player.personId,
+            firstName: player.firstName || "",
+            familyName: player.familyName || "",
+            jerseyNum: player.jerseyNum || "",
+            position: player.position || "",
+          };
+        const safeStats = segment === "all" ? stats : { ...SEGMENT_STAT_DEFAULTS, ...stats };
         const officialSeconds = segment === "all" ? parseDuration(player.minutes) : null;
         const minutesSeconds =
-          segment === "all" && Number.isFinite(officialSeconds) ? officialSeconds : stats.minutes;
+          segment === "all" && Number.isFinite(officialSeconds) ? officialSeconds : safeStats.minutes;
         const plusMinusPoints =
-          segment === "all" && player.plusMinusPoints != null ? player.plusMinusPoints : stats.plusMinusPoints;
+          segment === "all" && player.plusMinusPoints != null ? player.plusMinusPoints : safeStats.plusMinusPoints;
         return {
-          ...player,
-          ...stats,
+          ...base,
+          ...safeStats,
           plusMinusPoints,
           minutes: formatMinutesFromSeconds(minutesSeconds),
         };
@@ -487,6 +473,8 @@ export default function Game() {
   const homeTotals = homeSnapshotTotals ? { ...baseHomeTotals, ...homeSnapshotTotals } : baseHomeTotals;
   const advancedAwayTotals = baseAwayTotals;
   const advancedHomeTotals = baseHomeTotals;
+  const displayAwayScore = segment === "all" ? awayTeam?.score ?? 0 : awayTotals.points || 0;
+  const displayHomeScore = segment === "all" ? homeTeam?.score ?? 0 : homeTotals.points || 0;
 
   if (isLoading) {
     return <div className={styles.stateMessage}>Loading game details...</div>;
@@ -549,11 +537,15 @@ export default function Game() {
     && teamStats?.home?.transitionStats;
   const awayTransitionDerived = transitionStatsDerived(advancedAwayTotals, awayPossessions);
   const homeTransitionDerived = transitionStatsDerived(advancedHomeTotals, homePossessions);
+  const mergeTransition = (derived, official) =>
+    official
+      ? { ...derived, ...official, transitionRate: derived.transitionRate }
+      : derived;
   const awayTransition = useOfficialTransition
-    ? { ...awayTransitionDerived, ...teamStats.away.transitionStats }
+    ? mergeTransition(awayTransitionDerived, teamStats.away.transitionStats)
     : awayTransitionDerived;
   const homeTransition = useOfficialTransition
-    ? { ...homeTransitionDerived, ...teamStats.home.transitionStats }
+    ? mergeTransition(homeTransitionDerived, teamStats.home.transitionStats)
     : homeTransitionDerived;
 
   const awayDefReb = (advancedAwayTotals.reboundsTotal || 0) - (advancedAwayTotals.reboundsOffensive || 0);
@@ -764,7 +756,7 @@ export default function Game() {
 
           <div className={`${styles.teamStatsColumn} ${styles.awayStatsColumn}`}>
             <div className={styles.teamTricode}>{awayTeam.teamTricode}</div>
-            <div className={styles.teamScore}>{awayTeam.score}</div>
+            <div className={styles.teamScore}>{displayAwayScore}</div>
             <div className={styles.statValue}>{ortgAway}</div>
             <div className={styles.statValue}>{netAway >= 0 ? "+" : ""}{netAway}</div>
           </div>
@@ -783,7 +775,7 @@ export default function Game() {
 
           <div className={`${styles.teamStatsColumn} ${styles.homeStatsColumn}`}>
             <div className={styles.teamTricode}>{homeTeam.teamTricode}</div>
-            <div className={styles.teamScore}>{homeTeam.score}</div>
+            <div className={styles.teamScore}>{displayHomeScore}</div>
             <div className={styles.statValue}>{ortgHome}</div>
             <div className={styles.statValue}>{netHome >= 0 ? "+" : ""}{netHome}</div>
           </div>

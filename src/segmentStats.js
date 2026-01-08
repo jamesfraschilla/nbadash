@@ -22,7 +22,7 @@ export function segmentPeriods(segment) {
     case "first-half":
       return (p) => p === 1 || p === 2;
     case "second-half":
-      return (p) => p >= 3;
+      return (p) => p === 3 || p === 4;
     default:
       return () => true;
   }
@@ -82,7 +82,7 @@ function addRebound(player, isOffensive) {
 function classifyShot(action) {
   if (action.actionType === "3pt") return "three";
   const distance = Number(action.shotDistance || 0);
-  if (distance <= 4) return "rim";
+  if (distance <= 4.9) return "rim";
   return "mid";
 }
 
@@ -112,12 +112,18 @@ export function aggregateSegmentStats({
       );
     }, 0) ?? null;
   const segmentActions = actions.filter((action) => predicate(action.period));
+  const orderedActions = [...segmentActions].sort((a, b) => {
+    const aOrder = a.orderNumber ?? a.actionNumber ?? 0;
+    const bOrder = b.orderNumber ?? b.actionNumber ?? 0;
+    return aOrder - bOrder;
+  });
   const actionByNumber = new Map(segmentActions.map((action) => [action.actionNumber, action]));
 
   const playerMap = new Map();
   const baseMap = new Map();
   basePlayers.forEach((player) => baseMap.set(player.personId, player));
   const creditedBlocks = new Set();
+  const creditedTransitionTurnovers = new Set();
 
   const blockKey = (playerId, period, clock) =>
     `${playerId}:${period || "na"}:${clock || "na"}`;
@@ -198,14 +204,16 @@ export function aggregateSegmentStats({
     },
   };
 
-  if (segment !== "all" && segmentSeconds === 0) {
+  if (segment !== "all" && segmentSeconds === 0 && segmentActions.length === 0) {
     return {
       playerMap,
       teamTotals,
     };
   }
 
-  segmentActions.forEach((action) => {
+  const lastMissedShotByTeam = new Map();
+
+  orderedActions.forEach((action) => {
     const teamId = action.teamId;
     const isHome = teamId === homeTeam.teamId;
     const isAway = teamId === awayTeam.teamId;
@@ -215,16 +223,32 @@ export function aggregateSegmentStats({
     if (action.actionType === "2pt" || action.actionType === "3pt") {
       const description = `${action.description || ""} ${action.descriptor || ""}`.toLowerCase();
       const drivingKeywords = ["driving layup", "driving dunk", "driving float", "driving hook"];
+      const shotDistance = Number(action.shotDistance || 0);
       const isDriving =
         action.actionType === "2pt" &&
+        shotDistance <= 7 &&
         drivingKeywords.some((keyword) => description.includes(keyword));
       const isCutting = description.includes("cutting");
       const isPullup = /pull.?up/.test(description);
-      const isCatchAndShoot3 = action.actionType === "3pt" && !isPullup;
+      const isStepBack = /step.?back/.test(description);
+      const isCatchAndShoot3 = action.actionType === "3pt" && !isPullup && !isStepBack;
 
       const qualifiers = action.qualifiers || [];
       const isFastBreak = qualifiers.includes("fastbreak");
       const isSecondChance = qualifiers.includes("2ndchance") || qualifiers.includes("secondchance");
+      const isFromTurnover = qualifiers.includes("fromturnover");
+
+      if (isFromTurnover) {
+        const opponentId = isHome ? awayTeam.teamId : isAway ? homeTeam.teamId : null;
+        if (opponentId && teamTotals[opponentId]) {
+          const possessionKey = action.possession ?? action.actionNumber;
+          const creditKey = `${opponentId}:${possessionKey}`;
+          if (!creditedTransitionTurnovers.has(creditKey)) {
+            creditedTransitionTurnovers.add(creditKey);
+            teamTotals[opponentId].transitionTurnovers += 1;
+          }
+        }
+      }
 
       if (teamStats) {
         teamStats.fieldGoalsAttempted += 1;
@@ -253,6 +277,8 @@ export function aggregateSegmentStats({
           if (qualifiers.includes("fromturnover")) teamStats.pointsOffTurnovers += points;
           if (qualifiers.includes("pointsinthepaint")) teamStats.paintPoints += points;
         }
+      } else if (teamId) {
+        lastMissedShotByTeam.set(teamId, action);
       }
 
       if (action.personId) {
@@ -312,11 +338,18 @@ export function aggregateSegmentStats({
         addRebound(player, isOffensive);
       }
 
-      if (isOffensive && action.shotActionNumber) {
-        const shot = actionByNumber.get(action.shotActionNumber);
-        if (shot?.actionType === "3pt") {
+      if (isOffensive) {
+        const shot = action.shotActionNumber ? actionByNumber.get(action.shotActionNumber) : null;
+        const lastMiss = lastMissedShotByTeam.get(teamId);
+        const isThreePointMiss =
+          shot?.actionType === "3pt" || lastMiss?.actionType === "3pt";
+        if (isThreePointMiss && teamStats) {
           teamStats.threePointOReb = (teamStats.threePointOReb || 0) + 1;
         }
+        if (teamId) lastMissedShotByTeam.delete(teamId);
+      } else {
+        const opponentId = isHome ? awayTeam.teamId : isAway ? homeTeam.teamId : null;
+        if (opponentId) lastMissedShotByTeam.delete(opponentId);
       }
     }
 
