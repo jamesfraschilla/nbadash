@@ -499,7 +499,7 @@ export default function Game() {
     return <div className={styles.stateMessage}>Failed to load game details.</div>;
   }
 
-  const possessions = (teamTotals, opponentTotals) => {
+  const possessions = (teamTotals = {}, opponentTotals = {}) => {
     const fga = teamTotals.fieldGoalsAttempted || 0;
     const fta = teamTotals.freeThrowsAttempted || 0;
     const fg = teamTotals.fieldGoalsMade || 0;
