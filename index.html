@@ -11,24 +11,6 @@
       rel="stylesheet"
     />
     <title>Live Stats</title>
-    <script>
-      // Support GitHub Pages SPA redirect from 404.html.
-      (function () {
-        var l = window.location;
-        if (l.search[1] === "/") {
-          var decoded = l.search
-            .slice(1)
-            .split("&")
-            .map(function (s) {
-              return s.replace(/~and~/g, "&");
-            })
-            .join("?");
-          var base = l.pathname.replace(/\/+$/, "");
-          var decodedPath = decoded.replace(/^\/+/, "/");
-          window.history.replaceState(null, null, base + decodedPath + l.hash);
-        }
-      })();
-    </script>
   </head>
   <body>
     <div id="root"></div>

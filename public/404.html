@@ -14,12 +14,12 @@
       var path = l.pathname.startsWith(basePrefix)
         ? l.pathname.slice(basePrefix.length)
         : l.pathname.replace(/^\/+/, "");
-      var query = l.search ? l.search.slice(1).replace(/&/g, "~and~") : "";
+      var query = l.search ? l.search.slice(1) : "";
       var redirect =
         basePath +
-        "/?/" +
+        "/#/" +
         path +
-        (query ? "&" + query : "") +
+        (query ? "?" + query : "") +
         l.hash;
       l.replace(l.protocol + "//" + l.host + redirect);
     </script>

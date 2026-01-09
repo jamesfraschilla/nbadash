@@ -103,9 +103,10 @@ export function aggregateSegmentStats({
   const segmentSeconds =
     minutesData?.periods?.reduce((sum, period) => {
       if (!predicate(period.period)) return sum;
+      const stints = period.stints || [];
       return (
         sum +
-        period.stints.reduce(
+        stints.reduce(
           (stintSum, stint) => stintSum + (parseClock(stint.startClock) - parseClock(stint.endClock)),
           0
         )
