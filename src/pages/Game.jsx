@@ -889,6 +889,11 @@ export default function Game() {
         <Link to={dateParam ? `/g/${gameId}/events?d=${dateParam}` : `/g/${gameId}/events`}>
           Play-by-Play
         </Link>
+        <Link
+          to={dateParam ? `/g/${gameId}/events?d=${dateParam}&view=highlighted` : `/g/${gameId}/events?view=highlighted`}
+        >
+          Highlighted
+        </Link>
         <button type="button" className={styles.navButton} onClick={handleScrollToBoxScore}>
           Box Score
         </button>
@@ -952,6 +957,11 @@ export default function Game() {
         <Link to={dateParam ? `/m/${gameId}?d=${dateParam}` : `/m/${gameId}`}>Minutes</Link>
         <Link to={dateParam ? `/g/${gameId}/events?d=${dateParam}` : `/g/${gameId}/events`}>
           Play-by-Play
+        </Link>
+        <Link
+          to={dateParam ? `/g/${gameId}/events?d=${dateParam}&view=highlighted` : `/g/${gameId}/events?view=highlighted`}
+        >
+          Highlighted
         </Link>
         <button
           type="button"

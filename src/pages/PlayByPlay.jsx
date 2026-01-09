@@ -18,10 +18,11 @@ function actionDescription(action) {
 
 export default function PlayByPlay() {
   const { gameId } = useParams();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const dateParam = params.get("d");
+  const viewParam = params.get("view");
   const [period, setPeriod] = useState(null);
-  const [viewMode, setViewMode] = useState("all");
+  const [viewMode, setViewMode] = useState(viewParam === "highlighted" ? "highlighted" : "all");
   const [latestFirst, setLatestFirst] = useState(true);
   const [highlightedIds, setHighlightedIds] = useState(new Set());
   const holdTimerRef = useRef(null);
@@ -84,6 +85,18 @@ export default function PlayByPlay() {
     if (!highlightRows) return;
     setHighlightedIds(new Set(highlightRows.map((row) => row.action_number)));
   }, [highlightRows]);
+
+  useEffect(() => {
+    const nextParams = new URLSearchParams(params);
+    if (viewMode === "highlighted") {
+      nextParams.set("view", "highlighted");
+    } else {
+      nextParams.delete("view");
+    }
+    if (nextParams.toString() !== params.toString()) {
+      setParams(nextParams, { replace: true });
+    }
+  }, [viewMode, params, setParams]);
 
   const clearHoldTimer = () => {
     if (holdTimerRef.current) {
