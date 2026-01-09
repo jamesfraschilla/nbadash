@@ -22,7 +22,7 @@ export default function PlayByPlay() {
   const dateParam = params.get("d");
   const [period, setPeriod] = useState(null);
   const [viewMode, setViewMode] = useState("all");
-  const [latestFirst, setLatestFirst] = useState(false);
+  const [latestFirst, setLatestFirst] = useState(true);
   const [highlightedIds, setHighlightedIds] = useState(new Set());
   const holdTimerRef = useRef(null);
   const holdTargetRef = useRef(null);
