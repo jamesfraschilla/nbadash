@@ -334,6 +334,7 @@ export default function Game() {
 
     (game.playByPlayActions || []).forEach((action) => {
       if (action.actionType === "period" && action.subType === "end") {
+        if (action.period !== game.period) return;
         const key = getPeriodEndKey(action.period);
         if (!existingKeys.has(key)) {
           additions.push({
@@ -404,7 +405,7 @@ export default function Game() {
   }, [snapshotBounds, basePlayers, homeTeam, awayTeam]);
 
   const playerMap = useMemo(() => {
-    if (!snapshotStats) return segmentStats.playerMap;
+    if (!snapshotStats || !snapshotBounds?.endIsLive) return segmentStats.playerMap;
     const merged = new Map(segmentStats.playerMap);
     snapshotStats.playerMap.forEach((snap, personId) => {
       const base = merged.get(personId) || snap;
@@ -416,7 +417,7 @@ export default function Game() {
       });
     });
     return merged;
-  }, [segmentStats.playerMap, snapshotStats]);
+  }, [segmentStats.playerMap, snapshotStats, snapshotBounds?.endIsLive]);
 
   const formatMinutesFromSeconds = (seconds) => {
     const safeSeconds = Math.max(0, Math.round(seconds || 0));
@@ -467,8 +468,11 @@ export default function Game() {
 
   const baseAwayTotals = awayTeam?.teamId ? segmentStats.teamTotals[awayTeam.teamId] || {} : {};
   const baseHomeTotals = homeTeam?.teamId ? segmentStats.teamTotals[homeTeam.teamId] || {} : {};
-  const awaySnapshotTotals = awayTeam?.teamId ? snapshotStats?.teamTotals?.[awayTeam.teamId] : null;
-  const homeSnapshotTotals = homeTeam?.teamId ? snapshotStats?.teamTotals?.[homeTeam.teamId] : null;
+  const useSnapshotTotals = snapshotBounds?.endIsLive;
+  const awaySnapshotTotals =
+    useSnapshotTotals && awayTeam?.teamId ? snapshotStats?.teamTotals?.[awayTeam.teamId] : null;
+  const homeSnapshotTotals =
+    useSnapshotTotals && homeTeam?.teamId ? snapshotStats?.teamTotals?.[homeTeam.teamId] : null;
   const isLiveSegment = segment !== "all" && snapshotBounds?.endIsLive;
   const mergeTeamTotals = (base, snapshot) => {
     if (!snapshot) return base;
