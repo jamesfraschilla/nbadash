@@ -124,6 +124,10 @@
   background-color: var(--row-hover);
 }
 
+.highlighted {
+  background-color: #fff4a3;
+}
+
 .awayColumn,
 .homeColumn {
   padding: 10px 14px;
