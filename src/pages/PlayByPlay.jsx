@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { fetchGame, playerHeadshotUrl, teamLogoUrl } from "../api.js";
+import { supabase } from "../supabaseClient.js";
 import { normalizeClock } from "../utils.js";
 import styles from "./PlayByPlay.module.css";
 
@@ -21,12 +22,31 @@ export default function PlayByPlay() {
   const dateParam = params.get("d");
   const [period, setPeriod] = useState(null);
   const [latestFirst, setLatestFirst] = useState(false);
+  const [highlightedIds, setHighlightedIds] = useState(new Set());
+  const holdTimerRef = useRef(null);
+  const holdTargetRef = useRef(null);
 
   const { data: game, isLoading, error } = useQuery({
     queryKey: ["game", gameId],
     queryFn: () => fetchGame(gameId),
     enabled: Boolean(gameId),
     staleTime: 30_000,
+  });
+
+  const { data: highlightRows } = useQuery({
+    queryKey: ["pbp-highlights", gameId],
+    queryFn: async () => {
+      if (!supabase || !gameId) return [];
+      const { data, error: fetchError } = await supabase
+        .from("pbp_highlights")
+        .select("action_number")
+        .eq("game_id", gameId);
+      if (fetchError) throw fetchError;
+      return data || [];
+    },
+    enabled: Boolean(gameId),
+    staleTime: 15_000,
+    refetchInterval: 15_000,
   });
 
   const actions = game?.playByPlayActions || [];
@@ -53,6 +73,64 @@ export default function PlayByPlay() {
     const list = period ? scoreTracked.filter((action) => action.period === period) : scoreTracked;
     return latestFirst ? [...list].reverse() : list;
   }, [scoreTracked, period, latestFirst]);
+
+  useEffect(() => {
+    if (!highlightRows) return;
+    setHighlightedIds(new Set(highlightRows.map((row) => row.action_number)));
+  }, [highlightRows]);
+
+  const clearHoldTimer = () => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    holdTargetRef.current = null;
+  };
+
+  const toggleHighlight = async (actionNumber) => {
+    if (!actionNumber || !supabase || !gameId) return;
+    const isHighlighted = highlightedIds.has(actionNumber);
+    setHighlightedIds((prev) => {
+      const next = new Set(prev);
+      if (isHighlighted) {
+        next.delete(actionNumber);
+      } else {
+        next.add(actionNumber);
+      }
+      return next;
+    });
+    const request = isHighlighted
+      ? supabase.from("pbp_highlights").delete().eq("game_id", gameId).eq("action_number", actionNumber)
+      : supabase.from("pbp_highlights").upsert({ game_id: gameId, action_number: actionNumber }, { onConflict: "game_id,action_number" });
+    const { error: updateError } = await request;
+    if (updateError) {
+      setHighlightedIds((prev) => {
+        const next = new Set(prev);
+        if (isHighlighted) {
+          next.add(actionNumber);
+        } else {
+          next.delete(actionNumber);
+        }
+        return next;
+      });
+    }
+  };
+
+  const handleHoldStart = (actionNumber) => () => {
+    if (!actionNumber) return;
+    clearHoldTimer();
+    holdTargetRef.current = actionNumber;
+    holdTimerRef.current = setTimeout(() => {
+      if (holdTargetRef.current === actionNumber) {
+        toggleHighlight(actionNumber);
+      }
+      clearHoldTimer();
+    }, 450);
+  };
+
+  const handleHoldEnd = () => {
+    clearHoldTimer();
+  };
 
   if (isLoading) {
     return <div className={styles.stateMessage}>Loading events...</div>;
@@ -118,8 +196,18 @@ export default function PlayByPlay() {
         {filtered.map((action, index) => {
           const isAway = action.teamId === game.awayTeam?.teamId;
           const isHome = action.teamId === game.homeTeam?.teamId;
+          const actionNumber = action.actionNumber ?? null;
+          const rowKey = actionNumber ?? `${action.period}-${index}`;
           return (
-            <div key={`${action.actionNumber}-${index}`} className={styles.eventRow}>
+            <div
+              key={rowKey}
+              className={`${styles.eventRow} ${actionNumber && highlightedIds.has(actionNumber) ? styles.highlighted : ""}`}
+              onPointerDown={handleHoldStart(actionNumber)}
+              onPointerUp={handleHoldEnd}
+              onPointerLeave={handleHoldEnd}
+              onPointerCancel={handleHoldEnd}
+              onContextMenu={(event) => event.preventDefault()}
+            >
               <div className={styles.awayColumn}>
                 {isAway && (
                   <div className={`${styles.eventContent} ${action.scoringEvent ? styles.scoring : ""}`}>
