@@ -88,6 +88,8 @@
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .headerRow,
@@ -126,6 +128,13 @@
 
 .highlighted {
   background-color: #fff4a3;
+  color: #111;
+}
+
+.highlighted .eventContent,
+.highlighted .clock,
+.highlighted .score {
+  color: #111;
 }
 
 .awayColumn,

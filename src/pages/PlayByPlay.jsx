@@ -21,6 +21,7 @@ export default function PlayByPlay() {
   const [params] = useSearchParams();
   const dateParam = params.get("d");
   const [period, setPeriod] = useState(null);
+  const [viewMode, setViewMode] = useState("all");
   const [latestFirst, setLatestFirst] = useState(false);
   const [highlightedIds, setHighlightedIds] = useState(new Set());
   const holdTimerRef = useRef(null);
@@ -70,9 +71,14 @@ export default function PlayByPlay() {
   }, [actions, game?.awayTeam?.teamId, game?.homeTeam?.teamId]);
 
   const filtered = useMemo(() => {
-    const list = period ? scoreTracked.filter((action) => action.period === period) : scoreTracked;
+    let list = scoreTracked;
+    if (viewMode === "highlighted") {
+      list = scoreTracked.filter((action) => action.actionNumber && highlightedIds.has(action.actionNumber));
+    } else {
+      list = period ? scoreTracked.filter((action) => action.period === period) : scoreTracked;
+    }
     return latestFirst ? [...list].reverse() : list;
-  }, [scoreTracked, period, latestFirst]);
+  }, [scoreTracked, period, latestFirst, viewMode, highlightedIds]);
 
   useEffect(() => {
     if (!highlightRows) return;
@@ -165,19 +171,39 @@ export default function PlayByPlay() {
       </div>
 
       <div className={styles.periodButtons}>
-        <button type="button" className={!period ? styles.active : ""} onClick={() => setPeriod(null)}>
+        <button
+          type="button"
+          className={!period && viewMode === "all" ? styles.active : ""}
+          onClick={() => {
+            setViewMode("all");
+            setPeriod(null);
+          }}
+        >
           All
         </button>
         {[1, 2, 3, 4].map((p) => (
           <button
             key={p}
             type="button"
-            className={period === p ? styles.active : ""}
-            onClick={() => setPeriod(p)}
+            className={period === p && viewMode === "all" ? styles.active : ""}
+            onClick={() => {
+              setViewMode("all");
+              setPeriod(p);
+            }}
           >
             Q{p}
           </button>
         ))}
+        <button
+          type="button"
+          className={viewMode === "highlighted" ? styles.active : ""}
+          onClick={() => {
+            setViewMode("highlighted");
+            setPeriod(null);
+          }}
+        >
+          Highlighted
+        </button>
       </div>
 
       <div className={styles.eventsWrapper}>
