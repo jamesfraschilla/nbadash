@@ -25,6 +25,8 @@ export default function PlayByPlay() {
   const [viewMode, setViewMode] = useState(viewParam === "highlighted" ? "highlighted" : "all");
   const [latestFirst, setLatestFirst] = useState(true);
   const [highlightedMap, setHighlightedMap] = useState(new Map());
+  const [noteEditor, setNoteEditor] = useState({ open: false, actionNumber: null });
+  const [noteDraft, setNoteDraft] = useState("");
   const holdTimerRef = useRef(null);
   const holdTargetRef = useRef(null);
 
@@ -110,34 +112,22 @@ export default function PlayByPlay() {
     holdTargetRef.current = null;
   };
 
-  const toggleHighlight = async (actionNumber) => {
-    if (!actionNumber || !supabase || !gameId) return;
-    const isHighlighted = highlightedMap.has(actionNumber);
+  const openNoteEditor = (actionNumber) => {
+    if (!actionNumber) return;
     const existingNote = highlightedMap.get(actionNumber) || "";
-    const notePrompt = isHighlighted
-      ? "Edit highlight note (leave blank to keep no note)."
-      : "Add a note for this highlight (optional).";
-    const noteValue = window.prompt(notePrompt, existingNote);
-    if (noteValue === null) return;
-    const trimmedNote = String(noteValue).trim();
-    if (isHighlighted && trimmedNote === "" && existingNote) {
-      const remove = window.confirm("Remove this highlight?");
-      if (remove) {
-        const { error: removeError } = await supabase
-          .from("pbp_highlights")
-          .delete()
-          .eq("game_id", gameId)
-          .eq("action_number", actionNumber);
-        if (!removeError) {
-          setHighlightedMap((prev) => {
-            const next = new Map(prev);
-            next.delete(actionNumber);
-            return next;
-          });
-        }
-        return;
-      }
-    }
+    setNoteDraft(existingNote);
+    setNoteEditor({ open: true, actionNumber });
+  };
+
+  const closeNoteEditor = () => {
+    setNoteEditor({ open: false, actionNumber: null });
+    setNoteDraft("");
+  };
+
+  const saveNote = async () => {
+    const actionNumber = noteEditor.actionNumber;
+    if (!actionNumber || !supabase || !gameId) return;
+    const trimmedNote = String(noteDraft || "").trim();
     const { error: updateError } = await supabase
       .from("pbp_highlights")
       .upsert(
@@ -150,6 +140,25 @@ export default function PlayByPlay() {
         next.set(actionNumber, trimmedNote);
         return next;
       });
+      closeNoteEditor();
+    }
+  };
+
+  const removeHighlight = async () => {
+    const actionNumber = noteEditor.actionNumber;
+    if (!actionNumber || !supabase || !gameId) return;
+    const { error: removeError } = await supabase
+      .from("pbp_highlights")
+      .delete()
+      .eq("game_id", gameId)
+      .eq("action_number", actionNumber);
+    if (!removeError) {
+      setHighlightedMap((prev) => {
+        const next = new Map(prev);
+        next.delete(actionNumber);
+        return next;
+      });
+      closeNoteEditor();
     }
   };
 
@@ -159,7 +168,7 @@ export default function PlayByPlay() {
     holdTargetRef.current = actionNumber;
     holdTimerRef.current = setTimeout(() => {
       if (holdTargetRef.current === actionNumber) {
-        toggleHighlight(actionNumber);
+        openNoteEditor(actionNumber);
       }
       clearHoldTimer();
     }, 450);
@@ -318,6 +327,34 @@ export default function PlayByPlay() {
           );
         })}
       </div>
+      {noteEditor.open && (
+        <div className={styles.noteOverlay} onClick={closeNoteEditor}>
+          <div className={styles.noteModal} onClick={(event) => event.stopPropagation()}>
+            <h3>Highlight Note</h3>
+            <textarea
+              value={noteDraft}
+              onChange={(event) => setNoteDraft(event.target.value)}
+              placeholder="Add a note (optional)"
+              rows={4}
+            />
+            <div className={styles.noteActions}>
+              {highlightedMap.has(noteEditor.actionNumber) && (
+                <button type="button" className={styles.noteRemove} onClick={removeHighlight}>
+                  Remove
+                </button>
+              )}
+              <div className={styles.noteActionsRight}>
+                <button type="button" className={styles.noteCancel} onClick={closeNoteEditor}>
+                  Cancel
+                </button>
+                <button type="button" className={styles.noteSave} onClick={saveNote}>
+                  OK
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

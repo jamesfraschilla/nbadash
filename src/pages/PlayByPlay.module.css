@@ -227,6 +227,79 @@
   background: rgba(255, 255, 255, 0.6);
 }
 
+.noteOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 10, 16, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 50;
+}
+
+.noteModal {
+  width: min(420px, 100%);
+  background: var(--bg);
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+}
+
+.noteModal h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+  color: var(--text);
+}
+
+.noteModal textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--panel-strong);
+}
+
+.noteActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.noteActionsRight {
+  display: flex;
+  gap: 8px;
+}
+
+.noteActions button {
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.noteRemove {
+  background: #ffe4e4;
+  color: #7a0c0c;
+}
+
+.noteCancel {
+  background: var(--border);
+  color: var(--text);
+}
+
+.noteSave {
+  background: var(--highlight-text);
+  color: var(--bg);
+}
+
 .stateMessage {
   text-align: center;
   padding: 40px 0;
