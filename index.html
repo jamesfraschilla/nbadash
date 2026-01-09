@@ -23,8 +23,9 @@
               return s.replace(/~and~/g, "&");
             })
             .join("?");
-          var base = l.pathname.replace(/\/$/, "");
-          window.history.replaceState(null, null, base + decoded + l.hash);
+          var base = l.pathname.replace(/\/+$/, "");
+          var decodedPath = decoded.replace(/^\/+/, "/");
+          window.history.replaceState(null, null, base + decodedPath + l.hash);
         }
       })();
     </script>
