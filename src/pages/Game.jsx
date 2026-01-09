@@ -495,11 +495,16 @@ export default function Game() {
     return <div className={styles.stateMessage}>Failed to load game details.</div>;
   }
 
-  const possessions = (teamTotals) =>
-    (teamTotals.fieldGoalsAttempted || 0) +
-    0.44 * (teamTotals.freeThrowsAttempted || 0) +
-    (teamTotals.turnovers || 0) -
-    (teamTotals.reboundsOffensive || 0);
+  const possessions = (teamTotals, opponentTotals) => {
+    const fga = teamTotals.fieldGoalsAttempted || 0;
+    const fta = teamTotals.freeThrowsAttempted || 0;
+    const fg = teamTotals.fieldGoalsMade || 0;
+    const to = teamTotals.turnovers || 0;
+    const orb = teamTotals.reboundsOffensive || 0;
+    const oppDrb = (opponentTotals.reboundsTotal || 0) - (opponentTotals.reboundsOffensive || 0);
+    const orbRate = orb + oppDrb ? orb / (orb + oppDrb) : 0;
+    return fga + 0.4 * fta - 1.07 * orbRate * (fga - fg) + to;
+  };
 
   const useOfficialRatings = segment === "all" && teamStats?.away?.offensiveRating && teamStats?.home?.offensiveRating;
 
@@ -521,11 +526,11 @@ export default function Game() {
   const useOfficialPossessions = segment === "all" && officialAwayPossessions && officialHomePossessions;
 
   const awayPossessions = Math.max(
-    useOfficialPossessions ? officialAwayPossessions : possessions(advancedAwayTotals),
+    useOfficialPossessions ? officialAwayPossessions : possessions(advancedAwayTotals, advancedHomeTotals),
     1
   );
   const homePossessions = Math.max(
-    useOfficialPossessions ? officialHomePossessions : possessions(advancedHomeTotals),
+    useOfficialPossessions ? officialHomePossessions : possessions(advancedHomeTotals, advancedAwayTotals),
     1
   );
 
