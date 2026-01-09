@@ -713,7 +713,13 @@ export default function Game() {
         .filter((p) => predicate(p.period))
         .flatMap((p) => p.stints || [])
         .reduce((sum, stint) => sum + (parseClock(stint.startClock) - parseClock(stint.endClock)), 0);
-      if (total > 0) return total;
+      if (total > 0) {
+        if (segment === "all" && isLive) {
+          const elapsed = estimateElapsedAllSeconds();
+          if (elapsed) return Math.min(total, elapsed);
+        }
+        return total;
+      }
     }
     if (segment === "all") {
       const elapsed = estimateElapsedAllSeconds();
