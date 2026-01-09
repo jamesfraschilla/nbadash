@@ -469,8 +469,19 @@ export default function Game() {
   const baseHomeTotals = homeTeam?.teamId ? segmentStats.teamTotals[homeTeam.teamId] || {} : {};
   const awaySnapshotTotals = awayTeam?.teamId ? snapshotStats?.teamTotals?.[awayTeam.teamId] : null;
   const homeSnapshotTotals = homeTeam?.teamId ? snapshotStats?.teamTotals?.[homeTeam.teamId] : null;
-  const awayTotals = awaySnapshotTotals ? { ...baseAwayTotals, ...awaySnapshotTotals } : baseAwayTotals;
-  const homeTotals = homeSnapshotTotals ? { ...baseHomeTotals, ...homeSnapshotTotals } : baseHomeTotals;
+  const isLiveSegment = segment !== "all" && snapshotBounds?.endIsLive;
+  const mergeTeamTotals = (base, snapshot) => {
+    if (!snapshot) return base;
+    const merged = { ...base, ...snapshot };
+    if (isLiveSegment) {
+      const basePoints = base?.points ?? 0;
+      const snapPoints = snapshot?.points;
+      merged.points = Number.isFinite(snapPoints) ? Math.max(basePoints, snapPoints) : basePoints;
+    }
+    return merged;
+  };
+  const awayTotals = mergeTeamTotals(baseAwayTotals, awaySnapshotTotals);
+  const homeTotals = mergeTeamTotals(baseHomeTotals, homeSnapshotTotals);
   const advancedAwayTotals = baseAwayTotals;
   const advancedHomeTotals = baseHomeTotals;
   const displayAwayScore = segment === "all" ? awayTeam?.score ?? 0 : awayTotals.points || 0;
@@ -693,6 +704,21 @@ export default function Game() {
     return minutes * 60 + seconds;
   };
 
+  const estimateElapsedSegmentSeconds = () => {
+    if (!isLive || !game?.period || !game?.gameClock) return null;
+    const predicate = segmentPeriods(segment);
+    const currentPeriod = Number(game.period) || 1;
+    const periodLength = (period) => (period <= 4 ? 12 * 60 : 5 * 60);
+    const remaining = parseIsoClock(game.gameClock);
+    const elapsedCurrent = Math.max(0, periodLength(currentPeriod) - remaining);
+    let total = 0;
+    for (let period = 1; period < currentPeriod; period += 1) {
+      if (predicate(period)) total += periodLength(period);
+    }
+    if (predicate(currentPeriod)) total += elapsedCurrent;
+    return total || null;
+  };
+
   const estimateElapsedAllSeconds = () => {
     if (!game?.period || !game?.gameClock) return null;
     const period = Number(game.period) || 1;
@@ -714,8 +740,8 @@ export default function Game() {
         .flatMap((p) => p.stints || [])
         .reduce((sum, stint) => sum + (parseClock(stint.startClock) - parseClock(stint.endClock)), 0);
       if (total > 0) {
-        if (segment === "all" && isLive) {
-          const elapsed = estimateElapsedAllSeconds();
+        if (isLive) {
+          const elapsed = segment === "all" ? estimateElapsedAllSeconds() : estimateElapsedSegmentSeconds();
           if (elapsed) return Math.min(total, elapsed);
         }
         return total;
