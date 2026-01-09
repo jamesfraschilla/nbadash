@@ -684,6 +684,28 @@ export default function Game() {
     return Number(min) * 60 + Number(sec);
   };
 
+  const parseIsoClock = (clock) => {
+    if (!clock) return 0;
+    const match = /PT(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?/.exec(clock);
+    if (!match) return 0;
+    const minutes = Number(match[1] || 0);
+    const seconds = Number(match[2] || 0);
+    return minutes * 60 + seconds;
+  };
+
+  const estimateElapsedAllSeconds = () => {
+    if (!game?.period || !game?.gameClock) return null;
+    const period = Number(game.period) || 1;
+    const currentLength = period <= 4 ? 12 * 60 : 5 * 60;
+    const remaining = parseIsoClock(game.gameClock);
+    const elapsedCurrent = Math.max(0, currentLength - remaining);
+    let completed = 0;
+    for (let p = 1; p < period; p += 1) {
+      completed += p <= 4 ? 12 * 60 : 5 * 60;
+    }
+    return completed + elapsedCurrent;
+  };
+
   const segmentSeconds = (() => {
     if (minutesData?.periods?.length) {
       const predicate = segmentPeriods(segment);
@@ -692,6 +714,10 @@ export default function Game() {
         .flatMap((p) => p.stints || [])
         .reduce((sum, stint) => sum + (parseClock(stint.startClock) - parseClock(stint.endClock)), 0);
       if (total > 0) return total;
+    }
+    if (segment === "all") {
+      const elapsed = estimateElapsedAllSeconds();
+      if (elapsed) return elapsed;
     }
     const defaultSeconds = {
       "q1": 12 * 60,
