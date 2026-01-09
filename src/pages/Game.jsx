@@ -653,10 +653,18 @@ export default function Game() {
     },
   ];
 
+  const awayDeflections = segment === "all" ? teamStats?.away?.advancedStats?.deflections ?? 0 : 0;
+  const homeDeflections = segment === "all" ? teamStats?.home?.advancedStats?.deflections ?? 0 : 0;
   const awayDisruptions =
-    (advancedAwayTotals.steals || 0) + (advancedAwayTotals.blocks || 0) + (advancedAwayTotals.offensiveFoulsDrawn || 0);
+    (advancedAwayTotals.steals || 0) +
+    (advancedAwayTotals.blocks || 0) +
+    (advancedAwayTotals.offensiveFoulsDrawn || 0) +
+    awayDeflections;
   const homeDisruptions =
-    (advancedHomeTotals.steals || 0) + (advancedHomeTotals.blocks || 0) + (advancedHomeTotals.offensiveFoulsDrawn || 0);
+    (advancedHomeTotals.steals || 0) +
+    (advancedHomeTotals.blocks || 0) +
+    (advancedHomeTotals.offensiveFoulsDrawn || 0) +
+    homeDeflections;
   const buildCreatingStats = (teamTotals, fallback) => ({
     drivingFGMade: teamTotals.drivingFGMade ?? fallback?.drivingFGMade ?? 0,
     drivingFGAttempted: teamTotals.drivingFGAttempted ?? fallback?.drivingFGAttempted ?? 0,
