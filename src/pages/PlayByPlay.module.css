@@ -90,6 +90,7 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .headerRow,
@@ -120,10 +121,7 @@
 
 .eventRow {
   min-height: 44px;
-}
-
-.eventRow:hover {
-  background-color: var(--row-hover);
+  -webkit-tap-highlight-color: transparent;
 }
 
 .highlighted {
@@ -135,6 +133,18 @@
 .highlighted .clock,
 .highlighted .score {
   color: #111;
+}
+
+.eventRow.highlighted,
+.eventRow.highlighted:hover,
+.eventRow.highlighted:active {
+  background-color: #fff4a3;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .eventRow:hover {
+    background-color: var(--row-hover);
+  }
 }
 
 .awayColumn,
