@@ -24,7 +24,7 @@ export default function PlayByPlay() {
   const [period, setPeriod] = useState(null);
   const [viewMode, setViewMode] = useState(viewParam === "highlighted" ? "highlighted" : "all");
   const [latestFirst, setLatestFirst] = useState(true);
-  const [highlightedIds, setHighlightedIds] = useState(new Set());
+  const [highlightedMap, setHighlightedMap] = useState(new Map());
   const holdTimerRef = useRef(null);
   const holdTargetRef = useRef(null);
 
@@ -41,7 +41,7 @@ export default function PlayByPlay() {
       if (!supabase || !gameId) return [];
       const { data, error: fetchError } = await supabase
         .from("pbp_highlights")
-        .select("action_number")
+        .select("action_number,note")
         .eq("game_id", gameId);
       if (fetchError) throw fetchError;
       return data || [];
@@ -74,16 +74,20 @@ export default function PlayByPlay() {
   const filtered = useMemo(() => {
     let list = scoreTracked;
     if (viewMode === "highlighted") {
-      list = scoreTracked.filter((action) => action.actionNumber && highlightedIds.has(action.actionNumber));
+      list = scoreTracked.filter((action) => action.actionNumber && highlightedMap.has(action.actionNumber));
     } else {
       list = period ? scoreTracked.filter((action) => action.period === period) : scoreTracked;
     }
     return latestFirst ? [...list].reverse() : list;
-  }, [scoreTracked, period, latestFirst, viewMode, highlightedIds]);
+  }, [scoreTracked, period, latestFirst, viewMode, highlightedMap]);
 
   useEffect(() => {
     if (!highlightRows) return;
-    setHighlightedIds(new Set(highlightRows.map((row) => row.action_number)));
+    const next = new Map();
+    highlightRows.forEach((row) => {
+      if (row.action_number != null) next.set(row.action_number, row.note || "");
+    });
+    setHighlightedMap(next);
   }, [highlightRows]);
 
   useEffect(() => {
@@ -108,28 +112,42 @@ export default function PlayByPlay() {
 
   const toggleHighlight = async (actionNumber) => {
     if (!actionNumber || !supabase || !gameId) return;
-    const isHighlighted = highlightedIds.has(actionNumber);
-    setHighlightedIds((prev) => {
-      const next = new Set(prev);
-      if (isHighlighted) {
-        next.delete(actionNumber);
-      } else {
-        next.add(actionNumber);
-      }
-      return next;
-    });
-    const request = isHighlighted
-      ? supabase.from("pbp_highlights").delete().eq("game_id", gameId).eq("action_number", actionNumber)
-      : supabase.from("pbp_highlights").upsert({ game_id: gameId, action_number: actionNumber }, { onConflict: "game_id,action_number" });
-    const { error: updateError } = await request;
-    if (updateError) {
-      setHighlightedIds((prev) => {
-        const next = new Set(prev);
-        if (isHighlighted) {
-          next.add(actionNumber);
-        } else {
-          next.delete(actionNumber);
+    const isHighlighted = highlightedMap.has(actionNumber);
+    const existingNote = highlightedMap.get(actionNumber) || "";
+    const notePrompt = isHighlighted
+      ? "Edit highlight note (leave blank to keep no note)."
+      : "Add a note for this highlight (optional).";
+    const noteValue = window.prompt(notePrompt, existingNote);
+    if (noteValue === null) return;
+    const trimmedNote = String(noteValue).trim();
+    if (isHighlighted && trimmedNote === "" && existingNote) {
+      const remove = window.confirm("Remove this highlight?");
+      if (remove) {
+        const { error: removeError } = await supabase
+          .from("pbp_highlights")
+          .delete()
+          .eq("game_id", gameId)
+          .eq("action_number", actionNumber);
+        if (!removeError) {
+          setHighlightedMap((prev) => {
+            const next = new Map(prev);
+            next.delete(actionNumber);
+            return next;
+          });
         }
+        return;
+      }
+    }
+    const { error: updateError } = await supabase
+      .from("pbp_highlights")
+      .upsert(
+        { game_id: gameId, action_number: actionNumber, note: trimmedNote },
+        { onConflict: "game_id,action_number" }
+      );
+    if (!updateError) {
+      setHighlightedMap((prev) => {
+        const next = new Map(prev);
+        next.set(actionNumber, trimmedNote);
         return next;
       });
     }
@@ -237,10 +255,17 @@ export default function PlayByPlay() {
           const isHome = action.teamId === game.homeTeam?.teamId;
           const actionNumber = action.actionNumber ?? null;
           const rowKey = actionNumber ?? `${action.period}-${index}`;
+          const highlightNote = actionNumber != null ? highlightedMap.get(actionNumber) : "";
+          const periodLabel =
+            action.period > 4
+              ? action.period === 5
+                ? "OT"
+                : `OT${action.period - 4}`
+              : `Q${action.period}`;
           return (
             <div
               key={rowKey}
-              className={`${styles.eventRow} ${actionNumber && highlightedIds.has(actionNumber) ? styles.highlighted : ""}`}
+              className={`${styles.eventRow} ${actionNumber && highlightedMap.has(actionNumber) ? styles.highlighted : ""}`}
               onPointerDown={handleHoldStart(actionNumber)}
               onPointerUp={handleHoldEnd}
               onPointerLeave={handleHoldEnd}
@@ -264,10 +289,14 @@ export default function PlayByPlay() {
                 )}
               </div>
               <div className={styles.centerColumn}>
+                {viewMode === "highlighted" && <div className={styles.periodLabel}>{periodLabel}</div>}
                 <div className={styles.clock}>{normalizeClock(action.clock)}</div>
                 <div className={styles.score}>
                   {action.currentAwayScore} - {action.currentHomeScore}
                 </div>
+                {viewMode === "highlighted" && highlightNote ? (
+                  <div className={styles.note}>{highlightNote}</div>
+                ) : null}
               </div>
               <div className={styles.homeColumn}>
                 {isHome && (
