@@ -514,16 +514,34 @@ export default function Game() {
 
   const ortgAway = useOfficialRatings
     ? Math.round(teamStats.away.offensiveRating)
-    : Math.round((advancedAwayTotals.points || 0) / Math.max(possessions(advancedAwayTotals), 1) * 100);
+    : Math.round(
+      (advancedAwayTotals.points || 0) /
+        Math.max(possessions(advancedAwayTotals, advancedHomeTotals), 1) *
+        100
+    );
   const ortgHome = useOfficialRatings
     ? Math.round(teamStats.home.offensiveRating)
-    : Math.round((advancedHomeTotals.points || 0) / Math.max(possessions(advancedHomeTotals), 1) * 100);
+    : Math.round(
+      (advancedHomeTotals.points || 0) /
+        Math.max(possessions(advancedHomeTotals, advancedAwayTotals), 1) *
+        100
+    );
   const netAway = useOfficialRatings
     ? Math.round(teamStats.away.netRating)
-    : ortgAway - Math.round((advancedHomeTotals.points || 0) / Math.max(possessions(advancedHomeTotals), 1) * 100);
+    : ortgAway -
+      Math.round(
+        (advancedHomeTotals.points || 0) /
+          Math.max(possessions(advancedHomeTotals, advancedAwayTotals), 1) *
+          100
+      );
   const netHome = useOfficialRatings
     ? Math.round(teamStats.home.netRating)
-    : ortgHome - Math.round((advancedAwayTotals.points || 0) / Math.max(possessions(advancedAwayTotals), 1) * 100);
+    : ortgHome -
+      Math.round(
+        (advancedAwayTotals.points || 0) /
+          Math.max(possessions(advancedAwayTotals, advancedHomeTotals), 1) *
+          100
+      );
 
   const officialAwayPossessions = teamStats?.away?.possessions;
   const officialHomePossessions = teamStats?.home?.possessions;
