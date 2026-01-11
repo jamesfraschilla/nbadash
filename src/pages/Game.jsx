@@ -555,14 +555,6 @@ export default function Game() {
   const displayAwayScore = segment === "all" ? awayTeam?.score ?? 0 : awayTotals.points || 0;
   const displayHomeScore = segment === "all" ? homeTeam?.score ?? 0 : homeTotals.points || 0;
 
-  if (isLoading) {
-    return <div className={styles.stateMessage}>Loading game details...</div>;
-  }
-
-  if (error || !game) {
-    return <div className={styles.stateMessage}>Failed to load game details.</div>;
-  }
-
   const possessions = (teamTotals = {}, opponentTotals = {}) => {
     const fga = teamTotals.fieldGoalsAttempted || 0;
     const fta = teamTotals.freeThrowsAttempted || 0;
@@ -588,6 +580,14 @@ export default function Game() {
     possessionCounts
     && possessionCounts.homePossessions > 0
     && possessionCounts.awayPossessions > 0;
+
+  if (isLoading) {
+    return <div className={styles.stateMessage}>Loading game details...</div>;
+  }
+
+  if (error || !game) {
+    return <div className={styles.stateMessage}>Failed to load game details.</div>;
+  }
 
   const useOfficialRatings = segment === "all" && teamStats?.away?.offensiveRating && teamStats?.home?.offensiveRating;
 
