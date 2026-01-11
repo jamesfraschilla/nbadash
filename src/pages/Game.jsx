@@ -281,9 +281,22 @@ const getSegmentSnapshotBounds = (segment, snapshots, currentSnapshot, currentPe
 
 export default function Game() {
   const { gameId } = useParams();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const dateParam = params.get("d");
-  const [segment, setSegment] = useState("all");
+  const urlSegmentParam = params.get("segment");
+  const segmentFromUrl = useMemo(() => {
+    const map = {
+      Q1: "q1",
+      Q2: "q2",
+      Q3: "q3",
+      Q4: "q4",
+      "Q1-Q3": "q1-q3",
+      "1H": "first-half",
+      "2H": "second-half",
+    };
+    return urlSegmentParam ? map[urlSegmentParam] ?? "all" : "all";
+  }, [urlSegmentParam]);
+  const [segment, setSegment] = useState(segmentFromUrl);
   const [snapshots, setSnapshots] = useState(() => loadSnapshots(gameId));
   const statsNavRef = useRef(null);
   const boxScoreNavRef = useRef(null);
@@ -311,6 +324,31 @@ export default function Game() {
     };
     return map[segment] ?? null;
   }, [segment]);
+
+  useEffect(() => {
+    setSegment(segmentFromUrl);
+  }, [segmentFromUrl]);
+
+  const handleSegmentChange = (nextSegment) => {
+    setSegment(nextSegment);
+    const nextParams = new URLSearchParams(params);
+    const nextApiSegment = {
+      q1: "Q1",
+      q2: "Q2",
+      q3: "Q3",
+      q4: "Q4",
+      "q1-q3": "Q1-Q3",
+      "first-half": "1H",
+      "second-half": "2H",
+      all: null,
+    }[nextSegment] ?? null;
+    if (nextApiSegment) {
+      nextParams.set("segment", nextApiSegment);
+    } else {
+      nextParams.delete("segment");
+    }
+    setParams(nextParams);
+  };
 
   const { data: game, isLoading, error } = useQuery({
     queryKey: ["game", gameId, segmentParam],
@@ -994,7 +1032,7 @@ export default function Game() {
       </section>
 
       <div className={`${styles.navRow} ${styles.navRowTight}`} ref={statsNavRef}>
-        <SegmentSelector value={segment} onChange={setSegment} />
+        <SegmentSelector value={segment} onChange={handleSegmentChange} />
         {snapshotLabel ? <div className={styles.snapshotLabel}>{snapshotLabel}</div> : null}
         <Link to={dateParam ? `/m/${gameId}?d=${dateParam}` : `/m/${gameId}`}>Minutes</Link>
         <Link to={dateParam ? `/g/${gameId}/events?d=${dateParam}` : `/g/${gameId}/events`}>
@@ -1064,7 +1102,7 @@ export default function Game() {
         />
 
       <div className={styles.navRow} ref={boxScoreNavRef}>
-        <SegmentSelector value={segment} onChange={setSegment} />
+        <SegmentSelector value={segment} onChange={handleSegmentChange} />
         <Link to={dateParam ? `/m/${gameId}?d=${dateParam}` : `/m/${gameId}`}>Minutes</Link>
         <Link to={dateParam ? `/g/${gameId}/events?d=${dateParam}` : `/g/${gameId}/events`}>
           Play-by-Play
