@@ -760,23 +760,16 @@ export default function Game() {
   };
 
   const segmentSeconds = (() => {
-    if (minutesData?.periods?.length) {
+    if (isLive) {
+      const elapsed = segment === "all" ? estimateElapsedAllSeconds() : estimateElapsedSegmentSeconds();
+      if (elapsed) return elapsed;
+    } else if (minutesData?.periods?.length) {
       const predicate = segmentPeriods(segment);
       const total = minutesData.periods
         .filter((p) => predicate(p.period))
         .flatMap((p) => p.stints || [])
         .reduce((sum, stint) => sum + (parseClock(stint.startClock) - parseClock(stint.endClock)), 0);
-      if (total > 0) {
-        if (isLive) {
-          const elapsed = segment === "all" ? estimateElapsedAllSeconds() : estimateElapsedSegmentSeconds();
-          if (elapsed) return Math.min(total, elapsed);
-        }
-        return total;
-      }
-    }
-    if (segment === "all") {
-      const elapsed = estimateElapsedAllSeconds();
-      if (elapsed) return elapsed;
+      if (total > 0) return total;
     }
     const defaultSeconds = {
       "q1": 12 * 60,
