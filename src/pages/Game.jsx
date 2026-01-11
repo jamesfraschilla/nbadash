@@ -694,6 +694,10 @@ export default function Game() {
         : possessions(advancedHomeTotals, advancedAwayTotals),
     1
   );
+  const formatPossessionsValue = (value) => {
+    if (!Number.isFinite(value)) return "0";
+    return Number.isInteger(value) ? String(value) : value.toFixed(1);
+  };
 
   const transitionStatsDerived = (teamTotals, possessionsCount) => ({
     transitionRate: (teamTotals.transitionPossessions || 0)
@@ -991,6 +995,9 @@ export default function Game() {
           <div className={styles.statLabel}>ORTG</div>
           <div className={styles.statLabel}>NET</div>
           <div className={styles.paceRow}>PACE: {paceValue.toFixed(1)}</div>
+          <div className={styles.possessionsRow}>
+            POSSESSIONS: {formatPossessionsValue(awayPossessions)} - {formatPossessionsValue(homePossessions)}
+          </div>
           <div className={`${styles.status} ${isLive ? styles.statusLive : ""}`}>
             {status || game.gameStatusText}
           </div>

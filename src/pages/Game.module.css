@@ -180,6 +180,13 @@
   margin-top: 2px;
 }
 
+.possessionsRow {
+  font-size: 18px;
+  font-weight: 300;
+  color: var(--text);
+  margin-top: 2px;
+}
+
 .status {
   font-size: 20px;
   font-weight: 600;
