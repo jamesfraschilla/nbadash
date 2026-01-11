@@ -332,7 +332,7 @@ export function aggregateSegmentStats({
       const isOffensive = action.subType === "offensive";
       if (teamStats) {
         teamStats.reboundsTotal += 1;
-        if (isOffensive && action.personId) teamStats.reboundsOffensive += 1;
+        if (isOffensive) teamStats.reboundsOffensive += 1;
       }
       if (action.personId) {
         const player = ensurePlayer(playerMap, action.personId, baseMap.get(action.personId));
