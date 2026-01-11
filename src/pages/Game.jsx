@@ -61,6 +61,10 @@ const SEGMENT_STAT_DEFAULTS = {
   rimFieldGoalsAttempted: 0,
   midFieldGoalsMade: 0,
   midFieldGoalsAttempted: 0,
+  pointsFor: 0,
+  pointsAgainst: 0,
+  possessionsFor: 0,
+  possessionsAgainst: 0,
 };
 
 const reviveSnapshotEntry = (entry) => {
@@ -566,11 +570,17 @@ export default function Game() {
           segment === "all" && Number.isFinite(officialSeconds) ? officialSeconds : safeStats.minutes;
         const plusMinusPoints =
           segment === "all" && player.plusMinusPoints != null ? player.plusMinusPoints : safeStats.plusMinusPoints;
+        const offensivePoss = safeStats.possessionsFor || 0;
+        const defensivePoss = safeStats.possessionsAgainst || 0;
+        const ortg = offensivePoss ? (safeStats.pointsFor / offensivePoss) * 100 : null;
+        const drtg = defensivePoss ? (safeStats.pointsAgainst / defensivePoss) * 100 : null;
         return {
           ...base,
           ...safeStats,
           plusMinusPoints,
           minutes: formatMinutesFromSeconds(minutesSeconds),
+          ortg,
+          drtg,
         };
       })
       .filter((player) => player.minutes !== "00:00" || player.points > 0 || player.reboundsTotal > 0);

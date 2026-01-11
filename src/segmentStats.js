@@ -7,6 +7,15 @@ function parseClock(clock) {
   return minutes * 60 + seconds;
 }
 
+function parseIsoClock(clock) {
+  if (!clock) return 0;
+  const match = /PT(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?/.exec(clock);
+  if (!match) return 0;
+  const minutes = Number(match[1] || 0);
+  const seconds = Number(match[2] || 0);
+  return minutes * 60 + seconds;
+}
+
 export function segmentPeriods(segment) {
   switch (segment) {
     case "q1":
@@ -61,6 +70,10 @@ function ensurePlayer(map, playerId, base) {
       rimFieldGoalsAttempted: 0,
       midFieldGoalsMade: 0,
       midFieldGoalsAttempted: 0,
+      pointsFor: 0,
+      pointsAgainst: 0,
+      possessionsFor: 0,
+      possessionsAgainst: 0,
     });
   }
   return map.get(playerId);
@@ -119,6 +132,21 @@ export function aggregateSegmentStats({
     return aOrder - bOrder;
   });
   const actionByNumber = new Map(segmentActions.map((action) => [action.actionNumber, action]));
+  const actionsByPeriod = new Map();
+  orderedActions.forEach((action) => {
+    if (!action.clock) return;
+    const period = Number(action.period);
+    if (!period) return;
+    const secRemaining = parseIsoClock(action.clock);
+    if (!actionsByPeriod.has(period)) actionsByPeriod.set(period, []);
+    actionsByPeriod.get(period).push({
+      secRemaining,
+      possession: action.possession,
+    });
+  });
+  actionsByPeriod.forEach((list) => {
+    list.sort((a, b) => b.secRemaining - a.secRemaining);
+  });
 
   const playerMap = new Map();
   const baseMap = new Map();
@@ -394,24 +422,65 @@ export function aggregateSegmentStats({
     }
   });
 
+  const countPossessionsInWindow = (periodActions, startSec, endSec) => {
+    if (!periodActions?.length) return { home: 0, away: 0 };
+    let home = 0;
+    let away = 0;
+    let lastPossession = null;
+    let firstWindowPossession = null;
+    periodActions.forEach((action) => {
+      if (action.secRemaining > startSec) {
+        if (action.possession != null) lastPossession = action.possession;
+        return;
+      }
+      if (action.secRemaining < endSec) return;
+      if (action.possession == null) return;
+      if (firstWindowPossession == null) firstWindowPossession = action.possession;
+      if (action.possession !== lastPossession) {
+        if (Number(action.possession) === Number(homeTeam.teamId)) home += 1;
+        if (Number(action.possession) === Number(awayTeam.teamId)) away += 1;
+        lastPossession = action.possession;
+      }
+    });
+    if (home + away === 0 && firstWindowPossession != null) {
+      if (Number(firstWindowPossession) === Number(homeTeam.teamId)) home += 1;
+      if (Number(firstWindowPossession) === Number(awayTeam.teamId)) away += 1;
+    }
+    return { home, away };
+  };
+
   if (minutesData?.periods) {
     minutesData.periods.forEach((period) => {
       if (!predicate(period.period)) return;
+      const periodActions = actionsByPeriod.get(period.period) || [];
       period.stints.forEach((stint) => {
         const duration = parseClock(stint.startClock) - parseClock(stint.endClock);
         const awayPlusMinus = stint.plusMinus || 0;
         const homePlusMinus = -awayPlusMinus;
+        const startSec = parseClock(stint.startClock);
+        const endSec = parseClock(stint.endClock);
+        const pointsAway = stint.awayScore || 0;
+        const pointsHome = stint.homeScore || 0;
+        const stintPossessions = countPossessionsInWindow(periodActions, startSec, endSec);
 
         stint.playersAway.forEach((player) => {
           const entry = ensurePlayer(playerMap, player.personId, baseMap.get(player.personId));
           addSeconds(entry, duration);
           addPlusMinus(entry, awayPlusMinus);
+          entry.pointsFor += pointsAway;
+          entry.pointsAgainst += pointsHome;
+          entry.possessionsFor += stintPossessions.away;
+          entry.possessionsAgainst += stintPossessions.home;
         });
 
         stint.playersHome.forEach((player) => {
           const entry = ensurePlayer(playerMap, player.personId, baseMap.get(player.personId));
           addSeconds(entry, duration);
           addPlusMinus(entry, homePlusMinus);
+          entry.pointsFor += pointsHome;
+          entry.pointsAgainst += pointsAway;
+          entry.possessionsFor += stintPossessions.home;
+          entry.possessionsAgainst += stintPossessions.away;
         });
       });
     });

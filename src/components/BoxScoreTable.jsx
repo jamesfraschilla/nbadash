@@ -21,6 +21,11 @@ const columns = [
   "DRTG",
 ];
 
+function formatRating(value) {
+  if (!Number.isFinite(value)) return "";
+  return value.toFixed(1);
+}
+
 function playerLine(player) {
   return {
     MIN: formatMinutes(player.minutes),
@@ -38,8 +43,8 @@ function playerLine(player) {
     "3PT": `${player.threePointersMade}-${player.threePointersAttempted}`,
     FT: `${player.freeThrowsMade}-${player.freeThrowsAttempted}`,
     "+/-": player.plusMinusPoints,
-    ORTG: "",
-    DRTG: "",
+    ORTG: formatRating(player.ortg),
+    DRTG: formatRating(player.drtg),
   };
 }
 
@@ -125,8 +130,8 @@ export default function BoxScoreTable({ teamLabel, boxScore, currentPeriod, rati
               <td>{boxScore.totals.threePointersMade}-{boxScore.totals.threePointersAttempted}</td>
               <td>{boxScore.totals.freeThrowsMade}-{boxScore.totals.freeThrowsAttempted}</td>
               <td>{""}</td>
-              <td>{ratings.ortg ?? ""}</td>
-              <td>{ratings.drtg ?? ""}</td>
+              <td>{formatRating(ratings.ortg)}</td>
+              <td>{formatRating(ratings.drtg)}</td>
             </tr>
           )}
         </tbody>
