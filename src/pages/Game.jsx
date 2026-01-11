@@ -657,22 +657,30 @@ export default function Game() {
         Math.max(possessions(advancedHomeTotals, advancedAwayTotals), 1) *
         100
     );
+  const useOfficialDefensive = teamStats?.away?.defensiveRating && teamStats?.home?.defensiveRating;
+  const drtgAway = useOfficialDefensive
+    ? Math.round(teamStats.away.defensiveRating)
+    : Math.round(
+      (advancedHomeTotals.points || 0) /
+        Math.max(possessions(advancedHomeTotals, advancedAwayTotals), 1) *
+        100
+    );
+  const drtgHome = useOfficialDefensive
+    ? Math.round(teamStats.home.defensiveRating)
+    : Math.round(
+      (advancedAwayTotals.points || 0) /
+        Math.max(possessions(advancedAwayTotals, advancedHomeTotals), 1) *
+        100
+    );
+
   const netAway = useOfficialRatings
     ? Math.round(teamStats.away.netRating)
     : ortgAway -
-      Math.round(
-        (advancedHomeTotals.points || 0) /
-          Math.max(possessions(advancedHomeTotals, advancedAwayTotals), 1) *
-          100
-      );
+      drtgAway;
   const netHome = useOfficialRatings
     ? Math.round(teamStats.home.netRating)
     : ortgHome -
-      Math.round(
-        (advancedAwayTotals.points || 0) /
-          Math.max(possessions(advancedAwayTotals, advancedHomeTotals), 1) *
-          100
-      );
+      drtgHome;
 
   const officialAwayPossessions = teamStats?.away?.possessions;
   const officialHomePossessions = teamStats?.home?.possessions;
@@ -1132,11 +1140,13 @@ export default function Game() {
         <BoxScoreTable
           teamLabel={awayTeam.teamTricode}
           boxScore={{ players: awayPlayers, totals: awayTotals }}
+          ratings={{ ortg: ortgAway, drtg: drtgAway }}
           currentPeriod={game.period}
         />
         <BoxScoreTable
           teamLabel={homeTeam.teamTricode}
           boxScore={{ players: homePlayers, totals: homeTotals }}
+          ratings={{ ortg: ortgHome, drtg: drtgHome }}
           currentPeriod={game.period}
         />
       </section>

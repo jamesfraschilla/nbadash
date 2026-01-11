@@ -17,6 +17,8 @@ const columns = [
   "3PT",
   "FT",
   "+/-",
+  "ORTG",
+  "DRTG",
 ];
 
 function playerLine(player) {
@@ -36,6 +38,8 @@ function playerLine(player) {
     "3PT": `${player.threePointersMade}-${player.threePointersAttempted}`,
     FT: `${player.freeThrowsMade}-${player.freeThrowsAttempted}`,
     "+/-": player.plusMinusPoints,
+    ORTG: "",
+    DRTG: "",
   };
 }
 
@@ -60,7 +64,7 @@ function pfClass(fouls, period) {
   return styles.pfRed;
 }
 
-export default function BoxScoreTable({ teamLabel, boxScore, currentPeriod }) {
+export default function BoxScoreTable({ teamLabel, boxScore, currentPeriod, ratings = {} }) {
   if (!boxScore) return null;
 
   const shadedColumns = new Set(["FG", "RIM", "MID", "3PT", "FT"]);
@@ -121,6 +125,8 @@ export default function BoxScoreTable({ teamLabel, boxScore, currentPeriod }) {
               <td>{boxScore.totals.threePointersMade}-{boxScore.totals.threePointersAttempted}</td>
               <td>{boxScore.totals.freeThrowsMade}-{boxScore.totals.freeThrowsAttempted}</td>
               <td>{""}</td>
+              <td>{ratings.ortg ?? ""}</td>
+              <td>{ratings.drtg ?? ""}</td>
             </tr>
           )}
         </tbody>
