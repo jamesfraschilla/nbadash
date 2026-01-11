@@ -10,7 +10,12 @@ import TransitionStats from "../components/TransitionStats.jsx";
 import MiscStats from "../components/MiscStats.jsx";
 import CreatingDisruption from "../components/CreatingDisruption.jsx";
 import SegmentSelector from "../components/SegmentSelector.jsx";
-import { aggregateSegmentStats, computeKills, segmentPeriods } from "../segmentStats.js";
+import {
+  aggregateSegmentStats,
+  computeKills,
+  countPossessionsByTeam,
+  segmentPeriods,
+} from "../segmentStats.js";
 import { supabase } from "../supabaseClient.js";
 import styles from "./Game.module.css";
 
@@ -569,6 +574,21 @@ export default function Game() {
     return fga + 0.4 * fta - 1.07 * orbRate * (fga - fg) + to;
   };
 
+  const possessionCounts = useMemo(() => {
+    if (!homeTeam?.teamId || !awayTeam?.teamId) return null;
+    return countPossessionsByTeam(
+      game?.playByPlayActions || [],
+      segment,
+      homeTeam.teamId,
+      awayTeam.teamId
+    );
+  }, [game?.playByPlayActions, segment, homeTeam?.teamId, awayTeam?.teamId]);
+
+  const hasPossessionCounts =
+    possessionCounts
+    && possessionCounts.homePossessions > 0
+    && possessionCounts.awayPossessions > 0;
+
   const useOfficialRatings = segment === "all" && teamStats?.away?.offensiveRating && teamStats?.home?.offensiveRating;
 
   const ortgAway = useOfficialRatings
@@ -607,11 +627,19 @@ export default function Game() {
   const useOfficialPossessions = segment === "all" && officialAwayPossessions && officialHomePossessions;
 
   const awayPossessions = Math.max(
-    useOfficialPossessions ? officialAwayPossessions : possessions(advancedAwayTotals, advancedHomeTotals),
+    useOfficialPossessions
+      ? officialAwayPossessions
+      : hasPossessionCounts
+        ? possessionCounts.awayPossessions
+        : possessions(advancedAwayTotals, advancedHomeTotals),
     1
   );
   const homePossessions = Math.max(
-    useOfficialPossessions ? officialHomePossessions : possessions(advancedHomeTotals, advancedAwayTotals),
+    useOfficialPossessions
+      ? officialHomePossessions
+      : hasPossessionCounts
+        ? possessionCounts.homePossessions
+        : possessions(advancedHomeTotals, advancedAwayTotals),
     1
   );
 

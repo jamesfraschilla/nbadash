@@ -486,3 +486,32 @@ export function computeKills(actions, segment, homeTeamId, awayTeamId) {
     awayKills: kills[awayTeamId] || 0,
   };
 }
+
+export function countPossessionsByTeam(actions, segment, homeTeamId, awayTeamId) {
+  const predicate = segmentPeriods(segment);
+  const homeId = Number(homeTeamId);
+  const awayId = Number(awayTeamId);
+  const segmentActions = actions
+    .filter((action) => predicate(action.period))
+    .sort((a, b) => {
+      const aOrder = a.orderNumber ?? a.actionNumber ?? 0;
+      const bOrder = b.orderNumber ?? b.actionNumber ?? 0;
+      return aOrder - bOrder;
+    });
+
+  let currentPossession = null;
+  let homePossessions = 0;
+  let awayPossessions = 0;
+
+  segmentActions.forEach((action) => {
+    if (action.possession == null) return;
+    const possessionTeam = Number(action.possession);
+    if (!Number.isFinite(possessionTeam)) return;
+    if (possessionTeam === currentPossession) return;
+    currentPossession = possessionTeam;
+    if (possessionTeam === homeId) homePossessions += 1;
+    if (possessionTeam === awayId) awayPossessions += 1;
+  });
+
+  return { homePossessions, awayPossessions };
+}
