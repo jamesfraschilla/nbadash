@@ -712,11 +712,6 @@ export default function Game() {
         : possessions(advancedHomeTotals, advancedAwayTotals),
     1
   );
-  const formatPossessionsValue = (value) => {
-    if (!Number.isFinite(value)) return "0";
-    return Number.isInteger(value) ? String(value) : value.toFixed(1);
-  };
-
   const transitionStatsDerived = (teamTotals, possessionsCount) => ({
     transitionRate: (teamTotals.transitionPossessions || 0)
       ? ((teamTotals.transitionPossessions || 0) / possessionsCount) * 100
@@ -1005,7 +1000,6 @@ export default function Game() {
           <div className={styles.teamScore}>{displayAwayScore}</div>
           <div className={styles.statValue}>{ortgAway}</div>
           <div className={styles.statValue}>{netAway >= 0 ? "+" : ""}{netAway}</div>
-          <div className={styles.statValue}>{formatPossessionsValue(awayPossessions)}</div>
           </div>
 
           <div className={styles.centerColumn}>
@@ -1013,7 +1007,6 @@ export default function Game() {
             <div className={styles.dash}>-</div>
           <div className={styles.statLabel}>ORTG</div>
           <div className={styles.statLabel}>NET</div>
-          <div className={styles.statLabel}>POSS</div>
           <div className={styles.paceRow}>PACE: {paceValue.toFixed(1)}</div>
           <div className={`${styles.status} ${isLive ? styles.statusLive : ""}`}>
             {status || game.gameStatusText}
@@ -1026,7 +1019,6 @@ export default function Game() {
           <div className={styles.teamScore}>{displayHomeScore}</div>
           <div className={styles.statValue}>{ortgHome}</div>
           <div className={styles.statValue}>{netHome >= 0 ? "+" : ""}{netHome}</div>
-          <div className={styles.statValue}>{formatPossessionsValue(homePossessions)}</div>
           </div>
 
           <div className={`${styles.teamLogoColumn} ${styles.homeLogoColumn}`}>
