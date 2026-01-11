@@ -11,6 +11,7 @@ import MiscStats from "../components/MiscStats.jsx";
 import CreatingDisruption from "../components/CreatingDisruption.jsx";
 import SegmentSelector from "../components/SegmentSelector.jsx";
 import { aggregateSegmentStats, computeKills, segmentPeriods } from "../segmentStats.js";
+import { supabase } from "../supabaseClient.js";
 import styles from "./Game.module.css";
 
 const SNAPSHOT_STORAGE_PREFIX = "nba-dashboard:snapshots:";
@@ -309,6 +310,23 @@ export default function Game() {
     refetchIntervalInBackground: true,
   });
 
+  const { data: periodSnapshots = [] } = useQuery({
+    queryKey: ["period-snapshots", gameId],
+    queryFn: async () => {
+      if (!supabase || !gameId) return [];
+      const { data, error: fetchError } = await supabase
+        .from("period_snapshots")
+        .select("period,team_id,totals")
+        .eq("game_id", gameId);
+      if (fetchError) throw fetchError;
+      return data || [];
+    },
+    enabled: Boolean(gameId) && Boolean(supabase),
+    staleTime: 30_000,
+    refetchInterval: () => (game?.gameStatus === 2 ? 60_000 : false),
+    refetchIntervalInBackground: true,
+  });
+
   const { homeTeam, awayTeam, teamStats, boxScore, officials, callsAgainst } = game || {};
   const timeouts = game?.timeouts;
   const challenges = game?.challenges;
@@ -388,6 +406,43 @@ export default function Game() {
     })
     : { playerMap: new Map(), teamTotals: {} };
 
+  const periodSnapshotMap = useMemo(() => {
+    if (!periodSnapshots.length) return null;
+    const map = new Map();
+    periodSnapshots.forEach((row) => {
+      const period = Number(row.period);
+      const teamId = String(row.team_id);
+      if (!map.has(period)) map.set(period, new Map());
+      map.get(period).set(teamId, row.totals || {});
+    });
+    return map;
+  }, [periodSnapshots]);
+
+  const segmentSnapshotTotals = useMemo(() => {
+    if (!periodSnapshotMap || !homeTeam?.teamId || !awayTeam?.teamId) return null;
+    const segmentPeriodsMap = {
+      q1: { start: 0, end: 1 },
+      q2: { start: 1, end: 2 },
+      q3: { start: 2, end: 3 },
+      q4: { start: 3, end: 4 },
+      "first-half": { start: 0, end: 2 },
+      "second-half": { start: 2, end: 4 },
+      "q1-q3": { start: 0, end: 3 },
+    };
+    const bounds = segmentPeriodsMap[segment];
+    if (!bounds) return null;
+    const endTotals = periodSnapshotMap.get(bounds.end);
+    if (!endTotals) return null;
+    const startTotals = bounds.start === 0 ? null : periodSnapshotMap.get(bounds.start);
+    if (bounds.start !== 0 && !startTotals) return null;
+    const buildTotals = (teamId) =>
+      diffStats(startTotals?.get(teamId), endTotals.get(teamId));
+    return {
+      [awayTeam.teamId]: buildTotals(String(awayTeam.teamId)),
+      [homeTeam.teamId]: buildTotals(String(homeTeam.teamId)),
+    };
+  }, [periodSnapshotMap, segment, awayTeam?.teamId, homeTeam?.teamId]);
+
   const snapshotBounds = useMemo(() => {
     if (!useSnapshots) return null;
     return getSegmentSnapshotBounds(segment, snapshots, currentSnapshot, game?.period);
@@ -466,8 +521,12 @@ export default function Game() {
   const awayPlayers = buildPlayers(boxScore?.away?.players || []);
   const homePlayers = buildPlayers(boxScore?.home?.players || []);
 
-  const baseAwayTotals = awayTeam?.teamId ? segmentStats.teamTotals[awayTeam.teamId] || {} : {};
-  const baseHomeTotals = homeTeam?.teamId ? segmentStats.teamTotals[homeTeam.teamId] || {} : {};
+  const baseAwayTotals = awayTeam?.teamId
+    ? segmentSnapshotTotals?.[awayTeam.teamId] || segmentStats.teamTotals[awayTeam.teamId] || {}
+    : {};
+  const baseHomeTotals = homeTeam?.teamId
+    ? segmentSnapshotTotals?.[homeTeam.teamId] || segmentStats.teamTotals[homeTeam.teamId] || {}
+    : {};
   const useSnapshotTotals = snapshotBounds?.endIsLive;
   const awaySnapshotTotals =
     useSnapshotTotals && awayTeam?.teamId ? snapshotStats?.teamTotals?.[awayTeam.teamId] : null;
