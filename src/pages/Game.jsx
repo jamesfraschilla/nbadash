@@ -298,9 +298,23 @@ export default function Game() {
     window.scrollTo({ top: Math.max(0, top - offset), behavior: "smooth" });
   };
 
+  const segmentParam = useMemo(() => {
+    const map = {
+      q1: "Q1",
+      q2: "Q2",
+      q3: "Q3",
+      q4: "Q4",
+      "q1-q3": "Q1-Q3",
+      "first-half": "1H",
+      "second-half": "2H",
+      all: null,
+    };
+    return map[segment] ?? null;
+  }, [segment]);
+
   const { data: game, isLoading, error } = useQuery({
-    queryKey: ["game", gameId],
-    queryFn: () => fetchGame(gameId),
+    queryKey: ["game", gameId, segmentParam],
+    queryFn: () => fetchGame(gameId, segmentParam),
     enabled: Boolean(gameId),
     staleTime: 30_000,
     refetchInterval: (data) => (data?.gameStatus === 3 ? false : 15_000),
@@ -589,7 +603,7 @@ export default function Game() {
     return <div className={styles.stateMessage}>Failed to load game details.</div>;
   }
 
-  const useOfficialRatings = segment === "all" && teamStats?.away?.offensiveRating && teamStats?.home?.offensiveRating;
+  const useOfficialRatings = teamStats?.away?.offensiveRating && teamStats?.home?.offensiveRating;
 
   const ortgAway = useOfficialRatings
     ? Math.round(teamStats.away.offensiveRating)
@@ -624,7 +638,7 @@ export default function Game() {
 
   const officialAwayPossessions = teamStats?.away?.possessions;
   const officialHomePossessions = teamStats?.home?.possessions;
-  const useOfficialPossessions = segment === "all" && officialAwayPossessions && officialHomePossessions;
+  const useOfficialPossessions = officialAwayPossessions && officialHomePossessions;
 
   const awayPossessions = Math.max(
     useOfficialPossessions
@@ -657,8 +671,7 @@ export default function Game() {
       : 0,
   });
 
-  const useOfficialTransition = segment === "all"
-    && teamStats?.away?.transitionStats
+  const useOfficialTransition = teamStats?.away?.transitionStats
     && teamStats?.home?.transitionStats;
   const awayTransitionDerived = transitionStatsDerived(advancedAwayTotals, awayPossessions);
   const homeTransitionDerived = transitionStatsDerived(advancedHomeTotals, homePossessions);
@@ -778,8 +791,8 @@ export default function Game() {
     },
   ];
 
-  const awayDeflections = segment === "all" ? teamStats?.away?.advancedStats?.deflections ?? 0 : 0;
-  const homeDeflections = segment === "all" ? teamStats?.home?.advancedStats?.deflections ?? 0 : 0;
+  const awayDeflections = teamStats?.away?.advancedStats?.deflections ?? 0;
+  const homeDeflections = teamStats?.home?.advancedStats?.deflections ?? 0;
   const awayDisruptions =
     (advancedAwayTotals.steals || 0) +
     (advancedAwayTotals.blocks || 0) +

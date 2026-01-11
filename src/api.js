@@ -13,8 +13,9 @@ export function fetchGamesByDate(dateStr) {
   return requestJson(url);
 }
 
-export function fetchGame(gameId) {
-  const url = `${API_BASE}/games/${gameId}`;
+export function fetchGame(gameId, segment = null) {
+  const segmentParam = segment ? `?segment=${segment}` : "";
+  const url = `${API_BASE}/games/${gameId}${segmentParam}`;
   return requestJson(url);
 }
 
