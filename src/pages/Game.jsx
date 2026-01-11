@@ -589,10 +589,14 @@ export default function Game() {
   const homePlayers = buildPlayers(boxScore?.home?.players || []);
 
   const baseAwayTotals = awayTeam?.teamId
-    ? segmentSnapshotTotals?.[awayTeam.teamId] || segmentStats.teamTotals[awayTeam.teamId] || {}
+    ? segment === "all"
+      ? boxScore?.away?.totals || segmentStats.teamTotals[awayTeam.teamId] || {}
+      : segmentSnapshotTotals?.[awayTeam.teamId] || segmentStats.teamTotals[awayTeam.teamId] || {}
     : {};
   const baseHomeTotals = homeTeam?.teamId
-    ? segmentSnapshotTotals?.[homeTeam.teamId] || segmentStats.teamTotals[homeTeam.teamId] || {}
+    ? segment === "all"
+      ? boxScore?.home?.totals || segmentStats.teamTotals[homeTeam.teamId] || {}
+      : segmentSnapshotTotals?.[homeTeam.teamId] || segmentStats.teamTotals[homeTeam.teamId] || {}
     : {};
   const useSnapshotTotals = snapshotBounds?.endIsLive;
   const awaySnapshotTotals =
