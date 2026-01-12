@@ -504,6 +504,19 @@ export default function Game() {
     };
   }, [periodSnapshotMap, segment, awayTeam?.teamId, homeTeam?.teamId]);
 
+  const finalSnapshotTotals = useMemo(() => {
+    if (!periodSnapshotMap || !homeTeam?.teamId || !awayTeam?.teamId) return null;
+    const periods = Array.from(periodSnapshotMap.keys());
+    if (!periods.length) return null;
+    const maxPeriod = Math.max(...periods.map((value) => Number(value) || 0));
+    const endTotals = periodSnapshotMap.get(maxPeriod);
+    if (!endTotals) return null;
+    return {
+      [awayTeam.teamId]: endTotals.get(String(awayTeam.teamId)) || endTotals.get(awayTeam.teamId) || {},
+      [homeTeam.teamId]: endTotals.get(String(homeTeam.teamId)) || endTotals.get(homeTeam.teamId) || {},
+    };
+  }, [periodSnapshotMap, awayTeam?.teamId, homeTeam?.teamId]);
+
   const snapshotBounds = useMemo(() => {
     if (!useSnapshots) return null;
     return getSegmentSnapshotBounds(segment, snapshots, currentSnapshot, game?.period);
@@ -588,14 +601,44 @@ export default function Game() {
   const awayPlayers = buildPlayers(boxScore?.away?.players || []);
   const homePlayers = buildPlayers(boxScore?.home?.players || []);
 
+  const mergeAllSegmentTotals = (base, computed, snapshot) => {
+    if (segment !== "all") return base;
+    const pickValue = (primary, fallback) =>
+      Number.isFinite(primary) && primary !== 0
+        ? primary
+        : Number.isFinite(fallback)
+          ? fallback
+          : 0;
+    const pointsOffTurnovers = pickValue(
+      snapshot?.pointsOffTurnovers,
+      pickValue(computed?.pointsOffTurnovers, base?.pointsOffTurnovers)
+    );
+    const paintPoints = pickValue(
+      snapshot?.paintPoints,
+      pickValue(computed?.paintPoints, base?.paintPoints)
+    );
+    return {
+      ...base,
+      pointsOffTurnovers,
+      paintPoints,
+    };
+  };
   const baseAwayTotals = awayTeam?.teamId
     ? segment === "all"
-      ? boxScore?.away?.totals || segmentStats.teamTotals[awayTeam.teamId] || {}
+      ? mergeAllSegmentTotals(
+        boxScore?.away?.totals || segmentStats.teamTotals[awayTeam.teamId] || {},
+        segmentStats.teamTotals[awayTeam.teamId],
+        finalSnapshotTotals?.[awayTeam.teamId]
+      )
       : segmentSnapshotTotals?.[awayTeam.teamId] || segmentStats.teamTotals[awayTeam.teamId] || {}
     : {};
   const baseHomeTotals = homeTeam?.teamId
     ? segment === "all"
-      ? boxScore?.home?.totals || segmentStats.teamTotals[homeTeam.teamId] || {}
+      ? mergeAllSegmentTotals(
+        boxScore?.home?.totals || segmentStats.teamTotals[homeTeam.teamId] || {},
+        segmentStats.teamTotals[homeTeam.teamId],
+        finalSnapshotTotals?.[homeTeam.teamId]
+      )
       : segmentSnapshotTotals?.[homeTeam.teamId] || segmentStats.teamTotals[homeTeam.teamId] || {}
     : {};
   const useSnapshotTotals = snapshotBounds?.endIsLive;
@@ -738,12 +781,33 @@ export default function Game() {
 
   const useOfficialTransition = teamStats?.away?.transitionStats
     && teamStats?.home?.transitionStats;
-  const awayTransitionDerived = transitionStatsDerived(advancedAwayTotals, awayPossessions);
-  const homeTransitionDerived = transitionStatsDerived(advancedHomeTotals, homePossessions);
-  const mergeTransition = (derived, official) =>
-    official
-      ? { ...derived, ...official }
-      : derived;
+  const awayTransitionSource = segment === "all"
+    ? finalSnapshotTotals?.[awayTeam?.teamId]
+      || segmentStats.teamTotals?.[awayTeam?.teamId]
+      || advancedAwayTotals
+    : advancedAwayTotals;
+  const homeTransitionSource = segment === "all"
+    ? finalSnapshotTotals?.[homeTeam?.teamId]
+      || segmentStats.teamTotals?.[homeTeam?.teamId]
+      || advancedHomeTotals
+    : advancedHomeTotals;
+  const awayTransitionDerived = transitionStatsDerived(awayTransitionSource, awayPossessions);
+  const homeTransitionDerived = transitionStatsDerived(homeTransitionSource, homePossessions);
+  const mergeTransition = (derived, official) => {
+    if (!official) return derived;
+    const merged = { ...derived, ...official };
+    if (segment === "all") {
+      merged.pointsOffTurnovers = Number.isFinite(official.pointsOffTurnovers)
+        && official.pointsOffTurnovers !== 0
+        ? official.pointsOffTurnovers
+        : derived.pointsOffTurnovers;
+      merged.paintPoints = Number.isFinite(official.paintPoints)
+        && official.paintPoints !== 0
+        ? official.paintPoints
+        : derived.paintPoints;
+    }
+    return merged;
+  };
   const awayTransition = useOfficialTransition
     ? mergeTransition(awayTransitionDerived, teamStats.away.transitionStats)
     : awayTransitionDerived;

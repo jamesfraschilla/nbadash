@@ -455,8 +455,8 @@ export function aggregateSegmentStats({
       const periodActions = actionsByPeriod.get(period.period) || [];
       period.stints.forEach((stint) => {
         const duration = parseClock(stint.startClock) - parseClock(stint.endClock);
-        const awayPlusMinus = stint.plusMinus || 0;
-        const homePlusMinus = -awayPlusMinus;
+        const homePlusMinus = stint.plusMinus || 0;
+        const awayPlusMinus = -homePlusMinus;
         const startSec = parseClock(stint.startClock);
         const endSec = parseClock(stint.endClock);
         const pointsAway = stint.awayScore || 0;
