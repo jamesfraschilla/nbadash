@@ -49,6 +49,11 @@
   z-index: 1;
 }
 
+.table th.playerNameCol,
+.table td.playerNameCol {
+  text-align: left;
+}
+
 .table th.playerNumberCol,
 .table th.playerNameCol {
   z-index: 2;

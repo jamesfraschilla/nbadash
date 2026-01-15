@@ -73,6 +73,10 @@ export default function BoxScoreTable({ teamLabel, boxScore, currentPeriod, rati
   if (!boxScore) return null;
 
   const shadedColumns = new Set(["FG", "RIM", "MID", "3PT", "FT"]);
+  const formatPlayerName = (player) => {
+    const parts = [player.firstName, player.familyName].filter(Boolean);
+    return parts.join(" ");
+  };
 
   return (
     <div className={styles.tableWrapper}>
@@ -101,7 +105,7 @@ export default function BoxScoreTable({ teamLabel, boxScore, currentPeriod, rati
                 </td>
                 <td className={styles.playerNameCol}>
                   <span className={styles.playerName}>
-                    {player.familyName || player.firstName || ""}
+                    {formatPlayerName(player)}
                   </span>
                   <span className={styles.position}>{player.position || ""}</span>
                 </td>
