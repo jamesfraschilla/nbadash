@@ -79,25 +79,29 @@ export default function BoxScoreTable({ teamLabel, boxScore, currentPeriod, rati
       <table className={styles.table}>
         <thead>
           <tr className={styles.headerRow}>
-              <th className={styles.playerCol}>{teamLabel}</th>
-              {columns.map((col) => (
-                <th
-                  key={col}
-                  className={`${styles.statHeader} ${shadedColumns.has(col) ? styles.shadedColumn : ""}`}
-                >
-                  {col}
-                </th>
-              ))}
-            </tr>
+            <th className={styles.playerNumberCol}></th>
+            <th className={styles.playerNameCol}>{teamLabel}</th>
+            {columns.map((col) => (
+              <th
+                key={col}
+                className={`${styles.statHeader} ${shadedColumns.has(col) ? styles.shadedColumn : ""}`}
+              >
+                {col}
+              </th>
+            ))}
+          </tr>
         </thead>
         <tbody>
           {boxScore.players.map((player) => {
             const stats = playerLine(player);
             return (
               <tr key={player.personId}>
-                <td className={styles.playerCol}>
+                <td className={styles.playerNumberCol}>
+                  {player.jerseyNum ? `#${player.jerseyNum}` : ""}
+                </td>
+                <td className={styles.playerNameCol}>
                   <span className={styles.playerName}>
-                    {player.jerseyNum ? `#${player.jerseyNum} ` : ""}{player.familyName || player.firstName || ""}
+                    {player.familyName || player.firstName || ""}
                   </span>
                   <span className={styles.position}>{player.position || ""}</span>
                 </td>
@@ -114,7 +118,8 @@ export default function BoxScoreTable({ teamLabel, boxScore, currentPeriod, rati
           })}
           {boxScore.totals && (
             <tr className={styles.totalsRow}>
-              <td className={styles.playerCol}>Totals</td>
+              <td className={styles.playerNumberCol}></td>
+              <td className={styles.playerNameCol}>Totals</td>
               <td>{""}</td>
               <td>{boxScore.totals.points}</td>
               <td>{boxScore.totals.reboundsTotal}</td>

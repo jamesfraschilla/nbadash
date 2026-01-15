@@ -10,6 +10,7 @@
   font-size: 14px;
   min-width: 720px;
   color: var(--text);
+  --player-number-width: 38px;
 }
 
 .headerRow {
@@ -25,18 +26,31 @@
   font-variant-numeric: tabular-nums;
 }
 
-.playerCol {
+.playerNumberCol {
   text-align: left;
-  min-width: 120px;
+  min-width: var(--player-number-width);
+  width: var(--player-number-width);
   padding-left: 0;
-  padding-right: 8px;
+  padding-right: 6px;
   position: sticky;
   left: 0;
   background-color: var(--bg);
   z-index: 1;
 }
 
-.table th.playerCol {
+.playerNameCol {
+  text-align: left;
+  min-width: 160px;
+  padding-left: 0;
+  padding-right: 20px;
+  position: sticky;
+  left: var(--player-number-width);
+  background-color: var(--bg);
+  z-index: 1;
+}
+
+.table th.playerNumberCol,
+.table th.playerNameCol {
   z-index: 2;
 }
 
@@ -85,9 +99,17 @@
   .table {
     min-width: 100%;
     font-size: 12px;
+    --player-number-width: 32px;
   }
 
-  .playerCol {
-    min-width: 100px;
+  .playerNumberCol {
+    min-width: var(--player-number-width);
+    width: var(--player-number-width);
+  }
+
+  .playerNameCol {
+    min-width: 120px;
+    padding-right: 14px;
+    left: var(--player-number-width);
   }
 }
