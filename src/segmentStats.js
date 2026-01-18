@@ -16,6 +16,10 @@ function parseIsoClock(clock) {
   return minutes * 60 + seconds;
 }
 
+function periodLengthSeconds(period) {
+  return period <= 4 ? 12 * 60 : 5 * 60;
+}
+
 export function segmentPeriods(segment) {
   switch (segment) {
     case "q1":
@@ -134,18 +138,10 @@ export function aggregateSegmentStats({
   const actionByNumber = new Map(segmentActions.map((action) => [action.actionNumber, action]));
   const actionsByPeriod = new Map();
   orderedActions.forEach((action) => {
-    if (!action.clock) return;
     const period = Number(action.period);
     if (!period) return;
-    const secRemaining = parseIsoClock(action.clock);
     if (!actionsByPeriod.has(period)) actionsByPeriod.set(period, []);
-    actionsByPeriod.get(period).push({
-      secRemaining,
-      possession: action.possession,
-    });
-  });
-  actionsByPeriod.forEach((list) => {
-    list.sort((a, b) => b.secRemaining - a.secRemaining);
+    actionsByPeriod.get(period).push(action);
   });
 
   const playerMap = new Map();
@@ -422,67 +418,144 @@ export function aggregateSegmentStats({
     }
   });
 
-  const countPossessionsInWindow = (periodActions, startSec, endSec) => {
-    if (!periodActions?.length) return { home: 0, away: 0 };
-    let home = 0;
-    let away = 0;
-    let lastPossession = null;
-    let firstWindowPossession = null;
-    periodActions.forEach((action) => {
-      if (action.secRemaining > startSec) {
-        if (action.possession != null) lastPossession = action.possession;
-        return;
-      }
-      if (action.secRemaining < endSec) return;
-      if (action.possession == null) return;
-      if (firstWindowPossession == null) firstWindowPossession = action.possession;
-      if (action.possession !== lastPossession) {
-        if (Number(action.possession) === Number(homeTeam.teamId)) home += 1;
-        if (Number(action.possession) === Number(awayTeam.teamId)) away += 1;
-        lastPossession = action.possession;
-      }
-    });
-    if (home + away === 0 && firstWindowPossession != null) {
-      if (Number(firstWindowPossession) === Number(homeTeam.teamId)) home += 1;
-      if (Number(firstWindowPossession) === Number(awayTeam.teamId)) away += 1;
-    }
-    return { home, away };
-  };
-
+  const startersByPeriod = new Map();
   if (minutesData?.periods) {
     minutesData.periods.forEach((period) => {
-      if (!predicate(period.period)) return;
-      const periodActions = actionsByPeriod.get(period.period) || [];
-      period.stints.forEach((stint) => {
-        const duration = parseClock(stint.startClock) - parseClock(stint.endClock);
-        const homePlusMinus = stint.plusMinus || 0;
-        const awayPlusMinus = -homePlusMinus;
-        const startSec = parseClock(stint.startClock);
-        const endSec = parseClock(stint.endClock);
-        const pointsAway = stint.awayScore || 0;
-        const pointsHome = stint.homeScore || 0;
-        const stintPossessions = countPossessionsInWindow(periodActions, startSec, endSec);
-
-        stint.playersAway.forEach((player) => {
-          const entry = ensurePlayer(playerMap, player.personId, baseMap.get(player.personId));
-          addSeconds(entry, duration);
-          addPlusMinus(entry, awayPlusMinus);
-          entry.pointsFor += pointsAway;
-          entry.pointsAgainst += pointsHome;
-          entry.possessionsFor += stintPossessions.away;
-          entry.possessionsAgainst += stintPossessions.home;
-        });
-
-        stint.playersHome.forEach((player) => {
-          const entry = ensurePlayer(playerMap, player.personId, baseMap.get(player.personId));
-          addSeconds(entry, duration);
-          addPlusMinus(entry, homePlusMinus);
-          entry.pointsFor += pointsHome;
-          entry.pointsAgainst += pointsAway;
-          entry.possessionsFor += stintPossessions.home;
-          entry.possessionsAgainst += stintPossessions.away;
-        });
+      const stints = period.stints || [];
+      if (!stints.length) return;
+      const firstStint = [...stints].sort(
+        (a, b) => parseClock(b.startClock) - parseClock(a.startClock)
+      )[0];
+      if (!firstStint) return;
+      startersByPeriod.set(period.period, {
+        home: firstStint.playersHome || [],
+        away: firstStint.playersAway || [],
       });
+    });
+  }
+
+  const addLineupStats = ({
+    lineup,
+    duration,
+    pointsFor,
+    pointsAgainst,
+    possessionsFor,
+    possessionsAgainst,
+    plusMinus,
+  }) => {
+    lineup.forEach((personId) => {
+      const entry = ensurePlayer(playerMap, personId, baseMap.get(personId));
+      addSeconds(entry, duration);
+      addPlusMinus(entry, plusMinus);
+      entry.pointsFor += pointsFor;
+      entry.pointsAgainst += pointsAgainst;
+      entry.possessionsFor += possessionsFor;
+      entry.possessionsAgainst += possessionsAgainst;
+    });
+  };
+
+  if (actionsByPeriod.size && startersByPeriod.size) {
+    actionsByPeriod.forEach((periodActions, period) => {
+      if (!predicate(period)) return;
+      const starters = startersByPeriod.get(period);
+      if (!starters?.home?.length || !starters?.away?.length) return;
+
+      const homeLineup = new Set(starters.home.map((player) => player.personId));
+      const awayLineup = new Set(starters.away.map((player) => player.personId));
+      let currentStartSec = periodLengthSeconds(period);
+      let stintPointsHome = 0;
+      let stintPointsAway = 0;
+      let stintPossHome = 0;
+      let stintPossAway = 0;
+      let lastPossession = null;
+      let inSubBlock = false;
+
+      const finalizeStint = (endSec) => {
+        const duration = Math.max(0, currentStartSec - endSec);
+        if (
+          duration === 0 &&
+          stintPointsHome === 0 &&
+          stintPointsAway === 0 &&
+          stintPossHome === 0 &&
+          stintPossAway === 0
+        ) {
+          currentStartSec = endSec;
+          return;
+        }
+        const homePlusMinus = stintPointsHome - stintPointsAway;
+        addLineupStats({
+          lineup: homeLineup,
+          duration,
+          pointsFor: stintPointsHome,
+          pointsAgainst: stintPointsAway,
+          possessionsFor: stintPossHome,
+          possessionsAgainst: stintPossAway,
+          plusMinus: homePlusMinus,
+        });
+        addLineupStats({
+          lineup: awayLineup,
+          duration,
+          pointsFor: stintPointsAway,
+          pointsAgainst: stintPointsHome,
+          possessionsFor: stintPossAway,
+          possessionsAgainst: stintPossHome,
+          plusMinus: -homePlusMinus,
+        });
+        currentStartSec = endSec;
+        stintPointsHome = 0;
+        stintPointsAway = 0;
+        stintPossHome = 0;
+        stintPossAway = 0;
+      };
+
+      const scorePoints = (action) => {
+        if (action.actionType === "3pt" && action.shotResult === "Made") return 3;
+        if (action.actionType === "2pt" && action.shotResult === "Made") return 2;
+        if (action.actionType === "freethrow" && action.shotResult === "Made") return 1;
+        return 0;
+      };
+
+      periodActions.forEach((action) => {
+        const actionSec = action.clock ? parseIsoClock(action.clock) : null;
+        if (action.actionType === "substitution") {
+          if (actionSec != null && !inSubBlock) {
+            finalizeStint(actionSec);
+          }
+          inSubBlock = true;
+          const target =
+            action.teamId === homeTeam.teamId
+              ? homeLineup
+              : action.teamId === awayTeam.teamId
+                ? awayLineup
+                : null;
+          if (target && action.personId) {
+            if (action.subType === "out") target.delete(action.personId);
+            if (action.subType === "in") target.add(action.personId);
+          }
+          if (action.possession != null && action.possession !== lastPossession) {
+            if (Number(action.possession) === Number(homeTeam.teamId)) stintPossHome += 1;
+            if (Number(action.possession) === Number(awayTeam.teamId)) stintPossAway += 1;
+            lastPossession = action.possession;
+          }
+          return;
+        }
+
+        if (inSubBlock) inSubBlock = false;
+
+        const points = scorePoints(action);
+        if (points > 0) {
+          if (action.teamId === homeTeam.teamId) stintPointsHome += points;
+          if (action.teamId === awayTeam.teamId) stintPointsAway += points;
+        }
+
+        if (action.possession != null && action.possession !== lastPossession) {
+          if (Number(action.possession) === Number(homeTeam.teamId)) stintPossHome += 1;
+          if (Number(action.possession) === Number(awayTeam.teamId)) stintPossAway += 1;
+          lastPossession = action.possession;
+        }
+      });
+
+      finalizeStint(0);
     });
   }
 

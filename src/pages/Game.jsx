@@ -585,8 +585,14 @@ export default function Game() {
           segment === "all" && player.plusMinusPoints != null ? player.plusMinusPoints : safeStats.plusMinusPoints;
         const offensivePoss = safeStats.possessionsFor || 0;
         const defensivePoss = safeStats.possessionsAgainst || 0;
-        const ortg = offensivePoss ? (safeStats.pointsFor / offensivePoss) * 100 : null;
-        const drtg = defensivePoss ? (safeStats.pointsAgainst / defensivePoss) * 100 : null;
+        const computedOrt = offensivePoss ? (safeStats.pointsFor / offensivePoss) * 100 : null;
+        const computedDrt = defensivePoss ? (safeStats.pointsAgainst / defensivePoss) * 100 : null;
+        const ortg = segment === "all" && Number.isFinite(player.offensiveRating)
+          ? player.offensiveRating
+          : computedOrt;
+        const drtg = segment === "all" && Number.isFinite(player.defensiveRating)
+          ? player.defensiveRating
+          : computedDrt;
         return {
           ...base,
           ...safeStats,
