@@ -92,6 +92,10 @@
   gap: 6px;
 }
 
+.metaSpacer {
+  height: 8px;
+}
+
 .timeoutsNumbers {
   display: flex;
   gap: 6px;

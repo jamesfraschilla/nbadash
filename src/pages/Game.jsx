@@ -1059,6 +1059,7 @@ export default function Game({ variant = "full" }) {
           );
         })}
       </div>
+      <div className={styles.metaSpacer} />
     </div>
   );
   const renderFouls = (count) => (
@@ -1111,7 +1112,9 @@ export default function Game({ variant = "full" }) {
               src={teamLogoUrl(awayTeam.teamId)}
               alt={`${awayTeam.teamName} logo`}
             />
-            <div className={styles.teamRecord}>{awayTeam.wins}-{awayTeam.losses}</div>
+            {showExtras && (
+              <div className={styles.teamRecord}>{awayTeam.wins}-{awayTeam.losses}</div>
+            )}
             {timeouts && (
               <div className={styles.teamMetaRow}>
                 {isAtc ? renderTimeouts(timeouts.away) : `TO: ${timeouts.away}`}
@@ -1156,7 +1159,7 @@ export default function Game({ variant = "full" }) {
               <div className={styles.statValue}>{netAway >= 0 ? "+" : ""}{netAway}</div>
             </>
           )}
-          <div className={styles.statValue}>{formatChancesValue(awayChances)}</div>
+          {showExtras && <div className={styles.statValue}>{formatChancesValue(awayChances)}</div>}
           </div>
 
           <div className={styles.centerColumn}>
@@ -1168,7 +1171,7 @@ export default function Game({ variant = "full" }) {
               <div className={styles.statLabel}>NET</div>
             </>
           )}
-          <div className={styles.statLabel}>CHANCES</div>
+          {showExtras && <div className={styles.statLabel}>CHANCES</div>}
           {showExtras && <div className={styles.paceRow}>PACE: {paceValue.toFixed(1)}</div>}
           <div className={`${styles.status} ${isLive ? styles.statusLive : ""}`}>
             {status || game.gameStatusText}
@@ -1185,7 +1188,7 @@ export default function Game({ variant = "full" }) {
               <div className={styles.statValue}>{netHome >= 0 ? "+" : ""}{netHome}</div>
             </>
           )}
-          <div className={styles.statValue}>{formatChancesValue(homeChances)}</div>
+          {showExtras && <div className={styles.statValue}>{formatChancesValue(homeChances)}</div>}
           </div>
 
           <div className={`${styles.teamLogoColumn} ${styles.homeLogoColumn}`}>
@@ -1194,7 +1197,9 @@ export default function Game({ variant = "full" }) {
               src={teamLogoUrl(homeTeam.teamId)}
               alt={`${homeTeam.teamName} logo`}
             />
-            <div className={styles.teamRecord}>{homeTeam.wins}-{homeTeam.losses}</div>
+            {showExtras && (
+              <div className={styles.teamRecord}>{homeTeam.wins}-{homeTeam.losses}</div>
+            )}
             {timeouts && (
               <div className={styles.teamMetaRow}>
                 {isAtc ? renderTimeouts(timeouts.home) : `TO: ${timeouts.home}`}
