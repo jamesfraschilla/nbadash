@@ -35,6 +35,9 @@
   background-color: var(--bg);
   font-size: 13px;
   cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .lockButtonLocked {
