@@ -101,7 +101,6 @@
   font-weight: 400;
   color: var(--muted);
   line-height: 1.2;
-  width: 100%;
 }
 
 .metaBlock {
@@ -110,7 +109,6 @@
   align-items: center;
   gap: 4px;
   color: var(--text);
-  width: 100%;
 }
 
 .metaLabel {
@@ -123,21 +121,9 @@
 }
 
 .metaValueRow {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
   align-items: center;
-  column-gap: 16px;
-  justify-items: center;
-  width: 100%;
-}
-
-.metaLabelRow {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  align-items: baseline;
-  column-gap: 16px;
-  justify-items: center;
-  width: 100%;
+  gap: 6px;
 }
 
 .metaSpacer {
