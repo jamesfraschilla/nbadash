@@ -1049,12 +1049,19 @@ export default function Game({ variant = "full" }) {
         <Link className={styles.backButton} to={dateParam ? `/?d=${dateParam}` : "/"}>
           Back
         </Link>
-        {showExtras && (
+        {showExtras ? (
           <Link
             className={styles.backButton}
             to={dateParam ? `/g/${gameId}/atc?d=${dateParam}` : `/g/${gameId}/atc`}
           >
             ATC
+          </Link>
+        ) : (
+          <Link
+            className={styles.backButton}
+            to={dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`}
+          >
+            Full Dashboard
           </Link>
         )}
       </div>
