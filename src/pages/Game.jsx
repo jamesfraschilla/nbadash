@@ -1165,7 +1165,7 @@ export default function Game({ variant = "full" }) {
     <div className={styles.metaBlock}>
       <div className={styles.metaLabelRow}>
         <span className={styles.metaLabel}>Timeouts</span>
-        <span className={styles.metaLabel}>Coaches Challenge</span>
+        <span className={styles.metaLabel}>Challenge</span>
       </div>
       <div className={styles.metaValueRow}>
         {renderTimeoutDigits(remaining)}
