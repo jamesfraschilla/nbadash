@@ -283,7 +283,7 @@ const getSegmentSnapshotBounds = (segment, snapshots, currentSnapshot, currentPe
   }
 };
 
-export default function Game() {
+export default function Game({ variant = "full" }) {
   const { gameId } = useParams();
   const [params, setParams] = useSearchParams();
   const dateParam = params.get("d");
@@ -304,6 +304,9 @@ export default function Game() {
   const [snapshots, setSnapshots] = useState(() => loadSnapshots(gameId));
   const statsNavRef = useRef(null);
   const boxScoreNavRef = useRef(null);
+  const isAtc = variant === "atc";
+  const showExtras = !isAtc;
+
   const handleScrollToAdvanced = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -1046,6 +1049,14 @@ export default function Game() {
         <Link className={styles.backButton} to={dateParam ? `/?d=${dateParam}` : "/"}>
           Back
         </Link>
+        {showExtras && (
+          <Link
+            className={styles.backButton}
+            to={dateParam ? `/g/${gameId}/atc?d=${dateParam}` : `/g/${gameId}/atc`}
+          >
+            ATC
+          </Link>
+        )}
       </div>
       <div className={styles.contentAlign}>
         <section className={styles.scoreboard}>
@@ -1131,95 +1142,99 @@ export default function Game() {
         </div>
       </section>
 
-      <div className={`${styles.navRow} ${styles.navRowTight}`} ref={statsNavRef}>
-        <SegmentSelector value={segment} onChange={handleSegmentChange} />
-        {snapshotLabel ? <div className={styles.snapshotLabel}>{snapshotLabel}</div> : null}
-        <Link to={dateParam ? `/m/${gameId}?d=${dateParam}` : `/m/${gameId}`}>Minutes</Link>
-        <Link to={dateParam ? `/g/${gameId}/events?d=${dateParam}` : `/g/${gameId}/events`}>
-          Play-by-Play
-        </Link>
-        <Link
-          to={dateParam ? `/g/${gameId}/events?d=${dateParam}&view=highlighted` : `/g/${gameId}/events?view=highlighted`}
-        >
-          Highlighted
-        </Link>
-        <button type="button" className={styles.navButton} onClick={handleScrollToBoxScore}>
-          Box Score
-        </button>
-      </div>
+      {showExtras && (
+        <>
+          <div className={`${styles.navRow} ${styles.navRowTight}`} ref={statsNavRef}>
+            <SegmentSelector value={segment} onChange={handleSegmentChange} />
+            {snapshotLabel ? <div className={styles.snapshotLabel}>{snapshotLabel}</div> : null}
+            <Link to={dateParam ? `/m/${gameId}?d=${dateParam}` : `/m/${gameId}`}>Minutes</Link>
+            <Link to={dateParam ? `/g/${gameId}/events?d=${dateParam}` : `/g/${gameId}/events`}>
+              Play-by-Play
+            </Link>
+            <Link
+              to={dateParam ? `/g/${gameId}/events?d=${dateParam}&view=highlighted` : `/g/${gameId}/events?view=highlighted`}
+            >
+              Highlighted
+            </Link>
+            <button type="button" className={styles.navButton} onClick={handleScrollToBoxScore}>
+              Box Score
+            </button>
+          </div>
 
-      <StatBars
-        title="Four Factors"
-        awayLabel={awayTeam.teamTricode}
-        homeLabel={homeTeam.teamTricode}
-        rows={fourFactorRows}
-      />
+          <StatBars
+            title="Four Factors"
+            awayLabel={awayTeam.teamTricode}
+            homeLabel={homeTeam.teamTricode}
+            rows={fourFactorRows}
+          />
 
-        <StatBars
-          title="Shot Profile"
-          awayLabel={awayTeam.teamTricode}
-          homeLabel={homeTeam.teamTricode}
-          rows={shotProfileRows}
-        />
+          <StatBars
+            title="Shot Profile"
+            awayLabel={awayTeam.teamTricode}
+            homeLabel={homeTeam.teamTricode}
+            rows={shotProfileRows}
+          />
 
-        <StatBars
-          title="Shot Efficiency"
-          awayLabel={awayTeam.teamTricode}
-          homeLabel={homeTeam.teamTricode}
-          rows={shotEffRows}
-        />
+          <StatBars
+            title="Shot Efficiency"
+            awayLabel={awayTeam.teamTricode}
+            homeLabel={homeTeam.teamTricode}
+            rows={shotEffRows}
+          />
 
-        <TransitionStats
-          awayLabel={awayTeam.teamTricode}
-          homeLabel={homeTeam.teamTricode}
-          awayStats={awayTransition}
-          homeStats={homeTransition}
-        />
+          <TransitionStats
+            awayLabel={awayTeam.teamTricode}
+            homeLabel={homeTeam.teamTricode}
+            awayStats={awayTransition}
+            homeStats={homeTransition}
+          />
 
-        <MiscStats
-          awayLabel={awayTeam.teamTricode}
-          homeLabel={homeTeam.teamTricode}
-          awayStats={awayTransition}
-          homeStats={homeTransition}
-        />
+          <MiscStats
+            awayLabel={awayTeam.teamTricode}
+            homeLabel={homeTeam.teamTricode}
+            awayStats={awayTransition}
+            homeStats={homeTransition}
+          />
 
-        <CreatingDisruption
-          awayLabel={awayTeam.teamTricode}
-          homeLabel={homeTeam.teamTricode}
-          awayStats={awayCreating}
-          homeStats={homeCreating}
-          awayDisruptions={awayDisruptions}
-          homeDisruptions={homeDisruptions}
-          awayKills={killStats.awayKills}
-          homeKills={killStats.homeKills}
-        />
+          <CreatingDisruption
+            awayLabel={awayTeam.teamTricode}
+            homeLabel={homeTeam.teamTricode}
+            awayStats={awayCreating}
+            homeStats={homeCreating}
+            awayDisruptions={awayDisruptions}
+            homeDisruptions={homeDisruptions}
+            awayKills={killStats.awayKills}
+            homeKills={killStats.homeKills}
+          />
 
-        <Officials
-          officials={officials}
-          callsAgainst={callsAgainst}
-          homeAbr={homeTeam.teamTricode}
-          awayAbr={awayTeam.teamTricode}
-        />
+          <Officials
+            officials={officials}
+            callsAgainst={callsAgainst}
+            homeAbr={homeTeam.teamTricode}
+            awayAbr={awayTeam.teamTricode}
+          />
 
-      <div className={styles.navRow} ref={boxScoreNavRef}>
-        <SegmentSelector value={segment} onChange={handleSegmentChange} />
-        <Link to={dateParam ? `/m/${gameId}?d=${dateParam}` : `/m/${gameId}`}>Minutes</Link>
-        <Link to={dateParam ? `/g/${gameId}/events?d=${dateParam}` : `/g/${gameId}/events`}>
-          Play-by-Play
-        </Link>
-        <Link
-          to={dateParam ? `/g/${gameId}/events?d=${dateParam}&view=highlighted` : `/g/${gameId}/events?view=highlighted`}
-        >
-          Highlighted
-        </Link>
-        <button
-          type="button"
-          className={styles.navButton}
-          onClick={handleScrollToAdvanced}
-        >
-          Advanced
-        </button>
-      </div>
+          <div className={styles.navRow} ref={boxScoreNavRef}>
+            <SegmentSelector value={segment} onChange={handleSegmentChange} />
+            <Link to={dateParam ? `/m/${gameId}?d=${dateParam}` : `/m/${gameId}`}>Minutes</Link>
+            <Link to={dateParam ? `/g/${gameId}/events?d=${dateParam}` : `/g/${gameId}/events`}>
+              Play-by-Play
+            </Link>
+            <Link
+              to={dateParam ? `/g/${gameId}/events?d=${dateParam}&view=highlighted` : `/g/${gameId}/events?view=highlighted`}
+            >
+              Highlighted
+            </Link>
+            <button
+              type="button"
+              className={styles.navButton}
+              onClick={handleScrollToAdvanced}
+            >
+              Advanced
+            </button>
+          </div>
+        </>
+      )}
 
       <section className={styles.boxScoreSection}>
         <BoxScoreTable
