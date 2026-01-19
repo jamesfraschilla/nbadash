@@ -283,19 +283,8 @@ const getSegmentSnapshotBounds = (segment, snapshots, currentSnapshot, currentPe
   }
 };
 
-const foulsClass = (fouls, period, stylesRef) => {
+const foulsClass = (fouls, stylesRef) => {
   const safeFouls = fouls || 0;
-  const quarter = Math.min(Math.max(period || 1, 1), 4);
-  if (quarter === 1) {
-    if (safeFouls <= 1) return stylesRef.pfBlack;
-    if (safeFouls === 2) return stylesRef.pfYellow;
-    return stylesRef.pfRed;
-  }
-  if (quarter === 2) {
-    if (safeFouls <= 2) return stylesRef.pfBlack;
-    if (safeFouls === 3) return stylesRef.pfYellow;
-    return stylesRef.pfRed;
-  }
   if (safeFouls <= 3) return stylesRef.pfBlack;
   if (safeFouls === 4) return stylesRef.pfYellow;
   return stylesRef.pfRed;
@@ -1174,7 +1163,7 @@ export default function Game({ variant = "full" }) {
     <div className={styles.metaBlock}>
       <div className={styles.metaLabel}>Fouls</div>
       <div className={styles.metaValue}>
-        <span className={foulsClass(count, period, styles)}>{count}</span>
+        <span className={foulsClass(count, styles)}>{count}</span>
       </div>
     </div>
   );
