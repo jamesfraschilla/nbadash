@@ -164,7 +164,15 @@ export default function BoxScoreTable({
                 if (col === "FT") value = `${boxScore.totals.freeThrowsMade}-${boxScore.totals.freeThrowsAttempted}`;
                 if (col === "ORTG") value = formatRating(ratings.ortg);
                 if (col === "DRTG") value = formatRating(ratings.drtg);
-                return <td key={col}>{value}</td>;
+                const atcSeparator = variant === "atc" && col === "PF";
+                return (
+                  <td
+                    key={col}
+                    className={`${shadedColumns.has(col) ? styles.shadedColumn : ""} ${atcSeparator ? styles.atcSeparator : ""}`}
+                  >
+                    {value}
+                  </td>
+                );
               })}
             </tr>
           )}
