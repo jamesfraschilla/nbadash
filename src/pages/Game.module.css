@@ -382,7 +382,8 @@
   }
 
   .statLabel,
-  .statValue {
+  .statValue,
+  .paceRow {
     font-size: 16px;
   }
 
