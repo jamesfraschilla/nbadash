@@ -1113,41 +1113,18 @@ export default function Game({ variant = "full" }) {
               src={teamLogoUrl(awayTeam.teamId)}
               alt={`${awayTeam.teamName} logo`}
             />
-            {showExtras && (
-              <div className={styles.teamRecord}>{awayTeam.wins}-{awayTeam.losses}</div>
-            )}
             {timeouts && (
               <div className={styles.teamMetaRow}>
-                {isAtc ? renderTimeouts(timeouts.away) : `TO: ${timeouts.away}`}
+                {renderTimeouts(timeouts.away)}
               </div>
             )}
           {challenges && (
             <div className={styles.teamMetaRow}>
-              {isAtc ? (
-                renderChallenges(challenges.away)
-              ) : (
-                <>
-                  CC:
-                  <span className={styles.challengeRow}>
-                    {buildChallengeCircles(challenges.away).map((circle, index) => (
-                      <span
-                        key={`${circle.state}-${index}`}
-                        className={`${styles.challengeDot} ${styles[`challenge${circle.state[0].toUpperCase()}${circle.state.slice(1)}`]}`}
-                      />
-                    ))}
-                  </span>
-                </>
-              )}
+              {renderChallenges(challenges.away)}
             </div>
           )}
           <div className={styles.teamMetaRow}>
-            {isAtc ? (
-              renderFouls(Math.min(awayFouls, 5))
-            ) : (
-              <>
-                Fouls: <span className={awayFouls >= 5 ? styles.foulMax : ""}>{Math.min(awayFouls, 5)}</span>
-              </>
-            )}
+            {renderFouls(Math.min(awayFouls, 5))}
           </div>
         </div>
 
@@ -1198,41 +1175,18 @@ export default function Game({ variant = "full" }) {
               src={teamLogoUrl(homeTeam.teamId)}
               alt={`${homeTeam.teamName} logo`}
             />
-            {showExtras && (
-              <div className={styles.teamRecord}>{homeTeam.wins}-{homeTeam.losses}</div>
-            )}
             {timeouts && (
               <div className={styles.teamMetaRow}>
-                {isAtc ? renderTimeouts(timeouts.home) : `TO: ${timeouts.home}`}
+                {renderTimeouts(timeouts.home)}
               </div>
             )}
           {challenges && (
             <div className={styles.teamMetaRow}>
-              {isAtc ? (
-                renderChallenges(challenges.home)
-              ) : (
-                <>
-                  CC:
-                  <span className={styles.challengeRow}>
-                    {buildChallengeCircles(challenges.home).map((circle, index) => (
-                      <span
-                        key={`${circle.state}-${index}`}
-                        className={`${styles.challengeDot} ${styles[`challenge${circle.state[0].toUpperCase()}${circle.state.slice(1)}`]}`}
-                      />
-                    ))}
-                  </span>
-                </>
-              )}
+              {renderChallenges(challenges.home)}
             </div>
           )}
           <div className={styles.teamMetaRow}>
-            {isAtc ? (
-              renderFouls(Math.min(homeFouls, 5))
-            ) : (
-              <>
-                Fouls: <span className={homeFouls >= 5 ? styles.foulMax : ""}>{Math.min(homeFouls, 5)}</span>
-              </>
-            )}
+            {renderFouls(Math.min(homeFouls, 5))}
           </div>
         </div>
       </section>
