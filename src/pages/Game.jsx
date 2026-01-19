@@ -1129,24 +1129,20 @@ export default function Game({ variant = "full" }) {
   const awayFouls = currentFouls(awayTeam.teamId);
   const homeFouls = currentFouls(homeTeam.teamId);
   const lockIcon = isLocked ? "🔒" : "🔓";
-  const renderTimeouts = (remaining) => (
-    <div className={styles.metaBlock}>
-      <div className={styles.metaLabel}>Timeouts</div>
-      <div className={styles.timeoutsNumbers}>
-        {Array.from({ length: 7 }, (_, index) => {
-          const value = index + 1;
-          const inactive = remaining != null && value > remaining;
-          return (
-            <span
-              key={value}
-              className={`${styles.timeoutNumber} ${inactive ? styles.timeoutInactive : ""}`}
-            >
-              {value}
-            </span>
-          );
-        })}
-      </div>
-      <div className={styles.metaSpacer} />
+  const renderTimeoutDigits = (remaining) => (
+    <div className={styles.timeoutsNumbers}>
+      {Array.from({ length: 7 }, (_, index) => {
+        const value = index + 1;
+        const inactive = remaining != null && value > remaining;
+        return (
+          <span
+            key={value}
+            className={`${styles.timeoutNumber} ${inactive ? styles.timeoutInactive : ""}`}
+          >
+            {value}
+          </span>
+        );
+      })}
     </div>
   );
   const renderFouls = (count) => (
@@ -1155,16 +1151,25 @@ export default function Game({ variant = "full" }) {
       <div className={styles.metaValue}>{count}</div>
     </div>
   );
-  const renderChallenges = (teamChallenges) => (
+  const renderChallengeDots = (teamChallenges) => (
+    <div className={styles.metaValueRow}>
+      {buildChallengeCircles(teamChallenges).map((circle, index) => (
+        <span
+          key={`${circle.state}-${index}`}
+          className={`${styles.challengeDot} ${styles[`challenge${circle.state[0].toUpperCase()}${circle.state.slice(1)}`]}`}
+        />
+      ))}
+    </div>
+  );
+  const renderTimeoutsChallenges = (remaining, teamChallenges) => (
     <div className={styles.metaBlock}>
-      <div className={styles.metaLabel}>Coaches Challenge</div>
+      <div className={styles.metaLabelRow}>
+        <span className={styles.metaLabel}>Timeouts</span>
+        <span className={styles.metaLabel}>Coaches Challenge</span>
+      </div>
       <div className={styles.metaValueRow}>
-        {buildChallengeCircles(teamChallenges).map((circle, index) => (
-          <span
-            key={`${circle.state}-${index}`}
-            className={`${styles.challengeDot} ${styles[`challenge${circle.state[0].toUpperCase()}${circle.state.slice(1)}`]}`}
-          />
-        ))}
+        {renderTimeoutDigits(remaining)}
+        {renderChallengeDots(teamChallenges)}
       </div>
       <div className={styles.metaSpacer} />
     </div>
@@ -1222,16 +1227,11 @@ export default function Game({ variant = "full" }) {
               src={teamLogoUrl(awayTeam.teamId)}
               alt={`${awayTeam.teamName} logo`}
             />
-            {timeouts && (
+            {(timeouts || challenges) && (
               <div className={styles.teamMetaRow}>
-                {renderTimeouts(timeouts.away)}
+                {renderTimeoutsChallenges(timeouts?.away, challenges?.away || [])}
               </div>
             )}
-          {challenges && (
-            <div className={styles.teamMetaRow}>
-              {renderChallenges(challenges.away)}
-            </div>
-          )}
           <div className={styles.teamMetaRow}>
             {renderFouls(Math.min(awayFouls, 5))}
           </div>
@@ -1284,16 +1284,11 @@ export default function Game({ variant = "full" }) {
               src={teamLogoUrl(homeTeam.teamId)}
               alt={`${homeTeam.teamName} logo`}
             />
-            {timeouts && (
+            {(timeouts || challenges) && (
               <div className={styles.teamMetaRow}>
-                {renderTimeouts(timeouts.home)}
+                {renderTimeoutsChallenges(timeouts?.home, challenges?.home || [])}
               </div>
             )}
-          {challenges && (
-            <div className={styles.teamMetaRow}>
-              {renderChallenges(challenges.home)}
-            </div>
-          )}
           <div className={styles.teamMetaRow}>
             {renderFouls(Math.min(homeFouls, 5))}
           </div>

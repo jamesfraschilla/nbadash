@@ -73,6 +73,7 @@
   flex-direction: column;
   align-items: center;
   gap: 4px;
+  min-width: 220px;
 }
 
 .awayLogoColumn {
@@ -125,6 +126,12 @@
   gap: 6px;
 }
 
+.metaLabelRow {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+}
+
 .metaSpacer {
   height: 8px;
 }
@@ -132,6 +139,12 @@
 .timeoutsNumbers {
   display: flex;
   gap: 6px;
+}
+
+@media (max-width: 900px) {
+  .teamLogoColumn {
+    min-width: auto;
+  }
 }
 
 .timeoutNumber {
