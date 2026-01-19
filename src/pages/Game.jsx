@@ -1079,6 +1079,7 @@ export default function Game({ variant = "full" }) {
           />
         ))}
       </div>
+      <div className={styles.metaSpacer} />
     </div>
   );
 
