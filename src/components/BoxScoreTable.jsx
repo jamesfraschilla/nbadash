@@ -1,7 +1,7 @@
 import { formatMinutes } from "../utils.js";
 import styles from "./BoxScoreTable.module.css";
 
-const columns = [
+const defaultColumns = [
   "MIN",
   "PTS",
   "REB",
@@ -69,9 +69,18 @@ function pfClass(fouls, period) {
   return styles.pfRed;
 }
 
-export default function BoxScoreTable({ teamLabel, boxScore, currentPeriod, ratings = {} }) {
+export default function BoxScoreTable({
+  teamLabel,
+  boxScore,
+  currentPeriod,
+  ratings = {},
+  variant = "full",
+}) {
   if (!boxScore) return null;
 
+  const columns = variant === "atc"
+    ? defaultColumns.filter((col) => !["ORTG", "DRTG", "RIM", "MID"].includes(col))
+    : defaultColumns;
   const shadedColumns = new Set(["FG", "RIM", "MID", "3PT", "FT"]);
   const formatPlayerName = (player) => {
     const parts = [player.firstName, player.familyName].filter(Boolean);

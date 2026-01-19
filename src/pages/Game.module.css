@@ -69,7 +69,7 @@
   line-height: 1.2;
 }
 
-.timeoutsBlock {
+.metaBlock {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -77,9 +77,19 @@
   color: var(--text);
 }
 
-.timeoutsLabel {
+.metaLabel {
   text-decoration: underline;
   font-weight: 500;
+}
+
+.metaValue {
+  color: var(--text);
+}
+
+.metaValueRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .timeoutsNumbers {

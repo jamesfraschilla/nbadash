@@ -1043,8 +1043,8 @@ export default function Game({ variant = "full" }) {
   const awayFouls = currentFouls(awayTeam.teamId);
   const homeFouls = currentFouls(homeTeam.teamId);
   const renderTimeouts = (remaining) => (
-    <div className={styles.timeoutsBlock}>
-      <div className={styles.timeoutsLabel}>Timeouts</div>
+    <div className={styles.metaBlock}>
+      <div className={styles.metaLabel}>Timeouts</div>
       <div className={styles.timeoutsNumbers}>
         {Array.from({ length: 7 }, (_, index) => {
           const value = index + 1;
@@ -1058,6 +1058,25 @@ export default function Game({ variant = "full" }) {
             </span>
           );
         })}
+      </div>
+    </div>
+  );
+  const renderFouls = (count) => (
+    <div className={styles.metaBlock}>
+      <div className={styles.metaLabel}>Fouls</div>
+      <div className={styles.metaValue}>{count}</div>
+    </div>
+  );
+  const renderChallenges = (teamChallenges) => (
+    <div className={styles.metaBlock}>
+      <div className={styles.metaLabel}>Coaches Challenge</div>
+      <div className={styles.metaValueRow}>
+        {buildChallengeCircles(teamChallenges).map((circle, index) => (
+          <span
+            key={`${circle.state}-${index}`}
+            className={`${styles.challengeDot} ${styles[`challenge${circle.state[0].toUpperCase()}${circle.state.slice(1)}`]}`}
+          />
+        ))}
       </div>
     </div>
   );
@@ -1100,19 +1119,31 @@ export default function Game({ variant = "full" }) {
             )}
           {challenges && (
             <div className={styles.teamMetaRow}>
-              CC:
-              <span className={styles.challengeRow}>
-                {buildChallengeCircles(challenges.away).map((circle, index) => (
-                  <span
-                    key={`${circle.state}-${index}`}
-                    className={`${styles.challengeDot} ${styles[`challenge${circle.state[0].toUpperCase()}${circle.state.slice(1)}`]}`}
-                  />
-                ))}
-              </span>
+              {isAtc ? (
+                renderChallenges(challenges.away)
+              ) : (
+                <>
+                  CC:
+                  <span className={styles.challengeRow}>
+                    {buildChallengeCircles(challenges.away).map((circle, index) => (
+                      <span
+                        key={`${circle.state}-${index}`}
+                        className={`${styles.challengeDot} ${styles[`challenge${circle.state[0].toUpperCase()}${circle.state.slice(1)}`]}`}
+                      />
+                    ))}
+                  </span>
+                </>
+              )}
             </div>
           )}
           <div className={styles.teamMetaRow}>
-            Fouls: <span className={awayFouls >= 5 ? styles.foulMax : ""}>{Math.min(awayFouls, 5)}</span>
+            {isAtc ? (
+              renderFouls(Math.min(awayFouls, 5))
+            ) : (
+              <>
+                Fouls: <span className={awayFouls >= 5 ? styles.foulMax : ""}>{Math.min(awayFouls, 5)}</span>
+              </>
+            )}
           </div>
         </div>
 
@@ -1171,19 +1202,31 @@ export default function Game({ variant = "full" }) {
             )}
           {challenges && (
             <div className={styles.teamMetaRow}>
-              CC:
-              <span className={styles.challengeRow}>
-                {buildChallengeCircles(challenges.home).map((circle, index) => (
-                  <span
-                    key={`${circle.state}-${index}`}
-                    className={`${styles.challengeDot} ${styles[`challenge${circle.state[0].toUpperCase()}${circle.state.slice(1)}`]}`}
-                  />
-                ))}
-              </span>
+              {isAtc ? (
+                renderChallenges(challenges.home)
+              ) : (
+                <>
+                  CC:
+                  <span className={styles.challengeRow}>
+                    {buildChallengeCircles(challenges.home).map((circle, index) => (
+                      <span
+                        key={`${circle.state}-${index}`}
+                        className={`${styles.challengeDot} ${styles[`challenge${circle.state[0].toUpperCase()}${circle.state.slice(1)}`]}`}
+                      />
+                    ))}
+                  </span>
+                </>
+              )}
             </div>
           )}
           <div className={styles.teamMetaRow}>
-            Fouls: <span className={homeFouls >= 5 ? styles.foulMax : ""}>{Math.min(homeFouls, 5)}</span>
+            {isAtc ? (
+              renderFouls(Math.min(homeFouls, 5))
+            ) : (
+              <>
+                Fouls: <span className={homeFouls >= 5 ? styles.foulMax : ""}>{Math.min(homeFouls, 5)}</span>
+              </>
+            )}
           </div>
         </div>
       </section>
@@ -1288,12 +1331,14 @@ export default function Game({ variant = "full" }) {
           boxScore={{ players: awayPlayers, totals: awayTotals }}
           ratings={{ ortg: ortgAway, drtg: drtgAway }}
           currentPeriod={game.period}
+          variant={variant}
         />
         <BoxScoreTable
           teamLabel={homeTeam.teamTricode}
           boxScore={{ players: homePlayers, totals: homeTotals }}
           ratings={{ ortg: ortgHome, drtg: drtgHome }}
           currentPeriod={game.period}
+          variant={variant}
         />
       </section>
       </div>
