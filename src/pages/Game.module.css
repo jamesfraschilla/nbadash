@@ -6,10 +6,40 @@
 
 .backRow {
   margin-bottom: 8px;
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
+}
+
+.backRowLeft {
+  justify-self: start;
+}
+
+.backRowCenter {
+  justify-self: center;
+}
+
+.backRowRight {
+  justify-self: end;
+}
+
+.lockButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  background-color: var(--bg);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.lockButtonLocked {
+  border-color: var(--negative);
+  color: var(--negative);
 }
 
 .backButton {

@@ -304,6 +304,10 @@ export default function Game({ variant = "full" }) {
   const [snapshots, setSnapshots] = useState(() => loadSnapshots(gameId));
   const statsNavRef = useRef(null);
   const boxScoreNavRef = useRef(null);
+  const lockButtonRef = useRef(null);
+  const lockTimeoutRef = useRef(null);
+  const lockStyleRef = useRef(null);
+  const [isLocked, setIsLocked] = useState(false);
   const isAtc = variant === "atc";
   const showExtras = !isAtc;
 
@@ -335,6 +339,88 @@ export default function Game({ variant = "full" }) {
   useEffect(() => {
     setSegment(segmentFromUrl);
   }, [segmentFromUrl]);
+
+  useEffect(() => {
+    if (!isAtc) return undefined;
+    const preventAction = (event) => {
+      if (!isLocked) return;
+      if (lockButtonRef.current && lockButtonRef.current.contains(event.target)) return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    const preventScroll = (event) => {
+      if (!isLocked) return;
+      event.preventDefault();
+    };
+    document.addEventListener("click", preventAction, true);
+    document.addEventListener("mousedown", preventAction, true);
+    document.addEventListener("touchstart", preventAction, true);
+    document.addEventListener("touchmove", preventScroll, { passive: false });
+    document.addEventListener("wheel", preventScroll, { passive: false });
+    return () => {
+      document.removeEventListener("click", preventAction, true);
+      document.removeEventListener("mousedown", preventAction, true);
+      document.removeEventListener("touchstart", preventAction, true);
+      document.removeEventListener("touchmove", preventScroll);
+      document.removeEventListener("wheel", preventScroll);
+    };
+  }, [isAtc, isLocked]);
+
+  useEffect(() => {
+    if (!isAtc) return undefined;
+    const bodyStyle = document.body?.style;
+    const htmlStyle = document.documentElement?.style;
+    if (!bodyStyle || !htmlStyle) return undefined;
+    if (isLocked) {
+      if (!lockStyleRef.current) {
+        lockStyleRef.current = {
+          overflow: bodyStyle.overflow,
+          userSelect: bodyStyle.userSelect,
+          touchAction: htmlStyle.touchAction,
+        };
+      }
+      bodyStyle.overflow = "hidden";
+      bodyStyle.userSelect = "none";
+      htmlStyle.touchAction = "none";
+    } else {
+      const previous = lockStyleRef.current;
+      if (previous) {
+        bodyStyle.overflow = previous.overflow || "";
+        bodyStyle.userSelect = previous.userSelect || "";
+        htmlStyle.touchAction = previous.touchAction || "";
+      }
+      lockStyleRef.current = null;
+    }
+    return () => {
+      const previous = lockStyleRef.current;
+      if (previous) {
+        bodyStyle.overflow = previous.overflow || "";
+        bodyStyle.userSelect = previous.userSelect || "";
+        htmlStyle.touchAction = previous.touchAction || "";
+        lockStyleRef.current = null;
+      }
+    };
+  }, [isAtc, isLocked]);
+
+  const clearLockTimeout = () => {
+    if (lockTimeoutRef.current) {
+      clearTimeout(lockTimeoutRef.current);
+      lockTimeoutRef.current = null;
+    }
+  };
+
+  const startLockPress = () => {
+    if (!isAtc) return;
+    clearLockTimeout();
+    lockTimeoutRef.current = setTimeout(() => {
+      setIsLocked((prev) => !prev);
+      lockTimeoutRef.current = null;
+    }, 2000);
+  };
+
+  const endLockPress = () => {
+    clearLockTimeout();
+  };
 
   const handleSegmentChange = (nextSegment) => {
     setSegment(nextSegment);
@@ -1042,6 +1128,7 @@ export default function Game({ variant = "full" }) {
     ).length;
   const awayFouls = currentFouls(awayTeam.teamId);
   const homeFouls = currentFouls(homeTeam.teamId);
+  const lockIcon = isLocked ? "🔒" : "🔓";
   const renderTimeouts = (remaining) => (
     <div className={styles.metaBlock}>
       <div className={styles.metaLabel}>Timeouts</div>
@@ -1086,24 +1173,46 @@ export default function Game({ variant = "full" }) {
   return (
     <div className={styles.container}>
       <div className={styles.backRow}>
-        <Link className={styles.backButton} to={dateParam ? `/?d=${dateParam}` : "/"}>
-          Back
-        </Link>
-        {showExtras ? (
-          <Link
-            className={styles.backButton}
-            to={dateParam ? `/g/${gameId}/atc?d=${dateParam}` : `/g/${gameId}/atc`}
-          >
-            ATC
+        <div className={styles.backRowLeft}>
+          <Link className={styles.backButton} to={dateParam ? `/?d=${dateParam}` : "/"}>
+            Back
           </Link>
-        ) : (
-          <Link
-            className={styles.backButton}
-            to={dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`}
-          >
-            Full Dashboard
-          </Link>
-        )}
+        </div>
+        <div className={styles.backRowCenter}>
+          {isAtc && (
+            <button
+              ref={lockButtonRef}
+              type="button"
+              className={`${styles.lockButton} ${isLocked ? styles.lockButtonLocked : ""}`}
+              onMouseDown={startLockPress}
+              onMouseUp={endLockPress}
+              onMouseLeave={endLockPress}
+              onTouchStart={startLockPress}
+              onTouchEnd={endLockPress}
+              onTouchCancel={endLockPress}
+              aria-label={isLocked ? "Unlock page" : "Lock page"}
+            >
+              {lockIcon} Lock
+            </button>
+          )}
+        </div>
+        <div className={styles.backRowRight}>
+          {showExtras ? (
+            <Link
+              className={styles.backButton}
+              to={dateParam ? `/g/${gameId}/atc?d=${dateParam}` : `/g/${gameId}/atc`}
+            >
+              ATC
+            </Link>
+          ) : (
+            <Link
+              className={styles.backButton}
+              to={dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`}
+            >
+              Full Dashboard
+            </Link>
+          )}
+        </div>
       </div>
       <div className={styles.contentAlign}>
         <section className={styles.scoreboard}>

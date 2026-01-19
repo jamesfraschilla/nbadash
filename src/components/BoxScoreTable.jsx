@@ -144,7 +144,7 @@ export default function BoxScoreTable({
             );
           })}
           {boxScore.totals && (
-            <tr className={styles.totalsRow}>
+            <tr className={`${styles.totalsRow} ${variant === "atc" ? styles.totalsRowAtc : ""}`}>
               <td className={styles.playerNumberCol}></td>
               <td className={styles.playerNameCol}>Totals</td>
               {columns.map((col) => {
