@@ -104,10 +104,10 @@ export default function BoxScoreTable({
             ))}
           </tr>
         </thead>
-        <tbody>
-          {boxScore.players.map((player) => {
-            const stats = playerLine(player);
-            return (
+      <tbody>
+        {boxScore.players.map((player) => {
+          const stats = playerLine(player);
+          return (
               <tr key={player.personId}>
                 <td className={styles.playerNumberCol}>
                   {player.jerseyNum ? `#${player.jerseyNum}` : ""}
@@ -133,23 +133,25 @@ export default function BoxScoreTable({
             <tr className={styles.totalsRow}>
               <td className={styles.playerNumberCol}></td>
               <td className={styles.playerNameCol}>Totals</td>
-              <td>{""}</td>
-              <td>{boxScore.totals.points}</td>
-              <td>{boxScore.totals.reboundsTotal}</td>
-              <td>{boxScore.totals.reboundsOffensive}</td>
-              <td>{boxScore.totals.assists}</td>
-              <td>{boxScore.totals.steals}</td>
-              <td>{boxScore.totals.blocks}</td>
-              <td>{boxScore.totals.turnovers}</td>
-              <td>{boxScore.totals.foulsPersonal}</td>
-              <td>{boxScore.totals.fieldGoalsMade}-{boxScore.totals.fieldGoalsAttempted}</td>
-              <td>{boxScore.totals.rimFieldGoalsMade}-{boxScore.totals.rimFieldGoalsAttempted}</td>
-              <td>{boxScore.totals.midFieldGoalsMade}-{boxScore.totals.midFieldGoalsAttempted}</td>
-              <td>{boxScore.totals.threePointersMade}-{boxScore.totals.threePointersAttempted}</td>
-              <td>{boxScore.totals.freeThrowsMade}-{boxScore.totals.freeThrowsAttempted}</td>
-              <td>{""}</td>
-              <td>{formatRating(ratings.ortg)}</td>
-              <td>{formatRating(ratings.drtg)}</td>
+              {columns.map((col) => {
+                let value = "";
+                if (col === "PTS") value = boxScore.totals.points;
+                if (col === "REB") value = boxScore.totals.reboundsTotal;
+                if (col === "OREB") value = boxScore.totals.reboundsOffensive;
+                if (col === "AST") value = boxScore.totals.assists;
+                if (col === "STL") value = boxScore.totals.steals;
+                if (col === "BLK") value = boxScore.totals.blocks;
+                if (col === "TO") value = boxScore.totals.turnovers;
+                if (col === "PF") value = boxScore.totals.foulsPersonal;
+                if (col === "FG") value = `${boxScore.totals.fieldGoalsMade}-${boxScore.totals.fieldGoalsAttempted}`;
+                if (col === "RIM") value = `${boxScore.totals.rimFieldGoalsMade}-${boxScore.totals.rimFieldGoalsAttempted}`;
+                if (col === "MID") value = `${boxScore.totals.midFieldGoalsMade}-${boxScore.totals.midFieldGoalsAttempted}`;
+                if (col === "3PT") value = `${boxScore.totals.threePointersMade}-${boxScore.totals.threePointersAttempted}`;
+                if (col === "FT") value = `${boxScore.totals.freeThrowsMade}-${boxScore.totals.freeThrowsAttempted}`;
+                if (col === "ORTG") value = formatRating(ratings.ortg);
+                if (col === "DRTG") value = formatRating(ratings.drtg);
+                return <td key={col}>{value}</td>;
+              })}
             </tr>
           )}
         </tbody>
