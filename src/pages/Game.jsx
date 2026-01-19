@@ -1147,6 +1147,8 @@ export default function Game({ variant = "full" }) {
   const awayFouls = currentFouls(awayTeam.teamId);
   const homeFouls = currentFouls(homeTeam.teamId);
   const foulLimit = 5;
+  const awayFoulsDisplay = Math.min(awayFouls, foulLimit);
+  const homeFoulsDisplay = Math.min(homeFouls, foulLimit);
   const lockIcon = isLocked ? "🔒" : "🔓";
   const renderTimeouts = (remaining) => (
     <div className={styles.metaBlock}>
@@ -1249,7 +1251,7 @@ export default function Game({ variant = "full" }) {
               </div>
           )}
           <div className={styles.teamMetaRow}>
-            {renderFouls(awayFouls, currentPeriod)}
+            {renderFouls(awayFoulsDisplay, currentPeriod)}
           </div>
           {challenges && (
             <div className={styles.teamMetaRow}>
@@ -1311,7 +1313,7 @@ export default function Game({ variant = "full" }) {
               </div>
           )}
           <div className={styles.teamMetaRow}>
-            {renderFouls(homeFouls, currentPeriod)}
+            {renderFouls(homeFoulsDisplay, currentPeriod)}
           </div>
           {challenges && (
             <div className={styles.teamMetaRow}>
