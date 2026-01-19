@@ -1042,6 +1042,25 @@ export default function Game({ variant = "full" }) {
     ).length;
   const awayFouls = currentFouls(awayTeam.teamId);
   const homeFouls = currentFouls(homeTeam.teamId);
+  const renderTimeouts = (remaining) => (
+    <div className={styles.timeoutsBlock}>
+      <div className={styles.timeoutsLabel}>Timeouts</div>
+      <div className={styles.timeoutsNumbers}>
+        {Array.from({ length: 7 }, (_, index) => {
+          const value = index + 1;
+          const inactive = remaining != null && value > remaining;
+          return (
+            <span
+              key={value}
+              className={`${styles.timeoutNumber} ${inactive ? styles.timeoutInactive : ""}`}
+            >
+              {value}
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
 
   return (
     <div className={styles.container}>
@@ -1074,7 +1093,11 @@ export default function Game({ variant = "full" }) {
               alt={`${awayTeam.teamName} logo`}
             />
             <div className={styles.teamRecord}>{awayTeam.wins}-{awayTeam.losses}</div>
-            {timeouts && <div className={styles.teamMetaRow}>TO: {timeouts.away}</div>}
+            {timeouts && (
+              <div className={styles.teamMetaRow}>
+                {isAtc ? renderTimeouts(timeouts.away) : `TO: ${timeouts.away}`}
+              </div>
+            )}
           {challenges && (
             <div className={styles.teamMetaRow}>
               CC:
@@ -1096,18 +1119,26 @@ export default function Game({ variant = "full" }) {
           <div className={`${styles.teamStatsColumn} ${styles.awayStatsColumn}`}>
           <div className={styles.teamTricode}>{awayTeam.teamTricode}</div>
           <div className={styles.teamScore}>{displayAwayScore}</div>
-          <div className={styles.statValue}>{ortgAway}</div>
-          <div className={styles.statValue}>{netAway >= 0 ? "+" : ""}{netAway}</div>
+          {showExtras && (
+            <>
+              <div className={styles.statValue}>{ortgAway}</div>
+              <div className={styles.statValue}>{netAway >= 0 ? "+" : ""}{netAway}</div>
+            </>
+          )}
           <div className={styles.statValue}>{formatChancesValue(awayChances)}</div>
           </div>
 
           <div className={styles.centerColumn}>
             <div className={styles.vs}>vs</div>
             <div className={styles.dash}>-</div>
-          <div className={styles.statLabel}>ORTG</div>
-          <div className={styles.statLabel}>NET</div>
+          {showExtras && (
+            <>
+              <div className={styles.statLabel}>ORTG</div>
+              <div className={styles.statLabel}>NET</div>
+            </>
+          )}
           <div className={styles.statLabel}>CHANCES</div>
-          <div className={styles.paceRow}>PACE: {paceValue.toFixed(1)}</div>
+          {showExtras && <div className={styles.paceRow}>PACE: {paceValue.toFixed(1)}</div>}
           <div className={`${styles.status} ${isLive ? styles.statusLive : ""}`}>
             {status || game.gameStatusText}
           </div>
@@ -1117,8 +1148,12 @@ export default function Game({ variant = "full" }) {
           <div className={`${styles.teamStatsColumn} ${styles.homeStatsColumn}`}>
           <div className={styles.teamTricode}>{homeTeam.teamTricode}</div>
           <div className={styles.teamScore}>{displayHomeScore}</div>
-          <div className={styles.statValue}>{ortgHome}</div>
-          <div className={styles.statValue}>{netHome >= 0 ? "+" : ""}{netHome}</div>
+          {showExtras && (
+            <>
+              <div className={styles.statValue}>{ortgHome}</div>
+              <div className={styles.statValue}>{netHome >= 0 ? "+" : ""}{netHome}</div>
+            </>
+          )}
           <div className={styles.statValue}>{formatChancesValue(homeChances)}</div>
           </div>
 
@@ -1129,7 +1164,11 @@ export default function Game({ variant = "full" }) {
               alt={`${homeTeam.teamName} logo`}
             />
             <div className={styles.teamRecord}>{homeTeam.wins}-{homeTeam.losses}</div>
-            {timeouts && <div className={styles.teamMetaRow}>TO: {timeouts.home}</div>}
+            {timeouts && (
+              <div className={styles.teamMetaRow}>
+                {isAtc ? renderTimeouts(timeouts.home) : `TO: ${timeouts.home}`}
+              </div>
+            )}
           {challenges && (
             <div className={styles.teamMetaRow}>
               CC:

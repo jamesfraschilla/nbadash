@@ -69,6 +69,33 @@
   line-height: 1.2;
 }
 
+.timeoutsBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: var(--text);
+}
+
+.timeoutsLabel {
+  text-decoration: underline;
+  font-weight: 500;
+}
+
+.timeoutsNumbers {
+  display: flex;
+  gap: 6px;
+}
+
+.timeoutNumber {
+  color: var(--text);
+}
+
+.timeoutInactive {
+  color: var(--negative);
+  text-decoration: line-through;
+}
+
 .challengeRow {
   display: inline-flex;
   align-items: center;
