@@ -79,7 +79,21 @@ export default function BoxScoreTable({
   if (!boxScore) return null;
 
   const columns = variant === "atc"
-    ? defaultColumns.filter((col) => !["ORTG", "DRTG", "RIM", "MID"].includes(col))
+    ? [
+      "MIN",
+      "PF",
+      "PTS",
+      "REB",
+      "OREB",
+      "AST",
+      "STL",
+      "BLK",
+      "TO",
+      "FG",
+      "3PT",
+      "FT",
+      "+/-",
+    ]
     : defaultColumns;
   const shadedColumns = new Set(["FG", "RIM", "MID", "3PT", "FT"]);
   const formatPlayerName = (player) => {
@@ -97,7 +111,7 @@ export default function BoxScoreTable({
             {columns.map((col) => (
               <th
                 key={col}
-                className={`${styles.statHeader} ${shadedColumns.has(col) ? styles.shadedColumn : ""}`}
+                className={`${styles.statHeader} ${shadedColumns.has(col) ? styles.shadedColumn : ""} ${variant === "atc" && col === "PF" ? styles.atcSeparator : ""}`}
               >
                 {col}
               </th>
@@ -121,7 +135,7 @@ export default function BoxScoreTable({
                 {columns.map((col) => (
                   <td
                     key={col}
-                    className={shadedColumns.has(col) ? styles.shadedColumn : ""}
+                    className={`${shadedColumns.has(col) ? styles.shadedColumn : ""} ${variant === "atc" && col === "PF" ? styles.atcSeparator : ""}`}
                   >
                     {col === "PF" ? <span className={pfClass(stats[col], currentPeriod)}>{stats[col]}</span> : stats[col]}
                   </td>

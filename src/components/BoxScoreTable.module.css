@@ -26,6 +26,10 @@
   font-variant-numeric: tabular-nums;
 }
 
+.atcSeparator {
+  border-right: 2px solid #ffffff;
+}
+
 .playerNumberCol {
   text-align: left;
   min-width: var(--player-number-width);
