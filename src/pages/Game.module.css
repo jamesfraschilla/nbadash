@@ -155,6 +155,18 @@
   text-decoration: line-through;
 }
 
+.pfBlack {
+  color: var(--text);
+}
+
+.pfYellow {
+  color: var(--pf-yellow);
+}
+
+.pfRed {
+  color: var(--pf-red);
+}
+
 .challengeRow {
   display: inline-flex;
   align-items: center;
