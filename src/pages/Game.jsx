@@ -1227,14 +1227,14 @@ export default function Game({ variant = "full" }) {
                 {renderTimeouts(timeouts.away)}
               </div>
             )}
+          <div className={styles.teamMetaRow}>
+            {renderFouls(Math.min(awayFouls, 5))}
+          </div>
           {challenges && (
             <div className={styles.teamMetaRow}>
               {renderChallenges(challenges.away)}
             </div>
           )}
-          <div className={styles.teamMetaRow}>
-            {renderFouls(Math.min(awayFouls, 5))}
-          </div>
         </div>
 
           <div className={`${styles.teamStatsColumn} ${styles.awayStatsColumn}`}>
@@ -1289,14 +1289,14 @@ export default function Game({ variant = "full" }) {
                 {renderTimeouts(timeouts.home)}
               </div>
             )}
+          <div className={styles.teamMetaRow}>
+            {renderFouls(Math.min(homeFouls, 5))}
+          </div>
           {challenges && (
             <div className={styles.teamMetaRow}>
               {renderChallenges(challenges.home)}
             </div>
           )}
-          <div className={styles.teamMetaRow}>
-            {renderFouls(Math.min(homeFouls, 5))}
-          </div>
         </div>
       </section>
 
