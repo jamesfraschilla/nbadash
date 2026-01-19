@@ -121,15 +121,19 @@
 }
 
 .metaValueRow {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto auto;
   align-items: center;
-  gap: 6px;
+  column-gap: 16px;
+  justify-items: center;
 }
 
 .metaLabelRow {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto auto;
   align-items: baseline;
-  gap: 16px;
+  column-gap: 16px;
+  justify-items: center;
 }
 
 .metaSpacer {
@@ -139,6 +143,7 @@
 .timeoutsNumbers {
   display: flex;
   gap: 6px;
+  justify-content: center;
 }
 
 @media (max-width: 900px) {
