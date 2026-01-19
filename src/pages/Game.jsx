@@ -1149,10 +1149,12 @@ export default function Game({ variant = "full" }) {
       <div className={styles.metaSpacer} />
     </div>
   );
-  const renderFouls = (count) => (
+  const renderFouls = (count, period) => (
     <div className={styles.metaBlock}>
       <div className={styles.metaLabel}>Fouls</div>
-      <div className={styles.metaValue}>{count}</div>
+      <div className={styles.metaValue}>
+        <span className={pfClass(count, period)}>{count}</span>
+      </div>
     </div>
   );
   const renderChallenges = (teamChallenges) => (
@@ -1226,9 +1228,9 @@ export default function Game({ variant = "full" }) {
               <div className={styles.teamMetaRow}>
                 {renderTimeouts(timeouts.away)}
               </div>
-            )}
+          )}
           <div className={styles.teamMetaRow}>
-            {renderFouls(Math.min(awayFouls, 5))}
+            {renderFouls(Math.min(awayFouls, 5), currentPeriod)}
           </div>
           {challenges && (
             <div className={styles.teamMetaRow}>
@@ -1288,9 +1290,9 @@ export default function Game({ variant = "full" }) {
               <div className={styles.teamMetaRow}>
                 {renderTimeouts(timeouts.home)}
               </div>
-            )}
+          )}
           <div className={styles.teamMetaRow}>
-            {renderFouls(Math.min(homeFouls, 5))}
+            {renderFouls(Math.min(homeFouls, 5), currentPeriod)}
           </div>
           {challenges && (
             <div className={styles.teamMetaRow}>
