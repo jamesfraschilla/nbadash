@@ -153,9 +153,15 @@ const diffStats = (start = {}, end = {}) => {
 const diffSnapshots = (startSnapshot, endSnapshot, basePlayers) => {
   if (!endSnapshot) return null;
   const teamTotals = {};
+  let hasNegativeDiff = false;
   Object.keys(endSnapshot.teams || {}).forEach((teamId) => {
-    teamTotals[teamId] = diffStats(startSnapshot?.teams?.[teamId], endSnapshot.teams[teamId]);
+    const diff = diffStats(startSnapshot?.teams?.[teamId], endSnapshot.teams[teamId]);
+    teamTotals[teamId] = diff;
+    if (CORE_STAT_FIELDS.some((field) => (diff[field] || 0) < 0)) {
+      hasNegativeDiff = true;
+    }
   });
+  if (hasNegativeDiff) return null;
   const playerMap = new Map();
   basePlayers.forEach((player) => {
     const start = startSnapshot?.players?.get(player.personId) || {};
