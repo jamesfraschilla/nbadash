@@ -16,6 +16,20 @@ function parseIsoClock(clock) {
   return minutes * 60 + seconds;
 }
 
+function parseClockValue(clock) {
+  if (!clock) return null;
+  const value = String(clock);
+  if (value.startsWith("PT")) {
+    const match = /PT(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?/.exec(value);
+    if (!match) return null;
+    const minutes = Number(match[1] || 0);
+    const seconds = Number(match[2] || 0);
+    return minutes * 60 + seconds;
+  }
+  if (!/^\d+:\d+$/.test(value)) return null;
+  return parseClock(value);
+}
+
 function periodLengthSeconds(period) {
   return period <= 4 ? 12 * 60 : 5 * 60;
 }
@@ -115,8 +129,13 @@ export function aggregateSegmentStats({
   homeTeam,
   awayTeam,
   basePlayers,
+  currentPeriod,
+  currentClock,
+  isLive,
 }) {
   const predicate = segmentPeriods(segment);
+  const livePeriod = isLive ? Number(currentPeriod) || null : null;
+  const liveClockSec = isLive ? parseClockValue(currentClock) : null;
   const segmentSeconds =
     minutesData?.periods?.reduce((sum, period) => {
       if (!predicate(period.period)) return sum;
@@ -555,7 +574,11 @@ export function aggregateSegmentStats({
         }
       });
 
-      finalizeStint(0);
+      const endSec =
+        livePeriod === period && liveClockSec != null
+          ? Math.min(liveClockSec, currentStartSec)
+          : 0;
+      finalizeStint(endSec);
     });
   }
 

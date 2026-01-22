@@ -560,6 +560,9 @@ export default function Game({ variant = "full" }) {
       homeTeam,
       awayTeam,
       basePlayers,
+      currentPeriod: game?.period,
+      currentClock: game?.gameClock,
+      isLive,
     })
     : { playerMap: new Map(), teamTotals: {} };
 
@@ -1129,15 +1132,41 @@ export default function Game({ variant = "full" }) {
   const paceValue = paceFrom(basePace);
 
   const currentPeriod = game.period || 1;
+  const parseActionClock = (clock) => {
+    if (!clock) return null;
+    const value = String(clock);
+    if (value.includes(":") && !value.startsWith("PT")) return parseClock(value);
+    return parseIsoClock(value);
+  };
+  const isLastTwoMinutes = (clock) => {
+    const remaining = parseActionClock(clock);
+    return remaining != null && remaining <= 120;
+  };
   const currentFouls = (teamId) =>
     (game.playByPlayActions || []).filter(
       (action) => action.period === currentPeriod && action.actionType === "foul" && action.teamId === teamId
     ).length;
+  const lastTwoMinuteFouls = (teamId) =>
+    (game.playByPlayActions || []).filter(
+      (action) =>
+        action.period === currentPeriod &&
+        action.actionType === "foul" &&
+        action.teamId === teamId &&
+        isLastTwoMinutes(action.clock)
+    ).length;
+  const foulPenaltyDisplay = (teamFouls, lastTwoFouls) => {
+    let display = teamFouls;
+    if (lastTwoFouls >= 2) display = Math.max(display, 5);
+    else if (lastTwoFouls >= 1) display = Math.max(display, 4);
+    return Math.min(display, 5);
+  };
   const awayFouls = currentFouls(awayTeam.teamId);
   const homeFouls = currentFouls(homeTeam.teamId);
+  const awayLastTwoFouls = lastTwoMinuteFouls(awayTeam.teamId);
+  const homeLastTwoFouls = lastTwoMinuteFouls(homeTeam.teamId);
   const foulLimit = 5;
-  const awayFoulsDisplay = Math.min(awayFouls, foulLimit);
-  const homeFoulsDisplay = Math.min(homeFouls, foulLimit);
+  const awayFoulsDisplay = Math.min(foulPenaltyDisplay(awayFouls, awayLastTwoFouls), foulLimit);
+  const homeFoulsDisplay = Math.min(foulPenaltyDisplay(homeFouls, homeLastTwoFouls), foulLimit);
   const lockIcon = isLocked ? "🔒" : "🔓";
   const renderTimeouts = (remaining) => (
     <div className={styles.metaBlock}>
