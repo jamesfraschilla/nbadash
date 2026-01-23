@@ -492,6 +492,7 @@ export default function Game({ variant = "full" }) {
 
   const { homeTeam, awayTeam, teamStats, boxScore, officials, callsAgainst } = game || {};
   const timeouts = game?.timeouts;
+  const isPregame = game?.gameStatus === 1;
   const challenges = game?.challenges;
   const status = game ? gameStatusLabel(game) : "";
   const isLive = game?.gameStatus === 2;
@@ -1210,6 +1211,8 @@ export default function Game({ variant = "full" }) {
       <div className={styles.metaSpacer} />
     </div>
   );
+  const awayTimeoutsRemaining = isPregame ? 7 : timeouts?.away;
+  const homeTimeoutsRemaining = isPregame ? 7 : timeouts?.home;
   const renderFouls = (count, period) => (
     <div className={styles.metaBlock}>
       <div className={styles.metaLabel}>Fouls</div>
@@ -1285,9 +1288,9 @@ export default function Game({ variant = "full" }) {
               src={teamLogoUrl(awayTeam.teamId)}
               alt={`${awayTeam.teamName} logo`}
             />
-            {timeouts && (
+            {(timeouts || isPregame) && (
               <div className={styles.teamMetaRow}>
-                {renderTimeouts(timeouts.away)}
+                {renderTimeouts(awayTimeoutsRemaining)}
               </div>
           )}
           <div className={styles.teamMetaRow}>
@@ -1347,9 +1350,9 @@ export default function Game({ variant = "full" }) {
               src={teamLogoUrl(homeTeam.teamId)}
               alt={`${homeTeam.teamName} logo`}
             />
-            {timeouts && (
+            {(timeouts || isPregame) && (
               <div className={styles.teamMetaRow}>
-                {renderTimeouts(timeouts.home)}
+                {renderTimeouts(homeTimeoutsRemaining)}
               </div>
           )}
           <div className={styles.teamMetaRow}>
