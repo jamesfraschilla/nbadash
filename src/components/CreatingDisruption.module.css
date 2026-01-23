@@ -22,7 +22,7 @@
 .wrapper {
   display: flex;
   justify-content: center;
-  gap: 8px;
+  gap: var(--stats-col-gap);
   margin: 0;
 }
 
@@ -31,7 +31,8 @@
   flex-direction: column;
   gap: 4px;
   align-items: flex-start;
-  padding-right: 6px;
+  width: var(--stats-team-width);
+  padding-right: 0;
 }
 
 .spacer {
@@ -55,11 +56,11 @@
 }
 
 .gridCreating {
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, var(--stats-col-width));
 }
 
 .gridDisruption {
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, var(--stats-col-width));
 }
 
 .stat {
@@ -109,6 +110,7 @@
     padding-right: 2px;
     min-width: 20px;
     gap: 2px;
+    width: auto;
   }
 
   .spacer {
@@ -124,6 +126,14 @@
   .grid,
   .stat {
     gap: 2px;
+  }
+
+  .gridCreating {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .gridDisruption {
+    grid-template-columns: repeat(3, 1fr);
   }
 
   .statLabel {

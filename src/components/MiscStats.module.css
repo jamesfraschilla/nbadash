@@ -23,7 +23,7 @@
 .wrapper {
   display: flex;
   justify-content: center;
-  gap: 8px;
+  gap: var(--stats-col-gap);
   margin: 0;
 }
 
@@ -32,7 +32,8 @@
   flex-direction: column;
   gap: 4px;
   align-items: flex-start;
-  padding-right: 6px;
+  width: var(--stats-team-width);
+  padding-right: 0;
 }
 
 .spacer {
@@ -51,8 +52,8 @@
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
+  grid-template-columns: repeat(4, var(--stats-col-width));
+  gap: var(--stats-col-gap);
   justify-items: center;
 }
 
@@ -102,6 +103,7 @@
     padding-right: 2px;
     min-width: 20px;
     gap: 2px;
+    width: auto;
   }
 
   .spacer {
@@ -117,6 +119,10 @@
   .grid,
   .stat {
     gap: 2px;
+  }
+
+  .grid {
+    grid-template-columns: repeat(4, 1fr);
   }
 
   .statLabel {

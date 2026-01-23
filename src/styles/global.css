@@ -11,6 +11,9 @@
   --panel-strong: #f3f4f6;
   --panel-hover: #ebebeb;
   --stats-card-height: 200px;
+  --stats-team-width: 52px;
+  --stats-col-width: 120px;
+  --stats-col-gap: 8px;
   --row-hover: #f9fafb;
   --header-bg: #1f2937;
   --header-text: #ffffff;
