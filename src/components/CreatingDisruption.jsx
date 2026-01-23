@@ -17,7 +17,7 @@ const creatingColumns = [
   },
   {
     key: "catchShoot",
-    label: "Catch & Shoot 3s",
+    label: "C&S 3s",
     format: (stats) => formatPair(stats.catchAndShoot3FGMade, stats.catchAndShoot3FGAttempted),
   },
   {
@@ -30,7 +30,7 @@ const creatingColumns = [
 const disruptionColumns = [
   {
     key: "offFouls",
-    label: "Offensive Fouls Drawn",
+    label: "Offensive FD",
     format: (stats) => stats.offensiveFoulsDrawn ?? 0,
   },
   {

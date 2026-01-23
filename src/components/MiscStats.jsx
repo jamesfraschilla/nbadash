@@ -12,7 +12,7 @@ export default function MiscStats({ awayLabel, homeLabel, awayStats, homeStats }
 
   return (
     <section className={styles.container}>
-      <h3 className={styles.title}>Misc Stats</h3>
+      <h3 className={styles.title}>Misc</h3>
       <div className={styles.wrapper}>
         <div className={styles.teamLabels}>
           <div className={styles.spacer} />
