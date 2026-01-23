@@ -895,6 +895,7 @@ export default function Game({ variant = "full" }) {
     transitionRate: (teamTotals.transitionPossessions || 0)
       ? ((teamTotals.transitionPossessions || 0) / possessionsCount) * 100
       : 0,
+    transitionPossessions: teamTotals.transitionPossessions || 0,
     transitionPoints: teamTotals.transitionPoints || 0,
     transitionTurnovers: teamTotals.transitionTurnovers || 0,
     secondChancePoints: teamTotals.secondChancePoints || 0,
@@ -905,17 +906,37 @@ export default function Game({ variant = "full" }) {
       : 0,
   });
 
+  const mergeTransitionSource = (snapshotTotals, computedTotals, fallbackTotals = {}) => {
+    const base = snapshotTotals || computedTotals || fallbackTotals || {};
+    if (!computedTotals) return base;
+    return {
+      ...base,
+      transitionPossessions: computedTotals.transitionPossessions ?? base.transitionPossessions ?? 0,
+      transitionPoints: computedTotals.transitionPoints ?? base.transitionPoints ?? 0,
+      transitionTurnovers: computedTotals.transitionTurnovers ?? base.transitionTurnovers ?? 0,
+      secondChancePoints: computedTotals.secondChancePoints ?? base.secondChancePoints ?? 0,
+      pointsOffTurnovers: computedTotals.pointsOffTurnovers ?? base.pointsOffTurnovers ?? 0,
+      paintPoints: computedTotals.paintPoints ?? base.paintPoints ?? 0,
+      threePointOReb: computedTotals.threePointOReb ?? base.threePointOReb ?? 0,
+      reboundsOffensive: computedTotals.reboundsOffensive ?? base.reboundsOffensive ?? 0,
+    };
+  };
+
   const useOfficialTransition = teamStats?.away?.transitionStats
     && teamStats?.home?.transitionStats;
   const awayTransitionSource = segment === "all"
-    ? finalSnapshotTotals?.[awayTeam?.teamId]
-      || segmentStats.teamTotals?.[awayTeam?.teamId]
-      || advancedAwayTotals
+    ? mergeTransitionSource(
+      finalSnapshotTotals?.[awayTeam?.teamId],
+      segmentStats.teamTotals?.[awayTeam?.teamId],
+      advancedAwayTotals
+    )
     : advancedAwayTotals;
   const homeTransitionSource = segment === "all"
-    ? finalSnapshotTotals?.[homeTeam?.teamId]
-      || segmentStats.teamTotals?.[homeTeam?.teamId]
-      || advancedHomeTotals
+    ? mergeTransitionSource(
+      finalSnapshotTotals?.[homeTeam?.teamId],
+      segmentStats.teamTotals?.[homeTeam?.teamId],
+      advancedHomeTotals
+    )
     : advancedHomeTotals;
   const awayTransitionDerived = transitionStatsDerived(awayTransitionSource, awayPossessions);
   const homeTransitionDerived = transitionStatsDerived(homeTransitionSource, homePossessions);
