@@ -36,7 +36,7 @@ export default function CreatingDisruption({
         <div>{formatPair(awayStats.catchAndShoot3FGMade, awayStats.catchAndShoot3FGAttempted)}</div>
         <div>{formatPair(homeStats.catchAndShoot3FGMade, homeStats.catchAndShoot3FGAttempted)}</div>
 
-        <div className={styles.label}>Dynamite 3FGAs</div>
+        <div className={styles.label}>Dynamite 3s</div>
         <div>{formatPair(awayStats.secondChance3FGMade, awayStats.secondChance3FGAttempted)}</div>
         <div>{formatPair(homeStats.secondChance3FGMade, homeStats.secondChance3FGAttempted)}</div>
 

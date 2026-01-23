@@ -266,6 +266,12 @@ export function aggregateSegmentStats({
   let orebInPossession = false;
 
   const sameTeam = (a, b) => Number(a) === Number(b);
+  const isStoppage = (action) =>
+    action.actionType === "timeout" ||
+    action.actionType === "foul" ||
+    action.actionType === "freethrow" ||
+    action.actionType === "substitution" ||
+    action.actionType === "violation";
 
   orderedActions.forEach((action) => {
     if (action.possession != null) {
@@ -282,6 +288,10 @@ export function aggregateSegmentStats({
     const isAway = teamId === awayTeam.teamId;
 
     const teamStats = teamTotals[teamId];
+
+    if (orebInPossession && isStoppage(action)) {
+      orebInPossession = false;
+    }
 
     if (action.actionType === "2pt" || action.actionType === "3pt") {
       const description = `${action.description || ""} ${action.descriptor || ""}`.toLowerCase();
@@ -417,7 +427,11 @@ export function aggregateSegmentStats({
 
       if (isOffensive) {
         if (sameTeam(teamId, possessionTeam)) {
-          orebInPossession = true;
+          if (action.personId) {
+            orebInPossession = true;
+          } else {
+            orebInPossession = false;
+          }
         }
         const shot = action.shotActionNumber ? actionByNumber.get(action.shotActionNumber) : null;
         const lastMiss = lastMissedShotByTeam.get(teamId);
