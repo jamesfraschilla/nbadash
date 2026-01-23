@@ -744,23 +744,27 @@ export default function Game({ variant = "full" }) {
       secondChance3FGAttempted,
     };
   };
+  const mergeSegmentTotals = (computed, snapshot) =>
+    snapshot ? { ...computed, ...snapshot } : computed;
+  const computedAwayTotals = segmentStats.teamTotals[awayTeam?.teamId] || {};
+  const computedHomeTotals = segmentStats.teamTotals[homeTeam?.teamId] || {};
   const baseAwayTotals = awayTeam?.teamId
     ? segment === "all"
       ? mergeAllSegmentTotals(
         boxScore?.away?.totals || segmentStats.teamTotals[awayTeam.teamId] || {},
-        segmentStats.teamTotals[awayTeam.teamId],
+        computedAwayTotals,
         finalSnapshotTotals?.[awayTeam.teamId]
       )
-      : segmentSnapshotTotals?.[awayTeam.teamId] || segmentStats.teamTotals[awayTeam.teamId] || {}
+      : mergeSegmentTotals(computedAwayTotals, segmentSnapshotTotals?.[awayTeam.teamId])
     : {};
   const baseHomeTotals = homeTeam?.teamId
     ? segment === "all"
       ? mergeAllSegmentTotals(
         boxScore?.home?.totals || segmentStats.teamTotals[homeTeam.teamId] || {},
-        segmentStats.teamTotals[homeTeam.teamId],
+        computedHomeTotals,
         finalSnapshotTotals?.[homeTeam.teamId]
       )
-      : segmentSnapshotTotals?.[homeTeam.teamId] || segmentStats.teamTotals[homeTeam.teamId] || {}
+      : mergeSegmentTotals(computedHomeTotals, segmentSnapshotTotals?.[homeTeam.teamId])
     : {};
   const useSnapshotTotals = snapshotBounds?.endIsLive;
   const awaySnapshotTotals =
