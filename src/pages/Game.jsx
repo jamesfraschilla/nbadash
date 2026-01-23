@@ -1406,19 +1406,21 @@ export default function Game({ variant = "full" }) {
             rows={shotEffRows}
           />
 
-          <TransitionStats
-            awayLabel={awayTeam.teamTricode}
-            homeLabel={homeTeam.teamTricode}
-            awayStats={awayTransition}
-            homeStats={homeTransition}
-          />
+          <div className={styles.statsRow}>
+            <TransitionStats
+              awayLabel={awayTeam.teamTricode}
+              homeLabel={homeTeam.teamTricode}
+              awayStats={awayTransition}
+              homeStats={homeTransition}
+            />
 
-          <MiscStats
-            awayLabel={awayTeam.teamTricode}
-            homeLabel={homeTeam.teamTricode}
-            awayStats={awayTransition}
-            homeStats={homeTransition}
-          />
+            <MiscStats
+              awayLabel={awayTeam.teamTricode}
+              homeLabel={homeTeam.teamTricode}
+              awayStats={awayTransition}
+              homeStats={homeTransition}
+            />
+          </div>
 
           <CreatingDisruption
             awayLabel={awayTeam.teamTricode}
