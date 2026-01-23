@@ -10,6 +10,8 @@
   --panel: #f5f5f5;
   --panel-strong: #f3f4f6;
   --panel-hover: #ebebeb;
+  --stats-card-width: 560px;
+  --stats-card-height: 220px;
   --row-hover: #f9fafb;
   --header-bg: #1f2937;
   --header-text: #ffffff;
