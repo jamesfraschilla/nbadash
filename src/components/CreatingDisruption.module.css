@@ -1,17 +1,6 @@
-.row {
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  gap: 32px;
-  flex-wrap: wrap;
-  margin: 16px 0;
-}
-
 .section {
-  max-width: 700px;
   align-self: center;
-  width: min(var(--stats-card-width), 100%);
-  height: var(--stats-card-height);
+  width: 100%;
   padding: 4px 16px 12px;
   border-radius: 0;
   border: 1px solid #ffffff;
@@ -102,12 +91,6 @@
 }
 
 @media (max-width: 768px) {
-  .row {
-    flex-direction: column;
-    align-items: center;
-    gap: 16px;
-  }
-
   .section {
     margin: 0;
     padding: 4px 16px 12px;
@@ -152,5 +135,11 @@
   .statRow {
     height: 14px;
     font-size: 11px;
+  }
+}
+
+@media (min-width: 900px) {
+  .section {
+    height: var(--stats-card-height);
   }
 }

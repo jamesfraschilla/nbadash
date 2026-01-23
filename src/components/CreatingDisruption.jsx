@@ -95,9 +95,9 @@ export default function CreatingDisruption({
   );
 
   return (
-    <div className={styles.row}>
+    <>
       {renderSection("Creating", creatingColumns, styles.gridCreating)}
       {renderSection("Disruption", disruptionColumns, styles.gridDisruption)}
-    </div>
+    </>
   );
 }

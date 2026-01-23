@@ -1,8 +1,6 @@
 .container {
   margin: 10px 0;
-  max-width: 600px;
-  width: min(var(--stats-card-width), 100%);
-  height: var(--stats-card-height);
+  width: 100%;
   padding: 4px 16px 12px;
   border-radius: 0;
   border: 1px solid #ffffff;
@@ -128,5 +126,11 @@
   .statRow {
     height: 14px;
     font-size: 11px;
+  }
+}
+
+@media (min-width: 900px) {
+  .container {
+    height: var(--stats-card-height);
   }
 }
