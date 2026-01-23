@@ -1,9 +1,9 @@
 import styles from "./TransitionStats.module.css";
 
 const columns = [
-  { key: "transitionRate", label: "Trans%", format: (v) => `${(v || 0).toFixed(1)}%` },
-  { key: "transitionPoints", label: "Trans Pts" },
-  { key: "transitionTurnovers", label: "Trans TO" },
+  { key: "transitionRate", label: "%", format: (v) => `${(v || 0).toFixed(1)}%` },
+  { key: "transitionPoints", label: "PTS" },
+  { key: "transitionTurnovers", label: "TOV" },
 ];
 
 export default function TransitionStats({ awayLabel, homeLabel, awayStats, homeStats }) {
@@ -11,7 +11,7 @@ export default function TransitionStats({ awayLabel, homeLabel, awayStats, homeS
 
   return (
     <section className={styles.container}>
-      <h3 className={styles.title}>Transition Stats</h3>
+      <h3 className={styles.title}>Transition</h3>
       <div className={styles.wrapper}>
         <div className={styles.teamLabels}>
           <div className={styles.spacer} />
