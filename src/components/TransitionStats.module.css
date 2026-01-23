@@ -1,10 +1,13 @@
 .container {
   margin: 10px 0;
   max-width: 600px;
-  padding: 8px 16px 12px;
+  padding: 4px 16px 12px;
   border-radius: 0;
-  border: 1px solid var(--border);
+  border: 1px solid #ffffff;
   background-color: var(--panel-strong);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .title {
@@ -48,6 +51,7 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
+  justify-items: center;
 }
 
 .stat {
@@ -79,7 +83,7 @@
 @media (max-width: 768px) {
   .container {
     margin: 24px 0 0;
-    padding: 8px 16px 12px;
+    padding: 4px 16px 12px;
   }
 
   .title {
