@@ -728,10 +728,20 @@ export default function Game({ variant = "full" }) {
       snapshot?.paintPoints,
       pickValue(computed?.paintPoints, base?.paintPoints)
     );
+    const secondChance3FGMade = pickValue(
+      snapshot?.secondChance3FGMade,
+      pickValue(computed?.secondChance3FGMade, base?.secondChance3FGMade)
+    );
+    const secondChance3FGAttempted = pickValue(
+      snapshot?.secondChance3FGAttempted,
+      pickValue(computed?.secondChance3FGAttempted, base?.secondChance3FGAttempted)
+    );
     return {
       ...base,
       pointsOffTurnovers,
       paintPoints,
+      secondChance3FGMade,
+      secondChance3FGAttempted,
     };
   };
   const baseAwayTotals = awayTeam?.teamId
