@@ -211,6 +211,8 @@ export function aggregateSegmentStats({
       cuttingFGAttempted: 0,
       catchAndShoot3FGMade: 0,
       catchAndShoot3FGAttempted: 0,
+      secondChance3FGMade: 0,
+      secondChance3FGAttempted: 0,
       pointsOffTurnovers: 0,
       paintPoints: 0,
     },
@@ -243,6 +245,8 @@ export function aggregateSegmentStats({
       cuttingFGAttempted: 0,
       catchAndShoot3FGMade: 0,
       catchAndShoot3FGAttempted: 0,
+      secondChance3FGMade: 0,
+      secondChance3FGAttempted: 0,
       pointsOffTurnovers: 0,
       paintPoints: 0,
     },
@@ -257,7 +261,22 @@ export function aggregateSegmentStats({
 
   const lastMissedShotByTeam = new Map();
 
+  let currentPossession = null;
+  let possessionTeam = null;
+  let orebInPossession = false;
+
+  const sameTeam = (a, b) => Number(a) === Number(b);
+
   orderedActions.forEach((action) => {
+    if (action.possession != null) {
+      const nextPossession = Number(action.possession);
+      if (Number.isFinite(nextPossession) && nextPossession !== currentPossession) {
+        currentPossession = nextPossession;
+        possessionTeam = nextPossession;
+        orebInPossession = false;
+      }
+    }
+
     const teamId = action.teamId;
     const isHome = teamId === homeTeam.teamId;
     const isAway = teamId === awayTeam.teamId;
@@ -304,6 +323,13 @@ export function aggregateSegmentStats({
         if (isDriving) teamStats.drivingFGAttempted += 1;
         if (isCutting) teamStats.cuttingFGAttempted += 1;
         if (isCatchAndShoot3) teamStats.catchAndShoot3FGAttempted += 1;
+        if (
+          action.actionType === "3pt" &&
+          orebInPossession &&
+          sameTeam(teamId, possessionTeam)
+        ) {
+          teamStats.secondChance3FGAttempted += 1;
+        }
       }
       if (action.shotResult === "Made") {
         const points = action.actionType === "3pt" ? 3 : 2;
@@ -320,6 +346,13 @@ export function aggregateSegmentStats({
           if (isCatchAndShoot3) teamStats.catchAndShoot3FGMade += 1;
           if (qualifiers.includes("fromturnover")) teamStats.pointsOffTurnovers += points;
           if (qualifiers.includes("pointsinthepaint")) teamStats.paintPoints += points;
+          if (
+            action.actionType === "3pt" &&
+            orebInPossession &&
+            sameTeam(teamId, possessionTeam)
+          ) {
+            teamStats.secondChance3FGMade += 1;
+          }
         }
       } else if (teamId) {
         lastMissedShotByTeam.set(teamId, action);
@@ -383,6 +416,9 @@ export function aggregateSegmentStats({
       }
 
       if (isOffensive) {
+        if (sameTeam(teamId, possessionTeam)) {
+          orebInPossession = true;
+        }
         const shot = action.shotActionNumber ? actionByNumber.get(action.shotActionNumber) : null;
         const lastMiss = lastMissedShotByTeam.get(teamId);
         const isThreePointMiss =
@@ -585,6 +621,8 @@ export function aggregateSegmentStats({
   Object.values(teamTotals).forEach((team) => {
     team.threePointOReb = team.threePointOReb || 0;
     team.offensiveFoulsDrawn = team.offensiveFoulsDrawn || 0;
+    team.secondChance3FGMade = team.secondChance3FGMade || 0;
+    team.secondChance3FGAttempted = team.secondChance3FGAttempted || 0;
   });
 
   return {

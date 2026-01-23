@@ -1050,6 +1050,8 @@ export default function Game({ variant = "full" }) {
     cuttingFGAttempted: teamTotals.cuttingFGAttempted ?? fallback?.cuttingFGAttempted ?? 0,
     catchAndShoot3FGMade: teamTotals.catchAndShoot3FGMade ?? fallback?.catchAndShoot3FGMade ?? 0,
     catchAndShoot3FGAttempted: teamTotals.catchAndShoot3FGAttempted ?? fallback?.catchAndShoot3FGAttempted ?? 0,
+    secondChance3FGMade: teamTotals.secondChance3FGMade ?? fallback?.secondChance3FGMade ?? 0,
+    secondChance3FGAttempted: teamTotals.secondChance3FGAttempted ?? fallback?.secondChance3FGAttempted ?? 0,
     offensiveFoulsDrawn: teamTotals.offensiveFoulsDrawn ?? fallback?.offensiveFoulsDrawn ?? 0,
   });
 
