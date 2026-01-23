@@ -10,6 +10,10 @@
 .section {
   max-width: 700px;
   align-self: center;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background-color: var(--panel);
 }
 
 .title {
@@ -99,7 +103,7 @@
 
   .section {
     margin: 0;
-    padding: 0 16px;
+    padding: 12px 16px;
   }
 
   .title {
