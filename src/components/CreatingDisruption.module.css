@@ -1,7 +1,9 @@
 .section {
+  margin: 10px 0;
   align-self: center;
   width: 100%;
   max-width: var(--stats-card-width);
+  height: var(--stats-card-height);
   padding: 4px 16px 12px;
   border-radius: 0;
   border: 1px solid #ffffff;
@@ -17,6 +19,8 @@
   font-size: 24px;
   font-weight: 600;
   margin-bottom: 6px;
+  text-decoration: underline;
+  text-underline-offset: 4px;
   color: var(--text);
 }
 
@@ -104,11 +108,5 @@
   .statValue {
     height: 14px;
     font-size: 11px;
-  }
-}
-
-@media (min-width: 900px) {
-  .section {
-    height: var(--stats-card-height);
   }
 }
