@@ -64,40 +64,36 @@ export default function CreatingDisruption({
     kills: { away: awayKills, home: homeKills },
   };
 
-  const renderSection = (title, columns, gridClass) => (
+  const renderSection = (title, columns) => (
     <section className={styles.section}>
       <h3 className={styles.title}>{title}</h3>
-      <div className={styles.wrapper}>
-        <div className={styles.teamLabels}>
-          <div className={styles.spacer} />
-          <div className={styles.teamAbbr}>{awayLabel}</div>
-          <div className={styles.teamAbbr}>{homeLabel}</div>
-        </div>
-        <div className={`${styles.grid} ${gridClass}`}>
-          {columns.map((col) => {
-            const format = col.format || ((stats) => stats?.[col.key] ?? 0);
-            const derived = col.isDerived ? derivedValues[col.key] : null;
-            return (
-              <div key={col.key} className={styles.stat}>
-                <div className={styles.statLabel}>{col.label}</div>
-                <div className={styles.statRow}>
-                  {col.isDerived ? format(null, derived?.away) : format(awayStats)}
-                </div>
-                <div className={styles.statRow}>
-                  {col.isDerived ? format(null, derived?.home) : format(homeStats)}
-                </div>
+      <div className={styles.table}>
+        <div className={styles.corner} />
+        <div className={styles.teamHeader}>{awayLabel}</div>
+        <div className={styles.teamHeader}>{homeLabel}</div>
+        {columns.map((col) => {
+          const format = col.format || ((stats) => stats?.[col.key] ?? 0);
+          const derived = col.isDerived ? derivedValues[col.key] : null;
+          return (
+            <div key={col.key} className={styles.row}>
+              <div className={styles.statLabel}>{col.label}</div>
+              <div className={styles.statValue}>
+                {col.isDerived ? format(null, derived?.away) : format(awayStats)}
               </div>
-            );
-          })}
-        </div>
+              <div className={styles.statValue}>
+                {col.isDerived ? format(null, derived?.home) : format(homeStats)}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </section>
   );
 
   return (
     <>
-      {renderSection("Creating", creatingColumns, styles.gridCreating)}
-      {renderSection("Disruption", disruptionColumns, styles.gridDisruption)}
+      {renderSection("Creating", creatingColumns)}
+      {renderSection("Disruption", disruptionColumns)}
     </>
   );
 }

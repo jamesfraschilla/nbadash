@@ -20,27 +20,20 @@
   color: var(--text);
 }
 
-.wrapper {
-  display: flex;
-  justify-content: center;
-  gap: var(--stats-col-gap);
-  margin: 0;
+.table {
+  display: grid;
+  grid-template-columns: var(--stats-label-width) repeat(2, var(--stats-value-width));
+  column-gap: var(--stats-col-gap);
+  row-gap: 6px;
+  align-items: center;
+  width: fit-content;
 }
 
-.teamLabels {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  align-items: flex-start;
-  width: var(--stats-team-width);
-  padding-right: 0;
-}
-
-.spacer {
+.corner {
   height: 20px;
 }
 
-.teamAbbr {
+.teamHeader {
   font-size: 16px;
   font-weight: 600;
   color: var(--text);
@@ -48,29 +41,11 @@
   height: 20px;
   display: flex;
   align-items: center;
+  justify-content: center;
 }
 
-.grid {
-  display: grid;
-  gap: 12px;
-  justify-items: center;
-}
-
-.gridCreating {
-  grid-template-columns: repeat(4, var(--stats-col-width));
-}
-
-.gridDisruption {
-  grid-template-columns: repeat(3, var(--stats-col-width));
-}
-
-.stat {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
+.row {
+  display: contents;
 }
 
 .statLabel {
@@ -78,10 +53,10 @@
   font-weight: 600;
   line-height: 20px;
   color: var(--text);
-  text-align: center;
+  text-align: left;
 }
 
-.statRow {
+.statValue {
   height: 20px;
   display: flex;
   align-items: center;
@@ -89,7 +64,7 @@
   font-size: 16px;
   font-weight: 500;
   color: var(--text);
-  min-width: 48px;
+  font-variant-numeric: tabular-nums;
 }
 
 @media (max-width: 768px) {
@@ -103,38 +78,21 @@
     margin-bottom: 4px;
   }
 
-  .wrapper {
-    gap: 2px;
+  .table {
+    grid-template-columns: minmax(90px, 1fr) repeat(2, minmax(0, 1fr));
+    column-gap: 4px;
+    row-gap: 4px;
+    width: 100%;
   }
 
-  .teamLabels {
-    padding-right: 2px;
-    min-width: 20px;
-    gap: 2px;
-    width: auto;
+  .corner {
+    height: 14px;
   }
 
-  .spacer {
-    height: 15px;
-  }
-
-  .teamAbbr {
+  .teamHeader {
     font-size: 11px;
     height: 14px;
     line-height: 14px;
-  }
-
-  .grid,
-  .stat {
-    gap: 2px;
-  }
-
-  .gridCreating {
-    grid-template-columns: repeat(4, 1fr);
-  }
-
-  .gridDisruption {
-    grid-template-columns: repeat(3, 1fr);
   }
 
   .statLabel {
@@ -143,7 +101,7 @@
     line-height: 14px;
   }
 
-  .statRow {
+  .statValue {
     height: 14px;
     font-size: 11px;
   }
