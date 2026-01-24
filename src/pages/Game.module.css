@@ -70,10 +70,11 @@
 
 .statsGrid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: 32px;
-  row-gap: 44px;
+  grid-template-columns: repeat(2, minmax(0, var(--stats-card-width)));
+  column-gap: 24px;
+  row-gap: 36px;
   align-items: stretch;
+  justify-content: center;
   margin: 10px 0;
 }
 

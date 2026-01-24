@@ -1,6 +1,7 @@
 .section {
   align-self: center;
   width: 100%;
+  max-width: var(--stats-card-width);
   padding: 4px 16px 12px;
   border-radius: 0;
   border: 1px solid #ffffff;

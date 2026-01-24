@@ -1,6 +1,7 @@
 .container {
   margin: 10px 0;
   width: 100%;
+  max-width: var(--stats-card-width);
   padding: 4px 16px 12px;
   border-radius: 0;
   border: 1px solid #ffffff;
@@ -51,7 +52,7 @@
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(3, var(--stats-col-width));
+  grid-template-columns: repeat(4, var(--stats-col-width));
   gap: var(--stats-col-gap);
   justify-items: center;
 }
@@ -120,7 +121,7 @@
   }
 
   .grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
   }
 
   .statLabel {
