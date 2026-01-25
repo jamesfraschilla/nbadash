@@ -6,3 +6,4 @@ dist
 .env.local
 .env.*.local
 .Rhistory
+field-inventory-*.txt
