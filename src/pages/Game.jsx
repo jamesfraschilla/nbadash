@@ -296,6 +296,19 @@ const foulsClass = (fouls, stylesRef) => {
   return stylesRef.pfRed;
 };
 
+const parseTeamFoulMarker = (description) => {
+  if (!description) return null;
+  const text = String(description);
+  const teamMatch = text.match(/\bT(\d+)\b/);
+  const teamFouls = teamMatch ? Number.parseInt(teamMatch[1], 10) : null;
+  const inPenalty = /\bPN\b/.test(text);
+  if (teamFouls == null && !inPenalty) return null;
+  return {
+    teamFouls: Number.isNaN(teamFouls) ? null : teamFouls,
+    inPenalty,
+  };
+};
+
 export default function Game({ variant = "full" }) {
   const { gameId } = useParams();
   const [params, setParams] = useSearchParams();
@@ -1176,41 +1189,32 @@ export default function Game({ variant = "full" }) {
   const paceValue = paceFrom(basePace);
 
   const currentPeriod = game.period || 1;
-  const parseActionClock = (clock) => {
-    if (!clock) return null;
-    const value = String(clock);
-    if (value.includes(":") && !value.startsWith("PT")) return parseClock(value);
-    return parseIsoClock(value);
+  const teamFoulInfo = (teamId) => {
+    let count = 0;
+    let inPenalty = false;
+    (game.playByPlayActions || []).forEach((action) => {
+      if (action.period !== currentPeriod) return;
+      if (action.actionType !== "foul") return;
+      if (action.subType === "offensive") return;
+      if (action.teamId !== teamId) return;
+      const marker = parseTeamFoulMarker(action.description);
+      if (!marker) return;
+      if (marker.teamFouls != null) count = Math.max(count, marker.teamFouls);
+      if (marker.inPenalty) inPenalty = true;
+    });
+    return { count, inPenalty };
   };
-  const isLastTwoMinutes = (clock) => {
-    const remaining = parseActionClock(clock);
-    return remaining != null && remaining <= 120;
-  };
-  const currentFouls = (teamId) =>
-    (game.playByPlayActions || []).filter(
-      (action) => action.period === currentPeriod && action.actionType === "foul" && action.teamId === teamId
-    ).length;
-  const lastTwoMinuteFouls = (teamId) =>
-    (game.playByPlayActions || []).filter(
-      (action) =>
-        action.period === currentPeriod &&
-        action.actionType === "foul" &&
-        action.teamId === teamId &&
-        isLastTwoMinutes(action.clock)
-    ).length;
-  const foulPenaltyDisplay = (teamFouls, lastTwoFouls) => {
-    let display = teamFouls;
-    if (lastTwoFouls >= 2) display = Math.max(display, 5);
-    else if (lastTwoFouls >= 1) display = Math.max(display, 4);
-    return Math.min(display, 5);
-  };
-  const awayFouls = currentFouls(awayTeam.teamId);
-  const homeFouls = currentFouls(homeTeam.teamId);
-  const awayLastTwoFouls = lastTwoMinuteFouls(awayTeam.teamId);
-  const homeLastTwoFouls = lastTwoMinuteFouls(homeTeam.teamId);
+  const awayFoulInfo = teamFoulInfo(awayTeam.teamId);
+  const homeFoulInfo = teamFoulInfo(homeTeam.teamId);
   const foulLimit = 5;
-  const awayFoulsDisplay = Math.min(foulPenaltyDisplay(awayFouls, awayLastTwoFouls), foulLimit);
-  const homeFoulsDisplay = Math.min(foulPenaltyDisplay(homeFouls, homeLastTwoFouls), foulLimit);
+  const awayFoulsDisplay = Math.min(
+    awayFoulInfo.inPenalty ? foulLimit : awayFoulInfo.count,
+    foulLimit
+  );
+  const homeFoulsDisplay = Math.min(
+    homeFoulInfo.inPenalty ? foulLimit : homeFoulInfo.count,
+    foulLimit
+  );
   const lockIcon = isLocked ? "🔒" : "🔓";
   const renderTimeouts = (remaining) => (
     <div className={styles.metaBlock}>
@@ -1234,7 +1238,7 @@ export default function Game({ variant = "full" }) {
   );
   const awayTimeoutsRemaining = isPregame ? 7 : timeouts?.away;
   const homeTimeoutsRemaining = isPregame ? 7 : timeouts?.home;
-  const renderFouls = (count, period) => (
+  const renderFouls = (count) => (
     <div className={styles.metaBlock}>
       <div className={styles.metaLabel}>Fouls</div>
       <div className={styles.metaValue}>
@@ -1315,7 +1319,7 @@ export default function Game({ variant = "full" }) {
               </div>
           )}
           <div className={styles.teamMetaRow}>
-            {renderFouls(awayFoulsDisplay, currentPeriod)}
+            {renderFouls(awayFoulsDisplay)}
           </div>
           {challenges && (
             <div className={styles.teamMetaRow}>
@@ -1377,7 +1381,7 @@ export default function Game({ variant = "full" }) {
               </div>
           )}
           <div className={styles.teamMetaRow}>
-            {renderFouls(homeFoulsDisplay, currentPeriod)}
+            {renderFouls(homeFoulsDisplay)}
           </div>
           {challenges && (
             <div className={styles.teamMetaRow}>
