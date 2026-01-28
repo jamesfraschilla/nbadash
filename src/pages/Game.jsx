@@ -1189,24 +1189,40 @@ export default function Game({ variant = "full" }) {
   const paceValue = paceFrom(basePace);
 
   const currentPeriod = game.period || 1;
+  const foulLimit = 5;
+  const isTeamFoulAction = (action) => {
+    if (action.actionType !== "foul") return false;
+    const subType = String(action.subType || "").toLowerCase();
+    const descriptor = String(action.descriptor || "").toLowerCase();
+    const qualifiers = (action.qualifiers || []).map((q) => String(q || "").toLowerCase());
+    if (subType === "offensive") return false;
+    if (subType.includes("technical") || descriptor.includes("technical")) return false;
+    if (qualifiers.some((q) => q.includes("technical"))) return false;
+    return true;
+  };
   const teamFoulInfo = (teamId) => {
-    let count = 0;
+    let markerCount = 0;
+    let fallbackCount = 0;
     let inPenalty = false;
+    let sawMarker = false;
     (game.playByPlayActions || []).forEach((action) => {
       if (action.period !== currentPeriod) return;
-      if (action.actionType !== "foul") return;
-      if (action.subType === "offensive") return;
+      if (!isTeamFoulAction(action)) return;
       if (action.teamId !== teamId) return;
+      fallbackCount += 1;
       const marker = parseTeamFoulMarker(action.description);
       if (!marker) return;
-      if (marker.teamFouls != null) count = Math.max(count, marker.teamFouls);
+      sawMarker = true;
+      if (marker.teamFouls != null) markerCount = Math.max(markerCount, marker.teamFouls);
       if (marker.inPenalty) inPenalty = true;
     });
+    let count = (sawMarker && markerCount > 0) ? markerCount : fallbackCount;
+    if (!sawMarker && count >= foulLimit) inPenalty = true;
+    if (inPenalty && count < foulLimit) count = foulLimit;
     return { count, inPenalty };
   };
   const awayFoulInfo = teamFoulInfo(awayTeam.teamId);
   const homeFoulInfo = teamFoulInfo(homeTeam.teamId);
-  const foulLimit = 5;
   const awayFoulsDisplay = Math.min(
     awayFoulInfo.inPenalty ? foulLimit : awayFoulInfo.count,
     foulLimit
