@@ -1203,13 +1203,21 @@ export default function Game({ variant = "full" }) {
   const teamFoulInfo = (teamId) => {
     let markerCount = 0;
     let fallbackCount = 0;
+    let lastTwoCount = 0;
+    let preLastTwoCount = 0;
     let inPenalty = false;
     let sawMarker = false;
+    const isFourthOrOt = currentPeriod >= 4;
+    const penaltyThreshold = currentPeriod <= 4 ? 4 : 3;
+    const lastTwoSeconds = 2 * 60;
     (game.playByPlayActions || []).forEach((action) => {
       if (action.period !== currentPeriod) return;
       if (!isTeamFoulAction(action)) return;
       if (action.teamId !== teamId) return;
       fallbackCount += 1;
+      const remaining = parseIsoClock(action.clock);
+      if (isFourthOrOt && remaining <= lastTwoSeconds) lastTwoCount += 1;
+      if (isFourthOrOt && remaining > lastTwoSeconds) preLastTwoCount += 1;
       const marker = parseTeamFoulMarker(action.description);
       if (!marker) return;
       sawMarker = true;
@@ -1217,6 +1225,10 @@ export default function Game({ variant = "full" }) {
       if (marker.inPenalty) inPenalty = true;
     });
     let count = (sawMarker && markerCount > 0) ? markerCount : fallbackCount;
+    if (!inPenalty && count >= penaltyThreshold) inPenalty = true;
+    if (!inPenalty && isFourthOrOt && preLastTwoCount < penaltyThreshold && lastTwoCount >= 2) {
+      inPenalty = true;
+    }
     if (!sawMarker && count >= foulLimit) inPenalty = true;
     if (inPenalty && count < foulLimit) count = foulLimit;
     return { count, inPenalty };
