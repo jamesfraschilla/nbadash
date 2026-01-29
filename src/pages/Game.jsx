@@ -1603,6 +1603,9 @@ export default function Game({ variant = "full" }) {
                 const headshotUrl = action.personId ? playerHeadshotUrl(action.personId) : null;
                 const isHighlighted = action.actionNumber && highlightedMap.has(action.actionNumber);
                 const isHome = action.teamId && action.teamId === homeTeam?.teamId;
+                const scoreText = action.scoreHome && action.scoreAway
+                  ? `${action.scoreAway}-${action.scoreHome}`
+                  : "";
                 return (
                   <div
                     key={action.actionNumber || `${action.period}-${action.clock}-${descriptor}`}
@@ -1636,7 +1639,10 @@ export default function Game({ variant = "full" }) {
                       )}
                       <span className={styles.pbpText}>{descriptor}</span>
                     </div>
-                    <div className={styles.pbpFooter}>{periodText}</div>
+                    <div className={styles.pbpFooter}>
+                      <span>{periodText}</span>
+                      <span className={styles.pbpScore}>{scoreText}</span>
+                    </div>
                   </div>
                 );
               }) : (
@@ -1663,7 +1669,7 @@ export default function Game({ variant = "full" }) {
                 <div className={styles.noteActions}>
                   {highlightedMap.has(noteEditor.actionNumber) ? (
                     <button type="button" className={styles.noteRemove} onClick={removeHighlight}>
-                      Remove Highlight
+                      Remove
                     </button>
                   ) : (
                     <div />

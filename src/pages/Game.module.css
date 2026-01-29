@@ -92,6 +92,8 @@
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
 }
 
 .pbpWheelInner {
@@ -127,12 +129,24 @@
   color: #111;
 }
 
+.pbpCardHighlighted .pbpTeam {
+  color: #111;
+}
+
 html[data-theme="dark"] .container {
   --pbp-home-bg: #1f2937;
 }
 
 html[data-theme="dark"] .pbpCardHighlighted {
   background-color: #fff4a3;
+}
+
+html:not([data-theme="dark"]) .pbpWheel {
+  border-color: #d1d5db;
+}
+
+html[data-theme="dark"] .pbpWheel {
+  border-color: #ffffff;
 }
 
 .pbpHeader {
@@ -189,7 +203,14 @@ html[data-theme="dark"] .pbpCardHighlighted {
   margin-top: 6px;
   font-size: 11px;
   color: var(--muted);
-  text-align: right;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.pbpScore {
+  font-weight: 700;
+  color: var(--text);
 }
 
 .noteOverlay {
