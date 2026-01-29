@@ -330,6 +330,7 @@ export default function Game({ variant = "full" }) {
   const [snapshots, setSnapshots] = useState(() => loadSnapshots(gameId));
   const statsNavRef = useRef(null);
   const boxScoreNavRef = useRef(null);
+  const pbpWheelRef = useRef(null);
   const lockButtonRef = useRef(null);
   const lockTimeoutRef = useRef(null);
   const lockStyleRef = useRef(null);
@@ -622,6 +623,25 @@ export default function Game({ variant = "full" }) {
       [homeTeam.teamId]: buildTotals(String(homeTeam.teamId)),
     };
   }, [periodSnapshotMap, segment, awayTeam?.teamId, homeTeam?.teamId]);
+
+  const pbpWheelItems = useMemo(() => {
+    const actions = game?.playByPlayActions || [];
+    const filtered = actions.filter((action) => (
+      action.actionType === "2pt" ||
+      action.actionType === "3pt" ||
+      action.actionType === "freethrow" ||
+      action.actionType === "turnover"
+    ));
+    const sorted = filtered.slice().sort((a, b) => (a.actionNumber || 0) - (b.actionNumber || 0));
+    return sorted.slice(-16);
+  }, [game?.playByPlayActions]);
+
+  useEffect(() => {
+    if (!showExtras) return;
+    const wheel = pbpWheelRef.current;
+    if (!wheel) return;
+    wheel.scrollLeft = wheel.scrollWidth;
+  }, [pbpWheelItems, showExtras]);
 
   const finalSnapshotTotals = useMemo(() => {
     if (!periodSnapshotMap || !homeTeam?.teamId || !awayTeam?.teamId) return null;
@@ -1454,6 +1474,32 @@ export default function Game({ variant = "full" }) {
             <button type="button" className={styles.navButton} onClick={handleScrollToBoxScore}>
               Box Score
             </button>
+          </div>
+
+          <div className={styles.pbpWheel} ref={pbpWheelRef}>
+            <div className={styles.pbpWheelInner}>
+              {pbpWheelItems.length ? pbpWheelItems.map((action) => {
+                const teamTricode = action.teamTricode || "";
+                const clockText = action.clock ? normalizeClock(action.clock) : "";
+                const periodText = action.period ? `Q${action.period}` : "";
+                const descriptor = action.description || action.descriptor || action.subType || action.actionType || "";
+                return (
+                  <div
+                    key={action.actionNumber || `${action.period}-${action.clock}-${descriptor}`}
+                    className={styles.pbpCard}
+                  >
+                    <div className={styles.pbpHeader}>
+                      <span className={styles.pbpTeam}>{teamTricode}</span>
+                      <span className={styles.pbpClock}>{clockText}</span>
+                    </div>
+                    <div className={styles.pbpBody}>{descriptor}</div>
+                    <div className={styles.pbpFooter}>{periodText}</div>
+                  </div>
+                );
+              }) : (
+                <div className={styles.pbpEmpty}>No recent play-by-play yet.</div>
+              )}
+            </div>
           </div>
 
           <StatBars
