@@ -571,6 +571,50 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   font-weight: 600;
 }
 
+.possessionTable {
+  margin-top: 6px;
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  width: 220px;
+}
+
+.possessionRow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.possessionCell {
+  padding: 6px 4px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  border-right: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+}
+
+.possessionCell:last-child {
+  border-right: none;
+}
+
+.possessionRowTeams .possessionCell {
+  border-top: 1px solid var(--border);
+}
+
+.possessionLogo,
+.possessionPlaceholder {
+  width: 18px;
+  height: 18px;
+}
+
+.possessionLogo {
+  object-fit: contain;
+}
+
 .navRow {
   display: flex;
   justify-content: center;
@@ -678,5 +722,21 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 
   .dash {
     font-size: 28px;
+  }
+
+  .possessionTable {
+    width: 180px;
+  }
+
+  .possessionCell {
+    padding: 4px 2px;
+    font-size: 10px;
+    min-height: 22px;
+  }
+
+  .possessionLogo,
+  .possessionPlaceholder {
+    width: 14px;
+    height: 14px;
   }
 }

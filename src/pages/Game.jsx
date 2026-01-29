@@ -671,6 +671,42 @@ export default function Game({ variant = "full" }) {
     return sorted.slice(-16);
   }, [game?.playByPlayActions]);
 
+  const openingJumpTeamId = useMemo(() => {
+    const actions = game?.playByPlayActions || [];
+    const ordered = actions.slice().sort((a, b) => (a.actionNumber || 0) - (b.actionNumber || 0));
+    const openingJump = ordered.find((action) => {
+      const type = String(action.actionType || "").toLowerCase();
+      const desc = String(action.description || action.descriptor || action.subType || "").toLowerCase();
+      return type.includes("jump") || desc.includes("jump ball");
+    });
+    if (!openingJump) return null;
+    const candidate =
+      openingJump.jumpBallWonTeamId ??
+      openingJump.winningTeamId ??
+      openingJump.possessionTeamId ??
+      openingJump.teamId ??
+      openingJump.teamIdPossession ??
+      null;
+    return candidate != null ? String(candidate) : null;
+  }, [game?.playByPlayActions]);
+
+  const possessionTeams = useMemo(() => {
+    if (!openingJumpTeamId || !awayTeam?.teamId || !homeTeam?.teamId) {
+      return [null, null, null, null];
+    }
+    const awayId = String(awayTeam.teamId);
+    const homeId = String(homeTeam.teamId);
+    if (openingJumpTeamId !== awayId && openingJumpTeamId !== homeId) {
+      return [null, null, null, null];
+    }
+    return [
+      openingJumpTeamId === awayId ? awayTeam : homeTeam,
+      openingJumpTeamId === awayId ? homeTeam : awayTeam,
+      openingJumpTeamId === awayId ? homeTeam : awayTeam,
+      openingJumpTeamId === awayId ? awayTeam : homeTeam,
+    ];
+  }, [openingJumpTeamId, awayTeam, homeTeam]);
+
   const clearHoldTimer = () => {
     if (holdTimerRef.current) {
       clearTimeout(holdTimerRef.current);
@@ -1541,6 +1577,30 @@ export default function Game({ variant = "full" }) {
             {status || game.gameStatusText}
           </div>
           {clock && <div className={styles.clock}>{clock}</div>}
+          {isAtc && (
+            <div className={styles.possessionTable}>
+              <div className={styles.possessionRow}>
+                {["Q1", "Q2", "Q3", "Q4"].map((label) => (
+                  <div key={label} className={styles.possessionCell}>{label}</div>
+                ))}
+              </div>
+              <div className={`${styles.possessionRow} ${styles.possessionRowTeams}`}>
+                {possessionTeams.map((team, index) => (
+                  <div key={`possession-${index}`} className={styles.possessionCell}>
+                    {team ? (
+                      <img
+                        className={styles.possessionLogo}
+                        src={teamLogoUrl(team.teamId)}
+                        alt={`${team.teamName} logo`}
+                      />
+                    ) : (
+                      <div className={styles.possessionPlaceholder} />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           </div>
 
           <div className={`${styles.teamStatsColumn} ${styles.homeStatsColumn}`}>
