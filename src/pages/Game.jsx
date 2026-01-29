@@ -1243,8 +1243,21 @@ export default function Game({ variant = "full" }) {
     homeFoulInfo.inPenalty ? foulLimit : homeFoulInfo.count,
     foulLimit
   );
+  const mandatoryTimeoutTeam = (() => {
+    if (!homeTeam?.teamId || !awayTeam?.teamId) return null;
+    const actions = (game.playByPlayActions || [])
+      .filter((action) => action.actionType === "timeout" && action.period === currentPeriod)
+      .slice()
+      .sort((a, b) => (a.actionNumber || 0) - (b.actionNumber || 0));
+    if (!actions.length) return "home";
+    if (actions.length >= 2) return null;
+    const firstTeamId = actions[0]?.teamId;
+    if (firstTeamId === homeTeam.teamId) return "away";
+    if (firstTeamId === awayTeam.teamId) return "home";
+    return "home";
+  })();
   const lockIcon = isLocked ? "🔒" : "🔓";
-  const renderTimeouts = (remaining) => (
+  const renderTimeouts = (remaining, showMandatory) => (
     <div className={styles.metaBlock}>
       <div className={styles.metaLabel}>Timeouts</div>
       <div className={styles.timeoutsNumbers}>
@@ -1260,6 +1273,9 @@ export default function Game({ variant = "full" }) {
             </span>
           );
         })}
+      </div>
+      <div className={styles.mandatoryLine}>
+        {showMandatory ? "NEXT MANDATORY" : ""}
       </div>
       <div className={styles.metaSpacer} />
     </div>
@@ -1343,7 +1359,7 @@ export default function Game({ variant = "full" }) {
             />
             {(timeouts || isPregame) && (
               <div className={styles.teamMetaRow}>
-                {renderTimeouts(awayTimeoutsRemaining)}
+                {renderTimeouts(awayTimeoutsRemaining, mandatoryTimeoutTeam === "away")}
               </div>
           )}
           <div className={styles.teamMetaRow}>
@@ -1405,7 +1421,7 @@ export default function Game({ variant = "full" }) {
             />
             {(timeouts || isPregame) && (
               <div className={styles.teamMetaRow}>
-                {renderTimeouts(homeTimeoutsRemaining)}
+                {renderTimeouts(homeTimeoutsRemaining, mandatoryTimeoutTeam === "home")}
               </div>
           )}
           <div className={styles.teamMetaRow}>
