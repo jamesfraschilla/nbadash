@@ -512,6 +512,9 @@ export default function Game({ variant = "full" }) {
   const timeouts = game?.timeouts;
   const isPregame = game?.gameStatus === 1;
   const challenges = game?.challenges;
+  const defaultChallenges = { challengesTotal: 0, challengesWon: 0 };
+  const awayChallenges = challenges?.away || defaultChallenges;
+  const homeChallenges = challenges?.home || defaultChallenges;
   const status = game ? gameStatusLabel(game) : "";
   const isLive = game?.gameStatus === 2;
   const clock = isLive ? normalizeClock(game?.gameClock) : null;
@@ -1503,9 +1506,9 @@ export default function Game({ variant = "full" }) {
           <div className={styles.teamMetaRow}>
             {renderFouls(awayFoulsDisplay)}
           </div>
-          {challenges && (
+          {(challenges || isPregame) && (
             <div className={styles.teamMetaRow}>
-              {renderChallenges(challenges.away)}
+              {renderChallenges(awayChallenges)}
             </div>
           )}
         </div>
@@ -1565,9 +1568,9 @@ export default function Game({ variant = "full" }) {
           <div className={styles.teamMetaRow}>
             {renderFouls(homeFoulsDisplay)}
           </div>
-          {challenges && (
+          {(challenges || isPregame) && (
             <div className={styles.teamMetaRow}>
-              {renderChallenges(challenges.home)}
+              {renderChallenges(homeChallenges)}
             </div>
           )}
         </div>
