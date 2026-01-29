@@ -664,7 +664,8 @@ export default function Game({ variant = "full" }) {
       action.actionType === "2pt" ||
       action.actionType === "3pt" ||
       action.actionType === "freethrow" ||
-      action.actionType === "turnover"
+      action.actionType === "turnover" ||
+      action.actionType === "foul"
     ));
     const sorted = filtered.slice().sort((a, b) => (a.actionNumber || 0) - (b.actionNumber || 0));
     return sorted.slice(-16);
