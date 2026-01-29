@@ -3,14 +3,14 @@
   width: 100%;
   max-width: var(--stats-card-width);
   height: var(--stats-card-height);
-  padding: 6px 16px 12px;
+  padding: 10px 16px;
   border-radius: 0;
   border: 1px solid #ffffff;
   background-color: var(--panel-strong);
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
 }
 
 html:not([data-theme="dark"]) .container {
@@ -77,7 +77,7 @@ html:not([data-theme="dark"]) .container {
 @media (max-width: 768px) {
   .container {
     margin: 24px 0 0;
-    padding: 3px 16px 12px;
+    padding: 8px 16px;
   }
 
   .title {
