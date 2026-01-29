@@ -2,6 +2,7 @@
   max-width: 1400px;
   margin: 0 auto;
   padding: calc(16px + env(safe-area-inset-top)) 24px 40px;
+  --pbp-card-width: 220px;
 }
 
 .backRow {
@@ -81,6 +82,11 @@
 .pbpWheel {
   margin: 10px 0 18px;
   overflow-x: auto;
+  max-width: calc(var(--pbp-card-width) * 2 + 12px);
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .pbpWheelInner {
@@ -92,7 +98,7 @@
 }
 
 .pbpCard {
-  flex: 0 0 220px;
+  flex: 0 0 var(--pbp-card-width);
   border: 1px solid var(--border);
   background-color: var(--panel);
   padding: 8px 10px;
@@ -147,6 +153,10 @@
 @media (max-width: 768px) {
   .statsGrid {
     grid-template-columns: 1fr;
+  }
+
+  .container {
+    --pbp-card-width: 180px;
   }
 }
 
