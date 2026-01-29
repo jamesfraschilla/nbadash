@@ -1,7 +1,7 @@
 import { Link, useSearchParams, useParams } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchGame, fetchMinutes, teamLogoUrl } from "../api.js";
+import { fetchGame, fetchMinutes, playerHeadshotUrl, teamLogoUrl } from "../api.js";
 import { gameStatusLabel, normalizeClock } from "../utils.js";
 import BoxScoreTable from "../components/BoxScoreTable.jsx";
 import StatBars from "../components/StatBars.jsx";
@@ -1484,6 +1484,7 @@ export default function Game({ variant = "full" }) {
                 const periodText = action.period ? `Q${action.period}` : "";
                 const rawDescriptor = action.description || action.descriptor || action.subType || action.actionType || "";
                 const descriptor = String(rawDescriptor).replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
+                const headshotUrl = action.personId ? playerHeadshotUrl(action.personId) : null;
                 return (
                   <div
                     key={action.actionNumber || `${action.period}-${action.clock}-${descriptor}`}
@@ -1493,7 +1494,14 @@ export default function Game({ variant = "full" }) {
                       <span className={styles.pbpTeam}>{teamTricode}</span>
                       <span className={styles.pbpClock}>{clockText}</span>
                     </div>
-                    <div className={styles.pbpBody}>{descriptor}</div>
+                    <div className={styles.pbpBody}>
+                      {headshotUrl ? (
+                        <img className={styles.pbpHeadshot} src={headshotUrl} alt="" />
+                      ) : (
+                        <div className={styles.pbpHeadshotPlaceholder} />
+                      )}
+                      <span className={styles.pbpText}>{descriptor}</span>
+                    </div>
                     <div className={styles.pbpFooter}>{periodText}</div>
                   </div>
                 );
