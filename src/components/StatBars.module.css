@@ -30,6 +30,12 @@
   height: 24px;
 }
 
+.teamLabel {
+  height: 24px;
+  display: flex;
+  align-items: center;
+}
+
 .teamAbbr {
   font-size: 16px;
   font-weight: 600;
@@ -38,6 +44,12 @@
   height: 24px;
   display: flex;
   align-items: center;
+}
+
+.teamLogo {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
 }
 
 .grid {
@@ -135,10 +147,19 @@
     height: 18px;
   }
 
+  .teamLabel {
+    height: 18px;
+  }
+
   .teamAbbr {
     font-size: 11px;
     height: 18px;
     line-height: 18px;
+  }
+
+  .teamLogo {
+    width: 14px;
+    height: 14px;
   }
 
   .grid {

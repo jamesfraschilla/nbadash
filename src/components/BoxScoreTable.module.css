@@ -63,6 +63,12 @@
   z-index: 2;
 }
 
+.teamLogoHeader {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
 .playerName {
   display: inline-block;
   margin-right: 6px;

@@ -40,6 +40,12 @@
   letter-spacing: 0.03em;
 }
 
+.teamLogo {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
 .scoresColumn {
   display: flex;
   flex-direction: column;

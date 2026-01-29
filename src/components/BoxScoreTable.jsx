@@ -71,6 +71,8 @@ function pfClass(fouls, period) {
 
 export default function BoxScoreTable({
   teamLabel,
+  teamLogo,
+  teamName,
   boxScore,
   currentPeriod,
   ratings = {},
@@ -107,7 +109,17 @@ export default function BoxScoreTable({
         <thead>
           <tr className={styles.headerRow}>
             <th className={styles.playerNumberCol}></th>
-            <th className={styles.playerNameCol}>{teamLabel}</th>
+            <th className={styles.playerNameCol}>
+              {teamLogo ? (
+                <img
+                  className={styles.teamLogoHeader}
+                  src={teamLogo}
+                  alt={teamName || teamLabel || "Team logo"}
+                />
+              ) : (
+                teamLabel
+              )}
+            </th>
             {columns.map((col) => (
               <th
                 key={col}

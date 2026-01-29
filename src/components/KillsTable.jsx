@@ -1,9 +1,15 @@
+import { teamLogoUrl } from "../api.js";
 import styles from "./KillsTable.module.css";
 
 const killKeys = ["three", "four", "five", "six", "seven", "eight", "delta", "pi"];
 
-export default function KillsTable({ homeLabel, awayLabel, homeData, awayData }) {
+export default function KillsTable({ homeTeam, awayTeam, homeData, awayData }) {
   if (!homeData || !awayData) return null;
+
+  const awayLogo = awayTeam?.teamId ? teamLogoUrl(awayTeam.teamId) : null;
+  const homeLogo = homeTeam?.teamId ? teamLogoUrl(homeTeam.teamId) : null;
+  const awayAlt = awayTeam?.teamName || awayTeam?.teamTricode || "Away team";
+  const homeAlt = homeTeam?.teamName || homeTeam?.teamTricode || "Home team";
 
   return (
     <section className={styles.container}>
@@ -12,8 +18,20 @@ export default function KillsTable({ homeLabel, awayLabel, homeData, awayData })
         <thead>
           <tr>
             <th></th>
-            <th>{awayLabel}</th>
-            <th>{homeLabel}</th>
+            <th>
+              {awayLogo ? (
+                <img className={styles.teamLogo} src={awayLogo} alt={`${awayAlt} logo`} />
+              ) : (
+                awayTeam?.teamTricode || ""
+              )}
+            </th>
+            <th>
+              {homeLogo ? (
+                <img className={styles.teamLogo} src={homeLogo} alt={`${homeAlt} logo`} />
+              ) : (
+                homeTeam?.teamTricode || ""
+              )}
+            </th>
           </tr>
         </thead>
         <tbody>

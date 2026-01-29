@@ -194,9 +194,19 @@ export default function PlayByPlay() {
         </Link>
       </div>
       <h1 className={styles.title}>Play-by-Play Events</h1>
-      <p className={styles.subtitle}>
-        {game.awayTeam?.teamTricode} @ {game.homeTeam?.teamTricode}
-      </p>
+      <div className={styles.subtitle}>
+        <img
+          className={styles.subtitleLogo}
+          src={teamLogoUrl(game.awayTeam?.teamId)}
+          alt={`${game.awayTeam?.teamName || "Away team"} logo`}
+        />
+        <span className={styles.subtitleAt}>@</span>
+        <img
+          className={styles.subtitleLogo}
+          src={teamLogoUrl(game.homeTeam?.teamId)}
+          alt={`${game.homeTeam?.teamName || "Home team"} logo`}
+        />
+      </div>
 
       <div className={styles.controls}>
         <span>Total Events: {filtered.length}</span>

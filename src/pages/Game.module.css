@@ -164,6 +164,12 @@ html[data-theme="dark"] .pbpWheel {
   color: var(--text);
 }
 
+.pbpTeamLogo {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
 .pbpClock {
   font-variant-numeric: tabular-nums;
 }

@@ -1,6 +1,7 @@
+import { teamLogoUrl } from "../api.js";
 import styles from "./Officials.module.css";
 
-export default function Officials({ officials, callsAgainst, homeAbr, awayAbr }) {
+export default function Officials({ officials, callsAgainst, homeAbr, awayAbr, homeTeam, awayTeam }) {
   if (!officials?.length) return null;
   const awayTotal = callsAgainst
     ? officials.reduce((sum, official) => sum + (callsAgainst?.[official.personId]?.[awayAbr] ?? 0), 0)
@@ -8,6 +9,10 @@ export default function Officials({ officials, callsAgainst, homeAbr, awayAbr })
   const homeTotal = callsAgainst
     ? officials.reduce((sum, official) => sum + (callsAgainst?.[official.personId]?.[homeAbr] ?? 0), 0)
     : 0;
+  const awayLogo = awayTeam?.teamId ? teamLogoUrl(awayTeam.teamId) : null;
+  const homeLogo = homeTeam?.teamId ? teamLogoUrl(homeTeam.teamId) : null;
+  const awayAlt = awayTeam?.teamName || awayAbr || "Away team";
+  const homeAlt = homeTeam?.teamName || homeAbr || "Home team";
 
   return (
     <section className={styles.container}>
@@ -31,7 +36,13 @@ export default function Officials({ officials, callsAgainst, homeAbr, awayAbr })
           </thead>
           <tbody>
             <tr>
-              <td className={styles.teamCell}>{awayAbr}</td>
+              <td className={styles.teamCell}>
+                {awayLogo ? (
+                  <img className={styles.teamLogo} src={awayLogo} alt={`${awayAlt} logo`} />
+                ) : (
+                  awayAbr
+                )}
+              </td>
               <td className={styles.dataCell}>{awayTotal}</td>
               {officials.map((official) => (
                 <td key={official.personId} className={styles.dataCell}>
@@ -40,7 +51,13 @@ export default function Officials({ officials, callsAgainst, homeAbr, awayAbr })
               ))}
             </tr>
             <tr>
-              <td className={styles.teamCell}>{homeAbr}</td>
+              <td className={styles.teamCell}>
+                {homeLogo ? (
+                  <img className={styles.teamLogo} src={homeLogo} alt={`${homeAlt} logo`} />
+                ) : (
+                  homeAbr
+                )}
+              </td>
               <td className={styles.dataCell}>{homeTotal}</td>
               {officials.map((official) => (
                 <td key={official.personId} className={styles.dataCell}>

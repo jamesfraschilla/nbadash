@@ -74,7 +74,11 @@ export default function Home() {
                   />
                   <div className={styles.teamInfo}>
                     <div className={styles.teamHeader}>
-                      <div className={styles.teamTricode}>{team.teamTricode}</div>
+                      <img
+                        className={styles.teamTricodeLogo}
+                        src={teamLogoUrl(team.teamId)}
+                        alt={`${team.teamName} logo`}
+                      />
                       {scoreVisible && <div className={styles.score}>{team.score}</div>}
                     </div>
                     <div className={styles.teamRecord}>

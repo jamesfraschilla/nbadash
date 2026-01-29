@@ -22,6 +22,12 @@
   border-bottom: 1px solid var(--border);
 }
 
+.teamLogo {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
 .key {
   text-align: left;
   font-weight: 600;

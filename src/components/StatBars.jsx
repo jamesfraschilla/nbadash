@@ -1,3 +1,4 @@
+import { teamLogoUrl } from "../api.js";
 import styles from "./StatBars.module.css";
 
 function BarCell({ value, max, format, detail, variant }) {
@@ -13,15 +14,32 @@ function BarCell({ value, max, format, detail, variant }) {
   );
 }
 
-export default function StatBars({ title, awayLabel, homeLabel, rows }) {
+export default function StatBars({ title, awayTeam, homeTeam, rows }) {
+  const awayLogo = awayTeam?.teamId ? teamLogoUrl(awayTeam.teamId) : null;
+  const homeLogo = homeTeam?.teamId ? teamLogoUrl(homeTeam.teamId) : null;
+  const awayAlt = awayTeam?.teamName || awayTeam?.teamTricode || "Away team";
+  const homeAlt = homeTeam?.teamName || homeTeam?.teamTricode || "Home team";
+
   return (
     <section className={styles.container}>
       <h3 className={styles.title}>{title}</h3>
       <div className={styles.wrapper}>
         <div className={styles.teamLabels}>
           <div className={styles.spacer} />
-          <div className={styles.teamAbbr}>{awayLabel}</div>
-          <div className={styles.teamAbbr}>{homeLabel}</div>
+          <div className={styles.teamLabel}>
+            {awayLogo ? (
+              <img className={styles.teamLogo} src={awayLogo} alt={`${awayAlt} logo`} />
+            ) : (
+              <div className={styles.teamAbbr}>{awayTeam?.teamTricode || ""}</div>
+            )}
+          </div>
+          <div className={styles.teamLabel}>
+            {homeLogo ? (
+              <img className={styles.teamLogo} src={homeLogo} alt={`${homeAlt} logo`} />
+            ) : (
+              <div className={styles.teamAbbr}>{homeTeam?.teamTricode || ""}</div>
+            )}
+          </div>
         </div>
         <div
           className={styles.grid}

@@ -85,6 +85,12 @@
   line-height: 1.2;
 }
 
+.teamTricodeLogo {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
 .teamScore {
   font-size: 32px;
   font-weight: 300;
@@ -144,6 +150,15 @@
   font-weight: 600;
   border-top: 1px dashed var(--border);
   color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.teamLabelLogo {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
 }
 
 .stintsContainer {
@@ -222,6 +237,11 @@
 
   .teamTricode {
     font-size: 20px;
+  }
+
+  .teamTricodeLogo {
+    width: 22px;
+    height: 22px;
   }
 
   .teamScore {

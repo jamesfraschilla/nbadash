@@ -1,3 +1,4 @@
+import { teamLogoUrl } from "../api.js";
 import styles from "./AdvancedStatsTable.module.css";
 
 const rows = [
@@ -8,8 +9,13 @@ const rows = [
   { key: "offensiveFoulsDrawn", label: "Off Fouls Drawn" },
 ];
 
-export default function AdvancedStatsTable({ homeLabel, awayLabel, homeStats, awayStats }) {
+export default function AdvancedStatsTable({ homeTeam, awayTeam, homeStats, awayStats }) {
   if (!homeStats || !awayStats) return null;
+
+  const awayLogo = awayTeam?.teamId ? teamLogoUrl(awayTeam.teamId) : null;
+  const homeLogo = homeTeam?.teamId ? teamLogoUrl(homeTeam.teamId) : null;
+  const awayAlt = awayTeam?.teamName || awayTeam?.teamTricode || "Away team";
+  const homeAlt = homeTeam?.teamName || homeTeam?.teamTricode || "Home team";
 
   return (
     <section className={styles.container}>
@@ -18,8 +24,20 @@ export default function AdvancedStatsTable({ homeLabel, awayLabel, homeStats, aw
         <thead>
           <tr>
             <th></th>
-            <th>{awayLabel}</th>
-            <th>{homeLabel}</th>
+            <th>
+              {awayLogo ? (
+                <img className={styles.teamLogo} src={awayLogo} alt={`${awayAlt} logo`} />
+              ) : (
+                awayTeam?.teamTricode || ""
+              )}
+            </th>
+            <th>
+              {homeLogo ? (
+                <img className={styles.teamLogo} src={homeLogo} alt={`${homeAlt} logo`} />
+              ) : (
+                homeTeam?.teamTricode || ""
+              )}
+            </th>
           </tr>
         </thead>
         <tbody>

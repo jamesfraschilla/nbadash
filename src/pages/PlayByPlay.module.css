@@ -30,9 +30,22 @@
 }
 
 .subtitle {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   color: var(--muted);
   margin-bottom: 12px;
+}
+
+.subtitleLogo {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.subtitleAt {
+  font-size: 14px;
 }
 
 .controls {

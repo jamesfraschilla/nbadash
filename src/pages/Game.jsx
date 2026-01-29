@@ -1600,6 +1600,12 @@ export default function Game({ variant = "full" }) {
             <div className={styles.pbpWheelInner}>
               {pbpWheelItems.length ? pbpWheelItems.map((action) => {
                 const teamTricode = action.teamTricode || "";
+                const teamLogo = action.teamId ? teamLogoUrl(action.teamId) : null;
+                const teamAlt = action.teamId === awayTeam?.teamId
+                  ? awayTeam.teamName
+                  : action.teamId === homeTeam?.teamId
+                    ? homeTeam.teamName
+                    : "Team";
                 const clockText = action.clock ? normalizeClock(action.clock) : "";
                 const periodText = action.period ? `Q${action.period}` : "";
                 const rawDescriptor = action.description || action.descriptor || action.subType || action.actionType || "";
@@ -1622,7 +1628,11 @@ export default function Game({ variant = "full" }) {
                     onTouchCancel={handleHoldEnd}
                   >
                     <div className={styles.pbpHeader}>
-                      <span className={styles.pbpTeam}>{teamTricode}</span>
+                      {teamLogo ? (
+                        <img className={styles.pbpTeamLogo} src={teamLogo} alt={`${teamAlt} logo`} />
+                      ) : (
+                        <span className={styles.pbpTeam}>{teamTricode}</span>
+                      )}
                       <span className={styles.pbpClock}>{clockText}</span>
                     </div>
                     <div className={styles.pbpBody}>
@@ -1693,43 +1703,43 @@ export default function Game({ variant = "full" }) {
 
           <StatBars
             title="Four Factors"
-            awayLabel={awayTeam.teamTricode}
-            homeLabel={homeTeam.teamTricode}
+            awayTeam={awayTeam}
+            homeTeam={homeTeam}
             rows={fourFactorRows}
           />
 
           <StatBars
             title="Shot Profile"
-            awayLabel={awayTeam.teamTricode}
-            homeLabel={homeTeam.teamTricode}
+            awayTeam={awayTeam}
+            homeTeam={homeTeam}
             rows={shotProfileRows}
           />
 
           <StatBars
             title="Shot Efficiency"
-            awayLabel={awayTeam.teamTricode}
-            homeLabel={homeTeam.teamTricode}
+            awayTeam={awayTeam}
+            homeTeam={homeTeam}
             rows={shotEffRows}
           />
 
           <div className={styles.statsGrid}>
             <TransitionStats
-              awayLabel={awayTeam.teamTricode}
-              homeLabel={homeTeam.teamTricode}
+              awayTeam={awayTeam}
+              homeTeam={homeTeam}
               awayStats={awayTransition}
               homeStats={homeTransition}
             />
 
             <MiscStats
-              awayLabel={awayTeam.teamTricode}
-              homeLabel={homeTeam.teamTricode}
+              awayTeam={awayTeam}
+              homeTeam={homeTeam}
               awayStats={awayTransition}
               homeStats={homeTransition}
             />
 
             <CreatingDisruption
-              awayLabel={awayTeam.teamTricode}
-              homeLabel={homeTeam.teamTricode}
+              awayTeam={awayTeam}
+              homeTeam={homeTeam}
               awayStats={awayCreating}
               homeStats={homeCreating}
               awayDisruptions={awayDisruptions}
@@ -1744,6 +1754,8 @@ export default function Game({ variant = "full" }) {
             callsAgainst={callsAgainst}
             homeAbr={homeTeam.teamTricode}
             awayAbr={awayTeam.teamTricode}
+            homeTeam={homeTeam}
+            awayTeam={awayTeam}
           />
 
           <div className={styles.navRow} ref={boxScoreNavRef}>
@@ -1771,6 +1783,8 @@ export default function Game({ variant = "full" }) {
       <section className={styles.boxScoreSection}>
         <BoxScoreTable
           teamLabel={awayTeam.teamTricode}
+          teamLogo={teamLogoUrl(awayTeam.teamId)}
+          teamName={awayTeam.teamName}
           boxScore={{ players: awayPlayers, totals: awayTotals }}
           ratings={{ ortg: ortgAway, drtg: drtgAway }}
           currentPeriod={game.period}
@@ -1778,6 +1792,8 @@ export default function Game({ variant = "full" }) {
         />
         <BoxScoreTable
           teamLabel={homeTeam.teamTricode}
+          teamLogo={teamLogoUrl(homeTeam.teamId)}
+          teamName={homeTeam.teamName}
           boxScore={{ players: homePlayers, totals: homeTotals }}
           ratings={{ ortg: ortgHome, drtg: drtgHome }}
           currentPeriod={game.period}

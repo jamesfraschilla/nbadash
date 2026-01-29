@@ -103,14 +103,22 @@ export default function Minutes() {
         <div className={styles.teamSection}>
           <img src={teamLogoUrl(awayTeam.teamId)} alt={awayTeam.teamName} />
           <div>
-            <div className={styles.teamTricode}>{awayTeam.teamTricode}</div>
+            <img
+              className={styles.teamTricodeLogo}
+              src={teamLogoUrl(awayTeam.teamId)}
+              alt={`${awayTeam.teamName} logo`}
+            />
             <div className={styles.teamScore}>{awayTeam.score}</div>
           </div>
         </div>
         <div className={styles.vs}>@</div>
         <div className={styles.teamSection}>
           <div>
-            <div className={styles.teamTricode}>{homeTeam.teamTricode}</div>
+            <img
+              className={styles.teamTricodeLogo}
+              src={teamLogoUrl(homeTeam.teamId)}
+              alt={`${homeTeam.teamName} logo`}
+            />
             <div className={styles.teamScore}>{homeTeam.score}</div>
           </div>
           <img src={teamLogoUrl(homeTeam.teamId)} alt={homeTeam.teamName} />
@@ -124,8 +132,20 @@ export default function Minutes() {
             <div className={styles.stintRow}>
               <div className={styles.teamLabels}>
                 <div className={styles.labelSpacer} />
-                <div className={styles.teamLabel}>{awayTeam.teamTricode}</div>
-                <div className={styles.teamLabel}>{homeTeam.teamTricode}</div>
+                <div className={styles.teamLabel}>
+                  <img
+                    className={styles.teamLabelLogo}
+                    src={teamLogoUrl(awayTeam.teamId)}
+                    alt={`${awayTeam.teamName} logo`}
+                  />
+                </div>
+                <div className={styles.teamLabel}>
+                  <img
+                    className={styles.teamLabelLogo}
+                    src={teamLogoUrl(homeTeam.teamId)}
+                    alt={`${homeTeam.teamName} logo`}
+                  />
+                </div>
               </div>
               <div className={styles.stintsContainer}>
                 {period.stints.map((stint, index) => (
