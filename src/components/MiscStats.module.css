@@ -4,7 +4,7 @@
   width: 100%;
   max-width: var(--stats-card-width);
   height: var(--stats-card-height);
-  padding: 4px 16px 12px;
+  padding: 2px 16px 12px;
   border-radius: 0;
   border: 1px solid #ffffff;
   background-color: var(--panel-strong);
@@ -17,7 +17,7 @@
 .title {
   font-size: 24px;
   font-weight: 600;
-  margin-bottom: 6px;
+  margin: 0 0 6px;
   text-align: center;
   text-decoration: underline;
   text-underline-offset: 4px;
@@ -74,12 +74,12 @@
 @media (max-width: 768px) {
   .container {
     margin: 24px 0 0;
-    padding: 4px 16px 12px;
+    padding: 2px 16px 12px;
   }
 
   .title {
     font-size: 20px;
-    margin-bottom: 4px;
+    margin: 0 0 4px;
   }
 
   .table {
