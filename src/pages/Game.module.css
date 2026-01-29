@@ -182,10 +182,6 @@ html:not([data-theme="dark"]) .mandatoryActive {
   border-radius: 2px;
 }
 
-html:not([data-theme="dark"]) .challengeAvailable {
-  border-color: #111827;
-}
-
 @media (max-width: 900px) {
   .teamLogoColumn {
     min-width: auto;
@@ -242,6 +238,10 @@ html:not([data-theme="dark"]) .challengeAvailable {
 .challengeLost {
   background-color: #c94a3f;
   border-color: #c94a3f;
+}
+
+html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
+  border-color: #111827;
 }
 
 .foulMax {
