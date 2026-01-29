@@ -2,7 +2,7 @@
   max-width: 1400px;
   margin: 0 auto;
   padding: calc(16px + env(safe-area-inset-top)) 24px 40px;
-  --pbp-card-width: 220px;
+  --pbp-card-width: 260px;
 }
 
 .backRow {
@@ -156,7 +156,7 @@
   }
 
   .container {
-    --pbp-card-width: 180px;
+    --pbp-card-width: 210px;
   }
 }
 

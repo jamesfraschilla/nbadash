@@ -1482,7 +1482,8 @@ export default function Game({ variant = "full" }) {
                 const teamTricode = action.teamTricode || "";
                 const clockText = action.clock ? normalizeClock(action.clock) : "";
                 const periodText = action.period ? `Q${action.period}` : "";
-                const descriptor = action.description || action.descriptor || action.subType || action.actionType || "";
+                const rawDescriptor = action.description || action.descriptor || action.subType || action.actionType || "";
+                const descriptor = String(rawDescriptor).replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
                 return (
                   <div
                     key={action.actionNumber || `${action.period}-${action.clock}-${descriptor}`}
