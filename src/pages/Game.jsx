@@ -1275,7 +1275,9 @@ export default function Game({ variant = "full" }) {
         })}
       </div>
       <div className={styles.mandatoryLine}>
-        {showMandatory ? "NEXT MANDATORY" : ""}
+        {showMandatory ? (
+          <span className={styles.mandatoryActive}>NEXT MANDATORY</span>
+        ) : null}
       </div>
       <div className={styles.metaSpacer} />
     </div>
