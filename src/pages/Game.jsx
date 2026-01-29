@@ -337,6 +337,8 @@ export default function Game({ variant = "full" }) {
   const holdTimerRef = useRef(null);
   const holdTargetRef = useRef(null);
   const [isLocked, setIsLocked] = useState(false);
+  const [noteEditor, setNoteEditor] = useState({ open: false, actionNumber: null });
+  const [noteDraft, setNoteDraft] = useState("");
   const isAtc = variant === "atc";
   const showExtras = !isAtc;
 
@@ -673,21 +675,53 @@ export default function Game({ variant = "full" }) {
     holdTargetRef.current = null;
   };
 
-  const highlightAction = async (actionNumber) => {
+  const openNoteEditor = (actionNumber) => {
+    if (!actionNumber) return;
+    const existingNote = highlightedMap.get(actionNumber) || "";
+    setNoteDraft(existingNote);
+    setNoteEditor({ open: true, actionNumber });
+  };
+
+  const closeNoteEditor = () => {
+    setNoteEditor({ open: false, actionNumber: null });
+    setNoteDraft("");
+  };
+
+  const saveNote = async () => {
+    const actionNumber = noteEditor.actionNumber;
     if (!actionNumber || !supabase || !gameId) return;
+    const trimmedNote = String(noteDraft || "").trim();
     const { error: updateError } = await supabase
       .from("pbp_highlights")
       .upsert(
-        { game_id: gameId, action_number: actionNumber, note: "" },
+        { game_id: gameId, action_number: actionNumber, note: trimmedNote },
         { onConflict: "game_id,action_number" }
       );
     if (!updateError) {
       setHighlightedMap((prev) => {
-        if (prev.has(actionNumber)) return prev;
         const next = new Map(prev);
-        next.set(actionNumber, "");
+        next.set(actionNumber, trimmedNote);
         return next;
       });
+      closeNoteEditor();
+    }
+  };
+
+  const removeHighlight = async () => {
+    const actionNumber = noteEditor.actionNumber;
+    if (!actionNumber || !supabase || !gameId) return;
+    const { error: removeError } = await supabase
+      .from("pbp_highlights")
+      .delete()
+      .eq("game_id", gameId)
+      .eq("action_number", actionNumber);
+    if (!removeError) {
+      setHighlightedMap((prev) => {
+        const next = new Map(prev);
+        next.delete(actionNumber);
+        return next;
+      });
+      closeNoteEditor();
     }
   };
 
@@ -697,7 +731,7 @@ export default function Game({ variant = "full" }) {
     holdTargetRef.current = actionNumber;
     holdTimerRef.current = setTimeout(() => {
       if (holdTargetRef.current === actionNumber) {
-        highlightAction(actionNumber);
+        openNoteEditor(actionNumber);
       }
       clearHoldTimer();
     }, 1000);
@@ -1610,6 +1644,42 @@ export default function Game({ variant = "full" }) {
               )}
             </div>
           </div>
+
+          {noteEditor.open && (
+            <div className={styles.noteOverlay} onClick={closeNoteEditor}>
+              <div
+                className={styles.noteModal}
+                onClick={(event) => event.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+              >
+                <h3>{highlightedMap.has(noteEditor.actionNumber) ? "Edit Highlight Note" : "Add Highlight Note"}</h3>
+                <textarea
+                  rows={3}
+                  placeholder="Optional note..."
+                  value={noteDraft}
+                  onChange={(event) => setNoteDraft(event.target.value)}
+                />
+                <div className={styles.noteActions}>
+                  {highlightedMap.has(noteEditor.actionNumber) ? (
+                    <button type="button" className={styles.noteRemove} onClick={removeHighlight}>
+                      Remove Highlight
+                    </button>
+                  ) : (
+                    <div />
+                  )}
+                  <div className={styles.noteActionsRight}>
+                    <button type="button" className={styles.noteCancel} onClick={closeNoteEditor}>
+                      Cancel
+                    </button>
+                    <button type="button" className={styles.noteSave} onClick={saveNote}>
+                      Save
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <StatBars
             title="Four Factors"
