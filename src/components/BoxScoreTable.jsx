@@ -110,15 +110,16 @@ export default function BoxScoreTable({
           <tr className={styles.headerRow}>
             <th className={styles.playerNumberCol}></th>
             <th className={styles.playerNameCol}>
-              {teamLogo ? (
-                <img
-                  className={styles.teamLogoHeader}
-                  src={teamLogo}
-                  alt={teamName || teamLabel || "Team logo"}
-                />
-              ) : (
-                teamLabel
-              )}
+              <div className={styles.teamHeaderContent}>
+                {teamLogo && (
+                  <img
+                    className={styles.teamLogoHeader}
+                    src={teamLogo}
+                    alt={teamName || teamLabel || "Team logo"}
+                  />
+                )}
+                <span className={styles.teamHeaderText}>{teamLabel}</span>
+              </div>
             </th>
             {columns.map((col) => (
               <th

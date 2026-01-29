@@ -69,6 +69,17 @@
   object-fit: contain;
 }
 
+.teamHeaderContent {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.teamHeaderText {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
 .playerName {
   display: inline-block;
   margin-right: 6px;

@@ -897,7 +897,9 @@ export default function Game({ variant = "full" }) {
           drtg,
         };
       })
-      .filter((player) => player.minutes !== "00:00" || player.points > 0 || player.reboundsTotal > 0);
+      .filter((player) => (
+        isPregame || player.minutes !== "00:00" || player.points > 0 || player.reboundsTotal > 0
+      ));
 
   const awayPlayers = buildPlayers(boxScore?.away?.players || []);
   const homePlayers = buildPlayers(boxScore?.home?.players || []);

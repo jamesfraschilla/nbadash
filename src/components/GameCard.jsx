@@ -1,5 +1,4 @@
 import { Link, useSearchParams } from "react-router-dom";
-import { teamLogoUrl } from "../api.js";
 import { formatTipTime, gameStatusLabel, normalizeClock } from "../utils.js";
 import styles from "./GameCard.module.css";
 
@@ -19,16 +18,8 @@ export default function GameCard({ game }) {
       <div className={styles.gameCard}>
         <div className={styles.gameContent}>
           <div className={styles.teamTricodes}>
-            <img
-              className={styles.teamLogo}
-              src={teamLogoUrl(game.awayTeam.teamId)}
-              alt={`${game.awayTeam.teamName} logo`}
-            />
-            <img
-              className={styles.teamLogo}
-              src={teamLogoUrl(game.homeTeam.teamId)}
-              alt={`${game.homeTeam.teamName} logo`}
-            />
+            <span className={styles.teamTricode}>{game.awayTeam.teamTricode}</span>
+            <span className={styles.teamTricode}>{game.homeTeam.teamTricode}</span>
           </div>
 
           {(isLive || isFinal) && (

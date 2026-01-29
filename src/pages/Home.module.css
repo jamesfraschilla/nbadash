@@ -107,12 +107,6 @@
   min-width: 70px;
 }
 
-.teamTricodeLogo {
-  width: 26px;
-  height: 26px;
-  object-fit: contain;
-}
-
 .teamRecord {
   font-size: 14px;
   color: var(--muted);
@@ -186,11 +180,6 @@
   .teamTricode,
   .score {
     font-size: 18px;
-  }
-
-  .teamTricodeLogo {
-    width: 20px;
-    height: 20px;
   }
 
   .teamRecord {
