@@ -334,6 +334,8 @@ export default function Game({ variant = "full" }) {
   const lockButtonRef = useRef(null);
   const lockTimeoutRef = useRef(null);
   const lockStyleRef = useRef(null);
+  const holdTimerRef = useRef(null);
+  const holdTargetRef = useRef(null);
   const [isLocked, setIsLocked] = useState(false);
   const isAtc = variant === "atc";
   const showExtras = !isAtc;
@@ -513,6 +515,33 @@ export default function Game({ variant = "full" }) {
   const clock = isLive ? normalizeClock(game?.gameClock) : null;
   const useSnapshots = isLive;
 
+  const { data: highlightRows } = useQuery({
+    queryKey: ["pbp-highlights", gameId],
+    queryFn: async () => {
+      if (!supabase || !gameId) return [];
+      const { data, error: fetchError } = await supabase
+        .from("pbp_highlights")
+        .select("action_number,note")
+        .eq("game_id", gameId);
+      if (fetchError) throw fetchError;
+      return data || [];
+    },
+    enabled: Boolean(gameId),
+    staleTime: 15_000,
+    refetchInterval: 15_000,
+  });
+
+  const [highlightedMap, setHighlightedMap] = useState(new Map());
+
+  useEffect(() => {
+    if (!highlightRows) return;
+    const next = new Map();
+    highlightRows.forEach((row) => {
+      if (row.action_number != null) next.set(row.action_number, row.note || "");
+    });
+    setHighlightedMap(next);
+  }, [highlightRows]);
+
   const basePlayers = [
     ...(boxScore?.away?.players || []),
     ...(boxScore?.home?.players || []),
@@ -636,11 +665,64 @@ export default function Game({ variant = "full" }) {
     return sorted.slice(-16);
   }, [game?.playByPlayActions]);
 
+  const clearHoldTimer = () => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    holdTargetRef.current = null;
+  };
+
+  const highlightAction = async (actionNumber) => {
+    if (!actionNumber || !supabase || !gameId) return;
+    const { error: updateError } = await supabase
+      .from("pbp_highlights")
+      .upsert(
+        { game_id: gameId, action_number: actionNumber, note: "" },
+        { onConflict: "game_id,action_number" }
+      );
+    if (!updateError) {
+      setHighlightedMap((prev) => {
+        if (prev.has(actionNumber)) return prev;
+        const next = new Map(prev);
+        next.set(actionNumber, "");
+        return next;
+      });
+    }
+  };
+
+  const handleHoldStart = (actionNumber) => () => {
+    if (!actionNumber) return;
+    clearHoldTimer();
+    holdTargetRef.current = actionNumber;
+    holdTimerRef.current = setTimeout(() => {
+      if (holdTargetRef.current === actionNumber) {
+        highlightAction(actionNumber);
+      }
+      clearHoldTimer();
+    }, 1000);
+  };
+
+  const handleHoldEnd = () => {
+    clearHoldTimer();
+  };
+
   useEffect(() => {
     if (!showExtras) return;
     const wheel = pbpWheelRef.current;
     if (!wheel) return;
-    wheel.scrollLeft = wheel.scrollWidth;
+    const scrollToRight = () => {
+      wheel.scrollLeft = Math.max(0, wheel.scrollWidth - wheel.clientWidth);
+    };
+    const raf1 = requestAnimationFrame(() => {
+      scrollToRight();
+      requestAnimationFrame(scrollToRight);
+    });
+    const timeout = setTimeout(scrollToRight, 80);
+    return () => {
+      cancelAnimationFrame(raf1);
+      clearTimeout(timeout);
+    };
   }, [pbpWheelItems, showExtras]);
 
   const finalSnapshotTotals = useMemo(() => {
@@ -1485,10 +1567,18 @@ export default function Game({ variant = "full" }) {
                 const rawDescriptor = action.description || action.descriptor || action.subType || action.actionType || "";
                 const descriptor = String(rawDescriptor).replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
                 const headshotUrl = action.personId ? playerHeadshotUrl(action.personId) : null;
+                const isHighlighted = action.actionNumber && highlightedMap.has(action.actionNumber);
+                const isHome = action.teamId && action.teamId === homeTeam?.teamId;
                 return (
                   <div
                     key={action.actionNumber || `${action.period}-${action.clock}-${descriptor}`}
-                    className={styles.pbpCard}
+                    className={`${styles.pbpCard} ${isHome ? styles.pbpCardHome : ""} ${isHighlighted ? styles.pbpCardHighlighted : ""}`}
+                    onMouseDown={handleHoldStart(action.actionNumber)}
+                    onMouseUp={handleHoldEnd}
+                    onMouseLeave={handleHoldEnd}
+                    onTouchStart={handleHoldStart(action.actionNumber)}
+                    onTouchEnd={handleHoldEnd}
+                    onTouchCancel={handleHoldEnd}
                   >
                     <div className={styles.pbpHeader}>
                       <span className={styles.pbpTeam}>{teamTricode}</span>
@@ -1496,7 +1586,17 @@ export default function Game({ variant = "full" }) {
                     </div>
                     <div className={styles.pbpBody}>
                       {headshotUrl ? (
-                        <img className={styles.pbpHeadshot} src={headshotUrl} alt="" />
+                        <img
+                          className={styles.pbpHeadshot}
+                          src={headshotUrl}
+                          alt=""
+                          onLoad={() => {
+                            const wheel = pbpWheelRef.current;
+                            if (wheel) {
+                              wheel.scrollLeft = Math.max(0, wheel.scrollWidth - wheel.clientWidth);
+                            }
+                          }}
+                        />
                       ) : (
                         <div className={styles.pbpHeadshotPlaceholder} />
                       )}
