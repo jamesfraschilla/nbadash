@@ -84,7 +84,7 @@
 .pbpWheel {
   margin: 10px 0 18px;
   overflow-x: auto;
-  max-width: calc(var(--pbp-card-width) * 3 + 24px);
+  max-width: calc(var(--pbp-card-width) * 3 + 56px);
   width: 100%;
   margin-left: auto;
   margin-right: auto;
@@ -94,7 +94,7 @@
   -webkit-touch-callout: none;
   border: 1px solid transparent;
   border-radius: 8px;
-  padding: 12px 22px;
+  padding: 12px 28px;
 }
 
 .pbpWheelInner {
