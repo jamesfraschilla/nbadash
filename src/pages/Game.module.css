@@ -134,6 +134,19 @@
   color: #111;
 }
 
+.pbpCardTimeout {
+  background-color: #ef4444;
+  border-color: #b91c1c;
+}
+
+.pbpCardTimeout .pbpText,
+.pbpCardTimeout .pbpHeader,
+.pbpCardTimeout .pbpFooter,
+.pbpCardTimeout .pbpTeam,
+.pbpCardTimeout .pbpScore {
+  color: #fff;
+}
+
 html[data-theme="dark"] .container {
   --pbp-home-bg: #1f2937;
 }

@@ -1673,13 +1673,14 @@ export default function Game({ variant = "full" }) {
                 const headshotUrl = action.personId ? playerHeadshotUrl(action.personId) : null;
                 const isHighlighted = action.actionNumber && highlightedMap.has(action.actionNumber);
                 const isHome = action.teamId && action.teamId === homeTeam?.teamId;
+                const isTimeout = action.actionType === "timeout";
                 const scoreText = action.scoreHome && action.scoreAway
                   ? `${action.scoreAway}-${action.scoreHome}`
                   : "";
                 return (
                   <div
                     key={action.actionNumber || `${action.period}-${action.clock}-${descriptor}`}
-                    className={`${styles.pbpCard} ${isHome ? styles.pbpCardHome : ""} ${isHighlighted ? styles.pbpCardHighlighted : ""}`}
+                    className={`${styles.pbpCard} ${isHome ? styles.pbpCardHome : ""} ${isHighlighted ? styles.pbpCardHighlighted : ""} ${isTimeout ? styles.pbpCardTimeout : ""}`}
                     onMouseDown={handleHoldStart(action.actionNumber)}
                     onMouseUp={handleHoldEnd}
                     onMouseLeave={handleHoldEnd}
