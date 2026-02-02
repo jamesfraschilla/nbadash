@@ -272,6 +272,7 @@ export default function PlayByPlay() {
         {filtered.map((action, index) => {
           const isAway = action.teamId === game.awayTeam?.teamId;
           const isHome = action.teamId === game.homeTeam?.teamId;
+          const isTimeout = action.actionType === "timeout";
           const actionNumber = action.actionNumber ?? null;
           const rowKey = actionNumber ?? `${action.period}-${index}`;
           const highlightNote = actionNumber != null ? highlightedMap.get(actionNumber) : "";
@@ -284,7 +285,7 @@ export default function PlayByPlay() {
           return (
             <div
               key={rowKey}
-              className={`${styles.eventRow} ${actionNumber && highlightedMap.has(actionNumber) ? styles.highlighted : ""}`}
+              className={`${styles.eventRow} ${actionNumber && highlightedMap.has(actionNumber) ? styles.highlighted : ""} ${isTimeout ? styles.timeout : ""}`}
               onPointerDown={handleHoldStart(actionNumber)}
               onPointerUp={handleHoldEnd}
               onPointerLeave={handleHoldEnd}

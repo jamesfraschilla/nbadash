@@ -154,6 +154,17 @@
   background-color: #fff4a3;
 }
 
+.timeout {
+  background-color: #ef4444;
+}
+
+.timeout .eventContent,
+.timeout .clock,
+.timeout .score,
+.timeout .periodLabel {
+  color: #fff;
+}
+
 @media (hover: hover) and (pointer: fine) {
   .eventRow:hover {
     background-color: var(--row-hover);

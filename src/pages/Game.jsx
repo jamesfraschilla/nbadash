@@ -817,8 +817,6 @@ export default function Game({ variant = "full" }) {
   };
 
   const requestCancelNote = () => {
-    const confirmed = window.confirm("Are you sure you want to cancel this note?");
-    if (!confirmed) return;
     closeAddNote();
   };
 
@@ -1563,6 +1561,21 @@ export default function Game({ variant = "full" }) {
           <Link className={styles.backButton} to={dateParam ? `/?d=${dateParam}` : "/"}>
             Back
           </Link>
+          {showExtras ? (
+            <Link
+              className={styles.backButton}
+              to={dateParam ? `/g/${gameId}/atc?d=${dateParam}` : `/g/${gameId}/atc`}
+            >
+              ATC
+            </Link>
+          ) : (
+            <Link
+              className={styles.backButton}
+              to={dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`}
+            >
+              Full Dashboard
+            </Link>
+          )}
         </div>
         <div className={styles.backRowCenter}>
           {isAtc && (
@@ -1583,33 +1596,16 @@ export default function Game({ variant = "full" }) {
           )}
         </div>
         <div className={styles.backRowRight}>
-          {showExtras ? (
-            <Link
-              className={styles.backButton}
-              to={dateParam ? `/g/${gameId}/atc?d=${dateParam}` : `/g/${gameId}/atc`}
-            >
-              ATC
-            </Link>
-          ) : (
-            <Link
-              className={styles.backButton}
-              to={dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`}
-            >
-              Full Dashboard
-            </Link>
-          )}
+          <button type="button" className={styles.backButton} onClick={openAddNote}>
+            Add Note
+          </button>
+          <Link
+            className={styles.backButton}
+            to={dateParam ? `/g/${gameId}/notes?d=${dateParam}` : `/g/${gameId}/notes`}
+          >
+            View Notes
+          </Link>
         </div>
-      </div>
-      <div className={styles.backRowNotes}>
-        <button type="button" className={styles.backButton} onClick={openAddNote}>
-          Add Note
-        </button>
-        <Link
-          className={styles.backButton}
-          to={dateParam ? `/g/${gameId}/notes?d=${dateParam}` : `/g/${gameId}/notes`}
-        >
-          View Notes
-        </Link>
       </div>
       <div className={styles.contentAlign}>
         <section className={styles.scoreboard}>
