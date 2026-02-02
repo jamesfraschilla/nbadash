@@ -1560,26 +1560,9 @@ export default function Game({ variant = "full" }) {
     <div className={styles.container}>
       <div className={styles.backRow}>
         <div className={styles.backRowLeft}>
-          <div className={styles.backRowLeftStack}>
-            <Link className={styles.backButton} to={dateParam ? `/?d=${dateParam}` : "/"}>
-              Back
-            </Link>
-            {showExtras ? (
-              <Link
-                className={styles.backButton}
-                to={dateParam ? `/g/${gameId}/atc?d=${dateParam}` : `/g/${gameId}/atc`}
-              >
-                ATC
-              </Link>
-            ) : (
-              <Link
-                className={styles.backButton}
-                to={dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`}
-              >
-                Full Dashboard
-              </Link>
-            )}
-          </div>
+          <Link className={styles.backButton} to={dateParam ? `/?d=${dateParam}` : "/"}>
+            Back
+          </Link>
         </div>
         <div className={styles.backRowCenter}>
           {isAtc && (
@@ -1600,20 +1583,33 @@ export default function Game({ variant = "full" }) {
           )}
         </div>
         <div className={styles.backRowRight}>
-          {isAtc && (
-            <div className={styles.backRowRightStack}>
-              <button type="button" className={styles.backButton} onClick={openAddNote}>
-                Add Note
-              </button>
-              <Link
-                className={styles.backButton}
-                to={dateParam ? `/g/${gameId}/notes?d=${dateParam}` : `/g/${gameId}/notes`}
-              >
-                View Notes
-              </Link>
-            </div>
+          {showExtras ? (
+            <Link
+              className={styles.backButton}
+              to={dateParam ? `/g/${gameId}/atc?d=${dateParam}` : `/g/${gameId}/atc`}
+            >
+              ATC
+            </Link>
+          ) : (
+            <Link
+              className={styles.backButton}
+              to={dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`}
+            >
+              Full Dashboard
+            </Link>
           )}
         </div>
+      </div>
+      <div className={styles.backRowNotes}>
+        <button type="button" className={styles.backButton} onClick={openAddNote}>
+          Add Note
+        </button>
+        <Link
+          className={styles.backButton}
+          to={dateParam ? `/g/${gameId}/notes?d=${dateParam}` : `/g/${gameId}/notes`}
+        >
+          View Notes
+        </Link>
       </div>
       <div className={styles.contentAlign}>
         <section className={styles.scoreboard}>
@@ -1850,82 +1846,6 @@ export default function Game({ variant = "full" }) {
             </div>
           )}
 
-          {noteModalOpen && (
-            <div className={styles.noteOverlay} onClick={requestCancelNote}>
-              <div
-                className={`${styles.noteModal} ${styles.noteModalForm}`}
-                onClick={(event) => event.stopPropagation()}
-                role="dialog"
-                aria-modal="true"
-              >
-                <h3>Add Note</h3>
-                <div className={styles.noteTimeRow}>
-                  <div className={styles.noteTimeLabel}>Time left</div>
-                  <div className={styles.noteTimeControls}>
-                    <select
-                      className={styles.noteSelect}
-                      value={noteForm.period}
-                      onChange={(event) =>
-                        setNoteForm((prev) => ({ ...prev, period: event.target.value }))
-                      }
-                    >
-                      {NOTE_PERIOD_OPTIONS.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                    <div className={styles.noteClockSelects}>
-                      <select
-                        className={styles.noteSelect}
-                        value={noteForm.minutes}
-                        onChange={(event) =>
-                          setNoteForm((prev) => ({ ...prev, minutes: event.target.value }))
-                        }
-                      >
-                        {NOTE_MINUTE_OPTIONS.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                      <span className={styles.noteClockSeparator}>:</span>
-                      <select
-                        className={styles.noteSelect}
-                        value={noteForm.seconds}
-                        onChange={(event) =>
-                          setNoteForm((prev) => ({ ...prev, seconds: event.target.value }))
-                        }
-                      >
-                        {NOTE_SECOND_OPTIONS.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-                <textarea
-                  rows={4}
-                  placeholder="Type your note..."
-                  value={noteForm.text}
-                  onChange={(event) =>
-                    setNoteForm((prev) => ({ ...prev, text: event.target.value }))
-                  }
-                />
-                <div className={styles.noteActions}>
-                  <button type="button" className={styles.noteCancel} onClick={requestCancelNote}>
-                    Cancel
-                  </button>
-                  <button type="button" className={styles.noteSave} onClick={saveNewNote}>
-                    OK
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
           <StatBars
             title="Four Factors"
             awayTeam={awayTeam}
@@ -2003,6 +1923,82 @@ export default function Game({ variant = "full" }) {
             </button>
           </div>
         </>
+      )}
+
+      {noteModalOpen && (
+        <div className={styles.noteOverlay} onClick={requestCancelNote}>
+          <div
+            className={`${styles.noteModal} ${styles.noteModalForm}`}
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <h3>Add Note</h3>
+            <div className={styles.noteTimeRow}>
+              <div className={styles.noteTimeLabel}>Time left</div>
+              <div className={styles.noteTimeControls}>
+                <select
+                  className={styles.noteSelect}
+                  value={noteForm.period}
+                  onChange={(event) =>
+                    setNoteForm((prev) => ({ ...prev, period: event.target.value }))
+                  }
+                >
+                  {NOTE_PERIOD_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+                <div className={styles.noteClockSelects}>
+                  <select
+                    className={styles.noteSelect}
+                    value={noteForm.minutes}
+                    onChange={(event) =>
+                      setNoteForm((prev) => ({ ...prev, minutes: event.target.value }))
+                    }
+                  >
+                    {NOTE_MINUTE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                  <span className={styles.noteClockSeparator}>:</span>
+                  <select
+                    className={styles.noteSelect}
+                    value={noteForm.seconds}
+                    onChange={(event) =>
+                      setNoteForm((prev) => ({ ...prev, seconds: event.target.value }))
+                    }
+                  >
+                    {NOTE_SECOND_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+            <textarea
+              rows={4}
+              placeholder="Type your note..."
+              value={noteForm.text}
+              onChange={(event) =>
+                setNoteForm((prev) => ({ ...prev, text: event.target.value }))
+              }
+            />
+            <div className={styles.noteActions}>
+              <button type="button" className={styles.noteCancel} onClick={requestCancelNote}>
+                Cancel
+              </button>
+              <button type="button" className={styles.noteSave} onClick={saveNewNote}>
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <section className={styles.boxScoreSection}>

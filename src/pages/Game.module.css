@@ -19,13 +19,6 @@
   justify-self: start;
 }
 
-.backRowLeftStack {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-}
-
 .backRowCenter {
   justify-self: center;
 }
@@ -34,11 +27,11 @@
   justify-self: end;
 }
 
-.backRowRightStack {
+.backRowNotes {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 .lockButton {
