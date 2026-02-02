@@ -1510,21 +1510,28 @@ export default function Game({ variant = "full" }) {
           )}
         </div>
         <div className={styles.backRowRight}>
-          {showExtras ? (
-            <Link
-              className={styles.backButton}
-              to={dateParam ? `/g/${gameId}/atc?d=${dateParam}` : `/g/${gameId}/atc`}
-            >
-              ATC
-            </Link>
-          ) : (
-            <Link
-              className={styles.backButton}
-              to={dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`}
-            >
-              Full Dashboard
-            </Link>
-          )}
+          <div className={styles.backRowRightStack}>
+            {showExtras ? (
+              <Link
+                className={styles.backButton}
+                to={dateParam ? `/g/${gameId}/atc?d=${dateParam}` : `/g/${gameId}/atc`}
+              >
+                ATC
+              </Link>
+            ) : (
+              <>
+                <Link
+                  className={styles.backButton}
+                  to={dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`}
+                >
+                  Full Dashboard
+                </Link>
+                <button type="button" className={styles.backButton}>
+                  Add Note
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
       <div className={styles.contentAlign}>
