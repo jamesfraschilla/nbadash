@@ -11,6 +11,7 @@ import TransitionStats from "../components/TransitionStats.jsx";
 import MiscStats from "../components/MiscStats.jsx";
 import CreatingDisruption from "../components/CreatingDisruption.jsx";
 import SegmentSelector from "../components/SegmentSelector.jsx";
+import rosters from "../data/rosters.json";
 import {
   aggregateSegmentStats,
   computeKills,
@@ -931,10 +932,11 @@ export default function Game({ variant = "full" }) {
     return Math.round(minutes * 60 + seconds);
   };
 
-  const buildPlayers = (players) =>
+  const buildPlayers = (players, options = {}) =>
     players
       .map((player) => {
         const stats = playerMap.get(player.personId) || {};
+        const useDefaults = options.forceZeros || segment !== "all";
         const base = segment === "all"
           ? player
           : {
@@ -944,7 +946,7 @@ export default function Game({ variant = "full" }) {
             jerseyNum: player.jerseyNum || "",
             position: player.position || "",
           };
-        const safeStats = segment === "all" ? stats : { ...SEGMENT_STAT_DEFAULTS, ...stats };
+        const safeStats = useDefaults ? { ...SEGMENT_STAT_DEFAULTS, ...stats } : stats;
         const officialSeconds = segment === "all" ? parseDuration(player.minutes) : null;
         const minutesSeconds =
           segment === "all" && Number.isFinite(officialSeconds) ? officialSeconds : safeStats.minutes;
@@ -973,8 +975,21 @@ export default function Game({ variant = "full" }) {
         isPregame || player.minutes !== "00:00" || player.points > 0 || player.reboundsTotal > 0
       ));
 
-  const awayPlayers = buildPlayers(boxScore?.away?.players || []);
-  const homePlayers = buildPlayers(boxScore?.home?.players || []);
+  const getRosterPlayers = (teamId) => {
+    const key = teamId != null ? String(teamId) : "";
+    const entry = rosters?.[key] ?? rosters?.[Number(key)];
+    if (!entry) return [];
+    if (Array.isArray(entry)) return entry;
+    if (Array.isArray(entry.players)) return entry.players;
+    return [];
+  };
+
+  const hasBoxScorePlayers =
+    (boxScore?.away?.players?.length || 0) > 0 || (boxScore?.home?.players?.length || 0) > 0;
+  const awaySourcePlayers = hasBoxScorePlayers ? (boxScore?.away?.players || []) : getRosterPlayers(awayTeam?.teamId);
+  const homeSourcePlayers = hasBoxScorePlayers ? (boxScore?.home?.players || []) : getRosterPlayers(homeTeam?.teamId);
+  const awayPlayers = buildPlayers(awaySourcePlayers, { forceZeros: !hasBoxScorePlayers });
+  const homePlayers = buildPlayers(homeSourcePlayers, { forceZeros: !hasBoxScorePlayers });
 
   const mergeAllSegmentTotals = (base, computed, snapshot) => {
     if (segment !== "all") return base;
