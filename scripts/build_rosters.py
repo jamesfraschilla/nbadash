@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 from datetime import datetime
+import time
 from pathlib import Path
 
 try:
@@ -37,7 +38,24 @@ def build_rosters(season: str) -> dict[str, list[dict]]:
     roster_map: dict[str, list[dict]] = {}
     for team in teams.get_teams():
         team_id = str(team["id"])
-        roster = commonteamroster.CommonTeamRoster(team_id=team_id, season=season, league_id="00")
+        attempt = 0
+        roster = None
+        while attempt < 3:
+            attempt += 1
+            try:
+                roster = commonteamroster.CommonTeamRoster(
+                    team_id=team_id,
+                    season=season,
+                    league_id_nullable="00",
+                    timeout=60,
+                )
+                break
+            except Exception as exc:
+                time.sleep(2)
+                if attempt >= 3:
+                    raise exc
+        if roster is None:
+            continue
         data = roster.get_dict()
         rows = data.get("resultSets", [{}])[0].get("rowSet", [])
         headers = data.get("resultSets", [{}])[0].get("headers", [])
