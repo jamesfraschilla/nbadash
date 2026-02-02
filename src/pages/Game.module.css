@@ -19,6 +19,13 @@
   justify-self: start;
 }
 
+.backRowLeftStack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
 .backRowCenter {
   justify-self: center;
 }
@@ -260,10 +267,55 @@ html[data-theme="dark"] .pbpWheel {
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
 }
 
+.noteModalForm {
+  width: min(520px, 100%);
+}
+
 .noteModal h3 {
   margin: 0 0 10px;
   font-size: 16px;
   color: var(--text);
+}
+
+.noteTimeRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.noteTimeLabel {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.noteTimeControls {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.noteSelect {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--panel-strong);
+}
+
+.noteClockSelects {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.noteClockSeparator {
+  color: var(--muted);
+  font-size: 14px;
 }
 
 .noteModal textarea {

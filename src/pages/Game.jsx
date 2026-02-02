@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchGame, fetchMinutes, playerHeadshotUrl, teamLogoUrl } from "../api.js";
 import { gameStatusLabel, normalizeClock } from "../utils.js";
+import { saveNote as saveDashboardNote } from "../notesStorage.js";
 import BoxScoreTable from "../components/BoxScoreTable.jsx";
 import StatBars from "../components/StatBars.jsx";
 import Officials from "../components/Officials.jsx";
@@ -40,6 +41,10 @@ const CORE_STAT_FIELDS = [
   "midFieldGoalsMade",
   "midFieldGoalsAttempted",
 ];
+
+const NOTE_PERIOD_OPTIONS = ["--", "Q1", "Q2", "Q3", "Q4", "OT"];
+const NOTE_MINUTE_OPTIONS = ["--", ...Array.from({ length: 12 }, (_, idx) => String(idx))];
+const NOTE_SECOND_OPTIONS = ["--", ...Array.from({ length: 60 }, (_, idx) => String(idx).padStart(2, "0"))];
 const SEGMENT_STAT_DEFAULTS = {
   minutes: 0,
   plusMinusPoints: 0,
@@ -339,6 +344,13 @@ export default function Game({ variant = "full" }) {
   const [isLocked, setIsLocked] = useState(false);
   const [noteEditor, setNoteEditor] = useState({ open: false, actionNumber: null });
   const [noteDraft, setNoteDraft] = useState("");
+  const [noteModalOpen, setNoteModalOpen] = useState(false);
+  const [noteForm, setNoteForm] = useState({
+    period: "--",
+    minutes: "--",
+    seconds: "--",
+    text: "",
+  });
   const isAtc = variant === "atc";
   const showExtras = !isAtc;
 
@@ -764,6 +776,67 @@ export default function Game({ variant = "full" }) {
       });
       closeNoteEditor();
     }
+  };
+
+  const buildDefaultNoteForm = () => {
+    if (!isLive || !game?.period || !game?.gameClock) {
+      return {
+        period: "--",
+        minutes: "--",
+        seconds: "--",
+        text: "",
+      };
+    }
+    const periodNumber = Number(game.period) || 1;
+    const periodLabel = periodNumber > 4 ? "OT" : `Q${periodNumber}`;
+    const normalized = normalizeClock(game.gameClock);
+    const [minRaw, secRaw] = normalized.split(":");
+    if (!minRaw || !secRaw) {
+      return {
+        period: periodLabel,
+        minutes: "--",
+        seconds: "--",
+        text: "",
+      };
+    }
+    return {
+      period: periodLabel,
+      minutes: String(Number(minRaw)),
+      seconds: String(secRaw).padStart(2, "0"),
+      text: "",
+    };
+  };
+
+  const openAddNote = () => {
+    setNoteForm(buildDefaultNoteForm());
+    setNoteModalOpen(true);
+  };
+
+  const closeAddNote = () => {
+    setNoteModalOpen(false);
+  };
+
+  const requestCancelNote = () => {
+    const confirmed = window.confirm("Are you sure you want to cancel this note?");
+    if (!confirmed) return;
+    closeAddNote();
+  };
+
+  const saveNewNote = () => {
+    if (!gameId) return;
+    const minutesValue = noteForm.minutes === "--" ? null : Number(noteForm.minutes);
+    const secondsValue = noteForm.seconds === "--" ? null : Number(noteForm.seconds);
+    const payload = {
+      id: `${gameId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      gameId,
+      periodLabel: noteForm.period === "--" ? null : noteForm.period,
+      minutes: Number.isNaN(minutesValue) ? null : minutesValue,
+      seconds: Number.isNaN(secondsValue) ? null : secondsValue,
+      text: String(noteForm.text || "").trim(),
+      createdAt: Date.now(),
+    };
+    saveDashboardNote(payload);
+    closeAddNote();
   };
 
   const handleHoldStart = (actionNumber) => () => {
@@ -1487,9 +1560,26 @@ export default function Game({ variant = "full" }) {
     <div className={styles.container}>
       <div className={styles.backRow}>
         <div className={styles.backRowLeft}>
-          <Link className={styles.backButton} to={dateParam ? `/?d=${dateParam}` : "/"}>
-            Back
-          </Link>
+          <div className={styles.backRowLeftStack}>
+            <Link className={styles.backButton} to={dateParam ? `/?d=${dateParam}` : "/"}>
+              Back
+            </Link>
+            {showExtras ? (
+              <Link
+                className={styles.backButton}
+                to={dateParam ? `/g/${gameId}/atc?d=${dateParam}` : `/g/${gameId}/atc`}
+              >
+                ATC
+              </Link>
+            ) : (
+              <Link
+                className={styles.backButton}
+                to={dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`}
+              >
+                Full Dashboard
+              </Link>
+            )}
+          </div>
         </div>
         <div className={styles.backRowCenter}>
           {isAtc && (
@@ -1510,28 +1600,19 @@ export default function Game({ variant = "full" }) {
           )}
         </div>
         <div className={styles.backRowRight}>
-          <div className={styles.backRowRightStack}>
-            {showExtras ? (
+          {isAtc && (
+            <div className={styles.backRowRightStack}>
+              <button type="button" className={styles.backButton} onClick={openAddNote}>
+                Add Note
+              </button>
               <Link
                 className={styles.backButton}
-                to={dateParam ? `/g/${gameId}/atc?d=${dateParam}` : `/g/${gameId}/atc`}
+                to={dateParam ? `/g/${gameId}/notes?d=${dateParam}` : `/g/${gameId}/notes`}
               >
-                ATC
+                View Notes
               </Link>
-            ) : (
-              <>
-                <Link
-                  className={styles.backButton}
-                  to={dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`}
-                >
-                  Full Dashboard
-                </Link>
-                <button type="button" className={styles.backButton}>
-                  Add Note
-                </button>
-              </>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
       <div className={styles.contentAlign}>
@@ -1764,6 +1845,82 @@ export default function Game({ variant = "full" }) {
                       Save
                     </button>
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {noteModalOpen && (
+            <div className={styles.noteOverlay} onClick={requestCancelNote}>
+              <div
+                className={`${styles.noteModal} ${styles.noteModalForm}`}
+                onClick={(event) => event.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+              >
+                <h3>Add Note</h3>
+                <div className={styles.noteTimeRow}>
+                  <div className={styles.noteTimeLabel}>Time left</div>
+                  <div className={styles.noteTimeControls}>
+                    <select
+                      className={styles.noteSelect}
+                      value={noteForm.period}
+                      onChange={(event) =>
+                        setNoteForm((prev) => ({ ...prev, period: event.target.value }))
+                      }
+                    >
+                      {NOTE_PERIOD_OPTIONS.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                    <div className={styles.noteClockSelects}>
+                      <select
+                        className={styles.noteSelect}
+                        value={noteForm.minutes}
+                        onChange={(event) =>
+                          setNoteForm((prev) => ({ ...prev, minutes: event.target.value }))
+                        }
+                      >
+                        {NOTE_MINUTE_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                      <span className={styles.noteClockSeparator}>:</span>
+                      <select
+                        className={styles.noteSelect}
+                        value={noteForm.seconds}
+                        onChange={(event) =>
+                          setNoteForm((prev) => ({ ...prev, seconds: event.target.value }))
+                        }
+                      >
+                        {NOTE_SECOND_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <textarea
+                  rows={4}
+                  placeholder="Type your note..."
+                  value={noteForm.text}
+                  onChange={(event) =>
+                    setNoteForm((prev) => ({ ...prev, text: event.target.value }))
+                  }
+                />
+                <div className={styles.noteActions}>
+                  <button type="button" className={styles.noteCancel} onClick={requestCancelNote}>
+                    Cancel
+                  </button>
+                  <button type="button" className={styles.noteSave} onClick={saveNewNote}>
+                    OK
+                  </button>
                 </div>
               </div>
             </div>

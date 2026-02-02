@@ -1,0 +1,85 @@
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: calc(16px + env(safe-area-inset-top)) 24px 40px;
+}
+
+.backRow {
+  margin-bottom: 12px;
+}
+
+.backButton {
+  display: inline-block;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  background-color: var(--bg);
+  font-size: 13px;
+}
+
+.title {
+  margin: 0 0 16px;
+  font-size: 20px;
+  color: var(--text);
+}
+
+.empty {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.noteRow {
+  display: grid;
+  grid-template-columns: 24px auto 1fr;
+  align-items: start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.noteDelete {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.noteDelete:hover {
+  color: var(--negative);
+}
+
+.noteMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 48px;
+}
+
+.notePeriod {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.noteClock {
+  font-variant-numeric: tabular-nums;
+}
+
+.noteBody {
+  font-size: 14px;
+  color: var(--text);
+  white-space: pre-wrap;
+}
