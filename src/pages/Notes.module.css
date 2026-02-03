@@ -61,7 +61,7 @@
 
 .noteRow {
   display: grid;
-  grid-template-columns: 24px auto 1fr 24px;
+  grid-template-columns: 24px auto 1fr auto;
   align-items: start;
   gap: 12px;
   padding: 12px 14px;
@@ -94,6 +94,8 @@
   padding: 6px 12px;
   border-radius: 6px;
   min-width: 48px;
+  justify-self: end;
+  margin-right: 2px;
 }
 
 .noteEdit:hover {
