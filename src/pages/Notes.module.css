@@ -61,7 +61,7 @@
 
 .noteRow {
   display: grid;
-  grid-template-columns: 24px auto 1fr;
+  grid-template-columns: 24px auto 1fr 24px;
   align-items: start;
   gap: 12px;
   padding: 12px 14px;
@@ -82,6 +82,20 @@
 
 .noteDelete:hover {
   color: var(--negative);
+}
+
+.noteEdit {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.noteEdit:hover {
+  color: var(--text);
 }
 
 .noteMeta {
@@ -106,4 +120,96 @@
   font-size: 14px;
   color: var(--text);
   white-space: pre-wrap;
+}
+
+.noteOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 10, 16, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 50;
+}
+
+.noteModal {
+  width: min(520px, 100%);
+  background: var(--bg);
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+}
+
+.noteModal h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+  color: var(--text);
+}
+
+.noteModal textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--panel-strong);
+}
+
+.noteActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.noteActions button {
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.noteCancel {
+  background: var(--border);
+  color: var(--text);
+}
+
+.noteSave {
+  background: var(--highlight-text);
+  color: var(--bg);
+}
+
+.noteTags {
+  margin: 10px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 6px 10px;
+}
+
+.noteTags summary {
+  cursor: pointer;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.noteTagsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 6px 10px;
+  margin-top: 8px;
+}
+
+.noteTagOption {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
 }

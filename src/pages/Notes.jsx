@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { deleteNote, loadNotesForGame } from "../notesStorage.js";
+import { deleteNote, loadNotesForGame, updateNote } from "../notesStorage.js";
 import styles from "./Notes.module.css";
 
 const periodOrder = {
@@ -24,6 +24,7 @@ const filterTags = [
   "Concept",
   "Misc",
 ];
+const noteTags = filterTags.filter((tag) => tag !== "All");
 
 const getPeriodOrder = (note) => periodOrder[note.periodLabel] || 99;
 
@@ -44,6 +45,8 @@ export default function Notes() {
   const [notes, setNotes] = useState(() => loadNotesForGame(gameId));
   const [periodFilter, setPeriodFilter] = useState("All");
   const [tagFilter, setTagFilter] = useState("All");
+  const [editNote, setEditNote] = useState(null);
+  const [editDraft, setEditDraft] = useState({ text: "", tags: [] });
 
   useEffect(() => {
     setNotes(loadNotesForGame(gameId));
@@ -73,6 +76,29 @@ export default function Notes() {
     const confirmed = window.confirm("Delete this note?");
     if (!confirmed) return;
     setNotes(deleteNote(id).filter((note) => note.gameId === gameId));
+  };
+
+  const openEdit = (note) => {
+    setEditNote(note);
+    setEditDraft({
+      text: note.text || "",
+      tags: Array.isArray(note.tags) ? note.tags : [],
+    });
+  };
+
+  const closeEdit = () => {
+    setEditNote(null);
+    setEditDraft({ text: "", tags: [] });
+  };
+
+  const saveEdit = () => {
+    if (!editNote) return;
+    const updated = updateNote(editNote.id, {
+      text: String(editDraft.text || "").trim(),
+      tags: Array.isArray(editDraft.tags) ? editDraft.tags : [],
+    });
+    setNotes(updated.filter((note) => note.gameId === gameId));
+    closeEdit();
   };
 
   return (
@@ -130,8 +156,66 @@ export default function Notes() {
                 <span className={styles.noteClock}>{formatClock(note)}</span>
               </div>
               <div className={styles.noteBody}>{note.text || "—"}</div>
+              <button
+                type="button"
+                className={styles.noteEdit}
+                onClick={() => openEdit(note)}
+                aria-label="Edit note"
+              >
+                ✎
+              </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {editNote && (
+        <div className={styles.noteOverlay} onClick={closeEdit}>
+          <div
+            className={styles.noteModal}
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <h3>Edit Note</h3>
+            <details className={styles.noteTags} open>
+              <summary>Tags</summary>
+              <div className={styles.noteTagsGrid}>
+                {noteTags.map((tag) => {
+                  const checked = editDraft.tags.includes(tag);
+                  return (
+                    <label key={tag} className={styles.noteTagOption}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(event) => {
+                          const next = event.target.checked
+                            ? [...editDraft.tags, tag]
+                            : editDraft.tags.filter((value) => value !== tag);
+                          setEditDraft((prev) => ({ ...prev, tags: next }));
+                        }}
+                      />
+                      <span>{tag}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </details>
+            <textarea
+              rows={4}
+              placeholder="Type your note..."
+              value={editDraft.text}
+              onChange={(event) => setEditDraft((prev) => ({ ...prev, text: event.target.value }))}
+            />
+            <div className={styles.noteActions}>
+              <button type="button" className={styles.noteCancel} onClick={closeEdit}>
+                Cancel
+              </button>
+              <button type="button" className={styles.noteSave} onClick={saveEdit}>
+                Save
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

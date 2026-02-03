@@ -35,3 +35,10 @@ export const deleteNote = (id) => {
   writeNotes(next);
   return next;
 };
+
+export const updateNote = (id, updates) => {
+  const notes = readNotes();
+  const next = notes.map((note) => (note.id === id ? { ...note, ...updates } : note));
+  writeNotes(next);
+  return next;
+};
