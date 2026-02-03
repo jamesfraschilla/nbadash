@@ -100,7 +100,8 @@ export default function BoxScoreTable({
   const shadedColumns = new Set(["FG", "RIM", "MID", "3PT", "FT"]);
   const formatPlayerName = (player) => {
     const parts = [player.firstName, player.familyName].filter(Boolean);
-    return parts.join(" ");
+    if (parts.length) return parts.join(" ");
+    return player.fullName || player.name || "";
   };
 
   return (

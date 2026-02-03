@@ -62,11 +62,16 @@ def build_rosters(season: str) -> dict[str, list[dict]]:
         players = []
         for row in rows:
             entry = dict(zip(headers, row))
+            full_name = entry.get("PLAYER", "") or ""
+            parts = full_name.split()
+            first_name = parts[0] if parts else ""
+            family_name = " ".join(parts[1:]) if len(parts) > 1 else ""
             players.append(
                 {
                     "personId": entry.get("PLAYER_ID"),
-                    "firstName": entry.get("PLAYER_FIRST_NAME", ""),
-                    "familyName": entry.get("PLAYER_LAST_NAME", ""),
+                    "firstName": first_name,
+                    "familyName": family_name,
+                    "fullName": full_name,
                     "jerseyNum": str(entry.get("NUM", "") or ""),
                     "position": entry.get("POSITION", ""),
                 }
