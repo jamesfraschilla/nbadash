@@ -162,7 +162,7 @@ export default function Notes() {
                 onClick={() => openEdit(note)}
                 aria-label="Edit note"
               >
-                ✎
+                Edit
               </button>
             </div>
           ))}
