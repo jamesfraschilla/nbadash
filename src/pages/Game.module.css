@@ -270,6 +270,35 @@ html[data-theme="dark"] .pbpWheel {
   color: var(--text);
 }
 
+.noteTags {
+  margin: 10px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 6px 10px;
+}
+
+.noteTags summary {
+  cursor: pointer;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.noteTagsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 6px 10px;
+  margin-top: 8px;
+}
+
+.noteTagOption {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+}
+
 .noteTimeRow {
   display: flex;
   flex-direction: column;

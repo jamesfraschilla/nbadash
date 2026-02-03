@@ -46,6 +46,17 @@ const CORE_STAT_FIELDS = [
 const NOTE_PERIOD_OPTIONS = ["--", "Q1", "Q2", "Q3", "Q4", "OT"];
 const NOTE_MINUTE_OPTIONS = ["--", ...Array.from({ length: 12 }, (_, idx) => String(idx))];
 const NOTE_SECOND_OPTIONS = ["--", ...Array.from({ length: 60 }, (_, idx) => String(idx).padStart(2, "0"))];
+const NOTE_TAG_OPTIONS = [
+  "Reminder",
+  "Playcall",
+  "Injury",
+  "Good",
+  "Bad",
+  "Offense",
+  "Defense",
+  "Concept",
+  "Misc",
+];
 const SEGMENT_STAT_DEFAULTS = {
   minutes: 0,
   plusMinusPoints: 0,
@@ -351,6 +362,7 @@ export default function Game({ variant = "full" }) {
     minutes: "--",
     seconds: "--",
     text: "",
+    tags: [],
   });
   const isAtc = variant === "atc";
   const showExtras = !isAtc;
@@ -786,6 +798,7 @@ export default function Game({ variant = "full" }) {
         minutes: "--",
         seconds: "--",
         text: "",
+        tags: [],
       };
     }
     const periodNumber = Number(game.period) || 1;
@@ -798,6 +811,7 @@ export default function Game({ variant = "full" }) {
         minutes: "--",
         seconds: "--",
         text: "",
+        tags: [],
       };
     }
     return {
@@ -805,6 +819,7 @@ export default function Game({ variant = "full" }) {
       minutes: String(Number(minRaw)),
       seconds: String(secRaw).padStart(2, "0"),
       text: "",
+      tags: [],
     };
   };
 
@@ -832,6 +847,7 @@ export default function Game({ variant = "full" }) {
       minutes: Number.isNaN(minutesValue) ? null : minutesValue,
       seconds: Number.isNaN(secondsValue) ? null : secondsValue,
       text: String(noteForm.text || "").trim(),
+      tags: Array.isArray(noteForm.tags) ? noteForm.tags : [],
       createdAt: Date.now(),
     };
     saveDashboardNote(payload);
@@ -1945,9 +1961,9 @@ export default function Game({ variant = "full" }) {
             aria-modal="true"
           >
             <h3>Add Note</h3>
-            <div className={styles.noteTimeRow}>
-              <div className={styles.noteTimeLabel}>Time left</div>
-              <div className={styles.noteTimeControls}>
+                <div className={styles.noteTimeRow}>
+                  <div className={styles.noteTimeLabel}>Time left</div>
+                  <div className={styles.noteTimeControls}>
                 <select
                   className={styles.noteSelect}
                   value={noteForm.period}
@@ -1990,12 +2006,35 @@ export default function Game({ variant = "full" }) {
                     ))}
                   </select>
                 </div>
-              </div>
-            </div>
-            <textarea
-              rows={4}
-              placeholder="Type your note..."
-              value={noteForm.text}
+                  </div>
+                </div>
+                <details className={styles.noteTags}>
+                  <summary>Tags</summary>
+                  <div className={styles.noteTagsGrid}>
+                    {NOTE_TAG_OPTIONS.map((tag) => {
+                      const checked = noteForm.tags.includes(tag);
+                      return (
+                        <label key={tag} className={styles.noteTagOption}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(event) => {
+                              const next = event.target.checked
+                                ? [...noteForm.tags, tag]
+                                : noteForm.tags.filter((value) => value !== tag);
+                              setNoteForm((prev) => ({ ...prev, tags: next }));
+                            }}
+                          />
+                          <span>{tag}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </details>
+                <textarea
+                  rows={4}
+                  placeholder="Type your note..."
+                  value={noteForm.text}
               onChange={(event) =>
                 setNoteForm((prev) => ({ ...prev, text: event.target.value }))
               }

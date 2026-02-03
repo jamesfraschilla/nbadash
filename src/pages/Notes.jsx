@@ -11,6 +11,20 @@ const periodOrder = {
   OT: 5,
 };
 
+const filterPeriods = ["All", "--", "Q1", "Q2", "Q3", "Q4", "OT"];
+const filterTags = [
+  "All",
+  "Reminder",
+  "Playcall",
+  "Injury",
+  "Good",
+  "Bad",
+  "Offense",
+  "Defense",
+  "Concept",
+  "Misc",
+];
+
 const getPeriodOrder = (note) => periodOrder[note.periodLabel] || 99;
 
 const getRemainingSeconds = (note) => {
@@ -28,20 +42,32 @@ export default function Notes() {
   const [params] = useSearchParams();
   const dateParam = params.get("d");
   const [notes, setNotes] = useState(() => loadNotesForGame(gameId));
+  const [periodFilter, setPeriodFilter] = useState("All");
+  const [tagFilter, setTagFilter] = useState("All");
 
   useEffect(() => {
     setNotes(loadNotesForGame(gameId));
   }, [gameId]);
 
+  const filteredNotes = useMemo(() => {
+    return notes.filter((note) => {
+      const periodValue = note.periodLabel || "--";
+      const matchesPeriod = periodFilter === "All" || periodFilter === periodValue;
+      const tags = Array.isArray(note.tags) ? note.tags : [];
+      const matchesTag = tagFilter === "All" || tags.includes(tagFilter);
+      return matchesPeriod && matchesTag;
+    });
+  }, [notes, periodFilter, tagFilter]);
+
   const sortedNotes = useMemo(() => {
-    return [...notes].sort((a, b) => {
+    return [...filteredNotes].sort((a, b) => {
       const periodDiff = getPeriodOrder(a) - getPeriodOrder(b);
       if (periodDiff) return periodDiff;
       const remainingDiff = getRemainingSeconds(b) - getRemainingSeconds(a);
       if (remainingDiff) return remainingDiff;
       return (a.createdAt || 0) - (b.createdAt || 0);
     });
-  }, [notes]);
+  }, [filteredNotes]);
 
   const handleDelete = (id) => {
     const confirmed = window.confirm("Delete this note?");
@@ -61,6 +87,29 @@ export default function Notes() {
       </div>
 
       <h2 className={styles.title}>Notes</h2>
+
+      <div className={styles.filters}>
+        <label className={styles.filterField}>
+          <span>Quarter</span>
+          <select value={periodFilter} onChange={(event) => setPeriodFilter(event.target.value)}>
+            {filterPeriods.map((period) => (
+              <option key={period} value={period}>
+                {period}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className={styles.filterField}>
+          <span>Tag</span>
+          <select value={tagFilter} onChange={(event) => setTagFilter(event.target.value)}>
+            {filterTags.map((tag) => (
+              <option key={tag} value={tag}>
+                {tag}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       {sortedNotes.length === 0 ? (
         <div className={styles.empty}>No notes saved yet.</div>
