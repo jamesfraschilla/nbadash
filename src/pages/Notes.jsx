@@ -42,6 +42,9 @@ export default function Notes() {
   const { gameId } = useParams();
   const [params] = useSearchParams();
   const dateParam = params.get("d");
+  const fromParam = params.get("from");
+  const backPath = fromParam === "atc" ? `/g/${gameId}/atc` : `/g/${gameId}`;
+  const backUrl = dateParam ? `${backPath}?d=${dateParam}` : backPath;
   const [notes, setNotes] = useState(() => loadNotesForGame(gameId));
   const [periodFilter, setPeriodFilter] = useState("All");
   const [tagFilter, setTagFilter] = useState("All");
@@ -106,7 +109,7 @@ export default function Notes() {
       <div className={styles.backRow}>
         <Link
           className={styles.backButton}
-          to={dateParam ? `/g/${gameId}/atc?d=${dateParam}` : `/g/${gameId}/atc`}
+          to={backUrl}
         >
           Back
         </Link>

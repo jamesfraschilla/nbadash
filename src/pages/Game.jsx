@@ -330,6 +330,13 @@ export default function Game({ variant = "full" }) {
   const { gameId } = useParams();
   const [params, setParams] = useSearchParams();
   const dateParam = params.get("d");
+  const notesParams = useMemo(() => {
+    const nextParams = new URLSearchParams();
+    if (dateParam) nextParams.set("d", dateParam);
+    nextParams.set("from", isAtc ? "atc" : "full");
+    const query = nextParams.toString();
+    return query ? `?${query}` : "";
+  }, [dateParam, isAtc]);
   const urlSegmentParam = params.get("segment");
   const segmentFromUrl = useMemo(() => {
     const map = {
@@ -1632,7 +1639,7 @@ export default function Game({ variant = "full" }) {
           </button>
           <Link
             className={styles.backButton}
-            to={dateParam ? `/g/${gameId}/notes?d=${dateParam}` : `/g/${gameId}/notes`}
+            to={`/g/${gameId}/notes${notesParams}`}
           >
             View Notes
           </Link>
