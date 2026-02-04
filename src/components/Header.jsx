@@ -53,9 +53,6 @@ export default function Header({ theme, onToggleTheme }) {
       <div className={styles.container}>
         <div className={styles.modeGroup}>
           <span className={styles.modeLabel}>Mode</span>
-          <Link className={styles.navButton} to="/draw">
-            Court
-          </Link>
           <button className={styles.themeToggle} onClick={onToggleTheme} type="button" aria-label="Toggle theme">
             {theme === "dark" ? "☾" : "☀"}
           </button>

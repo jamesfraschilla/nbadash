@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import styles from "./Drawing.module.css";
 
 const TOOL_PEN = "pen";
@@ -13,12 +13,19 @@ export default function Drawing() {
   const drawingRef = useRef(false);
   const lastPointRef = useRef(null);
   const snapshotRef = useRef(null);
+  const strokeDirtyRef = useRef(false);
+  const undoStackRef = useRef([]);
 
+  const [params] = useSearchParams();
   const [tool, setTool] = useState(TOOL_PEN);
   const [color, setColor] = useState(defaultColors[0]);
   const [size, setSize] = useState(4);
+  const [courtMode, setCourtMode] = useState("half");
+  const [undoCount, setUndoCount] = useState(0);
 
   const effectiveColor = tool === TOOL_ERASER ? "#000000" : color;
+  const backParam = params.get("back");
+  const backUrl = backParam && backParam.startsWith("/") ? backParam : "/";
 
   const applyCanvasSize = (canvas, width, height) => {
     const ratio = window.devicePixelRatio || 1;
@@ -59,7 +66,7 @@ export default function Drawing() {
     resize();
 
     return () => observer.disconnect();
-  }, []);
+  }, [courtMode]);
 
   const drawLine = (start, end) => {
     const canvas = canvasRef.current;
@@ -85,15 +92,19 @@ export default function Drawing() {
 
   const handlePointerDown = (event) => {
     if (event.button !== 0 && event.pointerType === "mouse") return;
+    event.preventDefault();
     const point = getPoint(event);
     if (!point) return;
     drawingRef.current = true;
     lastPointRef.current = point;
+    strokeDirtyRef.current = true;
+    drawLine(point, point);
     event.currentTarget.setPointerCapture(event.pointerId);
   };
 
   const handlePointerMove = (event) => {
     if (!drawingRef.current) return;
+    event.preventDefault();
     const point = getPoint(event);
     if (!point || !lastPointRef.current) return;
     drawLine(lastPointRef.current, point);
@@ -102,9 +113,18 @@ export default function Drawing() {
 
   const handlePointerUp = (event) => {
     if (!drawingRef.current) return;
+    event.preventDefault();
     drawingRef.current = false;
     lastPointRef.current = null;
-    event.currentTarget.releasePointerCapture(event.pointerId);
+    if (strokeDirtyRef.current && canvasRef.current) {
+      const snapshot = canvasRef.current.toDataURL("image/png");
+      undoStackRef.current.push(snapshot);
+      setUndoCount(undoStackRef.current.length);
+    }
+    strokeDirtyRef.current = false;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
   };
 
   const clearCanvas = () => {
@@ -112,17 +132,34 @@ export default function Drawing() {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    undoStackRef.current = [];
+    setUndoCount(0);
+  };
+
+  const undoLast = () => {
+    const canvas = canvasRef.current;
+    if (!canvas || undoStackRef.current.length === 0) return;
+    undoStackRef.current.pop();
+    const previous = undoStackRef.current[undoStackRef.current.length - 1];
+    if (!previous) {
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    } else {
+      restoreSnapshot(canvas, previous);
+    }
+    setUndoCount(undoStackRef.current.length);
   };
 
   const toolLabel = useMemo(() => (tool === TOOL_PEN ? "Pen" : "Eraser"), [tool]);
 
+  const courtClass = courtMode === "full" ? styles.courtFull : styles.courtHalf;
+
   return (
     <div className={styles.page}>
       <div className={styles.headerRow}>
-        <Link className={styles.backButton} to="/">
+        <Link className={styles.backButton} to={backUrl}>
           Back
         </Link>
-        <h1 className={styles.title}>Court Board</h1>
       </div>
 
       <div className={styles.controls}>
@@ -181,12 +218,26 @@ export default function Drawing() {
           </div>
         </div>
 
+        <button
+          type="button"
+          className={styles.iconButton}
+          onClick={undoLast}
+          disabled={undoCount === 0}
+          aria-label="Undo"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" className={styles.icon}>
+            <path
+              d="M12.5 6.5c-2.8 0-5.1 1.4-6.5 3.5V7H3v8h8v-3H7.7c1-1.6 2.7-2.7 4.8-2.7 3 0 5.5 2.5 5.5 5.5 0 1.9-.9 3.6-2.4 4.6l1.8 2.3C19.6 20.2 21 18 21 15.5c0-5-4.1-9-9.1-9z"
+              fill="currentColor"
+            />
+          </svg>
+        </button>
         <button type="button" className={styles.clearButton} onClick={clearCanvas}>
           Clear
         </button>
       </div>
 
-      <div className={styles.courtWrap} ref={containerRef}>
+      <div className={`${styles.courtWrap} ${courtClass}`} ref={containerRef}>
         <canvas
           ref={canvasRef}
           className={styles.canvas}
@@ -196,7 +247,23 @@ export default function Drawing() {
           onPointerLeave={handlePointerUp}
           onPointerCancel={handlePointerUp}
         />
-        <div className={styles.hint}>Draw plays directly on the court.</div>
+      </div>
+
+      <div className={styles.courtToggle}>
+        <button
+          type="button"
+          className={`${styles.toggleButton} ${courtMode === "half" ? styles.toggleActive : ""}`}
+          onClick={() => setCourtMode("half")}
+        >
+          Half Court
+        </button>
+        <button
+          type="button"
+          className={`${styles.toggleButton} ${courtMode === "full" ? styles.toggleActive : ""}`}
+          onClick={() => setCourtMode("full")}
+        >
+          Full Court
+        </button>
       </div>
     </div>
   );

@@ -330,6 +330,7 @@ export default function Game({ variant = "full" }) {
   const { gameId } = useParams();
   const [params, setParams] = useSearchParams();
   const dateParam = params.get("d");
+  const courtBackUrl = dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`;
   const urlSegmentParam = params.get("segment");
   const segmentFromUrl = useMemo(() => {
     const map = {
@@ -1768,6 +1769,9 @@ export default function Game({ variant = "full" }) {
               to={dateParam ? `/g/${gameId}/events?d=${dateParam}&view=highlighted` : `/g/${gameId}/events?view=highlighted`}
             >
               Highlighted
+            </Link>
+            <Link to={`/draw?back=${encodeURIComponent(courtBackUrl)}`}>
+              Court
             </Link>
             <button type="button" className={styles.navButton} onClick={handleScrollToBoxScore}>
               Box Score

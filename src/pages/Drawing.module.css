@@ -2,6 +2,9 @@
   max-width: 1400px;
   margin: 0 auto;
   padding: 8px 16px 32px;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .headerRow {
@@ -26,13 +29,6 @@
 
 .backButton:hover {
   border-color: var(--muted);
-}
-
-.title {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--text);
-  margin: 0;
 }
 
 .controls {
@@ -124,16 +120,48 @@
   cursor: pointer;
 }
 
+.iconButton {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.iconButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.icon {
+  width: 16px;
+  height: 16px;
+}
+
 .courtWrap {
   position: relative;
   width: 100%;
   aspect-ratio: 94 / 50;
-  background-image: url("../assets/court.svg");
   background-size: cover;
   background-position: center;
   border-radius: 12px;
   border: 2px solid var(--border);
   overflow: hidden;
+  touch-action: none;
+  user-select: none;
+}
+
+.courtHalf {
+  background-image: url("../assets/Half_Court.png");
+}
+
+.courtFull {
+  background-image: url("../assets/Full_Court.png");
 }
 
 .canvas {
@@ -142,18 +170,29 @@
   width: 100%;
   height: 100%;
   touch-action: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.hint {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  background: rgba(15, 23, 42, 0.75);
-  color: #f8fafc;
-  font-size: 11px;
-  padding: 6px 10px;
+.courtToggle {
+  margin-top: 12px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.toggleButton {
+  padding: 6px 14px;
   border-radius: 999px;
-  pointer-events: none;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.toggleActive {
+  border-color: var(--highlight-text);
+  color: var(--highlight-text);
 }
 
 @media (max-width: 768px) {
