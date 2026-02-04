@@ -55,6 +55,26 @@ export default function Drawing() {
     return () => observer.disconnect();
   }, [courtMode]);
 
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return undefined;
+    const prevent = (event) => event.preventDefault();
+    canvas.addEventListener("touchstart", prevent, { passive: false });
+    canvas.addEventListener("touchmove", prevent, { passive: false });
+    canvas.addEventListener("touchend", prevent, { passive: false });
+    canvas.addEventListener("gesturestart", prevent);
+    canvas.addEventListener("gesturechange", prevent);
+    canvas.addEventListener("gestureend", prevent);
+    return () => {
+      canvas.removeEventListener("touchstart", prevent);
+      canvas.removeEventListener("touchmove", prevent);
+      canvas.removeEventListener("touchend", prevent);
+      canvas.removeEventListener("gesturestart", prevent);
+      canvas.removeEventListener("gesturechange", prevent);
+      canvas.removeEventListener("gestureend", prevent);
+    };
+  }, []);
+
   const drawLine = (start, end, stroke) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -117,6 +137,7 @@ export default function Drawing() {
   const handlePointerDown = (event) => {
     if (event.button !== 0 && event.pointerType === "mouse") return;
     event.preventDefault();
+    event.stopPropagation();
     const point = getPoint(event);
     if (!point) return;
     drawingRef.current = true;
@@ -135,6 +156,7 @@ export default function Drawing() {
   const handlePointerMove = (event) => {
     if (!drawingRef.current) return;
     event.preventDefault();
+    event.stopPropagation();
     const point = getPoint(event);
     if (!point || !lastPointRef.current) return;
     const stroke = currentStrokeRef.current;
@@ -147,6 +169,7 @@ export default function Drawing() {
   const handlePointerUp = (event) => {
     if (!drawingRef.current) return;
     event.preventDefault();
+    event.stopPropagation();
     drawingRef.current = false;
     lastPointRef.current = null;
     const stroke = currentStrokeRef.current;
