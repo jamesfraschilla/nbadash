@@ -330,13 +330,6 @@ export default function Game({ variant = "full" }) {
   const { gameId } = useParams();
   const [params, setParams] = useSearchParams();
   const dateParam = params.get("d");
-  const notesParams = useMemo(() => {
-    const nextParams = new URLSearchParams();
-    if (dateParam) nextParams.set("d", dateParam);
-    nextParams.set("from", isAtc ? "atc" : "full");
-    const query = nextParams.toString();
-    return query ? `?${query}` : "";
-  }, [dateParam, isAtc]);
   const urlSegmentParam = params.get("segment");
   const segmentFromUrl = useMemo(() => {
     const map = {
@@ -373,6 +366,13 @@ export default function Game({ variant = "full" }) {
   });
   const isAtc = variant === "atc";
   const showExtras = !isAtc;
+  const notesParams = useMemo(() => {
+    const nextParams = new URLSearchParams();
+    if (dateParam) nextParams.set("d", dateParam);
+    nextParams.set("from", isAtc ? "atc" : "full");
+    const query = nextParams.toString();
+    return query ? `?${query}` : "";
+  }, [dateParam, isAtc]);
 
   const handleScrollToAdvanced = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
