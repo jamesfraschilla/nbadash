@@ -12,9 +12,9 @@ export default function Drawing() {
   const containerRef = useRef(null);
   const drawingRef = useRef(false);
   const lastPointRef = useRef(null);
-  const snapshotRef = useRef(null);
-  const strokeDirtyRef = useRef(false);
-  const undoStackRef = useRef([]);
+  const currentStrokeRef = useRef(null);
+  const strokesRef = useRef([]);
+  const canvasSizeRef = useRef({ width: 1, height: 1 });
 
   const [params] = useSearchParams();
   const [tool, setTool] = useState(TOOL_PEN);
@@ -23,29 +23,18 @@ export default function Drawing() {
   const [courtMode, setCourtMode] = useState("half");
   const [undoCount, setUndoCount] = useState(0);
 
-  const effectiveColor = tool === TOOL_ERASER ? "#000000" : color;
   const backParam = params.get("back");
   const backUrl = backParam && backParam.startsWith("/") ? backParam : "/";
 
   const applyCanvasSize = (canvas, width, height) => {
     const ratio = window.devicePixelRatio || 1;
+    canvasSizeRef.current = { width, height };
     canvas.width = Math.max(1, Math.floor(width * ratio));
     canvas.height = Math.max(1, Math.floor(height * ratio));
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
     const ctx = canvas.getContext("2d");
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-  };
-
-  const restoreSnapshot = (canvas, snapshot) => {
-    if (!snapshot) return;
-    const ctx = canvas.getContext("2d");
-    const img = new Image();
-    img.onload = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width / (window.devicePixelRatio || 1), canvas.height / (window.devicePixelRatio || 1));
-    };
-    img.src = snapshot;
   };
 
   useEffect(() => {
@@ -55,10 +44,8 @@ export default function Drawing() {
 
     const resize = () => {
       const rect = container.getBoundingClientRect();
-      const snapshot = canvas.toDataURL("image/png");
       applyCanvasSize(canvas, rect.width, rect.height);
-      restoreSnapshot(canvas, snapshot);
-      snapshotRef.current = snapshot;
+      redrawAll();
     };
 
     const observer = new ResizeObserver(resize);
@@ -68,19 +55,50 @@ export default function Drawing() {
     return () => observer.disconnect();
   }, [courtMode]);
 
-  const drawLine = (start, end) => {
+  const drawLine = (start, end, stroke) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
-    ctx.strokeStyle = effectiveColor;
-    ctx.lineWidth = size;
-    ctx.globalCompositeOperation = tool === TOOL_ERASER ? "destination-out" : "source-over";
+    ctx.strokeStyle = stroke.tool === TOOL_ERASER ? "#000000" : stroke.color;
+    ctx.lineWidth = stroke.size;
+    ctx.globalCompositeOperation = stroke.tool === TOOL_ERASER ? "destination-out" : "source-over";
     ctx.beginPath();
     ctx.moveTo(start.x, start.y);
     ctx.lineTo(end.x, end.y);
     ctx.stroke();
+  };
+
+  const drawStrokePath = (stroke) => {
+    const canvas = canvasRef.current;
+    if (!canvas || !stroke || !stroke.points.length) return;
+    const ctx = canvas.getContext("2d");
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.strokeStyle = stroke.tool === TOOL_ERASER ? "#000000" : stroke.color;
+    ctx.lineWidth = stroke.size;
+    ctx.globalCompositeOperation = stroke.tool === TOOL_ERASER ? "destination-out" : "source-over";
+    const { width, height } = canvasSizeRef.current;
+    ctx.beginPath();
+    stroke.points.forEach((pt, index) => {
+      const x = pt.x * width;
+      const y = pt.y * height;
+      if (index === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    });
+    ctx.stroke();
+  };
+
+  const redrawAll = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    strokesRef.current.forEach((stroke) => drawStrokePath(stroke));
   };
 
   const getPoint = (event) => {
@@ -90,6 +108,12 @@ export default function Drawing() {
     return { x: event.clientX - rect.left, y: event.clientY - rect.top };
   };
 
+  const getNormalizedPoint = (point) => {
+    const { width, height } = canvasSizeRef.current;
+    if (!width || !height) return { x: 0, y: 0 };
+    return { x: point.x / width, y: point.y / height };
+  };
+
   const handlePointerDown = (event) => {
     if (event.button !== 0 && event.pointerType === "mouse") return;
     event.preventDefault();
@@ -97,8 +121,14 @@ export default function Drawing() {
     if (!point) return;
     drawingRef.current = true;
     lastPointRef.current = point;
-    strokeDirtyRef.current = true;
-    drawLine(point, point);
+    const newStroke = {
+      tool,
+      color,
+      size,
+      points: [getNormalizedPoint(point)],
+    };
+    currentStrokeRef.current = newStroke;
+    drawLine(point, point, newStroke);
     event.currentTarget.setPointerCapture(event.pointerId);
   };
 
@@ -107,7 +137,10 @@ export default function Drawing() {
     event.preventDefault();
     const point = getPoint(event);
     if (!point || !lastPointRef.current) return;
-    drawLine(lastPointRef.current, point);
+    const stroke = currentStrokeRef.current;
+    if (!stroke) return;
+    drawLine(lastPointRef.current, point, stroke);
+    stroke.points.push(getNormalizedPoint(point));
     lastPointRef.current = point;
   };
 
@@ -116,12 +149,12 @@ export default function Drawing() {
     event.preventDefault();
     drawingRef.current = false;
     lastPointRef.current = null;
-    if (strokeDirtyRef.current && canvasRef.current) {
-      const snapshot = canvasRef.current.toDataURL("image/png");
-      undoStackRef.current.push(snapshot);
-      setUndoCount(undoStackRef.current.length);
+    const stroke = currentStrokeRef.current;
+    if (stroke && stroke.points.length) {
+      strokesRef.current.push(stroke);
+      setUndoCount(strokesRef.current.length);
     }
-    strokeDirtyRef.current = false;
+    currentStrokeRef.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
@@ -132,22 +165,15 @@ export default function Drawing() {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    undoStackRef.current = [];
+    strokesRef.current = [];
     setUndoCount(0);
   };
 
   const undoLast = () => {
-    const canvas = canvasRef.current;
-    if (!canvas || undoStackRef.current.length === 0) return;
-    undoStackRef.current.pop();
-    const previous = undoStackRef.current[undoStackRef.current.length - 1];
-    if (!previous) {
-      const ctx = canvas.getContext("2d");
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-    } else {
-      restoreSnapshot(canvas, previous);
-    }
-    setUndoCount(undoStackRef.current.length);
+    if (strokesRef.current.length === 0) return;
+    strokesRef.current.pop();
+    setUndoCount(strokesRef.current.length);
+    redrawAll();
   };
 
   const toolLabel = useMemo(() => (tool === TOOL_PEN ? "Pen" : "Eraser"), [tool]);

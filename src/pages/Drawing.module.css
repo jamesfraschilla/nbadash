@@ -153,6 +153,7 @@
   overflow: hidden;
   touch-action: none;
   user-select: none;
+  margin: 0 auto;
 }
 
 .courtHalf {
@@ -167,6 +168,8 @@
   background-size: contain;
   background-repeat: no-repeat;
   aspect-ratio: 944 / 1758;
+  max-height: 70vh;
+  max-width: calc(70vh * 0.537);
 }
 
 .canvas {
