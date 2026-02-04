@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 94 50">
+  <rect width="94" height="50" fill="#f6e3c6"/>
+  <rect x="1" y="1" width="92" height="48" fill="none" stroke="#c68b59" stroke-width="0.6"/>
+  <line x1="47" y1="1" x2="47" y2="49" stroke="#c68b59" stroke-width="0.4"/>
+  <circle cx="47" cy="25" r="6" fill="none" stroke="#c68b59" stroke-width="0.4"/>
+  <circle cx="47" cy="25" r="1.2" fill="#c68b59"/>
+
+  <rect x="1" y="17" width="17" height="16" fill="none" stroke="#c68b59" stroke-width="0.4"/>
+  <rect x="76" y="17" width="17" height="16" fill="none" stroke="#c68b59" stroke-width="0.4"/>
+  <rect x="1" y="19" width="6" height="12" fill="none" stroke="#c68b59" stroke-width="0.4"/>
+  <rect x="87" y="19" width="6" height="12" fill="none" stroke="#c68b59" stroke-width="0.4"/>
+
+  <circle cx="6" cy="25" r="6" fill="none" stroke="#c68b59" stroke-width="0.4"/>
+  <circle cx="88" cy="25" r="6" fill="none" stroke="#c68b59" stroke-width="0.4"/>
+  <path d="M1 14 A11 11 0 0 1 1 36" fill="none" stroke="#c68b59" stroke-width="0.4"/>
+  <path d="M93 14 A11 11 0 0 0 93 36" fill="none" stroke="#c68b59" stroke-width="0.4"/>
+
+  <path d="M6 7 A20 20 0 0 1 6 43" fill="none" stroke="#c68b59" stroke-width="0.4"/>
+  <path d="M88 7 A20 20 0 0 0 88 43" fill="none" stroke="#c68b59" stroke-width="0.4"/>
+  <line x1="6" y1="7" x2="6" y2="43" stroke="#c68b59" stroke-width="0.4"/>
+  <line x1="88" y1="7" x2="88" y2="43" stroke="#c68b59" stroke-width="0.4"/>
+
+  <circle cx="6" cy="25" r="0.9" fill="#c68b59"/>
+  <circle cx="88" cy="25" r="0.9" fill="#c68b59"/>
+</svg>

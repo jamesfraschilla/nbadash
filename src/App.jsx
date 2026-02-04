@@ -6,6 +6,7 @@ import Game from "./pages/Game.jsx";
 import PlayByPlay from "./pages/PlayByPlay.jsx";
 import Minutes from "./pages/Minutes.jsx";
 import Notes from "./pages/Notes.jsx";
+import Drawing from "./pages/Drawing.jsx";
 
 export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem("theme") || "light");
@@ -26,6 +27,7 @@ export default function App() {
           <Route path="/g/:gameId/events" element={<PlayByPlay />} />
           <Route path="/g/:gameId/notes" element={<Notes />} />
           <Route path="/m/:gameId" element={<Minutes />} />
+          <Route path="/draw" element={<Drawing />} />
         </Routes>
       </main>
     </div>
