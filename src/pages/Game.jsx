@@ -1770,12 +1770,12 @@ export default function Game({ variant = "full" }) {
             >
               Highlighted
             </Link>
-            <Link to={`/draw?back=${encodeURIComponent(courtBackUrl)}`}>
-              Court
-            </Link>
             <button type="button" className={styles.navButton} onClick={handleScrollToBoxScore}>
               Box Score
             </button>
+            <Link to={`/draw?back=${encodeURIComponent(courtBackUrl)}`}>
+              Court
+            </Link>
           </div>
 
           <div className={styles.pbpWheel} ref={pbpWheelRef}>

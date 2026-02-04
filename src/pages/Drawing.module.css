@@ -146,7 +146,6 @@
 .courtWrap {
   position: relative;
   width: 100%;
-  aspect-ratio: 94 / 50;
   background-size: cover;
   background-position: center;
   border-radius: 12px;
@@ -158,10 +157,16 @@
 
 .courtHalf {
   background-image: url("../assets/Half_Court.png");
+  background-size: contain;
+  background-repeat: no-repeat;
+  aspect-ratio: 1574 / 1482;
 }
 
 .courtFull {
   background-image: url("../assets/Full_Court.png");
+  background-size: contain;
+  background-repeat: no-repeat;
+  aspect-ratio: 944 / 1758;
 }
 
 .canvas {
