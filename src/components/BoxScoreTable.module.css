@@ -111,6 +111,12 @@
   border-bottom: none;
 }
 
+.totalsPercentRow {
+  font-size: 12px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+
 .pfBlack {
   color: var(--text);
 }

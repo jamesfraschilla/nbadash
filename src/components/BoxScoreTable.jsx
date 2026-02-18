@@ -26,6 +26,13 @@ function formatRating(value) {
   return value.toFixed(1);
 }
 
+function formatShootingPercent(made, attempted) {
+  const safeMade = Number(made) || 0;
+  const safeAttempted = Number(attempted) || 0;
+  if (safeAttempted <= 0) return "0.0%";
+  return `${((safeMade / safeAttempted) * 100).toFixed(1)}%`;
+}
+
 function playerLine(player) {
   return {
     MIN: formatMinutes(player.minutes),
@@ -158,37 +165,85 @@ export default function BoxScoreTable({
             );
           })}
           {boxScore.totals && (
-            <tr className={`${styles.totalsRow} ${variant === "atc" ? styles.totalsRowAtc : ""}`}>
-              <td className={styles.playerNumberCol}></td>
-              <td className={styles.playerNameCol}>Totals</td>
-              {columns.map((col) => {
-                let value = "";
-                if (col === "PTS") value = boxScore.totals.points;
-                if (col === "REB") value = boxScore.totals.reboundsTotal;
-                if (col === "OREB") value = boxScore.totals.reboundsOffensive;
-                if (col === "AST") value = boxScore.totals.assists;
-                if (col === "STL") value = boxScore.totals.steals;
-                if (col === "BLK") value = boxScore.totals.blocks;
-                if (col === "TO") value = boxScore.totals.turnovers;
-                if (col === "PF") value = boxScore.totals.foulsPersonal;
-                if (col === "FG") value = `${boxScore.totals.fieldGoalsMade}-${boxScore.totals.fieldGoalsAttempted}`;
-                if (col === "RIM") value = `${boxScore.totals.rimFieldGoalsMade}-${boxScore.totals.rimFieldGoalsAttempted}`;
-                if (col === "MID") value = `${boxScore.totals.midFieldGoalsMade}-${boxScore.totals.midFieldGoalsAttempted}`;
-                if (col === "3PT") value = `${boxScore.totals.threePointersMade}-${boxScore.totals.threePointersAttempted}`;
-                if (col === "FT") value = `${boxScore.totals.freeThrowsMade}-${boxScore.totals.freeThrowsAttempted}`;
-                if (col === "ORTG") value = formatRating(ratings.ortg);
-                if (col === "DRTG") value = formatRating(ratings.drtg);
-                const atcSeparator = variant === "atc" && col === "PF";
-                return (
-                  <td
-                    key={col}
-                    className={`${shadedColumns.has(col) ? styles.shadedColumn : ""} ${atcSeparator ? styles.atcSeparator : ""}`}
-                  >
-                    {value}
-                  </td>
-                );
-              })}
-            </tr>
+            <>
+              <tr className={`${styles.totalsRow} ${variant === "atc" ? styles.totalsRowAtc : ""}`}>
+                <td className={styles.playerNumberCol}></td>
+                <td className={styles.playerNameCol}>Totals</td>
+                {columns.map((col) => {
+                  let value = "";
+                  if (col === "PTS") value = boxScore.totals.points;
+                  if (col === "REB") value = boxScore.totals.reboundsTotal;
+                  if (col === "OREB") value = boxScore.totals.reboundsOffensive;
+                  if (col === "AST") value = boxScore.totals.assists;
+                  if (col === "STL") value = boxScore.totals.steals;
+                  if (col === "BLK") value = boxScore.totals.blocks;
+                  if (col === "TO") value = boxScore.totals.turnovers;
+                  if (col === "PF") value = boxScore.totals.foulsPersonal;
+                  if (col === "FG") value = `${boxScore.totals.fieldGoalsMade}-${boxScore.totals.fieldGoalsAttempted}`;
+                  if (col === "RIM") value = `${boxScore.totals.rimFieldGoalsMade}-${boxScore.totals.rimFieldGoalsAttempted}`;
+                  if (col === "MID") value = `${boxScore.totals.midFieldGoalsMade}-${boxScore.totals.midFieldGoalsAttempted}`;
+                  if (col === "3PT") value = `${boxScore.totals.threePointersMade}-${boxScore.totals.threePointersAttempted}`;
+                  if (col === "FT") value = `${boxScore.totals.freeThrowsMade}-${boxScore.totals.freeThrowsAttempted}`;
+                  if (col === "ORTG") value = formatRating(ratings.ortg);
+                  if (col === "DRTG") value = formatRating(ratings.drtg);
+                  const atcSeparator = variant === "atc" && col === "PF";
+                  return (
+                    <td
+                      key={col}
+                      className={`${shadedColumns.has(col) ? styles.shadedColumn : ""} ${atcSeparator ? styles.atcSeparator : ""}`}
+                    >
+                      {value}
+                    </td>
+                  );
+                })}
+              </tr>
+              <tr className={styles.totalsPercentRow}>
+                <td className={styles.playerNumberCol}></td>
+                <td className={styles.playerNameCol}>%</td>
+                {columns.map((col) => {
+                  let value = "";
+                  if (col === "FG") {
+                    value = formatShootingPercent(
+                      boxScore.totals.fieldGoalsMade,
+                      boxScore.totals.fieldGoalsAttempted
+                    );
+                  }
+                  if (col === "RIM") {
+                    value = formatShootingPercent(
+                      boxScore.totals.rimFieldGoalsMade,
+                      boxScore.totals.rimFieldGoalsAttempted
+                    );
+                  }
+                  if (col === "MID") {
+                    value = formatShootingPercent(
+                      boxScore.totals.midFieldGoalsMade,
+                      boxScore.totals.midFieldGoalsAttempted
+                    );
+                  }
+                  if (col === "3PT") {
+                    value = formatShootingPercent(
+                      boxScore.totals.threePointersMade,
+                      boxScore.totals.threePointersAttempted
+                    );
+                  }
+                  if (col === "FT") {
+                    value = formatShootingPercent(
+                      boxScore.totals.freeThrowsMade,
+                      boxScore.totals.freeThrowsAttempted
+                    );
+                  }
+                  const atcSeparator = variant === "atc" && col === "PF";
+                  return (
+                    <td
+                      key={col}
+                      className={`${shadedColumns.has(col) ? styles.shadedColumn : ""} ${atcSeparator ? styles.atcSeparator : ""}`}
+                    >
+                      {value}
+                    </td>
+                  );
+                })}
+              </tr>
+            </>
           )}
         </tbody>
       </table>
