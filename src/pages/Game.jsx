@@ -46,6 +46,7 @@ const CORE_STAT_FIELDS = [
 const NOTE_PERIOD_OPTIONS = ["--", "Q1", "Q2", "Q3", "Q4", "OT"];
 const NOTE_MINUTE_OPTIONS = ["--", ...Array.from({ length: 12 }, (_, idx) => String(idx))];
 const NOTE_SECOND_OPTIONS = ["--", ...Array.from({ length: 60 }, (_, idx) => String(idx).padStart(2, "0"))];
+const HOLD_MOVE_TOLERANCE_PX = 10;
 const NOTE_TAG_OPTIONS = [
   "Reminder",
   "Playcall",
@@ -331,7 +332,6 @@ export default function Game({ variant = "full" }) {
   const [params, setParams] = useSearchParams();
   const dateParam = params.get("d");
   const courtBackUrl = dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`;
-  const kpisUrl = dateParam ? `/g/${gameId}/kpis?d=${dateParam}` : `/g/${gameId}/kpis`;
   const urlSegmentParam = params.get("segment");
   const segmentFromUrl = useMemo(() => {
     const map = {
@@ -355,6 +355,7 @@ export default function Game({ variant = "full" }) {
   const lockStyleRef = useRef(null);
   const holdTimerRef = useRef(null);
   const holdTargetRef = useRef(null);
+  const holdPointerStartRef = useRef(null);
   const [isLocked, setIsLocked] = useState(false);
   const [noteEditor, setNoteEditor] = useState({ open: false, actionNumber: null });
   const [noteDraft, setNoteDraft] = useState("");
@@ -748,6 +749,7 @@ export default function Game({ variant = "full" }) {
       holdTimerRef.current = null;
     }
     holdTargetRef.current = null;
+    holdPointerStartRef.current = null;
   };
 
   const openNoteEditor = (actionNumber) => {
@@ -863,16 +865,45 @@ export default function Game({ variant = "full" }) {
     closeAddNote();
   };
 
-  const handleHoldStart = (actionNumber) => () => {
+  const handleHoldStart = (actionNumber) => (event) => {
     if (!actionNumber) return;
     clearHoldTimer();
     holdTargetRef.current = actionNumber;
+    if (event?.touches?.length) {
+      holdPointerStartRef.current = {
+        x: event.touches[0].clientX,
+        y: event.touches[0].clientY,
+      };
+    } else if (typeof event?.clientX === "number" && typeof event?.clientY === "number") {
+      holdPointerStartRef.current = {
+        x: event.clientX,
+        y: event.clientY,
+      };
+    }
     holdTimerRef.current = setTimeout(() => {
       if (holdTargetRef.current === actionNumber) {
         openNoteEditor(actionNumber);
       }
       clearHoldTimer();
     }, 1000);
+  };
+
+  const handleHoldMove = (event) => {
+    if (!holdTimerRef.current || !holdPointerStartRef.current) return;
+
+    let point = null;
+    if (event?.touches?.length) {
+      point = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+    } else if (typeof event?.clientX === "number" && typeof event?.clientY === "number") {
+      point = { x: event.clientX, y: event.clientY };
+    }
+    if (!point) return;
+
+    const dx = point.x - holdPointerStartRef.current.x;
+    const dy = point.y - holdPointerStartRef.current.y;
+    if (Math.hypot(dx, dy) >= HOLD_MOVE_TOLERANCE_PX) {
+      clearHoldTimer();
+    }
   };
 
   const handleHoldEnd = () => {
@@ -1777,12 +1808,9 @@ export default function Game({ variant = "full" }) {
             <Link to={`/draw?back=${encodeURIComponent(courtBackUrl)}`}>
               Court
             </Link>
-            <Link to={kpisUrl}>
-              KPIs
-            </Link>
           </div>
 
-          <div className={styles.pbpWheel} ref={pbpWheelRef}>
+          <div className={styles.pbpWheel} ref={pbpWheelRef} onScroll={clearHoldTimer}>
             <div className={styles.pbpWheelInner}>
               {pbpWheelItems.length ? pbpWheelItems.map((action) => {
                 const teamTricode = action.teamTricode || "";
@@ -1810,7 +1838,9 @@ export default function Game({ variant = "full" }) {
                     onMouseDown={handleHoldStart(action.actionNumber)}
                     onMouseUp={handleHoldEnd}
                     onMouseLeave={handleHoldEnd}
+                    onMouseMove={handleHoldMove}
                     onTouchStart={handleHoldStart(action.actionNumber)}
+                    onTouchMove={handleHoldMove}
                     onTouchEnd={handleHoldEnd}
                     onTouchCancel={handleHoldEnd}
                   >
@@ -1956,7 +1986,6 @@ export default function Game({ variant = "full" }) {
             >
               Highlighted
             </Link>
-            <Link to={kpisUrl}>KPIs</Link>
             <button
               type="button"
               className={styles.navButton}
