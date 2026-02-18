@@ -168,7 +168,7 @@ export default function BoxScoreTable({
             <>
               <tr className={`${styles.totalsRow} ${variant === "atc" ? styles.totalsRowAtc : ""}`}>
                 <td className={styles.playerNumberCol}></td>
-                <td className={styles.playerNameCol}>Totals</td>
+                <td className={styles.playerNameCol}></td>
                 {columns.map((col) => {
                   let value = "";
                   if (col === "PTS") value = boxScore.totals.points;
@@ -199,7 +199,7 @@ export default function BoxScoreTable({
               </tr>
               <tr className={styles.totalsPercentRow}>
                 <td className={styles.playerNumberCol}></td>
-                <td className={styles.playerNameCol}>%</td>
+                <td className={styles.playerNameCol}></td>
                 {columns.map((col) => {
                   let value = "";
                   if (col === "FG") {
