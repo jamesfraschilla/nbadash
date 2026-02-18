@@ -1666,17 +1666,7 @@ export default function Game({ variant = "full" }) {
             </button>
           )}
         </div>
-        <div className={styles.backRowRight}>
-          <button type="button" className={styles.backButton} onClick={openAddNote}>
-            Add Note
-          </button>
-          <Link
-            className={styles.backButton}
-            to={`/g/${gameId}/notes${notesParams}`}
-          >
-            View Notes
-          </Link>
-        </div>
+        <div className={styles.backRowRight} />
       </div>
       <div className={styles.contentAlign}>
         <section className={styles.scoreboard}>
@@ -1807,6 +1797,12 @@ export default function Game({ variant = "full" }) {
             </button>
             <Link to={`/draw?back=${encodeURIComponent(courtBackUrl)}`}>
               Court
+            </Link>
+            <button type="button" className={styles.navButton} onClick={openAddNote}>
+              Add Note
+            </button>
+            <Link to={`/g/${gameId}/notes${notesParams}`}>
+              View Notes
             </Link>
           </div>
 
