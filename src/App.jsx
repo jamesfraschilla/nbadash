@@ -7,6 +7,7 @@ import PlayByPlay from "./pages/PlayByPlay.jsx";
 import Minutes from "./pages/Minutes.jsx";
 import Notes from "./pages/Notes.jsx";
 import Drawing from "./pages/Drawing.jsx";
+import Kpis from "./pages/Kpis.jsx";
 
 export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem("theme") || "light");
@@ -26,6 +27,7 @@ export default function App() {
           <Route path="/g/:gameId/atc" element={<Game variant="atc" />} />
           <Route path="/g/:gameId/events" element={<PlayByPlay />} />
           <Route path="/g/:gameId/notes" element={<Notes />} />
+          <Route path="/g/:gameId/kpis" element={<Kpis />} />
           <Route path="/m/:gameId" element={<Minutes />} />
           <Route path="/draw" element={<Drawing />} />
         </Routes>

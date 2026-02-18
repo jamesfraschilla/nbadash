@@ -331,6 +331,7 @@ export default function Game({ variant = "full" }) {
   const [params, setParams] = useSearchParams();
   const dateParam = params.get("d");
   const courtBackUrl = dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`;
+  const kpisUrl = dateParam ? `/g/${gameId}/kpis?d=${dateParam}` : `/g/${gameId}/kpis`;
   const urlSegmentParam = params.get("segment");
   const segmentFromUrl = useMemo(() => {
     const map = {
@@ -1776,6 +1777,9 @@ export default function Game({ variant = "full" }) {
             <Link to={`/draw?back=${encodeURIComponent(courtBackUrl)}`}>
               Court
             </Link>
+            <Link to={kpisUrl}>
+              KPIs
+            </Link>
           </div>
 
           <div className={styles.pbpWheel} ref={pbpWheelRef}>
@@ -1952,6 +1956,7 @@ export default function Game({ variant = "full" }) {
             >
               Highlighted
             </Link>
+            <Link to={kpisUrl}>KPIs</Link>
             <button
               type="button"
               className={styles.navButton}

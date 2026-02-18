@@ -1,0 +1,132 @@
+.container {
+  max-width: 1200px;
+  margin: 0;
+  padding: 12px 0 24px;
+}
+
+.backRow {
+  margin-bottom: 8px;
+}
+
+.backButton {
+  display: inline-block;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  background-color: var(--bg);
+  font-size: 13px;
+}
+
+.backButton:hover {
+  border-color: var(--muted);
+}
+
+.title {
+  margin: 4px 0;
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.subtitle {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.textarea {
+  width: 100%;
+  min-height: 220px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 12px;
+  font-family: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  margin-bottom: 12px;
+}
+
+.controlsRow {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.controlItem {
+  min-width: 340px;
+  flex: 1;
+}
+
+.input {
+  width: 100%;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.computeButton {
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--highlight-text);
+  border-radius: 8px;
+  color: var(--highlight-text);
+  background: var(--bg);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.computeButton:hover {
+  background: var(--highlight-bg);
+}
+
+.error {
+  margin-bottom: 12px;
+  border: 1px solid #b91c1c;
+  color: #b91c1c;
+  background: rgba(185, 28, 28, 0.08);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.resultsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px;
+}
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--bg);
+}
+
+.cardLabel {
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.cardValue {
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 700;
+  word-break: break-word;
+}
