@@ -2,7 +2,11 @@ import { teamLogoUrl } from "../api.js";
 import styles from "./TransitionStats.module.css";
 
 const columns = [
-  { key: "transitionRate", label: "%", format: (v) => `${(v || 0).toFixed(1)}%` },
+  {
+    key: "transitionRate",
+    label: "%",
+    format: (v, stats) => `${(v || 0).toFixed(1)}% (${stats.transitionPossessions || 0})`,
+  },
   { key: "transitionPoints", label: "PTS" },
   { key: "transitionPPP", label: "PPP", format: (v) => (v || 0).toFixed(1) },
   { key: "transitionTurnovers", label: "TOV" },
@@ -48,8 +52,8 @@ export default function TransitionStats({ awayTeam, homeTeam, awayStats, homeSta
           return (
             <div key={col.key} className={styles.row}>
               <div className={styles.statLabel}>{col.label}</div>
-              <div className={styles.statValue}>{format(derivedAway[col.key])}</div>
-              <div className={styles.statValue}>{format(derivedHome[col.key])}</div>
+              <div className={styles.statValue}>{format(derivedAway[col.key], derivedAway)}</div>
+              <div className={styles.statValue}>{format(derivedHome[col.key], derivedHome)}</div>
             </div>
           );
         })}
