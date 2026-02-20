@@ -255,6 +255,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  align-self: center;
   margin-top: 2px;
   width: 22px;
   height: 18px;

@@ -45,9 +45,17 @@ export function playerHeadshotUrl(personId) {
 export function nbaEventVideoUrl({ gameId, actionNumber, seasonYear, title }) {
   if (!gameId || actionNumber == null) return null;
 
-  const numericSeasonYear = Number(seasonYear);
-  const startYear = Number.isFinite(numericSeasonYear) ? numericSeasonYear : null;
-  const season = startYear ? `${startYear}-${String(startYear + 1).slice(-2)}` : undefined;
+  const seasonText = String(seasonYear ?? "").trim();
+  let season;
+  if (/^\d{4}$/.test(seasonText)) {
+    const startYear = Number(seasonText);
+    season = `${startYear}-${String(startYear + 1).slice(-2)}`;
+  } else if (/^\d{4}-\d{2}$/.test(seasonText)) {
+    season = seasonText;
+  } else if (/^\d{4}-\d{4}$/.test(seasonText)) {
+    const startYear = Number(seasonText.slice(0, 4));
+    season = `${startYear}-${String(startYear + 1).slice(-2)}`;
+  }
 
   const params = new URLSearchParams({
     flag: "1",
