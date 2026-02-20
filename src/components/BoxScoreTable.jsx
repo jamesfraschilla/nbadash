@@ -55,6 +55,25 @@ function playerLine(player) {
   };
 }
 
+function playerSlug(player) {
+  const name = [player.firstName, player.familyName]
+    .filter(Boolean)
+    .join(" ")
+    .trim() || player.fullName || player.name || "";
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function playerPageUrl(player) {
+  if (!player?.personId) return null;
+  const slug = playerSlug(player);
+  return slug
+    ? `https://www.nba.com/player/${player.personId}/${slug}`
+    : `https://www.nba.com/player/${player.personId}`;
+}
+
 function pfClass(fouls, period) {
   const safeFouls = fouls || 0;
   const quarter = Math.min(Math.max(period || 1, 1), 4);
@@ -142,15 +161,29 @@ export default function BoxScoreTable({
       <tbody>
         {boxScore.players.map((player) => {
           const stats = playerLine(player);
+          const pageUrl = playerPageUrl(player);
           return (
               <tr key={player.personId}>
                 <td className={styles.playerNumberCol}>
                   {player.jerseyNum ? `#${player.jerseyNum}` : ""}
                 </td>
                 <td className={styles.playerNameCol}>
-                  <span className={styles.playerName}>
-                    {formatPlayerName(player)}
-                  </span>
+                  {pageUrl ? (
+                    <a
+                      href={pageUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={styles.playerLink}
+                    >
+                      <span className={styles.playerName}>
+                        {formatPlayerName(player)}
+                      </span>
+                    </a>
+                  ) : (
+                    <span className={styles.playerName}>
+                      {formatPlayerName(player)}
+                    </span>
+                  )}
                   <span className={styles.position}>{player.position || ""}</span>
                 </td>
                 {columns.map((col) => (
