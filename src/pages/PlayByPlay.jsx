@@ -83,6 +83,32 @@ export default function PlayByPlay() {
     return latestFirst ? [...list].reverse() : list;
   }, [scoreTracked, period, latestFirst, viewMode, highlightedMap]);
 
+  const videoEventIdByActionNumber = useMemo(() => {
+    const eventMap = new Map();
+    for (let index = 0; index < actions.length; index += 1) {
+      const action = actions[index];
+      const actionNumber = action?.actionNumber;
+      if (actionNumber == null) continue;
+
+      let videoEventId = actionNumber;
+      if (action.actionType === "steal") {
+        const clock = normalizeClock(action.clock);
+        for (let scan = index - 1; scan >= 0 && index - scan <= 4; scan -= 1) {
+          const previous = actions[scan];
+          if (!previous || previous.period !== action.period) break;
+          if (normalizeClock(previous.clock) !== clock) continue;
+          if (previous.actionType === "turnover" && previous.actionNumber != null) {
+            videoEventId = previous.actionNumber;
+            break;
+          }
+        }
+      }
+
+      eventMap.set(actionNumber, videoEventId);
+    }
+    return eventMap;
+  }, [actions]);
+
   useEffect(() => {
     if (!highlightRows) return;
     const next = new Map();
@@ -274,11 +300,13 @@ export default function PlayByPlay() {
           const isHome = action.teamId === game.homeTeam?.teamId;
           const isTimeout = action.actionType === "timeout";
           const actionNumber = action.actionNumber ?? null;
+          const videoEventId =
+            actionNumber != null ? (videoEventIdByActionNumber.get(actionNumber) ?? actionNumber) : null;
           const rowKey = actionNumber ?? `${action.period}-${index}`;
           const highlightNote = actionNumber != null ? highlightedMap.get(actionNumber) : "";
           const clipUrl = nbaEventVideoUrl({
             gameId,
-            actionNumber,
+            actionNumber: videoEventId,
             seasonYear: game.seasonYear,
             title: actionDescription(action),
           });
