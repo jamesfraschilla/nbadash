@@ -148,6 +148,11 @@
   color: #111;
 }
 
+.highlighted .clipLink {
+  color: #111;
+  border-color: rgba(17, 17, 17, 0.25);
+}
+
 .eventRow.highlighted,
 .eventRow.highlighted:hover,
 .eventRow.highlighted:active {
@@ -163,6 +168,11 @@
 .timeout .score,
 .timeout .periodLabel {
   color: #fff;
+}
+
+.timeout .clipLink {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.45);
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -239,6 +249,33 @@
   font-size: 14px;
   font-weight: 700;
   color: var(--text);
+}
+
+.clipLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+  width: 22px;
+  height: 18px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.clipLink:hover {
+  text-decoration: underline;
+}
+
+.playIcon {
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 8px solid #facc15;
+  margin-left: 1px;
 }
 
 .note {

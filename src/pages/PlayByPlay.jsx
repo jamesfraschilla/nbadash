@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { fetchGame, playerHeadshotUrl, teamLogoUrl } from "../api.js";
+import { fetchGame, nbaEventVideoUrl, playerHeadshotUrl, teamLogoUrl } from "../api.js";
 import { supabase } from "../supabaseClient.js";
 import { normalizeClock } from "../utils.js";
 import styles from "./PlayByPlay.module.css";
@@ -276,6 +276,12 @@ export default function PlayByPlay() {
           const actionNumber = action.actionNumber ?? null;
           const rowKey = actionNumber ?? `${action.period}-${index}`;
           const highlightNote = actionNumber != null ? highlightedMap.get(actionNumber) : "";
+          const clipUrl = nbaEventVideoUrl({
+            gameId,
+            actionNumber,
+            seasonYear: game.seasonYear,
+            title: actionDescription(action),
+          });
           const periodLabel =
             action.period > 4
               ? action.period === 5
@@ -314,6 +320,20 @@ export default function PlayByPlay() {
                 <div className={styles.score}>
                   {action.currentAwayScore} - {action.currentHomeScore}
                 </div>
+                {clipUrl ? (
+                  <a
+                    className={styles.clipLink}
+                    href={clipUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label="Play clip"
+                    title="Play clip"
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <span className={styles.playIcon} aria-hidden="true" />
+                  </a>
+                ) : null}
                 {viewMode === "highlighted" && highlightNote ? (
                   <div className={styles.note}>{highlightNote}</div>
                 ) : null}

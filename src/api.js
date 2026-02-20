@@ -41,3 +41,22 @@ export function teamLogoUrl(teamId, league = null) {
 export function playerHeadshotUrl(personId) {
   return `https://cdn.nba.com/headshots/nba/latest/260x190/${personId}.png`;
 }
+
+export function nbaEventVideoUrl({ gameId, actionNumber, seasonYear, title }) {
+  if (!gameId || actionNumber == null) return null;
+
+  const numericSeasonYear = Number(seasonYear);
+  const startYear = Number.isFinite(numericSeasonYear) ? numericSeasonYear : null;
+  const season = startYear ? `${startYear}-${String(startYear + 1).slice(-2)}` : undefined;
+
+  const params = new URLSearchParams({
+    flag: "1",
+    GameID: String(gameId),
+    GameEventID: String(actionNumber),
+  });
+
+  if (season) params.set("Season", season);
+  if (title) params.set("title", String(title));
+
+  return `https://www.nba.com/stats/events?${params.toString()}`;
+}
