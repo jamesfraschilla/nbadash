@@ -55,23 +55,9 @@ function playerLine(player) {
   };
 }
 
-function playerSlug(player) {
-  const name = [player.firstName, player.familyName]
-    .filter(Boolean)
-    .join(" ")
-    .trim() || player.fullName || player.name || "";
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
 function playerPageUrl(player) {
   if (!player?.personId) return null;
-  const slug = playerSlug(player);
-  return slug
-    ? `https://www.nba.com/player/${player.personId}/${slug}`
-    : `https://www.nba.com/player/${player.personId}`;
+  return `https://www.nba.com/stats/player/${player.personId}`;
 }
 
 function pfClass(fouls, period) {
