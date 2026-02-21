@@ -16,6 +16,26 @@ function actionDescription(action) {
   return parts.join(" ");
 }
 
+function shouldShowClip(action) {
+  const isBasketAttempt =
+    (action.actionType === "2pt" || action.actionType === "3pt") &&
+    (action.shotResult === "Made" || action.shotResult === "Missed");
+  if (isBasketAttempt) return true;
+
+  if (action.actionType !== "foul") return false;
+  const foulText = [
+    action.foulType,
+    action.subType,
+    action.descriptor,
+    action.description,
+    action.officialDescription,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return foulText.includes("shooting");
+}
+
 export default function PlayByPlay() {
   const { gameId } = useParams();
   const [params, setParams] = useSearchParams();
@@ -310,6 +330,7 @@ export default function PlayByPlay() {
             seasonYear: game.seasonYear,
             title: actionDescription(action),
           });
+          const showClip = shouldShowClip(action);
           const periodLabel =
             action.period > 4
               ? action.period === 5
@@ -348,7 +369,7 @@ export default function PlayByPlay() {
                 <div className={styles.score}>
                   {action.currentAwayScore} - {action.currentHomeScore}
                 </div>
-                {clipUrl ? (
+                {showClip && clipUrl ? (
                   <a
                     className={styles.clipLink}
                     href={clipUrl}
