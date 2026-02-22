@@ -21,6 +21,7 @@ function shouldShowClip(action) {
     (action.actionType === "2pt" || action.actionType === "3pt") &&
     (action.shotResult === "Made" || action.shotResult === "Missed");
   if (isBasketAttempt) return true;
+  if (action.actionType === "turnover") return true;
 
   if (action.actionType !== "foul") return false;
   const foulText = [
