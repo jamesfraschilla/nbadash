@@ -1256,8 +1256,6 @@ export default function Game({ variant = "full" }) {
     };
   };
 
-  const useOfficialTransition = teamStats?.away?.transitionStats
-    && teamStats?.home?.transitionStats;
   const awayTransitionSource = segment === "all"
     ? mergeTransitionSource(
       finalSnapshotTotals?.[awayTeam?.teamId],
@@ -1274,27 +1272,8 @@ export default function Game({ variant = "full" }) {
     : advancedHomeTotals;
   const awayTransitionDerived = transitionStatsDerived(awayTransitionSource, awayPossessions);
   const homeTransitionDerived = transitionStatsDerived(homeTransitionSource, homePossessions);
-  const mergeTransition = (derived, official) => {
-    if (!official) return derived;
-    const merged = { ...derived, ...official };
-    if (segment === "all") {
-      merged.pointsOffTurnovers = Number.isFinite(official.pointsOffTurnovers)
-        && official.pointsOffTurnovers !== 0
-        ? official.pointsOffTurnovers
-        : derived.pointsOffTurnovers;
-      merged.paintPoints = Number.isFinite(official.paintPoints)
-        && official.paintPoints !== 0
-        ? official.paintPoints
-        : derived.paintPoints;
-    }
-    return merged;
-  };
-  const awayTransition = useOfficialTransition
-    ? mergeTransition(awayTransitionDerived, teamStats.away.transitionStats)
-    : awayTransitionDerived;
-  const homeTransition = useOfficialTransition
-    ? mergeTransition(homeTransitionDerived, teamStats.home.transitionStats)
-    : homeTransitionDerived;
+  const awayTransition = awayTransitionDerived;
+  const homeTransition = homeTransitionDerived;
 
   const awayDefReb = (advancedAwayTotals.reboundsTotal || 0) - (advancedAwayTotals.reboundsOffensive || 0);
   const homeDefReb = (advancedHomeTotals.reboundsTotal || 0) - (advancedHomeTotals.reboundsOffensive || 0);
