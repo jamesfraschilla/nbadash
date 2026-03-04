@@ -469,6 +469,7 @@ function drawLandscapeTemplate(primaryOfficials, alternates, imageMap, themeMode
   const footerBlockHeight = footerText ? 18 : 0;
   const footerGap = footerText ? 6 : 0;
   const rowAreaHeight = 360;
+  const headerGap = 24;
   const maxTileContentHeight = primaryOfficials.length
     ? Math.max(
       ...primaryOfficials.map((official) => (
@@ -476,11 +477,11 @@ function drawLandscapeTemplate(primaryOfficials, alternates, imageMap, themeMode
       ))
     )
     : 0;
-  const contentBlockHeight = 50 + 12 + rowAreaHeight + footerGap + footerBlockHeight;
+  const contentBlockHeight = 50 + headerGap + rowAreaHeight + footerGap + footerBlockHeight;
   const availableHeight = height - padding.top - padding.bottom;
   const blockOffset = Math.max(0, (availableHeight - contentBlockHeight) / 2);
   const headerY = padding.top + blockOffset;
-  const rowAreaY = headerY + 50 + 12;
+  const rowAreaY = headerY + 50 + headerGap;
   const rowContentOffset = Math.max(0, (rowAreaHeight - maxTileContentHeight) / 2);
   const rowY = rowAreaY + rowContentOffset;
   const footerY = footerText ? rowAreaY + rowAreaHeight + footerGap : null;
