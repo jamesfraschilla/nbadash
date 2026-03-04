@@ -9,8 +9,9 @@ export default function Officials({
   awayAbr,
   homeTeam,
   awayTeam,
+  publishedOrder,
 }) {
-  const orderedOfficials = orderOfficials(officials);
+  const orderedOfficials = orderOfficials(officials, publishedOrder);
   if (!orderedOfficials.length) return null;
 
   const awayTotal = callsAgainst

@@ -128,9 +128,9 @@ function normalizeOfficial(official, index) {
   };
 }
 
-function buildOfficialsData(officials) {
+function buildOfficialsData(officials, publishedOrder) {
   const rawOfficials = Array.isArray(officials) ? officials : [];
-  const primary = orderOfficials(rawOfficials).map((official, index) => normalizeOfficial(official, index));
+  const primary = orderOfficials(rawOfficials, publishedOrder).map((official, index) => normalizeOfficial(official, index));
 
   const alternates = rawOfficials
     .map((official, index) => normalizeOfficial(official, index))
@@ -367,19 +367,33 @@ function drawPortraitTemplate(primaryOfficials, alternates, imageMap, themeMode,
   const contentWidth = width - padding.left - padding.right;
   const textFamily = EXPORT_FONT_FAMILIES.body;
   const headerFamily = EXPORT_FONT_FAMILIES.header;
-
-  drawCenteredText(context, "TONIGHT'S OFFICIALS", padding.left, padding.top, contentWidth, {
-    size: 28.8,
-    family: headerFamily,
-    weight: 700,
-    color: colors.text,
-  });
+  const headerHeight = 28.8;
+  const headerGap = 10;
+  const portraitTargetShift = height * 0.1;
+  const tileHeights = primaryOfficials.map((official) => (
+    120 + 8 + 23 + (official.roleKey === "crewChief" ? 13 : 0)
+  ));
+  const tileStackHeight = tileHeights.length
+    ? tileHeights.reduce((sum, item) => sum + item, 0) + ((tileHeights.length - 1) * 18)
+    : 18;
 
   const footerText = alternates.length ? `Alternate: ${alternates.join(", ")}` : "";
   const footerHeight = footerText ? 16 : 0;
   const footerTop = height - padding.bottom - footerHeight;
-  const listTop = padding.top + 28.8 + 10;
+  const baseHeaderY = padding.top;
+  const baseListTop = baseHeaderY + headerHeight + headerGap;
+  const availableTopShift = Math.max(0, footerTop - baseListTop - tileStackHeight);
+  const topShift = Math.min(portraitTargetShift, availableTopShift);
+  const headerY = baseHeaderY + topShift;
+  const listTop = baseListTop + topShift;
   const listBottom = footerTop;
+
+  drawCenteredText(context, "TONIGHT'S OFFICIALS", padding.left, headerY, contentWidth, {
+    size: headerHeight,
+    family: headerFamily,
+    weight: 700,
+    color: colors.text,
+  });
 
   if (!primaryOfficials.length) {
     setCanvasFont(context, {
@@ -456,8 +470,8 @@ function drawLandscapeTemplate(primaryOfficials, alternates, imageMap, themeMode
 
   const fixedHeight = 50 + 12 + 360;
   const remaining = height - padding.top - padding.bottom - footerHeight - fixedHeight;
-  const topSpacer = Math.max(0, remaining * 0.75);
-  const bottomSpacer = Math.max(0, remaining - topSpacer);
+  const topSpacer = Math.max(0, remaining / 2);
+  const bottomSpacer = Math.max(0, remaining / 2);
   const headerY = padding.top + topSpacer;
   const rowY = headerY + 50 + 12;
   const footerY = rowY + 360 + bottomSpacer + 6;
@@ -594,37 +608,12 @@ function Spinner() {
   return <span className={styles.spinner} aria-hidden="true" />;
 }
 
-export default function OfficialsExportPanel({ officials, gameId }) {
+export default function OfficialsExportPanel({ officials, gameId, publishedOrder }) {
   const { primary, alternates } = useMemo(
-    () => buildOfficialsData(officials),
-    [officials]
+    () => buildOfficialsData(officials, publishedOrder),
+    [officials, publishedOrder]
   );
   const [busyFormat, setBusyFormat] = useState("");
-  const showDebug = String(gameId) === "0022500891";
-  const debugPayload = useMemo(() => {
-    if (!showDebug) return "";
-    const rows = (officials || []).map((official) => ({
-      name: readOfficialName(official),
-      jerseyNum: official?.jerseyNum,
-      assignment: official?.assignment,
-      role: official?.role,
-      title: official?.title,
-      position: official?.position,
-      officialRole: official?.officialRole,
-      roleName: official?.roleName,
-      assignmentOrder: official?.assignmentOrder,
-      sortOrder: official?.sortOrder,
-      order: official?.order,
-      sequence: official?.sequence,
-      assignmentSequence: official?.assignmentSequence,
-      sequenceNumber: official?.sequenceNumber,
-      positionOrder: official?.positionOrder,
-      officialOrder: official?.officialOrder,
-      metadata: official?.metadata,
-      assignmentObject: official?.assignment,
-    }));
-    return JSON.stringify(rows, null, 2);
-  }, [officials, showDebug]);
 
   const handleExport = async (format) => {
     if (busyFormat) return;
@@ -680,26 +669,6 @@ export default function OfficialsExportPanel({ officials, gameId }) {
           );
         })}
       </div>
-
-      {showDebug ? (
-        <pre
-          style={{
-            margin: "16px auto 0",
-            width: "min(100%, 1100px)",
-            padding: "12px",
-            overflowX: "auto",
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-            background: "rgba(0,0,0,0.15)",
-            color: "var(--text)",
-            border: "1px solid var(--border)",
-            fontSize: "12px",
-            lineHeight: 1.3,
-          }}
-        >
-          {debugPayload}
-        </pre>
-      ) : null}
     </section>
   );
 }
