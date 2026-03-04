@@ -69,10 +69,16 @@
 .teamSection {
   display: flex;
   align-items: center;
-  gap: 12px;
 }
 
-.teamSection img {
+.teamSummary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.teamLogo {
   width: 60px;
   height: 60px;
   object-fit: contain;
@@ -230,7 +236,7 @@
     padding: 16px;
   }
 
-  .teamSection img {
+  .teamLogo {
     width: 48px;
     height: 48px;
   }

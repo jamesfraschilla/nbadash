@@ -101,27 +101,17 @@ export default function Minutes() {
       </div>
       <section className={styles.header}>
         <div className={styles.teamSection}>
-          <img src={teamLogoUrl(awayTeam.teamId)} alt={awayTeam.teamName} />
-          <div>
-            <img
-              className={styles.teamTricodeLogo}
-              src={teamLogoUrl(awayTeam.teamId)}
-              alt={`${awayTeam.teamName} logo`}
-            />
+          <div className={styles.teamSummary}>
+            <img className={styles.teamLogo} src={teamLogoUrl(awayTeam.teamId)} alt={`${awayTeam.teamName} logo`} />
             <div className={styles.teamScore}>{awayTeam.score}</div>
           </div>
         </div>
         <div className={styles.vs}>@</div>
         <div className={styles.teamSection}>
-          <div>
-            <img
-              className={styles.teamTricodeLogo}
-              src={teamLogoUrl(homeTeam.teamId)}
-              alt={`${homeTeam.teamName} logo`}
-            />
+          <div className={styles.teamSummary}>
+            <img className={styles.teamLogo} src={teamLogoUrl(homeTeam.teamId)} alt={`${homeTeam.teamName} logo`} />
             <div className={styles.teamScore}>{homeTeam.score}</div>
           </div>
-          <img src={teamLogoUrl(homeTeam.teamId)} alt={homeTeam.teamName} />
         </div>
       </section>
 
