@@ -9,6 +9,7 @@ import styles from "./PreGame.module.css";
 
 const PLAYERS_STORAGE_KEY = "pregame:players:v1";
 const SLOT_STORAGE_PREFIX = "pregame:slots:v1:";
+const SLOT_TEMPLATE_KEY = "pregame:slot-template:v1";
 
 const EXPORT_SPECS = {
   portrait: { logicalWidth: 384, logicalHeight: 648, outputWidth: 1536, outputHeight: 2592 },
@@ -111,6 +112,28 @@ function persistSlots(gameId, slots) {
   window.localStorage.setItem(slotStorageKey(gameId), JSON.stringify(slots));
 }
 
+function loadSlotTemplate() {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(SLOT_TEMPLATE_KEY);
+  if (!raw) return null;
+  const parsed = safeParseJson(raw, null);
+  if (!parsed || typeof parsed !== "object") return null;
+  const count = Math.max(1, Number(parsed.count || 8));
+  const playerGroups = Array.isArray(parsed.playerGroups)
+    ? parsed.playerGroups.map((group) => (Array.isArray(group) ? group.slice(0, 3).map((value) => String(value || "")) : ["", ""]))
+    : [];
+  return { count, playerGroups };
+}
+
+function persistSlotTemplate(slots) {
+  if (typeof window === "undefined") return;
+  const payload = {
+    count: Math.max(1, slots.length),
+    playerGroups: slots.map((slot) => slot.playerIds.slice(0, 3)),
+  };
+  window.localStorage.setItem(SLOT_TEMPLATE_KEY, JSON.stringify(payload));
+}
+
 function formatTime(dateValue) {
   return format(dateValue, "h:mm");
 }
@@ -138,6 +161,17 @@ function buildDefaultSlots(game, count = 8) {
       playerIds: ["", ""],
     };
   });
+}
+
+function buildSlotsFromTemplate(game, template) {
+  const count = Math.max(1, Number(template?.count || 8));
+  const seeded = buildDefaultSlots(game, count);
+  return seeded.map((slot, index) => ({
+    ...slot,
+    playerIds: Array.isArray(template?.playerGroups?.[index])
+      ? template.playerGroups[index].slice(0, 3).map((value) => String(value || ""))
+      : ["", ""],
+  }));
 }
 
 function ensureExportFonts() {
@@ -354,6 +388,9 @@ export default function PreGame() {
   const [playerDrafts, setPlayerDrafts] = useState({});
   const [newPlayerDraft, setNewPlayerDraft] = useState({ name: "", display: "" });
   const [slotDrafts, setSlotDrafts] = useState([]);
+  const [inlineTimeSlotId, setInlineTimeSlotId] = useState(null);
+  const [inlineTimeDraft, setInlineTimeDraft] = useState("");
+  const [quickEditSlotId, setQuickEditSlotId] = useState(null);
 
   const washingtonGame = useMemo(() => (
     isWashingtonTeam(game?.homeTeam) || isWashingtonTeam(game?.awayTeam)
@@ -365,7 +402,12 @@ export default function PreGame() {
     if (saved?.length) {
       setSlots(saved);
     } else {
-      setSlots(buildDefaultSlots(game));
+      const template = loadSlotTemplate();
+      if (template) {
+        setSlots(buildSlotsFromTemplate(game, template));
+      } else {
+        setSlots(buildDefaultSlots(game));
+      }
     }
   }, [gameId, game]);
 
@@ -376,15 +418,21 @@ export default function PreGame() {
   useEffect(() => {
     if (!gameId || !slots.length) return;
     persistSlots(gameId, slots);
+    persistSlotTemplate(slots);
   }, [gameId, slots]);
 
   const sortedPlayers = useMemo(() => sortPlayersByLastName(players), [players]);
   const playerById = useMemo(() => new Map(sortedPlayers.map((player) => [player.id, player])), [sortedPlayers]);
   const headerLineTwo = useMemo(() => buildHeaderLine(game), [game]);
+  const quickEditSlot = useMemo(() => slots.find((slot) => slot.id === quickEditSlotId) || null, [slots, quickEditSlotId]);
 
   const openSlotsEditor = () => {
     setSlotDrafts(slots.map((slot) => ({ ...slot, playerIds: [...slot.playerIds] })));
     setSlotsOpen(true);
+  };
+
+  const updateSlotById = (slotId, updater) => {
+    setSlots((current) => current.map((slot) => (slot.id === slotId ? updater(slot) : slot)));
   };
 
   const handleSavePlayer = (playerId, draft) => {
@@ -491,37 +539,93 @@ export default function PreGame() {
       </header>
 
       <section className={styles.tableWrap}>
-        <div className={styles.timesRow} style={{ gridTemplateColumns: `repeat(${Math.max(1, slots.length)}, minmax(0, 1fr))` }}>
-          {slots.map((slot) => (
-            <div key={`time-${slot.id}`} className={styles.timeCell}>{slot.time}</div>
-          ))}
-        </div>
-        <div className={styles.playersRow} style={{ gridTemplateColumns: `repeat(${Math.max(1, slots.length)}, minmax(0, 1fr))` }}>
-          {slots.map((slot) => {
-            const names = slot.playerIds.map((id) => playerById.get(id)?.display || "").filter(Boolean);
-            return (
-              <div key={`slot-top-${slot.id}`} className={styles.playerCell}>
-                {(names[0] || "").toUpperCase()}
-              </div>
-            );
-          })}
-        </div>
-        <div className={styles.playersRow} style={{ gridTemplateColumns: `repeat(${Math.max(1, slots.length)}, minmax(0, 1fr))` }}>
-          {slots.map((slot) => {
-            const names = slot.playerIds.map((id) => playerById.get(id)?.display || "").filter(Boolean);
-            return (
-              <div key={`slot-bottom-${slot.id}`} className={styles.playerCell}>
-                {names.slice(1).map((name) => (
-                  <div key={`${slot.id}-${name}`}>{name.toUpperCase()}</div>
-                ))}
-              </div>
-            );
-          })}
-        </div>
+        <table className={styles.scheduleTable}>
+          <thead>
+            <tr>
+              {slots.map((slot) => (
+                <th key={`time-${slot.id}`} className={styles.timeCell}>
+                  {inlineTimeSlotId === slot.id ? (
+                    <input
+                      autoFocus
+                      className={styles.inlineTimeInput}
+                      value={inlineTimeDraft}
+                      onChange={(event) => setInlineTimeDraft(event.target.value)}
+                      onBlur={() => {
+                        updateSlotById(slot.id, (current) => ({ ...current, time: inlineTimeDraft.trim() || current.time }));
+                        setInlineTimeSlotId(null);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          updateSlotById(slot.id, (current) => ({ ...current, time: inlineTimeDraft.trim() || current.time }));
+                          setInlineTimeSlotId(null);
+                        }
+                        if (event.key === "Escape") {
+                          setInlineTimeSlotId(null);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className={styles.cellButton}
+                      onClick={() => {
+                        setInlineTimeSlotId(slot.id);
+                        setInlineTimeDraft(slot.time);
+                      }}
+                    >
+                      {slot.time}
+                    </button>
+                  )}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              {slots.map((slot) => {
+                const names = slot.playerIds.map((id) => playerById.get(id)?.display || "").filter(Boolean);
+                const hasThree = names.length >= 3;
+                if (hasThree) {
+                  return (
+                    <td key={`merged-${slot.id}`} className={styles.playerCellMerged} rowSpan={2}>
+                      <button type="button" className={styles.cellButton} onClick={() => setQuickEditSlotId(slot.id)}>
+                        {names.map((name) => (
+                          <div key={`${slot.id}-${name}`} className={styles.nameLine}>{name.toUpperCase()}</div>
+                        ))}
+                      </button>
+                    </td>
+                  );
+                }
+
+                return (
+                  <td key={`slot-top-${slot.id}`} className={styles.playerCell}>
+                    <button type="button" className={styles.cellButton} onClick={() => setQuickEditSlotId(slot.id)}>
+                      {(names[0] || "").toUpperCase()}
+                    </button>
+                  </td>
+                );
+              })}
+            </tr>
+            <tr>
+              {slots.map((slot) => {
+                const names = slot.playerIds.map((id) => playerById.get(id)?.display || "").filter(Boolean);
+                if (names.length >= 3) return null;
+                return (
+                  <td key={`slot-bottom-${slot.id}`} className={styles.playerCell}>
+                    <button type="button" className={styles.cellButton} onClick={() => setQuickEditSlotId(slot.id)}>
+                      {names.slice(1).map((name) => (
+                        <div key={`${slot.id}-${name}`} className={styles.nameLine}>{name.toUpperCase()}</div>
+                      ))}
+                    </button>
+                  </td>
+                );
+              })}
+            </tr>
+          </tbody>
+        </table>
       </section>
 
       <div className={styles.bottomRow}>
-        <img src={wizardsLogoUrl} className={styles.wizardsLogo} alt="Washington Wizards logo" />
         <div className={styles.actions}>
           <button type="button" className={styles.actionButton} onClick={openSlotsEditor}>Edit Slots</button>
           <button type="button" className={styles.actionButton} onClick={() => setPlayersOpen(true)}>Edit Players</button>
@@ -789,6 +893,59 @@ export default function PreGame() {
             <button type="button" className={styles.doneButton} onClick={() => handleExport("landscape")}>Landscape</button>
             <button type="button" className={styles.doneButton} onClick={() => handleExport("was")}>WAS</button>
             <button type="button" className={styles.modalCancel} onClick={() => setExportOpen(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {quickEditSlot && (
+        <div className={styles.modalOverlay} onClick={() => setQuickEditSlotId(null)}>
+          <div className={styles.quickEditModal} onClick={(event) => event.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h2 className={styles.modalTitle}>Edit Slot</h2>
+              <button type="button" className={styles.modalClose} onClick={() => setQuickEditSlotId(null)}>Close</button>
+            </div>
+            <div className={styles.slotTimeColumn}>
+              <div className={styles.slotHeaderTime}>Time</div>
+              <input
+                className={styles.timeInput}
+                value={quickEditSlot.time}
+                onChange={(event) => updateSlotById(quickEditSlot.id, (slot) => ({ ...slot, time: event.target.value }))}
+              />
+            </div>
+            <div className={styles.slotPlayerColumn}>
+              {quickEditSlot.playerIds.map((playerId, index) => (
+                <select
+                  key={`${quickEditSlot.id}-${index}`}
+                  className={styles.selectInput}
+                  value={playerId}
+                  onChange={(event) => {
+                    const nextId = event.target.value;
+                    updateSlotById(quickEditSlot.id, (slot) => {
+                      const next = [...slot.playerIds];
+                      next[index] = nextId;
+                      return { ...slot, playerIds: next };
+                    });
+                  }}
+                >
+                  <option value="">--</option>
+                  {sortedPlayers.map((player) => (
+                    <option key={player.id} value={player.id}>{player.name}</option>
+                  ))}
+                </select>
+              ))}
+            </div>
+            <div className={styles.quickEditActions}>
+              <button
+                type="button"
+                className={styles.iconButton}
+                onClick={() => updateSlotById(quickEditSlot.id, (slot) => (
+                  slot.playerIds.length >= 3 ? slot : { ...slot, playerIds: [...slot.playerIds, ""] }
+                ))}
+              >
+                +
+              </button>
+              <button type="button" className={styles.doneButton} onClick={() => setQuickEditSlotId(null)}>Done</button>
+            </div>
           </div>
         </div>
       )}
