@@ -129,13 +129,11 @@ function normalizeOfficial(official, index) {
 }
 
 function buildOfficialsData(officials) {
-  const normalized = Array.isArray(officials)
-    ? officials.map((official, index) => normalizeOfficial(official, index))
-    : [];
+  const rawOfficials = Array.isArray(officials) ? officials : [];
+  const primary = orderOfficials(rawOfficials).map((official, index) => normalizeOfficial(official, index));
 
-  const primary = orderOfficials(normalized);
-
-  const alternates = normalized
+  const alternates = rawOfficials
+    .map((official, index) => normalizeOfficial(official, index))
     .filter((official) => official.isAlternate)
     .map((official) => official.fullName)
     .filter(Boolean);
