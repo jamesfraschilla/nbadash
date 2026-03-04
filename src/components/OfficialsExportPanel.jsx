@@ -194,8 +194,18 @@ function makeCanvas(width, height, background) {
   canvas.width = width;
   canvas.height = height;
   const context = canvas.getContext("2d");
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
   context.fillStyle = background;
   context.fillRect(0, 0, width, height);
+  return { canvas, context };
+}
+
+function makeScaledLogicalCanvas(logicalWidth, logicalHeight, scale, background) {
+  const pixelWidth = Math.round(logicalWidth * scale);
+  const pixelHeight = Math.round(logicalHeight * scale);
+  const { canvas, context } = makeCanvas(pixelWidth, pixelHeight, background);
+  context.scale(scale, scale);
   return { canvas, context };
 }
 
@@ -351,11 +361,11 @@ function drawAvatar(context, image, official, x, y, size, radius, variant) {
   context.restore();
 }
 
-function drawPortraitTemplate(primaryOfficials, alternates, imageMap, themeMode) {
+function drawPortraitTemplate(primaryOfficials, alternates, imageMap, themeMode, scale = 1) {
   const width = EXPORT_SPECS.portrait.logicalWidth;
   const height = EXPORT_SPECS.portrait.logicalHeight;
   const colors = getColors(themeMode);
-  const { canvas, context } = makeCanvas(width, height, colors.background);
+  const { canvas, context } = makeScaledLogicalCanvas(width, height, scale, colors.background);
 
   const padding = { left: 24, top: 24, right: 24, bottom: 18 };
   const contentWidth = width - padding.left - padding.right;
@@ -435,11 +445,11 @@ function drawPortraitTemplate(primaryOfficials, alternates, imageMap, themeMode)
   return canvas;
 }
 
-function drawLandscapeTemplate(primaryOfficials, alternates, imageMap, themeMode) {
+function drawLandscapeTemplate(primaryOfficials, alternates, imageMap, themeMode, scale = 1) {
   const width = EXPORT_SPECS.landscape.logicalWidth;
   const height = EXPORT_SPECS.landscape.logicalHeight;
   const colors = getColors(themeMode);
-  const { canvas, context } = makeCanvas(width, height, colors.background);
+  const { canvas, context } = makeScaledLogicalCanvas(width, height, scale, colors.background);
 
   const padding = { left: 22, top: 12, right: 22, bottom: 18 };
   const contentWidth = width - padding.left - padding.right;
@@ -534,26 +544,26 @@ function drawLandscapeTemplate(primaryOfficials, alternates, imageMap, themeMode
 
 async function buildExportCanvas(format, primaryOfficials, alternates, themeMode) {
   const imageMap = await buildLoadedImageMap(primaryOfficials);
+  const portraitSpec = EXPORT_SPECS.portrait;
+  const landscapeSpec = EXPORT_SPECS.landscape;
+  const portraitScale = portraitSpec.outputWidth / portraitSpec.logicalWidth;
+  const landscapeScale = landscapeSpec.outputWidth / landscapeSpec.logicalWidth;
 
   if (format === "portrait") {
-    const source = drawPortraitTemplate(primaryOfficials, alternates, imageMap, themeMode);
-    const spec = EXPORT_SPECS.portrait;
-    const colors = getColors(themeMode);
-    const { canvas, context } = makeCanvas(spec.outputWidth, spec.outputHeight, colors.background);
-    drawContain(context, source, 0, 0, spec.outputWidth, spec.outputHeight);
-    return canvas;
+    return drawPortraitTemplate(primaryOfficials, alternates, imageMap, themeMode, portraitScale);
   }
 
   if (format === "landscape") {
-    const source = drawLandscapeTemplate(primaryOfficials, alternates, imageMap, themeMode);
-    const spec = EXPORT_SPECS.landscape;
-    const colors = getColors(themeMode);
-    const { canvas, context } = makeCanvas(spec.outputWidth, spec.outputHeight, colors.background);
-    drawContain(context, source, 0, 0, spec.outputWidth, spec.outputHeight);
-    return canvas;
+    return drawLandscapeTemplate(primaryOfficials, alternates, imageMap, themeMode, landscapeScale);
   }
 
-  const portraitCanvas = drawPortraitTemplate(primaryOfficials, alternates, imageMap, themeMode);
+  const portraitCanvas = drawPortraitTemplate(
+    primaryOfficials,
+    alternates,
+    imageMap,
+    themeMode,
+    portraitScale
+  );
   const spec = EXPORT_SPECS.was;
   const colors = getColors(themeMode);
   const { canvas, context } = makeCanvas(spec.outputWidth, spec.outputHeight, "#ffffff");

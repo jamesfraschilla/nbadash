@@ -1942,15 +1942,6 @@ export default function Game({ variant = "full" }) {
             />
           </div>
 
-          <Officials
-            officials={officials}
-            callsAgainst={callsAgainst}
-            homeAbr={homeTeam.teamTricode}
-            awayAbr={awayTeam.teamTricode}
-            homeTeam={homeTeam}
-            awayTeam={awayTeam}
-          />
-
           <div className={styles.navRow} ref={boxScoreNavRef}>
             <SegmentSelector value={segment} onChange={handleSegmentChange} />
             <Link to={dateParam ? `/m/${gameId}?d=${dateParam}` : `/m/${gameId}`}>Minutes</Link>
@@ -2093,6 +2084,14 @@ export default function Game({ variant = "full" }) {
         />
       </section>
       <OfficialsExportPanel officials={officials} gameId={gameId} />
+      <Officials
+        officials={officials}
+        callsAgainst={callsAgainst}
+        homeAbr={homeTeam.teamTricode}
+        awayAbr={awayTeam.teamTricode}
+        homeTeam={homeTeam}
+        awayTeam={awayTeam}
+      />
       </div>
     </div>
   );

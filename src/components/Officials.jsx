@@ -1,13 +1,73 @@
 import { teamLogoUrl } from "../api.js";
 import styles from "./Officials.module.css";
 
+const ROLE_ORDER = {
+  crewChief: 0,
+  referee: 1,
+  umpire: 2,
+};
+
+function normalizeRole(rawValue) {
+  const compact = String(rawValue || "").replace(/[^a-z]/gi, "").toLowerCase();
+  if (!compact) return "referee";
+  if (compact.includes("alternate")) return "alternate";
+  if (compact === "crewchief" || (compact.includes("crew") && compact.includes("chief"))) {
+    return "crewChief";
+  }
+  if (compact.includes("umpire")) return "umpire";
+  if (compact.includes("referee")) return "referee";
+  return "referee";
+}
+
+function getOrderedOfficials(officials) {
+  return [...(officials || [])]
+    .filter((official) => {
+      const role = normalizeRole(
+        official?.assignment ||
+        official?.role ||
+        official?.title ||
+        official?.position ||
+        official?.officialRole ||
+        official?.roleName
+      );
+      const explicitAlternate = Boolean(official?.isAlternate || official?.alternate);
+      return !explicitAlternate && role !== "alternate";
+    })
+    .sort((a, b) => {
+      const aRole = normalizeRole(
+        a?.assignment ||
+        a?.role ||
+        a?.title ||
+        a?.position ||
+        a?.officialRole ||
+        a?.roleName
+      );
+      const bRole = normalizeRole(
+        b?.assignment ||
+        b?.role ||
+        b?.title ||
+        b?.position ||
+        b?.officialRole ||
+        b?.roleName
+      );
+      const aOrder = ROLE_ORDER[aRole] ?? 99;
+      const bOrder = ROLE_ORDER[bRole] ?? 99;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return `${a?.firstName || ""} ${a?.familyName || ""}`.localeCompare(
+        `${b?.firstName || ""} ${b?.familyName || ""}`
+      );
+    });
+}
+
 export default function Officials({ officials, callsAgainst, homeAbr, awayAbr, homeTeam, awayTeam }) {
-  if (!officials?.length) return null;
+  const orderedOfficials = getOrderedOfficials(officials);
+  if (!orderedOfficials.length) return null;
+
   const awayTotal = callsAgainst
-    ? officials.reduce((sum, official) => sum + (callsAgainst?.[official.personId]?.[awayAbr] ?? 0), 0)
+    ? orderedOfficials.reduce((sum, official) => sum + (callsAgainst?.[official.personId]?.[awayAbr] ?? 0), 0)
     : 0;
   const homeTotal = callsAgainst
-    ? officials.reduce((sum, official) => sum + (callsAgainst?.[official.personId]?.[homeAbr] ?? 0), 0)
+    ? orderedOfficials.reduce((sum, official) => sum + (callsAgainst?.[official.personId]?.[homeAbr] ?? 0), 0)
     : 0;
   const awayLogo = awayTeam?.teamId ? teamLogoUrl(awayTeam.teamId) : null;
   const homeLogo = homeTeam?.teamId ? teamLogoUrl(homeTeam.teamId) : null;
@@ -16,7 +76,6 @@ export default function Officials({ officials, callsAgainst, homeAbr, awayAbr, h
 
   return (
     <section className={styles.container}>
-      <div className={styles.officialsLabel}>Officials</div>
       {callsAgainst ? (
         <table className={styles.callsTable}>
           <thead>
@@ -25,11 +84,9 @@ export default function Officials({ officials, callsAgainst, homeAbr, awayAbr, h
                 <div className={styles.callsAgainstLabel}>Calls Against</div>
               </th>
               <th className={styles.headerCell}>Total</th>
-              {officials.map((official) => (
-                <th key={official.personId} className={styles.headerCell}>
-                  <span className={styles.name}>
-                    #{official.jerseyNum} {official.firstName} {official.familyName}
-                  </span>
+              {orderedOfficials.map((official) => (
+                <th key={official.personId} className={styles.headerCell} aria-hidden="true">
+                  <span className={styles.columnSpacer} />
                 </th>
               ))}
             </tr>
@@ -44,7 +101,7 @@ export default function Officials({ officials, callsAgainst, homeAbr, awayAbr, h
                 )}
               </td>
               <td className={styles.dataCell}>{awayTotal}</td>
-              {officials.map((official) => (
+              {orderedOfficials.map((official) => (
                 <td key={official.personId} className={styles.dataCell}>
                   {callsAgainst?.[official.personId]?.[awayAbr] ?? 0}
                 </td>
@@ -59,7 +116,7 @@ export default function Officials({ officials, callsAgainst, homeAbr, awayAbr, h
                 )}
               </td>
               <td className={styles.dataCell}>{homeTotal}</td>
-              {officials.map((official) => (
+              {orderedOfficials.map((official) => (
                 <td key={official.personId} className={styles.dataCell}>
                   {callsAgainst?.[official.personId]?.[homeAbr] ?? 0}
                 </td>
@@ -69,7 +126,7 @@ export default function Officials({ officials, callsAgainst, homeAbr, awayAbr, h
         </table>
       ) : (
         <div className={styles.officialsStack}>
-          {officials.map((official) => (
+          {orderedOfficials.map((official) => (
             <div key={official.personId} className={styles.officialItem}>
               <span className={styles.officialName}>
                 #{official.jerseyNum} {official.firstName} {official.familyName}
