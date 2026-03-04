@@ -316,6 +316,12 @@ const foulsClass = (fouls, stylesRef) => {
   return stylesRef.pfRed;
 };
 
+const isWashingtonTeam = (team) => {
+  const tricode = String(team?.teamTricode || "").toUpperCase();
+  const name = `${team?.teamCity || ""} ${team?.teamName || ""}`.toLowerCase();
+  return tricode === "WAS" || name.includes("washington") || name.includes("wizards");
+};
+
 const parseTeamFoulMarker = (description) => {
   if (!description) return null;
   const text = String(description);
@@ -546,6 +552,7 @@ export default function Game({ variant = "full" }) {
   });
 
   const { homeTeam, awayTeam, teamStats, boxScore, officials, callsAgainst } = game || {};
+  const isWashingtonGame = isWashingtonTeam(homeTeam) || isWashingtonTeam(awayTeam);
   const [publishedOfficialOrder, setPublishedOfficialOrder] = useState(null);
   const timeouts = game?.timeouts;
   const isPregame = game?.gameStatus === 1;
@@ -1648,6 +1655,14 @@ export default function Game({ variant = "full" }) {
               to={dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`}
             >
               Full Dashboard
+            </Link>
+          )}
+          {showExtras && isWashingtonGame && (
+            <Link
+              className={styles.backButton}
+              to={dateParam ? `/g/${gameId}/pregame?d=${dateParam}` : `/g/${gameId}/pregame`}
+            >
+              Pre-Game
             </Link>
           )}
         </div>
