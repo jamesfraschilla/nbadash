@@ -1,33 +1,41 @@
 .container {
+  --calls-team-width: 150px;
+  --calls-total-width: 90px;
+  --official-column-width: 132px;
   margin: 24px auto 0;
   padding: 18px 20px;
   border: 1px solid var(--border);
   background: var(--panel);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 76px;
+  grid-template-columns: minmax(0, calc(var(--calls-team-width) + var(--calls-total-width) + (var(--official-column-width) * 3))) 76px;
   gap: 18px;
   align-items: center;
-  max-width: 1220px;
+  max-width: calc(var(--calls-team-width) + var(--calls-total-width) + (var(--official-column-width) * 3) + 76px + 58px);
 }
 
 .contentColumn {
   min-width: 0;
+  width: calc(var(--calls-team-width) + var(--calls-total-width) + (var(--official-column-width) * 3));
 }
 
 .officialsRow {
-  display: flex;
-  flex-wrap: nowrap;
-  justify-content: center;
-  gap: 16px;
+  display: grid;
+  grid-template-columns: var(--calls-team-width) var(--calls-total-width) repeat(3, var(--official-column-width));
+  justify-content: start;
+  align-items: start;
   overflow-x: auto;
 }
 
 .officialTile {
-  width: 132px;
+  width: var(--official-column-width);
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
+}
+
+.rowSpacer {
+  width: 100%;
 }
 
 .avatarFrame {
@@ -155,7 +163,7 @@
 
   .officialsRow {
     width: 100%;
-    justify-content: flex-start;
+    min-width: calc(var(--calls-team-width) + var(--calls-total-width) + (var(--official-column-width) * 3));
   }
 
   .buttonColumn {

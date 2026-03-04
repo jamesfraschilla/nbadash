@@ -1,66 +1,17 @@
 import { teamLogoUrl } from "../api.js";
+import { orderOfficials } from "../officialAssignments.js";
 import styles from "./Officials.module.css";
 
-const ROLE_ORDER = {
-  crewChief: 0,
-  referee: 1,
-  umpire: 2,
-};
-
-function normalizeRole(rawValue) {
-  const compact = String(rawValue || "").replace(/[^a-z]/gi, "").toLowerCase();
-  if (!compact) return "referee";
-  if (compact.includes("alternate")) return "alternate";
-  if (compact === "crewchief" || (compact.includes("crew") && compact.includes("chief"))) {
-    return "crewChief";
-  }
-  if (compact.includes("umpire")) return "umpire";
-  if (compact.includes("referee")) return "referee";
-  return "referee";
-}
-
-function getOrderedOfficials(officials) {
-  return [...(officials || [])]
-    .filter((official) => {
-      const role = normalizeRole(
-        official?.assignment ||
-        official?.role ||
-        official?.title ||
-        official?.position ||
-        official?.officialRole ||
-        official?.roleName
-      );
-      const explicitAlternate = Boolean(official?.isAlternate || official?.alternate);
-      return !explicitAlternate && role !== "alternate";
-    })
-    .sort((a, b) => {
-      const aRole = normalizeRole(
-        a?.assignment ||
-        a?.role ||
-        a?.title ||
-        a?.position ||
-        a?.officialRole ||
-        a?.roleName
-      );
-      const bRole = normalizeRole(
-        b?.assignment ||
-        b?.role ||
-        b?.title ||
-        b?.position ||
-        b?.officialRole ||
-        b?.roleName
-      );
-      const aOrder = ROLE_ORDER[aRole] ?? 99;
-      const bOrder = ROLE_ORDER[bRole] ?? 99;
-      if (aOrder !== bOrder) return aOrder - bOrder;
-      return `${a?.firstName || ""} ${a?.familyName || ""}`.localeCompare(
-        `${b?.firstName || ""} ${b?.familyName || ""}`
-      );
-    });
-}
-
-export default function Officials({ officials, callsAgainst, homeAbr, awayAbr, homeTeam, awayTeam }) {
-  const orderedOfficials = getOrderedOfficials(officials);
+export default function Officials({
+  officials,
+  callsAgainst,
+  homeAbr,
+  awayAbr,
+  homeTeam,
+  awayTeam,
+  publishedOrder,
+}) {
+  const orderedOfficials = orderOfficials(officials, publishedOrder);
   if (!orderedOfficials.length) return null;
 
   const awayTotal = callsAgainst
@@ -78,6 +29,13 @@ export default function Officials({ officials, callsAgainst, homeAbr, awayAbr, h
     <section className={styles.container}>
       {callsAgainst ? (
         <table className={styles.callsTable}>
+          <colgroup>
+            <col className={styles.teamCol} />
+            <col className={styles.totalCol} />
+            {orderedOfficials.map((official) => (
+              <col key={`col-${official.personId}`} className={styles.officialCol} />
+            ))}
+          </colgroup>
           <thead>
             <tr className={styles.headerRow}>
               <th className={styles.headerCellLeft}>

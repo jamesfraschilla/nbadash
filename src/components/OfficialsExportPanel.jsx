@@ -1,21 +1,6 @@
 import { useMemo, useState } from "react";
+import { normalizeOfficialRole, orderOfficials } from "../officialAssignments.js";
 import styles from "./OfficialsExportPanel.module.css";
-
-const IMAGE_MODULES = import.meta.glob(
-  [
-    "../assets/referees/*.jpg",
-    "../assets/referees/*.jpeg",
-    "../assets/referees/*.JPG",
-    "../assets/referees/*.JPEG",
-  ],
-  { eager: true, import: "default" }
-);
-
-const ROLE_ORDER = {
-  crewChief: 0,
-  referee: 1,
-  umpire: 2,
-};
 
 const EXPORT_SPECS = {
   portrait: {
@@ -42,6 +27,16 @@ const EXPORT_SPECS = {
     boxHeight: 1300,
   },
 };
+
+const IMAGE_MODULES = import.meta.glob(
+  [
+    "../assets/referees/*.jpg",
+    "../assets/referees/*.jpeg",
+    "../assets/referees/*.JPG",
+    "../assets/referees/*.JPEG",
+  ],
+  { eager: true, import: "default" }
+);
 
 const refereeHeadshotMap = Object.entries(IMAGE_MODULES).reduce((map, [path, url]) => {
   const fileName = path.split("/").pop() || "";
@@ -101,22 +96,10 @@ function splitOfficialName(official) {
   };
 }
 
-function normalizeRole(rawValue) {
-  const compact = String(rawValue || "").replace(/[^a-z]/gi, "").toLowerCase();
-  if (!compact) return "referee";
-  if (compact.includes("alternate")) return "alternate";
-  if (compact === "crewchief" || (compact.includes("crew") && compact.includes("chief"))) {
-    return "crewChief";
-  }
-  if (compact.includes("umpire")) return "umpire";
-  if (compact.includes("referee")) return "referee";
-  return "referee";
-}
-
 function normalizeOfficial(official, index) {
   const nameParts = splitOfficialName(official);
   const fullName = nameParts.fullName || `${nameParts.firstName} ${nameParts.lastName}`.trim();
-  const role = normalizeRole(
+  const role = String(
     official?.assignment ||
     official?.role ||
     official?.title ||
@@ -140,24 +123,18 @@ function normalizeOfficial(official, index) {
       ""
     ).trim(),
     role,
-    isAlternate: Boolean(official?.isAlternate || official?.alternate) || role === "alternate",
+    roleKey: normalizeOfficialRole(role),
+    isAlternate: Boolean(official?.isAlternate || official?.alternate) || String(role).toLowerCase().includes("alternate"),
     headshotUrl: refereeHeadshotMap.get(normalizeNameKey(fullName)) || null,
   };
 }
 
-function buildOfficialsData(officials) {
+function buildOfficialsData(officials, publishedOrder) {
   const normalized = Array.isArray(officials)
     ? officials.map((official, index) => normalizeOfficial(official, index))
     : [];
 
-  const primary = normalized
-    .filter((official) => !official.isAlternate)
-    .sort((a, b) => {
-      const aOrder = ROLE_ORDER[a.role] ?? 99;
-      const bOrder = ROLE_ORDER[b.role] ?? 99;
-      if (aOrder !== bOrder) return aOrder - bOrder;
-      return a.fullName.localeCompare(b.fullName);
-    });
+  const primary = orderOfficials(normalized, publishedOrder);
 
   const alternates = normalized
     .filter((official) => official.isAlternate)
@@ -414,7 +391,7 @@ function drawPortraitTemplate(primaryOfficials, alternates, imageMap, themeMode,
       });
       currentY += 23;
 
-      if (official.role === "crewChief") {
+      if (official.roleKey === "crewChief") {
         currentY += 2;
         drawCenteredText(context, "Crew Chief", padding.left, currentY, contentWidth, {
           size: 11,
@@ -517,7 +494,7 @@ function drawLandscapeTemplate(primaryOfficials, alternates, imageMap, themeMode
       });
       textY += 15;
 
-      if (official.role === "crewChief") {
+      if (official.roleKey === "crewChief") {
         textY += 4;
         drawCenteredText(context, "Crew Chief", tileX, textY, tileWidth, {
           size: 10,
@@ -589,7 +566,7 @@ function VisibleOfficialTile({ official }) {
         )}
       </div>
       <div className={styles.nameText}>{getVisibleNameText(official)}</div>
-      {official.role === "crewChief" ? <div className={styles.roleText}>Crew Chief</div> : null}
+      {official.roleKey === "crewChief" ? <div className={styles.roleText}>Crew Chief</div> : null}
     </div>
   );
 }
@@ -598,8 +575,11 @@ function Spinner() {
   return <span className={styles.spinner} aria-hidden="true" />;
 }
 
-export default function OfficialsExportPanel({ officials, gameId }) {
-  const { primary, alternates } = useMemo(() => buildOfficialsData(officials), [officials]);
+export default function OfficialsExportPanel({ officials, gameId, publishedOrder }) {
+  const { primary, alternates } = useMemo(
+    () => buildOfficialsData(officials, publishedOrder),
+    [officials, publishedOrder]
+  );
   const [busyFormat, setBusyFormat] = useState("");
 
   const handleExport = async (format) => {
@@ -625,6 +605,8 @@ export default function OfficialsExportPanel({ officials, gameId }) {
       <div className={styles.contentColumn}>
         {primary.length ? (
           <div className={styles.officialsRow}>
+            <div className={styles.rowSpacer} aria-hidden="true" />
+            <div className={styles.rowSpacer} aria-hidden="true" />
             {primary.map((official) => (
               <VisibleOfficialTile key={official.id} official={official} />
             ))}

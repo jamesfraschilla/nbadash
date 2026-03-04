@@ -1,4 +1,7 @@
 .container {
+  --calls-team-width: 150px;
+  --calls-total-width: 90px;
+  --official-column-width: 132px;
   margin-top: 12px;
   margin-bottom: 2.5rem;
   font-size: 0.875rem;
@@ -10,11 +13,23 @@
 }
 
 .callsTable {
-  width: 100%;
+  width: calc(var(--calls-team-width) + var(--calls-total-width) + (var(--official-column-width) * 3));
   border-spacing: 0;
   text-align: center;
   color: var(--text);
   table-layout: fixed;
+}
+
+.teamCol {
+  width: var(--calls-team-width);
+}
+
+.totalCol {
+  width: var(--calls-total-width);
+}
+
+.officialCol {
+  width: var(--official-column-width);
 }
 
 .headerRow {
@@ -99,7 +114,7 @@
   }
 
   .callsTable {
-    min-width: 100%;
+    min-width: calc(var(--calls-team-width) + var(--calls-total-width) + (var(--official-column-width) * 3));
     font-size: 0.75rem;
   }
 
