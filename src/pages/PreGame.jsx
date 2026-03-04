@@ -358,9 +358,9 @@ function drawLandscapeExport(slots, playerById, headerLineTwo, logoImage, themeM
     context.strokeRect(x, row1Y, colWidth, rowHeight);
     context.strokeRect(x, row2Y, colWidth, rowHeight);
 
-    const names = slot.playerIds.map((id) => playerById.get(id)?.display || "").filter(Boolean);
-    const first = names[0] || "";
-    const rest = names.slice(1);
+    const displays = slot.playerIds.slice(0, 3).map((id) => playerById.get(id)?.display || "");
+    const first = displays[0] || "";
+    const rest = displays.slice(1).filter(Boolean);
     if (first) {
       drawCenteredTextMiddle(context, first.toUpperCase(), x, row1Y, colWidth, rowHeight, 24, colors.cellText, 700);
     }
@@ -408,16 +408,17 @@ function drawPortraitExport(slots, playerById, headerLineTwo, logoImage, themeMo
 
     const x1 = tableX + timeColWidth;
     const x2 = x1 + playerColWidth;
-    const names = slot.playerIds.map((id) => playerById.get(id)?.display || "").filter(Boolean);
+    const displays = slot.playerIds.slice(0, 3).map((id) => playerById.get(id)?.display || "");
+    const presentCount = displays.filter(Boolean).length;
 
-    if (names.length >= 3) {
+    if (slot.playerIds.length >= 3 && presentCount >= 3) {
       context.fillStyle = colors.cellBg;
       context.fillRect(x1, y, playerColWidth * 2, rowHeight);
       context.strokeRect(x1, y, playerColWidth * 2, rowHeight);
       const lineHeight = 24;
       const totalHeight = lineHeight * 3;
       const startY = y + ((rowHeight - totalHeight) / 2);
-      names.slice(0, 3).forEach((name, idx) => {
+      displays.slice(0, 3).forEach((name, idx) => {
         drawCenteredTextMiddle(
           context,
           name.toUpperCase(),
@@ -439,11 +440,11 @@ function drawPortraitExport(slots, playerById, headerLineTwo, logoImage, themeMo
     context.strokeRect(x1, y, playerColWidth, rowHeight);
     context.strokeRect(x2, y, playerColWidth, rowHeight);
 
-    if (names[0]) {
-      drawCenteredTextMiddle(context, names[0].toUpperCase(), x1, y, playerColWidth, rowHeight, 24, colors.cellText, 700);
+    if (displays[0]) {
+      drawCenteredTextMiddle(context, displays[0].toUpperCase(), x1, y, playerColWidth, rowHeight, 24, colors.cellText, 700);
     }
-    if (names.length > 1) {
-      const restText = names.slice(1).join("  ").toUpperCase();
+    if (rest.length) {
+      const restText = rest.join("  ").toUpperCase();
       drawCenteredTextMiddle(context, restText, x2, y, playerColWidth, rowHeight, 24, colors.cellText, 700);
     }
   });
@@ -756,8 +757,8 @@ export default function PreGame() {
           <tbody>
             <tr>
               {slots.map((slot) => {
-                const names = slot.playerIds.map((id) => playerById.get(id)?.display || "").filter(Boolean);
-                const hasThree = names.length >= 3;
+                const displays = slot.playerIds.slice(0, 3).map((id) => playerById.get(id)?.display || "");
+                const hasThree = slot.playerIds.length >= 3;
                 if (hasThree) {
                   return (
                     <td key={`merged-${slot.id}`} className={styles.playerCellMerged} rowSpan={2}>
@@ -787,8 +788,8 @@ export default function PreGame() {
                         </div>
                       ) : (
                         <button type="button" className={styles.cellButton} onClick={() => setActivePlayerCell({ slotId: slot.id, index: "merged" })}>
-                          {names.map((name) => (
-                            <div key={`${slot.id}-${name}`} className={styles.nameLine}>{name.toUpperCase()}</div>
+                          {displays.filter(Boolean).map((name, idx) => (
+                            <div key={`${slot.id}-${idx}`} className={styles.nameLine}>{name.toUpperCase()}</div>
                           ))}
                         </button>
                       )}
@@ -820,7 +821,7 @@ export default function PreGame() {
                       </select>
                     ) : (
                       <button type="button" className={styles.cellButton} onClick={() => setActivePlayerCell({ slotId: slot.id, index: 0 })}>
-                        {(names[0] || "").toUpperCase()}
+                        {(displays[0] || "").toUpperCase()}
                       </button>
                     )}
                   </td>
@@ -829,8 +830,8 @@ export default function PreGame() {
             </tr>
             <tr>
               {slots.map((slot) => {
-                const names = slot.playerIds.map((id) => playerById.get(id)?.display || "").filter(Boolean);
-                if (names.length >= 3) return null;
+                const displays = slot.playerIds.slice(0, 3).map((id) => playerById.get(id)?.display || "");
+                if (slot.playerIds.length >= 3) return null;
                 return (
                   <td key={`slot-bottom-${slot.id}`} className={styles.playerCell}>
                     {activePlayerCell?.slotId === slot.id && activePlayerCell?.index === 1 ? (
@@ -855,9 +856,7 @@ export default function PreGame() {
                       </select>
                     ) : (
                       <button type="button" className={styles.cellButton} onClick={() => setActivePlayerCell({ slotId: slot.id, index: 1 })}>
-                        {names.slice(1).map((name) => (
-                          <div key={`${slot.id}-${name}`} className={styles.nameLine}>{name.toUpperCase()}</div>
-                        ))}
+                        {(displays[1] || "").toUpperCase()}
                       </button>
                     )}
                   </td>
