@@ -44,6 +44,10 @@ const ORDER_PATHS = [
 
 let publishedAssignmentsPromise = null;
 const OFFICIALS_ASSIGNMENTS_URL = "https://official.nba.com/referee-assignments/";
+const ASSIGNMENTS_PROXY_URLS = [
+  import.meta.env.VITE_ASSIGNMENTS_PROXY_URL,
+  "/api/referee-assignments",
+].filter(Boolean);
 const ASSIGNMENTS_SOURCE_URLS = [
   OFFICIALS_ASSIGNMENTS_URL,
   `https://api.allorigins.win/raw?url=${encodeURIComponent(OFFICIALS_ASSIGNMENTS_URL)}`,
@@ -237,6 +241,34 @@ function parseAssignmentTables(html) {
   return [];
 }
 
+function normalizeAssignmentsPayload(payload) {
+  const assignments = Array.isArray(payload?.assignments) ? payload.assignments : [];
+  return assignments
+    .map((row) => ({
+      game: String(row?.game || "").trim(),
+      crewChief: stripNumberSuffix(row?.crewChief || ""),
+      referee: stripNumberSuffix(row?.referee || ""),
+      umpire: stripNumberSuffix(row?.umpire || ""),
+      alternate: stripNumberSuffix(row?.alternate || ""),
+    }))
+    .filter((row) => row.crewChief && row.referee && row.umpire);
+}
+
+async function fetchAssignmentsViaProxy() {
+  for (const proxyUrl of ASSIGNMENTS_PROXY_URLS) {
+    try {
+      const response = await fetch(proxyUrl, { cache: "no-store" });
+      if (!response.ok) continue;
+      const payload = await response.json();
+      const assignments = normalizeAssignmentsPayload(payload);
+      if (assignments.length) return assignments;
+    } catch {
+      // Try the next proxy.
+    }
+  }
+  return [];
+}
+
 async function fetchFirstWorkingAssignments() {
   for (const url of ASSIGNMENTS_SOURCE_URLS) {
     try {
@@ -255,7 +287,11 @@ async function fetchFirstWorkingAssignments() {
 
 async function fetchPublishedAssignments() {
   if (!publishedAssignmentsPromise) {
-    publishedAssignmentsPromise = fetchFirstWorkingAssignments()
+    publishedAssignmentsPromise = fetchAssignmentsViaProxy()
+      .then((proxyAssignments) => {
+        if (proxyAssignments.length) return proxyAssignments;
+        return fetchFirstWorkingAssignments();
+      })
       .then((assignments) => {
         if (assignments.length) return assignments;
 
