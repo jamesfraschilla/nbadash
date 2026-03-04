@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { fetchGame } from "../api.js";
+import { supabase } from "../supabaseClient.js";
 import wizardsLogoUrl from "../assets/WWizards_Primary_Icon.png";
 import dinFontUrl from "../assets/fonts/DIN.ttf";
 import styles from "./PreGame.module.css";
@@ -10,6 +11,7 @@ import styles from "./PreGame.module.css";
 const PLAYERS_STORAGE_KEY = "pregame:players:v1";
 const SLOT_STORAGE_PREFIX = "pregame:slots:v1:";
 const SLOT_TEMPLATE_KEY = "pregame:slot-template:v1";
+const GLOBAL_ROW_ID = "global";
 
 const EXPORT_SPECS = {
   portrait: { logicalWidth: 384, logicalHeight: 648, outputWidth: 1536, outputHeight: 2592 },
@@ -132,6 +134,85 @@ function persistSlotTemplate(slots) {
     playerGroups: slots.map((slot) => slot.playerIds.slice(0, 3)),
   };
   window.localStorage.setItem(SLOT_TEMPLATE_KEY, JSON.stringify(payload));
+}
+
+async function fetchRemotePlayers() {
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("pregame_players")
+    .select("players")
+    .eq("id", GLOBAL_ROW_ID)
+    .maybeSingle();
+  if (error) return null;
+  const remotePlayers = Array.isArray(data?.players) ? data.players : [];
+  return sortPlayersByLastName(
+    remotePlayers
+      .map((player) => ({
+        id: String(player?.id || crypto.randomUUID()),
+        name: normalizePlayerName(player?.name || ""),
+        display: normalizePlayerName(player?.display || ""),
+      }))
+      .filter((player) => player.name && player.display)
+  );
+}
+
+async function fetchRemoteSchedule(gameId) {
+  if (!supabase || !gameId) return null;
+  const { data, error } = await supabase
+    .from("pregame_schedules")
+    .select("slots")
+    .eq("game_id", gameId)
+    .maybeSingle();
+  if (error || !Array.isArray(data?.slots)) return null;
+  return data.slots
+    .map((slot) => ({
+      id: String(slot?.id || crypto.randomUUID()),
+      time: String(slot?.time || ""),
+      playerIds: Array.isArray(slot?.playerIds)
+        ? slot.playerIds.slice(0, 3).map((value) => String(value || ""))
+        : ["", ""],
+    }))
+    .filter((slot) => slot.time);
+}
+
+async function fetchRemoteTemplate() {
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("pregame_templates")
+    .select("count,player_groups")
+    .eq("id", GLOBAL_ROW_ID)
+    .maybeSingle();
+  if (error) return null;
+  const count = Math.max(1, Number(data?.count || 8));
+  const playerGroups = Array.isArray(data?.player_groups)
+    ? data.player_groups.map((group) => (Array.isArray(group) ? group.slice(0, 3).map((value) => String(value || "")) : ["", ""]))
+    : [];
+  return { count, playerGroups };
+}
+
+async function saveRemotePlayers(players) {
+  if (!supabase) return;
+  await supabase.from("pregame_players").upsert({
+    id: GLOBAL_ROW_ID,
+    players: sortPlayersByLastName(players),
+  });
+}
+
+async function saveRemoteSchedule(gameId, slots) {
+  if (!supabase || !gameId) return;
+  await supabase.from("pregame_schedules").upsert({
+    game_id: gameId,
+    slots,
+  });
+}
+
+async function saveRemoteTemplate(slots) {
+  if (!supabase) return;
+  await supabase.from("pregame_templates").upsert({
+    id: GLOBAL_ROW_ID,
+    count: Math.max(1, slots.length),
+    player_groups: slots.map((slot) => slot.playerIds.slice(0, 3)),
+  });
 }
 
 function formatTime(dateValue) {
@@ -390,41 +471,74 @@ export default function PreGame() {
   const [slotDrafts, setSlotDrafts] = useState([]);
   const [inlineTimeSlotId, setInlineTimeSlotId] = useState(null);
   const [inlineTimeDraft, setInlineTimeDraft] = useState("");
-  const [quickEditSlotId, setQuickEditSlotId] = useState(null);
+  const [activePlayerCell, setActivePlayerCell] = useState(null);
+
+  const { data: remotePlayers } = useQuery({
+    queryKey: ["pregame-players-remote"],
+    queryFn: fetchRemotePlayers,
+    enabled: Boolean(supabase),
+    staleTime: 60_000,
+  });
+
+  const { data: remoteSchedule } = useQuery({
+    queryKey: ["pregame-schedule-remote", gameId],
+    queryFn: () => fetchRemoteSchedule(gameId),
+    enabled: Boolean(supabase && gameId),
+    staleTime: 60_000,
+  });
+
+  const { data: remoteTemplate } = useQuery({
+    queryKey: ["pregame-template-remote"],
+    queryFn: fetchRemoteTemplate,
+    enabled: Boolean(supabase),
+    staleTime: 60_000,
+  });
 
   const washingtonGame = useMemo(() => (
     isWashingtonTeam(game?.homeTeam) || isWashingtonTeam(game?.awayTeam)
   ), [game]);
 
   useEffect(() => {
+    if (!remotePlayers?.length) return;
+    setPlayers(remotePlayers);
+  }, [remotePlayers]);
+
+  useEffect(() => {
     if (!gameId || !game) return;
-    const saved = loadSlots(gameId);
-    if (saved?.length) {
-      setSlots(saved);
+    if (remoteSchedule?.length) {
+      setSlots(remoteSchedule);
+      return;
+    }
+
+    const savedLocal = loadSlots(gameId);
+    if (savedLocal?.length) {
+      setSlots(savedLocal);
     } else {
-      const template = loadSlotTemplate();
+      const template = remoteTemplate || loadSlotTemplate();
       if (template) {
         setSlots(buildSlotsFromTemplate(game, template));
       } else {
         setSlots(buildDefaultSlots(game));
       }
     }
-  }, [gameId, game]);
+  }, [gameId, game, remoteSchedule, remoteTemplate]);
 
   useEffect(() => {
     persistPlayers(players);
+    saveRemotePlayers(players);
   }, [players]);
 
   useEffect(() => {
     if (!gameId || !slots.length) return;
     persistSlots(gameId, slots);
     persistSlotTemplate(slots);
+    saveRemoteSchedule(gameId, slots);
+    saveRemoteTemplate(slots);
   }, [gameId, slots]);
 
   const sortedPlayers = useMemo(() => sortPlayersByLastName(players), [players]);
   const playerById = useMemo(() => new Map(sortedPlayers.map((player) => [player.id, player])), [sortedPlayers]);
   const headerLineTwo = useMemo(() => buildHeaderLine(game), [game]);
-  const quickEditSlot = useMemo(() => slots.find((slot) => slot.id === quickEditSlotId) || null, [slots, quickEditSlotId]);
 
   const openSlotsEditor = () => {
     setSlotDrafts(slots.map((slot) => ({ ...slot, playerIds: [...slot.playerIds] })));
@@ -588,20 +702,68 @@ export default function PreGame() {
                 if (hasThree) {
                   return (
                     <td key={`merged-${slot.id}`} className={styles.playerCellMerged} rowSpan={2}>
-                      <button type="button" className={styles.cellButton} onClick={() => setQuickEditSlotId(slot.id)}>
-                        {names.map((name) => (
-                          <div key={`${slot.id}-${name}`} className={styles.nameLine}>{name.toUpperCase()}</div>
-                        ))}
-                      </button>
+                      {activePlayerCell?.slotId === slot.id && activePlayerCell?.index === "merged" ? (
+                        <div className={styles.inlinePlayerEditor}>
+                          {[0, 1, 2].map((playerIndex) => (
+                            <select
+                              key={`${slot.id}-merged-${playerIndex}`}
+                              className={styles.inlineSelect}
+                              value={slot.playerIds[playerIndex] || ""}
+                              onChange={(event) => {
+                                const nextId = event.target.value;
+                                updateSlotById(slot.id, (current) => {
+                                  const next = [...current.playerIds];
+                                  next[playerIndex] = nextId;
+                                  return { ...current, playerIds: next };
+                                });
+                              }}
+                              onBlur={() => setActivePlayerCell(null)}
+                            >
+                              <option value="">--</option>
+                              {sortedPlayers.map((player) => (
+                                <option key={player.id} value={player.id}>{player.name}</option>
+                              ))}
+                            </select>
+                          ))}
+                        </div>
+                      ) : (
+                        <button type="button" className={styles.cellButton} onClick={() => setActivePlayerCell({ slotId: slot.id, index: "merged" })}>
+                          {names.map((name) => (
+                            <div key={`${slot.id}-${name}`} className={styles.nameLine}>{name.toUpperCase()}</div>
+                          ))}
+                        </button>
+                      )}
                     </td>
                   );
                 }
 
                 return (
                   <td key={`slot-top-${slot.id}`} className={styles.playerCell}>
-                    <button type="button" className={styles.cellButton} onClick={() => setQuickEditSlotId(slot.id)}>
-                      {(names[0] || "").toUpperCase()}
-                    </button>
+                    {activePlayerCell?.slotId === slot.id && activePlayerCell?.index === 0 ? (
+                      <select
+                        autoFocus
+                        className={styles.inlineSelect}
+                        value={slot.playerIds[0] || ""}
+                        onChange={(event) => {
+                          const nextId = event.target.value;
+                          updateSlotById(slot.id, (current) => {
+                            const next = [...current.playerIds];
+                            next[0] = nextId;
+                            return { ...current, playerIds: next };
+                          });
+                        }}
+                        onBlur={() => setActivePlayerCell(null)}
+                      >
+                        <option value="">--</option>
+                        {sortedPlayers.map((player) => (
+                          <option key={player.id} value={player.id}>{player.name}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <button type="button" className={styles.cellButton} onClick={() => setActivePlayerCell({ slotId: slot.id, index: 0 })}>
+                        {(names[0] || "").toUpperCase()}
+                      </button>
+                    )}
                   </td>
                 );
               })}
@@ -612,11 +774,33 @@ export default function PreGame() {
                 if (names.length >= 3) return null;
                 return (
                   <td key={`slot-bottom-${slot.id}`} className={styles.playerCell}>
-                    <button type="button" className={styles.cellButton} onClick={() => setQuickEditSlotId(slot.id)}>
-                      {names.slice(1).map((name) => (
-                        <div key={`${slot.id}-${name}`} className={styles.nameLine}>{name.toUpperCase()}</div>
-                      ))}
-                    </button>
+                    {activePlayerCell?.slotId === slot.id && activePlayerCell?.index === 1 ? (
+                      <select
+                        autoFocus
+                        className={styles.inlineSelect}
+                        value={slot.playerIds[1] || ""}
+                        onChange={(event) => {
+                          const nextId = event.target.value;
+                          updateSlotById(slot.id, (current) => {
+                            const next = [...current.playerIds];
+                            next[1] = nextId;
+                            return { ...current, playerIds: next };
+                          });
+                        }}
+                        onBlur={() => setActivePlayerCell(null)}
+                      >
+                        <option value="">--</option>
+                        {sortedPlayers.map((player) => (
+                          <option key={player.id} value={player.id}>{player.name}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <button type="button" className={styles.cellButton} onClick={() => setActivePlayerCell({ slotId: slot.id, index: 1 })}>
+                        {names.slice(1).map((name) => (
+                          <div key={`${slot.id}-${name}`} className={styles.nameLine}>{name.toUpperCase()}</div>
+                        ))}
+                      </button>
+                    )}
                   </td>
                 );
               })}
@@ -830,25 +1014,39 @@ export default function PreGame() {
                   </div>
                   <div className={styles.slotPlayerColumn}>
                     {slot.playerIds.map((playerId, playerIndex) => (
-                      <select
-                        key={`${slot.id}-${playerIndex}`}
-                        className={styles.selectInput}
-                        value={playerId}
-                        onChange={(event) => {
-                          const nextId = event.target.value;
-                          setSlotDrafts((current) => current.map((candidate, candidateIndex) => {
+                      <div key={`${slot.id}-${playerIndex}`} className={styles.slotPlayerRow}>
+                        <select
+                          className={styles.selectInput}
+                          value={playerId}
+                          onChange={(event) => {
+                            const nextId = event.target.value;
+                            setSlotDrafts((current) => current.map((candidate, candidateIndex) => {
+                              if (candidateIndex !== index) return candidate;
+                              const nextPlayerIds = [...candidate.playerIds];
+                              nextPlayerIds[playerIndex] = nextId;
+                              return { ...candidate, playerIds: nextPlayerIds };
+                            }));
+                          }}
+                        >
+                          <option value="">--</option>
+                          {sortedPlayers.map((player) => (
+                            <option key={player.id} value={player.id}>{player.name}</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className={styles.slotClearPlayerButton}
+                          onClick={() => setSlotDrafts((current) => current.map((candidate, candidateIndex) => {
                             if (candidateIndex !== index) return candidate;
                             const nextPlayerIds = [...candidate.playerIds];
-                            nextPlayerIds[playerIndex] = nextId;
+                            nextPlayerIds[playerIndex] = "";
                             return { ...candidate, playerIds: nextPlayerIds };
-                          }));
-                        }}
-                      >
-                        <option value="">--</option>
-                        {sortedPlayers.map((player) => (
-                          <option key={player.id} value={player.id}>{player.name}</option>
-                        ))}
-                      </select>
+                          }))}
+                          aria-label="Clear selected player"
+                        >
+                          ✕
+                        </button>
+                      </div>
                     ))}
                   </div>
                   <button
@@ -893,59 +1091,6 @@ export default function PreGame() {
             <button type="button" className={styles.doneButton} onClick={() => handleExport("landscape")}>Landscape</button>
             <button type="button" className={styles.doneButton} onClick={() => handleExport("was")}>WAS</button>
             <button type="button" className={styles.modalCancel} onClick={() => setExportOpen(false)}>Cancel</button>
-          </div>
-        </div>
-      )}
-
-      {quickEditSlot && (
-        <div className={styles.modalOverlay} onClick={() => setQuickEditSlotId(null)}>
-          <div className={styles.quickEditModal} onClick={(event) => event.stopPropagation()}>
-            <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>Edit Slot</h2>
-              <button type="button" className={styles.modalClose} onClick={() => setQuickEditSlotId(null)}>Close</button>
-            </div>
-            <div className={styles.slotTimeColumn}>
-              <div className={styles.slotHeaderTime}>Time</div>
-              <input
-                className={styles.timeInput}
-                value={quickEditSlot.time}
-                onChange={(event) => updateSlotById(quickEditSlot.id, (slot) => ({ ...slot, time: event.target.value }))}
-              />
-            </div>
-            <div className={styles.slotPlayerColumn}>
-              {quickEditSlot.playerIds.map((playerId, index) => (
-                <select
-                  key={`${quickEditSlot.id}-${index}`}
-                  className={styles.selectInput}
-                  value={playerId}
-                  onChange={(event) => {
-                    const nextId = event.target.value;
-                    updateSlotById(quickEditSlot.id, (slot) => {
-                      const next = [...slot.playerIds];
-                      next[index] = nextId;
-                      return { ...slot, playerIds: next };
-                    });
-                  }}
-                >
-                  <option value="">--</option>
-                  {sortedPlayers.map((player) => (
-                    <option key={player.id} value={player.id}>{player.name}</option>
-                  ))}
-                </select>
-              ))}
-            </div>
-            <div className={styles.quickEditActions}>
-              <button
-                type="button"
-                className={styles.iconButton}
-                onClick={() => updateSlotById(quickEditSlot.id, (slot) => (
-                  slot.playerIds.length >= 3 ? slot : { ...slot, playerIds: [...slot.playerIds, ""] }
-                ))}
-              >
-                +
-              </button>
-              <button type="button" className={styles.doneButton} onClick={() => setQuickEditSlotId(null)}>Done</button>
-            </div>
           </div>
         </div>
       )}

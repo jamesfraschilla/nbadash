@@ -96,6 +96,12 @@
   padding: 0;
 }
 
+.inlinePlayerEditor {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+}
+
 .cellButton {
   width: 100%;
   min-height: 82px;
@@ -174,7 +180,7 @@
 }
 
 .modal {
-  width: min(980px, 100%);
+  width: min(720px, 100%);
   background: var(--bg);
   border: 1px solid var(--border);
   color: var(--text);
@@ -217,7 +223,7 @@
 
 .gridHeader {
   display: grid;
-  grid-template-columns: 1.2fr 1fr 130px;
+  grid-template-columns: 1.2fr 1fr 104px;
   gap: 10px;
   font-size: 16px;
   margin-bottom: 8px;
@@ -230,7 +236,7 @@
 
 .playerRow {
   display: grid;
-  grid-template-columns: 1.2fr 1fr 130px;
+  grid-template-columns: 1.2fr 1fr 104px;
   gap: 10px;
 }
 
@@ -245,6 +251,17 @@
   font-size: 14px;
   height: 32px;
   padding: 4px 8px;
+}
+
+.inlineSelect {
+  width: 100%;
+  height: 42px;
+  border: 1px solid var(--border);
+  background: #d3d3d3;
+  color: #000000;
+  font-family: "DIN", sans-serif;
+  font-size: 16px;
+  padding: 2px 8px;
 }
 
 .readCell {
@@ -340,25 +357,32 @@
   cursor: pointer;
 }
 
-.quickEditModal {
-  width: min(460px, 100%);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  color: var(--text);
-  padding: 14px;
-  display: grid;
-  gap: 10px;
-}
-
-.quickEditActions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
 .slotPlayerColumn {
   display: grid;
   gap: 4px;
+}
+
+.slotPlayerRow {
+  display: grid;
+  grid-template-columns: 1fr 16px;
+  gap: 6px;
+  align-items: center;
+}
+
+.slotClearPlayerButton {
+  border: none;
+  background: transparent;
+  color: #ff0000;
+  font-family: "DIN", sans-serif;
+  font-size: 12px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
 }
 
 .modalFooter {
