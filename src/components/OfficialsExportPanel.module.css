@@ -3,16 +3,19 @@
   --calls-total-width: 90px;
   --official-column-width: 132px;
   margin: 24px auto 0;
-  padding: 18px 0;
+  padding: 18px 20px;
   border: 1px solid var(--border);
   background: var(--panel);
-  position: relative;
-  width: min(100%, 1220px);
+  display: grid;
+  grid-template-columns: 76px auto;
+  gap: 18px;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
 }
 
 .contentColumn {
   width: calc(var(--calls-team-width) + var(--calls-total-width) + (var(--official-column-width) * 3));
-  margin: 0 auto;
   min-width: 0;
 }
 
@@ -103,10 +106,6 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  position: absolute;
-  right: 20px;
-  top: 50%;
-  transform: translateY(-50%);
 }
 
 .exportButton {
@@ -159,6 +158,7 @@
 
 @media (max-width: 768px) {
   .container {
+    grid-template-columns: 1fr;
     padding: 16px;
   }
 
@@ -172,8 +172,6 @@
   }
 
   .buttonColumn {
-    position: static;
-    transform: none;
     width: 100%;
     max-width: 240px;
     margin: 12px auto 0;

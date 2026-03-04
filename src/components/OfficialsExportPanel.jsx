@@ -648,23 +648,6 @@ export default function OfficialsExportPanel({ officials, gameId, publishedOrder
 
   return (
     <section className={styles.container} aria-label="Tonight's officials">
-      <div className={styles.contentColumn}>
-        {primary.length ? (
-          <div className={styles.officialsRow}>
-            <div className={styles.rowSpacer} aria-hidden="true" />
-            <div className={styles.rowSpacer} aria-hidden="true" />
-            {primary.map((official) => (
-              <VisibleOfficialTile key={official.id} official={official} />
-            ))}
-          </div>
-        ) : (
-          <div className={styles.emptyState}>Officials not posted.</div>
-        )}
-        {alternates.length ? (
-          <div className={styles.footer}>{`Alternate: ${alternates.join(", ")}`}</div>
-        ) : null}
-      </div>
-
       <div className={styles.buttonColumn}>
         {["portrait", "landscape", "was"].map((format) => {
           const busy = busyFormat === format;
@@ -680,6 +663,23 @@ export default function OfficialsExportPanel({ officials, gameId, publishedOrder
             </button>
           );
         })}
+      </div>
+
+      <div className={styles.contentColumn}>
+        {primary.length ? (
+          <div className={styles.officialsRow}>
+            <div className={styles.rowSpacer} aria-hidden="true" />
+            <div className={styles.rowSpacer} aria-hidden="true" />
+            {primary.map((official) => (
+              <VisibleOfficialTile key={official.id} official={official} />
+            ))}
+          </div>
+        ) : (
+          <div className={styles.emptyState}>Officials not posted.</div>
+        )}
+        {alternates.length ? (
+          <div className={styles.footer}>{`Alternate: ${alternates.join(", ")}`}</div>
+        ) : null}
       </div>
     </section>
   );
