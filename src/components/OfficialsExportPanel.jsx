@@ -655,22 +655,24 @@ export default function OfficialsExportPanel({ officials, gameId, publishedOrder
 
   return (
     <section className={styles.container} aria-label="Tonight's officials">
-      <div className={styles.buttonColumn}>
-        {["portrait", "landscape", "was"].map((format) => {
-          const busy = busyFormat === format;
-          return (
-            <button
-              key={format}
-              type="button"
-              className={styles.exportButton}
-              onClick={() => handleExport(format)}
-              disabled={Boolean(busyFormat)}
-            >
-              {busy ? <Spinner /> : EXPORT_SPECS[format].label}
-            </button>
-          );
-        })}
-      </div>
+      {primary.length ? (
+        <div className={styles.buttonColumn}>
+          {["portrait", "landscape", "was"].map((format) => {
+            const busy = busyFormat === format;
+            return (
+              <button
+                key={format}
+                type="button"
+                className={styles.exportButton}
+                onClick={() => handleExport(format)}
+                disabled={Boolean(busyFormat)}
+              >
+                {busy ? <Spinner /> : EXPORT_SPECS[format].label}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
 
       <div className={styles.contentColumn}>
         {primary.length ? (
