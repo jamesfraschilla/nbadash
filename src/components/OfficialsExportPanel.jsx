@@ -433,7 +433,7 @@ function drawPortraitTemplate(primaryOfficials, alternates, imageMap, themeMode,
 
       if (official.roleKey === "crewChief") {
         currentY += 2;
-        drawCenteredText(context, "Crew Chief", padding.left, currentY, contentWidth, {
+        drawCenteredText(context, "CREW CHIEF", padding.left, currentY, contentWidth, {
           size: 11,
           family: textFamily,
           weight: 600,
@@ -548,7 +548,7 @@ function drawLandscapeTemplate(primaryOfficials, alternates, imageMap, themeMode
 
       if (official.roleKey === "crewChief") {
         textY += 4;
-        drawCenteredText(context, "Crew Chief", tileX, textY, tileWidth, {
+        drawCenteredText(context, "CREW CHIEF", tileX, textY, tileWidth, {
           size: 10,
           family: textFamily,
           weight: 600,
