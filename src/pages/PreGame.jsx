@@ -443,6 +443,7 @@ function drawPortraitExport(slots, playerById, headerLineTwo, logoImage, themeMo
     if (displays[0]) {
       drawCenteredTextMiddle(context, displays[0].toUpperCase(), x1, y, playerColWidth, rowHeight, 24, colors.cellText, 700);
     }
+    const rest = displays.slice(1).filter(Boolean);
     if (rest.length) {
       const restText = rest.join("  ").toUpperCase();
       drawCenteredTextMiddle(context, restText, x2, y, playerColWidth, rowHeight, 24, colors.cellText, 700);
@@ -529,6 +530,8 @@ export default function PreGame() {
   const [inlineTimeSlotId, setInlineTimeSlotId] = useState(null);
   const [inlineTimeDraft, setInlineTimeDraft] = useState("");
   const [activePlayerCell, setActivePlayerCell] = useState(null);
+  const [playersHydrated, setPlayersHydrated] = useState(false);
+  const [slotsHydrated, setSlotsHydrated] = useState(false);
 
   const { data: remotePlayers } = useQuery({
     queryKey: ["pregame-players-remote"],
@@ -559,20 +562,31 @@ export default function PreGame() {
   ), [game]);
 
   useEffect(() => {
-    if (!remotePlayers?.length) return;
-    setPlayers(remotePlayers);
-  }, [remotePlayers]);
+    setPlayersHydrated(false);
+    setSlotsHydrated(false);
+  }, [gameId]);
 
   useEffect(() => {
+    if (playersHydrated) return;
+    if (remotePlayers?.length) {
+      setPlayers(remotePlayers);
+    }
+    setPlayersHydrated(true);
+  }, [playersHydrated, remotePlayers]);
+
+  useEffect(() => {
+    if (slotsHydrated) return;
     if (!gameId || !game) return;
     if (remoteSchedule?.length) {
       setSlots(remoteSchedule);
+      setSlotsHydrated(true);
       return;
     }
 
     const savedLocal = loadSlots(gameId);
     if (savedLocal?.length) {
       setSlots(savedLocal);
+      setSlotsHydrated(true);
     } else {
       const template = remoteTemplate || loadSlotTemplate();
       if (template) {
@@ -580,8 +594,9 @@ export default function PreGame() {
       } else {
         setSlots(buildDefaultSlots(game));
       }
+      setSlotsHydrated(true);
     }
-  }, [gameId, game, remoteSchedule, remoteTemplate]);
+  }, [gameId, game, remoteSchedule, remoteTemplate, slotsHydrated]);
 
   useEffect(() => {
     persistPlayers(players);
@@ -776,6 +791,7 @@ export default function PreGame() {
                                   next[playerIndex] = nextId;
                                   return { ...current, playerIds: next };
                                 });
+                                setActivePlayerCell(null);
                               }}
                               onBlur={() => setActivePlayerCell(null)}
                             >
@@ -811,6 +827,7 @@ export default function PreGame() {
                             next[0] = nextId;
                             return { ...current, playerIds: next };
                           });
+                          setActivePlayerCell(null);
                         }}
                         onBlur={() => setActivePlayerCell(null)}
                       >
@@ -846,6 +863,7 @@ export default function PreGame() {
                             next[1] = nextId;
                             return { ...current, playerIds: next };
                           });
+                          setActivePlayerCell(null);
                         }}
                         onBlur={() => setActivePlayerCell(null)}
                       >
