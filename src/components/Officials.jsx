@@ -12,7 +12,7 @@ export default function Officials({
   publishedOrder,
 }) {
   const orderedOfficials = orderOfficials(officials, publishedOrder);
-  if (!orderedOfficials.length) return null;
+  if (!orderedOfficials.length || !callsAgainst) return null;
 
   const awayTotal = callsAgainst
     ? orderedOfficials.reduce((sum, official) => sum + (callsAgainst?.[official.personId]?.[awayAbr] ?? 0), 0)
@@ -27,72 +27,60 @@ export default function Officials({
 
   return (
     <section className={styles.container}>
-      {callsAgainst ? (
-        <table className={styles.callsTable}>
-          <colgroup>
-            <col className={styles.teamCol} />
-            <col className={styles.totalCol} />
-            {orderedOfficials.map((official) => (
-              <col key={`col-${official.personId}`} className={styles.officialCol} />
-            ))}
-          </colgroup>
-          <thead>
-            <tr className={styles.headerRow}>
-              <th className={styles.headerCellLeft}>
-                <div className={styles.callsAgainstLabel}>Calls Against</div>
-              </th>
-              <th className={styles.headerCell}>Total</th>
-              {orderedOfficials.map((official) => (
-                <th key={official.personId} className={styles.headerCell} aria-hidden="true">
-                  <span className={styles.columnSpacer} />
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td className={styles.teamCell}>
-                {awayLogo ? (
-                  <img className={styles.teamLogo} src={awayLogo} alt={`${awayAlt} logo`} />
-                ) : (
-                  awayAbr
-                )}
-              </td>
-              <td className={styles.dataCell}>{awayTotal}</td>
-              {orderedOfficials.map((official) => (
-                <td key={official.personId} className={styles.dataCell}>
-                  {callsAgainst?.[official.personId]?.[awayAbr] ?? 0}
-                </td>
-              ))}
-            </tr>
-            <tr>
-              <td className={styles.teamCell}>
-                {homeLogo ? (
-                  <img className={styles.teamLogo} src={homeLogo} alt={`${homeAlt} logo`} />
-                ) : (
-                  homeAbr
-                )}
-              </td>
-              <td className={styles.dataCell}>{homeTotal}</td>
-              {orderedOfficials.map((official) => (
-                <td key={official.personId} className={styles.dataCell}>
-                  {callsAgainst?.[official.personId]?.[homeAbr] ?? 0}
-                </td>
-              ))}
-            </tr>
-          </tbody>
-        </table>
-      ) : (
-        <div className={styles.officialsStack}>
+      <table className={styles.callsTable}>
+        <colgroup>
+          <col className={styles.teamCol} />
+          <col className={styles.totalCol} />
           {orderedOfficials.map((official) => (
-            <div key={official.personId} className={styles.officialItem}>
-              <span className={styles.officialName}>
-                #{official.jerseyNum} {official.firstName} {official.familyName}
-              </span>
-            </div>
+            <col key={`col-${official.personId}`} className={styles.officialCol} />
           ))}
-        </div>
-      )}
+        </colgroup>
+        <thead>
+          <tr className={styles.headerRow}>
+            <th className={styles.headerCellLeft}>
+              <div className={styles.callsAgainstLabel}>Calls Against</div>
+            </th>
+            <th className={styles.headerCell}>Total</th>
+            {orderedOfficials.map((official) => (
+              <th key={official.personId} className={styles.headerCell} aria-hidden="true">
+                <span className={styles.columnSpacer} />
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td className={styles.teamCell}>
+              {awayLogo ? (
+                <img className={styles.teamLogo} src={awayLogo} alt={`${awayAlt} logo`} />
+              ) : (
+                awayAbr
+              )}
+            </td>
+            <td className={styles.dataCell}>{awayTotal}</td>
+            {orderedOfficials.map((official) => (
+              <td key={official.personId} className={styles.dataCell}>
+                {callsAgainst?.[official.personId]?.[awayAbr] ?? 0}
+              </td>
+            ))}
+          </tr>
+          <tr>
+            <td className={styles.teamCell}>
+              {homeLogo ? (
+                <img className={styles.teamLogo} src={homeLogo} alt={`${homeAlt} logo`} />
+              ) : (
+                homeAbr
+              )}
+            </td>
+            <td className={styles.dataCell}>{homeTotal}</td>
+            {orderedOfficials.map((official) => (
+              <td key={official.personId} className={styles.dataCell}>
+                {callsAgainst?.[official.personId]?.[homeAbr] ?? 0}
+              </td>
+            ))}
+          </tr>
+        </tbody>
+      </table>
     </section>
   );
 }
