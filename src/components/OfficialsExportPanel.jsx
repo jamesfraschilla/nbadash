@@ -369,7 +369,7 @@ function drawPortraitTemplate(primaryOfficials, alternates, imageMap, themeMode,
   const headerFamily = EXPORT_FONT_FAMILIES.header;
   const headerHeight = 28.8;
   const headerGap = 10;
-  const portraitTargetShift = height * 0.1;
+  const portraitTargetShift = height * 0.04;
   const tileHeights = primaryOfficials.map((official) => (
     120 + 8 + 23 + (official.roleKey === "crewChief" ? 13 : 0)
   ));
@@ -466,15 +466,14 @@ function drawLandscapeTemplate(primaryOfficials, alternates, imageMap, themeMode
   const textFamily = EXPORT_FONT_FAMILIES.body;
   const headerFamily = EXPORT_FONT_FAMILIES.header;
   const footerText = alternates.length ? `Alternate: ${alternates.join(", ")}` : "";
-  const footerHeight = footerText ? 18 : 0;
-
-  const fixedHeight = 50 + 12 + 360;
-  const remaining = height - padding.top - padding.bottom - footerHeight - fixedHeight;
-  const topSpacer = Math.max(0, remaining / 2);
-  const bottomSpacer = Math.max(0, remaining / 2);
-  const headerY = padding.top + topSpacer;
+  const footerBlockHeight = footerText ? 18 : 0;
+  const footerGap = footerText ? 6 : 0;
+  const contentBlockHeight = 50 + 12 + 360 + footerGap + footerBlockHeight;
+  const availableHeight = height - padding.top - padding.bottom;
+  const blockOffset = Math.max(0, (availableHeight - contentBlockHeight) / 2);
+  const headerY = padding.top + blockOffset;
   const rowY = headerY + 50 + 12;
-  const footerY = rowY + 360 + bottomSpacer + 6;
+  const footerY = footerText ? rowY + 360 + footerGap : null;
 
   drawCenteredText(context, "TONIGHT'S OFFICIALS", padding.left, headerY, contentWidth, {
     size: 50,
@@ -539,7 +538,7 @@ function drawLandscapeTemplate(primaryOfficials, alternates, imageMap, themeMode
     });
   }
 
-  if (footerText) {
+  if (footerText && footerY != null) {
     drawCenteredText(context, footerText, padding.left, footerY, contentWidth, {
       size: 12,
       minSize: 9,
