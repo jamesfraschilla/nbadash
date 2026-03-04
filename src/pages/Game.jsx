@@ -12,7 +12,6 @@ import TransitionStats from "../components/TransitionStats.jsx";
 import MiscStats from "../components/MiscStats.jsx";
 import CreatingDisruption from "../components/CreatingDisruption.jsx";
 import SegmentSelector from "../components/SegmentSelector.jsx";
-import { fetchPublishedOrderForOfficials } from "../officialAssignments.js";
 import rosters from "../data/rosters.json";
 import {
   aggregateSegmentStats,
@@ -546,7 +545,6 @@ export default function Game({ variant = "full" }) {
   });
 
   const { homeTeam, awayTeam, teamStats, boxScore, officials, callsAgainst } = game || {};
-  const [publishedOfficialOrder, setPublishedOfficialOrder] = useState(null);
   const timeouts = game?.timeouts;
   const isPregame = game?.gameStatus === 1;
   const challenges = game?.challenges;
@@ -575,29 +573,6 @@ export default function Game({ variant = "full" }) {
   });
 
   const [highlightedMap, setHighlightedMap] = useState(new Map());
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (!officials?.length) {
-      setPublishedOfficialOrder(null);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    setPublishedOfficialOrder(null);
-
-    fetchPublishedOrderForOfficials(officials).then((publishedOrder) => {
-      if (!cancelled) {
-        setPublishedOfficialOrder(publishedOrder);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [officials]);
 
   useEffect(() => {
     if (!highlightRows) return;
@@ -2108,11 +2083,7 @@ export default function Game({ variant = "full" }) {
           variant={variant}
         />
       </section>
-      <OfficialsExportPanel
-        officials={officials}
-        gameId={gameId}
-        publishedOrder={publishedOfficialOrder}
-      />
+      <OfficialsExportPanel officials={officials} gameId={gameId} />
       <Officials
         officials={officials}
         callsAgainst={callsAgainst}
@@ -2120,7 +2091,6 @@ export default function Game({ variant = "full" }) {
         awayAbr={awayTeam.teamTricode}
         homeTeam={homeTeam}
         awayTeam={awayTeam}
-        publishedOrder={publishedOfficialOrder}
       />
       </div>
     </div>

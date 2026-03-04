@@ -16,14 +16,14 @@ export function normalizeNameKey(value) {
 
 export function normalizeOfficialRole(rawValue) {
   const compact = String(rawValue || "").replace(/[^a-z]/gi, "").toLowerCase();
-  if (!compact) return "referee";
+  if (!compact) return null;
   if (compact.includes("alternate")) return "alternate";
   if (compact === "crewchief" || (compact.includes("crew") && compact.includes("chief"))) {
     return "crewChief";
   }
   if (compact.includes("umpire")) return "umpire";
   if (compact.includes("referee")) return "referee";
-  return "referee";
+  return null;
 }
 
 export function getOfficialDisplayName(official) {
@@ -53,30 +53,37 @@ export function isAlternateOfficial(official) {
 }
 
 export function sortOfficialsByRole(officials) {
-  return [...(officials || [])]
-    .filter((official) => !isAlternateOfficial(official))
-    .sort((a, b) => {
-      const aRole = normalizeOfficialRole(
-        a?.assignment ||
-        a?.role ||
-        a?.title ||
-        a?.position ||
-        a?.officialRole ||
-        a?.roleName
-      );
-      const bRole = normalizeOfficialRole(
-        b?.assignment ||
-        b?.role ||
-        b?.title ||
-        b?.position ||
-        b?.officialRole ||
-        b?.roleName
-      );
-      const aOrder = ROLE_ORDER[aRole] ?? 99;
-      const bOrder = ROLE_ORDER[bRole] ?? 99;
-      if (aOrder !== bOrder) return aOrder - bOrder;
-      return getOfficialDisplayName(a).localeCompare(getOfficialDisplayName(b));
+  const primary = [...(officials || [])]
+    .map((official, index) => ({
+      official,
+      index,
+      role: normalizeOfficialRole(
+        official?.assignment ||
+        official?.role ||
+        official?.title ||
+        official?.position ||
+        official?.officialRole ||
+        official?.roleName
+      ),
+    }))
+    .filter(({ official, role }) => {
+      const explicitAlternate = Boolean(official?.isAlternate || official?.alternate);
+      return !explicitAlternate && role !== "alternate";
     });
+
+  const hasExplicitRole = primary.some(({ role }) => role && role !== "alternate");
+  if (!hasExplicitRole) {
+    return primary.map(({ official }) => official);
+  }
+
+  return primary
+    .sort((a, b) => {
+      const aOrder = a.role ? (ROLE_ORDER[a.role] ?? 99) : 99;
+      const bOrder = b.role ? (ROLE_ORDER[b.role] ?? 99) : 99;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return a.index - b.index;
+    })
+    .map(({ official }) => official);
 }
 
 export function orderOfficials(officials, publishedOrder = null) {

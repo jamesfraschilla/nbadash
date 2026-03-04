@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import { normalizeOfficialRole, orderOfficials } from "../officialAssignments.js";
+import dinFontUrl from "../assets/fonts/DIN.ttf";
+import dinAltFontUrl from "../assets/fonts/DINalt.ttf";
 import styles from "./OfficialsExportPanel.module.css";
 
 const EXPORT_SPECS = {
@@ -46,6 +48,11 @@ const refereeHeadshotMap = Object.entries(IMAGE_MODULES).reduce((map, [path, url
 }, new Map());
 
 const loadedImageCache = new Map();
+let exportFontsPromise = null;
+const EXPORT_FONT_FAMILIES = {
+  header: "\"DIN\", sans-serif",
+  body: "\"DINalt\", sans-serif",
+};
 
 function normalizeNameKey(value) {
   return String(value || "")
@@ -129,12 +136,12 @@ function normalizeOfficial(official, index) {
   };
 }
 
-function buildOfficialsData(officials, publishedOrder) {
+function buildOfficialsData(officials) {
   const normalized = Array.isArray(officials)
     ? officials.map((official, index) => normalizeOfficial(official, index))
     : [];
 
-  const primary = orderOfficials(normalized, publishedOrder);
+  const primary = orderOfficials(normalized);
 
   const alternates = normalized
     .filter((official) => official.isAlternate)
@@ -164,6 +171,28 @@ function getColors(themeMode) {
     fallbackBox: "#E8E8E8",
     fallbackText: "#000000",
   };
+}
+
+function ensureExportFonts() {
+  if (typeof document === "undefined" || typeof FontFace === "undefined") {
+    return Promise.resolve();
+  }
+  if (exportFontsPromise) return exportFontsPromise;
+
+  const loadFont = async (family, url) => {
+    const alreadyLoaded = Array.from(document.fonts || []).some((fontFace) => fontFace.family === family);
+    if (alreadyLoaded) return;
+    const fontFace = new FontFace(family, `url(${url})`);
+    await fontFace.load();
+    document.fonts.add(fontFace);
+  };
+
+  exportFontsPromise = Promise.all([
+    loadFont("DIN", dinFontUrl),
+    loadFont("DINalt", dinAltFontUrl),
+  ]).then(() => undefined).catch(() => undefined);
+
+  return exportFontsPromise;
 }
 
 function makeCanvas(width, height, background) {
@@ -301,7 +330,7 @@ function drawFallbackAvatar(context, x, y, size, radius, fullName) {
   setCanvasFont(context, {
     weight: 700,
     size: Math.max(18, size * 0.28),
-    family: "\"DINalt\", \"Roboto Condensed\", sans-serif",
+    family: EXPORT_FONT_FAMILIES.body,
   });
   context.fillText(getInitials(fullName), x + size / 2, y + size / 2);
 }
@@ -346,8 +375,8 @@ function drawPortraitTemplate(primaryOfficials, alternates, imageMap, themeMode,
 
   const padding = { left: 24, top: 24, right: 24, bottom: 18 };
   const contentWidth = width - padding.left - padding.right;
-  const textFamily = "\"DINalt\", \"Roboto Condensed\", sans-serif";
-  const headerFamily = "\"DIN\", \"Roboto Condensed\", sans-serif";
+  const textFamily = EXPORT_FONT_FAMILIES.body;
+  const headerFamily = EXPORT_FONT_FAMILIES.header;
 
   drawCenteredText(context, "TONIGHT'S OFFICIALS", padding.left, padding.top, contentWidth, {
     size: 28.8,
@@ -430,8 +459,8 @@ function drawLandscapeTemplate(primaryOfficials, alternates, imageMap, themeMode
 
   const padding = { left: 22, top: 12, right: 22, bottom: 18 };
   const contentWidth = width - padding.left - padding.right;
-  const textFamily = "\"DINalt\", \"Roboto Condensed\", sans-serif";
-  const headerFamily = "\"DIN\", \"Roboto Condensed\", sans-serif";
+  const textFamily = EXPORT_FONT_FAMILIES.body;
+  const headerFamily = EXPORT_FONT_FAMILIES.header;
   const footerText = alternates.length ? `Alternate: ${alternates.join(", ")}` : "";
   const footerHeight = footerText ? 18 : 0;
 
@@ -575,10 +604,10 @@ function Spinner() {
   return <span className={styles.spinner} aria-hidden="true" />;
 }
 
-export default function OfficialsExportPanel({ officials, gameId, publishedOrder }) {
+export default function OfficialsExportPanel({ officials, gameId }) {
   const { primary, alternates } = useMemo(
-    () => buildOfficialsData(officials, publishedOrder),
-    [officials, publishedOrder]
+    () => buildOfficialsData(officials),
+    [officials]
   );
   const [busyFormat, setBusyFormat] = useState("");
 
@@ -587,6 +616,7 @@ export default function OfficialsExportPanel({ officials, gameId, publishedOrder
     setBusyFormat(format);
 
     try {
+      await ensureExportFonts();
       if (document.fonts?.ready) {
         await document.fonts.ready;
       }
