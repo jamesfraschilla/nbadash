@@ -468,12 +468,22 @@ function drawLandscapeTemplate(primaryOfficials, alternates, imageMap, themeMode
   const footerText = alternates.length ? `Alternate: ${alternates.join(", ")}` : "";
   const footerBlockHeight = footerText ? 18 : 0;
   const footerGap = footerText ? 6 : 0;
-  const contentBlockHeight = 50 + 12 + 360 + footerGap + footerBlockHeight;
+  const rowAreaHeight = 360;
+  const maxTileContentHeight = primaryOfficials.length
+    ? Math.max(
+      ...primaryOfficials.map((official) => (
+        170 + 10 + 23 + 15 + (official.roleKey === "crewChief" ? 14 : 0)
+      ))
+    )
+    : 0;
+  const contentBlockHeight = 50 + 12 + rowAreaHeight + footerGap + footerBlockHeight;
   const availableHeight = height - padding.top - padding.bottom;
   const blockOffset = Math.max(0, (availableHeight - contentBlockHeight) / 2);
   const headerY = padding.top + blockOffset;
-  const rowY = headerY + 50 + 12;
-  const footerY = footerText ? rowY + 360 + footerGap : null;
+  const rowAreaY = headerY + 50 + 12;
+  const rowContentOffset = Math.max(0, (rowAreaHeight - maxTileContentHeight) / 2);
+  const rowY = rowAreaY + rowContentOffset;
+  const footerY = footerText ? rowAreaY + rowAreaHeight + footerGap : null;
 
   drawCenteredText(context, "TONIGHT'S OFFICIALS", padding.left, headerY, contentWidth, {
     size: 50,
@@ -491,7 +501,7 @@ function drawLandscapeTemplate(primaryOfficials, alternates, imageMap, themeMode
       size: 20,
       family: textFamily,
     });
-    context.fillText("Officials not posted.", width / 2, rowY + 180);
+    context.fillText("Officials not posted.", width / 2, rowAreaY + (rowAreaHeight / 2));
   } else {
     const count = primaryOfficials.length;
     const gap = 12;
