@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import styles from "./OfficialsExportPanel.module.css";
 
 const IMAGE_MODULES = import.meta.glob(
@@ -50,7 +50,7 @@ const refereeHeadshotMap = Object.entries(IMAGE_MODULES).reduce((map, [path, url
   return map;
 }, new Map());
 
-const imageDataUrlCache = new Map();
+const loadedImageCache = new Map();
 
 function normalizeNameKey(value) {
   return String(value || "")
@@ -78,11 +78,11 @@ function splitOfficialName(official) {
   const explicitFirst = String(official?.firstName || "").trim();
   const explicitLast = String(official?.familyName || "").trim();
   if (explicitFirst || explicitLast) {
-    const fallback = `${explicitFirst} ${explicitLast}`.trim();
+    const fullName = `${explicitFirst} ${explicitLast}`.trim();
     return {
-      firstName: explicitFirst || fallback,
-      lastName: explicitLast || fallback,
-      fullName: fallback,
+      firstName: explicitFirst || fullName,
+      lastName: explicitLast || fullName,
+      fullName,
     };
   }
 
@@ -102,8 +102,7 @@ function splitOfficialName(official) {
 }
 
 function normalizeRole(rawValue) {
-  const raw = String(rawValue || "").trim();
-  const compact = raw.replace(/[^a-z]/gi, "").toLowerCase();
+  const compact = String(rawValue || "").replace(/[^a-z]/gi, "").toLowerCase();
   if (!compact) return "referee";
   if (compact.includes("alternate")) return "alternate";
   if (compact === "crewchief" || (compact.includes("crew") && compact.includes("chief"))) {
@@ -125,27 +124,24 @@ function normalizeOfficial(official, index) {
     official?.officialRole ||
     official?.roleName
   );
-  const isAlternate = Boolean(official?.isAlternate || official?.alternate) || role === "alternate";
-  const jerseyNumber = String(
-    official?.jerseyNum ??
-    official?.jerseyNumber ??
-    official?.number ??
-    official?.shirtNumber ??
-    ""
-  ).trim();
-  const headshotUrl = refereeHeadshotMap.get(normalizeNameKey(fullName)) || null;
 
   return {
     id: official?.personId || official?.officialId || `${fullName || "official"}-${index}`,
+    fullName,
     firstName: nameParts.firstName,
     lastName: nameParts.lastName,
-    fullName,
     firstUpper: nameParts.firstName.toUpperCase(),
     lastUpper: nameParts.lastName.toUpperCase(),
-    jerseyNumber,
+    jerseyNumber: String(
+      official?.jerseyNum ??
+      official?.jerseyNumber ??
+      official?.number ??
+      official?.shirtNumber ??
+      ""
+    ).trim(),
     role,
-    isAlternate,
-    headshotUrl,
+    isAlternate: Boolean(official?.isAlternate || official?.alternate) || role === "alternate",
+    headshotUrl: refereeHeadshotMap.get(normalizeNameKey(fullName)) || null,
   };
 }
 
@@ -183,108 +179,17 @@ function getThemeMode() {
   return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
 }
 
-function waitForFrame() {
-  return new Promise((resolve) => {
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(resolve);
-    });
-  });
+function getColors(themeMode) {
+  const dark = themeMode === "dark";
+  return {
+    background: dark ? "#000000" : "#ffffff",
+    text: dark ? "#ffffff" : "#000000",
+    fallbackBox: "#E8E8E8",
+    fallbackText: "#000000",
+  };
 }
 
-function loadImage(src) {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.decoding = "async";
-    image.onload = () => resolve(image);
-    image.onerror = reject;
-    image.src = src;
-  });
-}
-
-function blobToDataUrl(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-}
-
-async function assetUrlToDataUrl(url) {
-  if (!url) return null;
-  if (url.startsWith("data:")) return url;
-  if (imageDataUrlCache.has(url)) return imageDataUrlCache.get(url);
-  const promise = fetch(url)
-    .then((response) => {
-      if (!response.ok) {
-        throw new Error(`Failed to load asset: ${response.status}`);
-      }
-      return response.blob();
-    })
-    .then(blobToDataUrl)
-    .catch(() => null);
-  imageDataUrlCache.set(url, promise);
-  return promise;
-}
-
-async function inlineImages(cloneRoot) {
-  const images = Array.from(cloneRoot.querySelectorAll("img"));
-  await Promise.all(
-    images.map(async (image) => {
-      const currentSrc = image.getAttribute("src") || "";
-      const dataUrl = await assetUrlToDataUrl(currentSrc);
-      if (dataUrl) {
-        image.setAttribute("src", dataUrl);
-      } else {
-        image.remove();
-      }
-    })
-  );
-}
-
-async function renderNodeToCanvas(node, width, height) {
-  if (!node) {
-    throw new Error("Missing export template.");
-  }
-
-  const clone = node.cloneNode(true);
-  clone.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
-  await inlineImages(clone);
-
-  const markup = clone.outerHTML;
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-      <foreignObject x="0" y="0" width="100%" height="100%">${markup}</foreignObject>
-    </svg>
-  `;
-  const svgBlob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
-  const url = URL.createObjectURL(svgBlob);
-
-  try {
-    const image = await loadImage(url);
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const context = canvas.getContext("2d");
-    context.drawImage(image, 0, 0, width, height);
-    return canvas;
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
-
-function drawContain(context, source, targetX, targetY, targetWidth, targetHeight) {
-  const width = source.width || source.naturalWidth;
-  const height = source.height || source.naturalHeight;
-  const scale = Math.min(targetWidth / width, targetHeight / height);
-  const drawWidth = width * scale;
-  const drawHeight = height * scale;
-  const x = targetX + (targetWidth - drawWidth) / 2;
-  const y = targetY + (targetHeight - drawHeight) / 2;
-  context.drawImage(source, x, y, drawWidth, drawHeight);
-}
-
-function makeOutputCanvas(width, height, background) {
+function makeCanvas(width, height, background) {
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -301,15 +206,49 @@ function downloadCanvas(canvas, fileName) {
   link.click();
 }
 
-function getTextColors(themeMode) {
-  const dark = themeMode === "dark";
-  return {
-    background: dark ? "#000000" : "#ffffff",
-    text: dark ? "#ffffff" : "#000000",
-    mutedText: dark ? "#ffffff" : "#000000",
-    fallbackBox: "#E8E8E8",
-    fallbackText: "#000000",
-  };
+function drawContain(context, source, targetX, targetY, targetWidth, targetHeight) {
+  const sourceWidth = source.width || source.naturalWidth;
+  const sourceHeight = source.height || source.naturalHeight;
+  const scale = Math.min(targetWidth / sourceWidth, targetHeight / sourceHeight);
+  const drawWidth = sourceWidth * scale;
+  const drawHeight = sourceHeight * scale;
+  const drawX = targetX + (targetWidth - drawWidth) / 2;
+  const drawY = targetY + (targetHeight - drawHeight) / 2;
+  context.drawImage(source, drawX, drawY, drawWidth, drawHeight);
+}
+
+function setCanvasFont(context, { weight, size, family }) {
+  context.font = `${weight} ${size}px ${family}`;
+}
+
+function fitTextSize(context, text, maxWidth, baseSize, minSize, family, weight) {
+  let size = baseSize;
+  while (size > minSize) {
+    setCanvasFont(context, { weight, size, family });
+    if (context.measureText(text).width <= maxWidth) {
+      return size;
+    }
+    size -= 0.5;
+  }
+  return minSize;
+}
+
+function drawCenteredText(context, text, x, y, width, options) {
+  const {
+    size,
+    minSize = size,
+    family,
+    weight,
+    color,
+    baseline = "top",
+  } = options;
+  const finalSize = fitTextSize(context, text, width, size, minSize, family, weight);
+  setCanvasFont(context, { weight, size: finalSize, family });
+  context.fillStyle = color;
+  context.textAlign = "center";
+  context.textBaseline = baseline;
+  context.fillText(text, x + width / 2, y);
+  return finalSize;
 }
 
 function getPortraitNameText(official) {
@@ -317,332 +256,311 @@ function getPortraitNameText(official) {
   return `${prefix}${official.firstUpper} ${official.lastUpper}`.trim();
 }
 
-function fitFontSize(text, baseSize, maxChars) {
-  const count = String(text || "").length;
-  if (!count || count <= maxChars) return baseSize;
-  const scale = Math.max(0.68, maxChars / count);
-  return Number((baseSize * scale).toFixed(2));
+function getVisibleNameText(official) {
+  const prefix = official.jerseyNumber ? `#${official.jerseyNumber} ` : "";
+  const fullName = [official.firstName, official.lastName].filter(Boolean).join(" ");
+  return `${prefix}${fullName}`.trim();
 }
 
-function getAvatarImageStyle(official, variant) {
-  if (official.fullName !== "Eric Lewis") {
-    return {
-      width: "100%",
-      height: "100%",
-      objectFit: "cover",
-      objectPosition: "center top",
-      display: "block",
-    };
-  }
-
-  const shift = variant === "landscape" ? 8.5 : 6;
-  return {
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-    objectPosition: "center top",
-    display: "block",
-    transform: `translateY(${shift}px) scale(1.12)`,
-    transformOrigin: "center top",
-  };
+function getLandscapeLineOne(official) {
+  return `${official.jerseyNumber ? `#${official.jerseyNumber} ` : ""}${official.firstUpper}`.trim();
 }
 
-function renderAvatar(official, size, radius, variant) {
-  const frameStyle = {
-    width: `${size}px`,
-    height: `${size}px`,
-    borderRadius: `${radius}px`,
-    overflow: "hidden",
-    background: "#E8E8E8",
-    flexShrink: 0,
-    position: "relative",
-  };
+function loadImage(url) {
+  if (!url) return Promise.resolve(null);
+  if (loadedImageCache.has(url)) return loadedImageCache.get(url);
 
-  const fallback = (
-    <div
-      style={{
-        position: "absolute",
-        inset: 0,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        color: "#000000",
-        fontFamily: "\"DINalt\", \"Roboto Condensed\", sans-serif",
-        fontWeight: 700,
-        fontSize: `${Math.max(18, size * 0.28)}px`,
-        lineHeight: 1,
-      }}
-    >
-      {getInitials(official.fullName)}
-    </div>
+  const promise = new Promise((resolve) => {
+    const image = new Image();
+    image.decoding = "async";
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
+    image.src = url;
+  });
+
+  loadedImageCache.set(url, promise);
+  return promise;
+}
+
+async function buildLoadedImageMap(officials) {
+  const entries = await Promise.all(
+    officials.map(async (official) => [official.id, await loadImage(official.headshotUrl)])
   );
-
-  if (official.headshotUrl) {
-    return (
-      <div style={frameStyle}>
-        {fallback}
-        <img
-          alt=""
-          src={official.headshotUrl}
-          style={getAvatarImageStyle(official, variant)}
-        />
-      </div>
-    );
-  }
-
-  return <div style={frameStyle}>{fallback}</div>;
+  return new Map(entries);
 }
 
-function ExportTemplate({ variant, primaryOfficials, alternates, themeMode }) {
-  const colors = getTextColors(themeMode);
-  const isPortrait = variant === "portrait";
-  const width = isPortrait ? 384 : 660;
-  const height = isPortrait ? 648 : 510;
+function drawRoundedRectPath(context, x, y, width, height, radius) {
+  context.beginPath();
+  context.moveTo(x + radius, y);
+  context.lineTo(x + width - radius, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + radius);
+  context.lineTo(x + width, y + height - radius);
+  context.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  context.lineTo(x + radius, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - radius);
+  context.lineTo(x, y + radius);
+  context.quadraticCurveTo(x, y, x + radius, y);
+  context.closePath();
+}
 
-  return (
-    <div
-      style={{
-        width: `${width}px`,
-        height: `${height}px`,
-        padding: isPortrait ? "24px 24px 18px" : "12px 22px 18px",
-        background: colors.background,
+function drawFallbackAvatar(context, x, y, size, radius, fullName) {
+  drawRoundedRectPath(context, x, y, size, size, radius);
+  context.fillStyle = "#E8E8E8";
+  context.fill();
+
+  context.fillStyle = "#000000";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  setCanvasFont(context, {
+    weight: 700,
+    size: Math.max(18, size * 0.28),
+    family: "\"DINalt\", \"Roboto Condensed\", sans-serif",
+  });
+  context.fillText(getInitials(fullName), x + size / 2, y + size / 2);
+}
+
+function drawAvatar(context, image, official, x, y, size, radius, variant) {
+  if (!image) {
+    drawFallbackAvatar(context, x, y, size, radius, official.fullName);
+    return;
+  }
+
+  const sourceWidth = image.naturalWidth || image.width;
+  const sourceHeight = image.naturalHeight || image.height;
+  const coverScale = Math.max(size / sourceWidth, size / sourceHeight);
+  let drawWidth = sourceWidth * coverScale;
+  let drawHeight = sourceHeight * coverScale;
+  let drawX = x + (size - drawWidth) / 2;
+  let drawY = y;
+
+  if (official.fullName === "Eric Lewis") {
+    const scale = 1.12;
+    const shift = variant === "landscape" ? 8.5 : 6;
+    drawWidth *= scale;
+    drawHeight *= scale;
+    drawX = x + (size - drawWidth) / 2;
+    drawY = y + shift;
+  }
+
+  context.save();
+  drawRoundedRectPath(context, x, y, size, size, radius);
+  context.clip();
+  context.fillStyle = "#E8E8E8";
+  context.fillRect(x, y, size, size);
+  context.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+  context.restore();
+}
+
+function drawPortraitTemplate(primaryOfficials, alternates, imageMap, themeMode) {
+  const width = EXPORT_SPECS.portrait.logicalWidth;
+  const height = EXPORT_SPECS.portrait.logicalHeight;
+  const colors = getColors(themeMode);
+  const { canvas, context } = makeCanvas(width, height, colors.background);
+
+  const padding = { left: 24, top: 24, right: 24, bottom: 18 };
+  const contentWidth = width - padding.left - padding.right;
+  const textFamily = "\"DINalt\", \"Roboto Condensed\", sans-serif";
+  const headerFamily = "\"DIN\", \"Roboto Condensed\", sans-serif";
+
+  drawCenteredText(context, "TONIGHT'S OFFICIALS", padding.left, padding.top, contentWidth, {
+    size: 28.8,
+    family: headerFamily,
+    weight: 700,
+    color: colors.text,
+  });
+
+  const footerText = alternates.length ? `Alternate: ${alternates.join(", ")}` : "";
+  const footerHeight = footerText ? 16 : 0;
+  const footerTop = height - padding.bottom - footerHeight;
+  const listTop = padding.top + 28.8 + 10;
+  const listBottom = footerTop;
+
+  if (!primaryOfficials.length) {
+    setCanvasFont(context, {
+      weight: 600,
+      size: 18,
+      family: textFamily,
+    });
+    context.fillStyle = colors.text;
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText("Officials not posted.", width / 2, listTop + (listBottom - listTop) / 2);
+  } else {
+    let currentY = listTop;
+    primaryOfficials.forEach((official, index) => {
+      const roleHeight = official.role === "crewChief" ? 11 : 0;
+      const blockHeight = 120 + 8 + 23 + (roleHeight ? 2 + roleHeight : 0);
+      const image = imageMap.get(official.id);
+
+      drawAvatar(context, image, official, (width - 120) / 2, currentY, 120, 18, "portrait");
+      currentY += 128;
+
+      drawCenteredText(context, getPortraitNameText(official), padding.left, currentY, contentWidth, {
+        size: 23,
+        minSize: 15.5,
+        family: textFamily,
+        weight: 700,
         color: colors.text,
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: isPortrait ? "flex-start" : "stretch",
-        textDecoration: "none",
-        fontFamily: "\"DINalt\", \"Roboto Condensed\", sans-serif",
-      }}
-    >
-      {isPortrait ? (
-        <>
-          <div
-            style={{
-              textAlign: "center",
-              fontFamily: "\"DIN\", \"Roboto Condensed\", sans-serif",
-              fontWeight: 700,
-              fontSize: "28.8px",
-              lineHeight: 1,
-              textDecoration: "none",
-            }}
-          >
-            TONIGHT&apos;S OFFICIALS
-          </div>
-          <div style={{ height: "10px", flexShrink: 0 }} />
-          {primaryOfficials.length ? (
-            <>
-              <div style={{ display: "flex", flexDirection: "column", gap: "18px", flexShrink: 0 }}>
-                {primaryOfficials.map((official) => {
-                  const nameLine = getPortraitNameText(official);
-                  return (
-                    <div
-                      key={`${variant}-${official.id}`}
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        textAlign: "center",
-                        textDecoration: "none",
-                      }}
-                    >
-                      {renderAvatar(official, 120, 18, variant)}
-                      <div style={{ height: "8px", flexShrink: 0 }} />
-                      <div
-                        style={{
-                          width: "100%",
-                          fontFamily: "\"DINalt\", \"Roboto Condensed\", sans-serif",
-                          fontWeight: 700,
-                          fontSize: `${fitFontSize(nameLine, 23, 18)}px`,
-                          lineHeight: 0.95,
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textDecoration: "none",
-                        }}
-                      >
-                        {nameLine}
-                      </div>
-                      {official.role === "crewChief" ? (
-                        <div
-                          style={{
-                            marginTop: "2px",
-                            fontFamily: "\"DINalt\", \"Roboto Condensed\", sans-serif",
-                            fontWeight: 600,
-                            fontSize: "11px",
-                            lineHeight: 1,
-                            textDecoration: "none",
-                          }}
-                        >
-                          Crew Chief
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-              <div style={{ flex: 1 }} />
-            </>
-          ) : (
-            <div
-              style={{
-                flex: 1,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                textAlign: "center",
-                fontSize: "18px",
-                fontWeight: 600,
-                textDecoration: "none",
-              }}
-            >
-              Officials not posted.
-            </div>
-          )}
-          {alternates.length ? (
-            <div
-              style={{
-                paddingTop: "6px",
-                fontFamily: "\"DINalt\", \"Roboto Condensed\", sans-serif",
-                fontWeight: 600,
-                fontSize: "10px",
-                lineHeight: 1,
-                textAlign: "center",
-                textDecoration: "none",
-              }}
-            >
-              {`Alternate: ${alternates.join(", ")}`}
-            </div>
-          ) : null}
-        </>
-      ) : (
-        <>
-          <div style={{ flex: 3 }} />
-          <div
-            style={{
-              textAlign: "center",
-              fontFamily: "\"DIN\", \"Roboto Condensed\", sans-serif",
-              fontWeight: 700,
-              fontSize: "50px",
-              lineHeight: 1,
-              textDecoration: "none",
-            }}
-          >
-            TONIGHT&apos;S OFFICIALS
-          </div>
-          <div style={{ height: "12px", flexShrink: 0 }} />
-          {primaryOfficials.length ? (
-            <>
-              <div
-                style={{
-                  height: "360px",
-                  display: "grid",
-                  gridTemplateColumns: `repeat(${Math.max(primaryOfficials.length, 1)}, minmax(0, 1fr))`,
-                  gap: "12px",
-                  alignItems: "start",
-                  flexShrink: 0,
-                }}
-              >
-                {primaryOfficials.map((official) => {
-                  const lineOne = `${official.jerseyNumber ? `#${official.jerseyNumber} ` : ""}${official.firstUpper}`.trim();
-                  const lineTwo = official.lastUpper;
-                  return (
-                    <div
-                      key={`${variant}-${official.id}`}
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        textAlign: "center",
-                        textDecoration: "none",
-                      }}
-                    >
-                      {renderAvatar(official, 170, 20, variant)}
-                      <div style={{ height: "10px", flexShrink: 0 }} />
-                      <div
-                        style={{
-                          width: "100%",
-                          fontFamily: "\"DINalt\", \"Roboto Condensed\", sans-serif",
-                          fontWeight: 700,
-                          fontSize: `${fitFontSize(lineOne, 23, 13)}px`,
-                          lineHeight: 0.95,
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textDecoration: "none",
-                        }}
-                      >
-                        {lineOne}
-                      </div>
-                      <div
-                        style={{
-                          width: "100%",
-                          fontFamily: "\"DINalt\", \"Roboto Condensed\", sans-serif",
-                          fontWeight: 600,
-                          fontSize: `${fitFontSize(lineTwo, 15, 14)}px`,
-                          lineHeight: 0.95,
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textDecoration: "none",
-                        }}
-                      >
-                        {lineTwo}
-                      </div>
-                      {official.role === "crewChief" ? (
-                        <div
-                          style={{
-                            marginTop: "4px",
-                            fontFamily: "\"DINalt\", \"Roboto Condensed\", sans-serif",
-                            fontWeight: 600,
-                            fontSize: "10px",
-                            lineHeight: 1,
-                            textDecoration: "none",
-                          }}
-                        >
-                          Crew Chief
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-              <div style={{ flex: 1 }} />
-            </>
-          ) : (
-            <>
-              <div
-                style={{
-                  height: "360px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  textAlign: "center",
-                  fontSize: "20px",
-                  fontWeight: 600,
-                  textDecoration: "none",
-                }}
-              >
-                Officials not posted.
-              </div>
-              <div style={{ flex: 1 }} />
-            </>
-          )}
-          {alternates.length ? (
-            <div
-              style={{
-                paddingTop: "6px",
-                fontFamily: "\"DINalt\", \"Roboto Condensed\", sans-serif",
-                fontWeight: 600,
-                fontSize: "12px",
-                lineHeight: 1,
-                textAlign: "center",
-                textDecoration: "none",
-              }}
-            >
-              {`Alternate: ${alternates.join(", ")}`}
-            </div>
-          ) : null}
-        </>
-      )}
-    </div>
-  );
+      });
+      currentY += 23;
+
+      if (official.role === "crewChief") {
+        currentY += 2;
+        drawCenteredText(context, "Crew Chief", padding.left, currentY, contentWidth, {
+          size: 11,
+          family: textFamily,
+          weight: 600,
+          color: colors.text,
+        });
+        currentY += 11;
+      }
+
+      if (index < primaryOfficials.length - 1) {
+        const nextY = currentY + 18;
+        currentY = Math.min(nextY, listBottom - blockHeight);
+      }
+    });
+  }
+
+  if (footerText) {
+    drawCenteredText(context, footerText, padding.left, footerTop + 6, contentWidth, {
+      size: 10,
+      minSize: 8,
+      family: textFamily,
+      weight: 600,
+      color: colors.text,
+    });
+  }
+
+  return canvas;
+}
+
+function drawLandscapeTemplate(primaryOfficials, alternates, imageMap, themeMode) {
+  const width = EXPORT_SPECS.landscape.logicalWidth;
+  const height = EXPORT_SPECS.landscape.logicalHeight;
+  const colors = getColors(themeMode);
+  const { canvas, context } = makeCanvas(width, height, colors.background);
+
+  const padding = { left: 22, top: 12, right: 22, bottom: 18 };
+  const contentWidth = width - padding.left - padding.right;
+  const textFamily = "\"DINalt\", \"Roboto Condensed\", sans-serif";
+  const headerFamily = "\"DIN\", \"Roboto Condensed\", sans-serif";
+  const footerText = alternates.length ? `Alternate: ${alternates.join(", ")}` : "";
+  const footerHeight = footerText ? 18 : 0;
+
+  const fixedHeight = 50 + 12 + 360;
+  const remaining = height - padding.top - padding.bottom - footerHeight - fixedHeight;
+  const topSpacer = Math.max(0, remaining * 0.75);
+  const bottomSpacer = Math.max(0, remaining - topSpacer);
+  const headerY = padding.top + topSpacer;
+  const rowY = headerY + 50 + 12;
+  const footerY = rowY + 360 + bottomSpacer + 6;
+
+  drawCenteredText(context, "TONIGHT'S OFFICIALS", padding.left, headerY, contentWidth, {
+    size: 50,
+    family: headerFamily,
+    weight: 700,
+    color: colors.text,
+  });
+
+  if (!primaryOfficials.length) {
+    context.fillStyle = colors.text;
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    setCanvasFont(context, {
+      weight: 600,
+      size: 20,
+      family: textFamily,
+    });
+    context.fillText("Officials not posted.", width / 2, rowY + 180);
+  } else {
+    const count = primaryOfficials.length;
+    const gap = 12;
+    const tileWidth = count === 1
+      ? contentWidth
+      : (contentWidth - gap * (count - 1)) / count;
+
+    primaryOfficials.forEach((official, index) => {
+      const tileX = padding.left + index * (tileWidth + gap);
+      const avatarX = tileX + (tileWidth - 170) / 2;
+      const avatarY = rowY;
+      const image = imageMap.get(official.id);
+
+      drawAvatar(context, image, official, avatarX, avatarY, 170, 20, "landscape");
+
+      let textY = avatarY + 170 + 10;
+      drawCenteredText(context, getLandscapeLineOne(official), tileX, textY, tileWidth, {
+        size: 23,
+        minSize: 15.5,
+        family: textFamily,
+        weight: 700,
+        color: colors.text,
+      });
+      textY += 23;
+
+      drawCenteredText(context, official.lastUpper, tileX, textY, tileWidth, {
+        size: 15,
+        minSize: 11,
+        family: textFamily,
+        weight: 600,
+        color: colors.text,
+      });
+      textY += 15;
+
+      if (official.role === "crewChief") {
+        textY += 4;
+        drawCenteredText(context, "Crew Chief", tileX, textY, tileWidth, {
+          size: 10,
+          family: textFamily,
+          weight: 600,
+          color: colors.text,
+        });
+      }
+    });
+  }
+
+  if (footerText) {
+    drawCenteredText(context, footerText, padding.left, footerY, contentWidth, {
+      size: 12,
+      minSize: 9,
+      family: textFamily,
+      weight: 600,
+      color: colors.text,
+    });
+  }
+
+  return canvas;
+}
+
+async function buildExportCanvas(format, primaryOfficials, alternates, themeMode) {
+  const imageMap = await buildLoadedImageMap(primaryOfficials);
+
+  if (format === "portrait") {
+    const source = drawPortraitTemplate(primaryOfficials, alternates, imageMap, themeMode);
+    const spec = EXPORT_SPECS.portrait;
+    const colors = getColors(themeMode);
+    const { canvas, context } = makeCanvas(spec.outputWidth, spec.outputHeight, colors.background);
+    drawContain(context, source, 0, 0, spec.outputWidth, spec.outputHeight);
+    return canvas;
+  }
+
+  if (format === "landscape") {
+    const source = drawLandscapeTemplate(primaryOfficials, alternates, imageMap, themeMode);
+    const spec = EXPORT_SPECS.landscape;
+    const colors = getColors(themeMode);
+    const { canvas, context } = makeCanvas(spec.outputWidth, spec.outputHeight, colors.background);
+    drawContain(context, source, 0, 0, spec.outputWidth, spec.outputHeight);
+    return canvas;
+  }
+
+  const portraitCanvas = drawPortraitTemplate(primaryOfficials, alternates, imageMap, themeMode);
+  const spec = EXPORT_SPECS.was;
+  const colors = getColors(themeMode);
+  const { canvas, context } = makeCanvas(spec.outputWidth, spec.outputHeight, "#ffffff");
+  context.fillStyle = colors.background;
+  context.fillRect(spec.boxX, spec.boxY, spec.boxWidth, spec.boxHeight);
+  drawContain(context, portraitCanvas, spec.boxX, spec.boxY, spec.boxWidth, spec.boxHeight);
+  return canvas;
 }
 
 function VisibleOfficialTile({ official }) {
@@ -660,12 +578,8 @@ function VisibleOfficialTile({ official }) {
           <div className={styles.avatarFallback}>{getInitials(official.fullName)}</div>
         )}
       </div>
-      <div className={styles.nameText}>
-        {getPortraitNameText(official)}
-      </div>
-      {official.role === "crewChief" ? (
-        <div className={styles.roleText}>Crew Chief</div>
-      ) : null}
+      <div className={styles.nameText}>{getVisibleNameText(official)}</div>
+      {official.role === "crewChief" ? <div className={styles.roleText}>Crew Chief</div> : null}
     </div>
   );
 }
@@ -676,78 +590,19 @@ function Spinner() {
 
 export default function OfficialsExportPanel({ officials, gameId }) {
   const { primary, alternates } = useMemo(() => buildOfficialsData(officials), [officials]);
-  const portraitRef = useRef(null);
-  const landscapeRef = useRef(null);
   const [busyFormat, setBusyFormat] = useState("");
-  const [templateThemeMode, setTemplateThemeMode] = useState(() => getThemeMode());
 
   const handleExport = async (format) => {
     if (busyFormat) return;
     setBusyFormat(format);
 
     try {
-      const themeMode = getThemeMode();
-      setTemplateThemeMode(themeMode);
-
       if (document.fonts?.ready) {
         await document.fonts.ready;
       }
-      await waitForFrame();
 
-      const colors = getTextColors(themeMode);
-      const portraitSpec = EXPORT_SPECS.portrait;
-      const landscapeSpec = EXPORT_SPECS.landscape;
-
-      if (format === "portrait") {
-        const sourceCanvas = await renderNodeToCanvas(
-          portraitRef.current,
-          portraitSpec.logicalWidth,
-          portraitSpec.logicalHeight
-        );
-        const { canvas, context } = makeOutputCanvas(
-          portraitSpec.outputWidth,
-          portraitSpec.outputHeight,
-          colors.background
-        );
-        drawContain(context, sourceCanvas, 0, 0, portraitSpec.outputWidth, portraitSpec.outputHeight);
-        downloadCanvas(canvas, `officials-${gameId || "game"}-portrait.png`);
-        return;
-      }
-
-      if (format === "landscape") {
-        const sourceCanvas = await renderNodeToCanvas(
-          landscapeRef.current,
-          landscapeSpec.logicalWidth,
-          landscapeSpec.logicalHeight
-        );
-        const { canvas, context } = makeOutputCanvas(
-          landscapeSpec.outputWidth,
-          landscapeSpec.outputHeight,
-          colors.background
-        );
-        drawContain(context, sourceCanvas, 0, 0, landscapeSpec.outputWidth, landscapeSpec.outputHeight);
-        downloadCanvas(canvas, `officials-${gameId || "game"}-landscape.png`);
-        return;
-      }
-
-      const wasSpec = EXPORT_SPECS.was;
-      const sourceCanvas = await renderNodeToCanvas(
-        portraitRef.current,
-        portraitSpec.logicalWidth,
-        portraitSpec.logicalHeight
-      );
-      const { canvas, context } = makeOutputCanvas(wasSpec.outputWidth, wasSpec.outputHeight, "#ffffff");
-      context.fillStyle = colors.background;
-      context.fillRect(wasSpec.boxX, wasSpec.boxY, wasSpec.boxWidth, wasSpec.boxHeight);
-      drawContain(
-        context,
-        sourceCanvas,
-        wasSpec.boxX,
-        wasSpec.boxY,
-        wasSpec.boxWidth,
-        wasSpec.boxHeight
-      );
-      downloadCanvas(canvas, `officials-${gameId || "game"}-was.png`);
+      const canvas = await buildExportCanvas(format, primary, alternates, getThemeMode());
+      downloadCanvas(canvas, `officials-${gameId || "game"}-${format}.png`);
     } catch (error) {
       console.error("Failed to export officials graphic.", error);
     } finally {
@@ -756,60 +611,38 @@ export default function OfficialsExportPanel({ officials, gameId }) {
   };
 
   return (
-    <>
-      <section className={styles.container} aria-label="Tonight's officials">
-        <div className={styles.contentColumn}>
-          <div className={styles.header}>Tonight&apos;s Officials</div>
-          {primary.length ? (
-            <div className={styles.officialsRow}>
-              {primary.map((official) => (
-                <VisibleOfficialTile key={official.id} official={official} />
-              ))}
-            </div>
-          ) : (
-            <div className={styles.emptyState}>Officials not posted.</div>
-          )}
-          {alternates.length ? (
-            <div className={styles.footer}>{`Alternate: ${alternates.join(", ")}`}</div>
-          ) : null}
-        </div>
-        <div className={styles.buttonColumn}>
-          {["portrait", "landscape", "was"].map((format) => {
-            const spec = EXPORT_SPECS[format];
-            const busy = busyFormat === format;
-            return (
-              <button
-                key={format}
-                type="button"
-                className={styles.exportButton}
-                onClick={() => handleExport(format)}
-                disabled={Boolean(busyFormat)}
-              >
-                {busy ? <Spinner /> : spec.label}
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      <div className={styles.exportSandbox} aria-hidden="true">
-        <div ref={portraitRef}>
-          <ExportTemplate
-            variant="portrait"
-            primaryOfficials={primary}
-            alternates={alternates}
-            themeMode={templateThemeMode}
-          />
-        </div>
-        <div ref={landscapeRef}>
-          <ExportTemplate
-            variant="landscape"
-            primaryOfficials={primary}
-            alternates={alternates}
-            themeMode={templateThemeMode}
-          />
-        </div>
+    <section className={styles.container} aria-label="Tonight's officials">
+      <div className={styles.contentColumn}>
+        {primary.length ? (
+          <div className={styles.officialsRow}>
+            {primary.map((official) => (
+              <VisibleOfficialTile key={official.id} official={official} />
+            ))}
+          </div>
+        ) : (
+          <div className={styles.emptyState}>Officials not posted.</div>
+        )}
+        {alternates.length ? (
+          <div className={styles.footer}>{`Alternate: ${alternates.join(", ")}`}</div>
+        ) : null}
       </div>
-    </>
+
+      <div className={styles.buttonColumn}>
+        {["portrait", "landscape", "was"].map((format) => {
+          const busy = busyFormat === format;
+          return (
+            <button
+              key={format}
+              type="button"
+              className={styles.exportButton}
+              onClick={() => handleExport(format)}
+              disabled={Boolean(busyFormat)}
+            >
+              {busy ? <Spinner /> : EXPORT_SPECS[format].label}
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }
