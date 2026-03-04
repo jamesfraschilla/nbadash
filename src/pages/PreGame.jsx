@@ -69,14 +69,9 @@ function safeParseJson(raw, fallback) {
   }
 }
 
-function loadPlayers() {
-  if (typeof window === "undefined") return [];
-  const raw = window.localStorage.getItem(PLAYERS_STORAGE_KEY);
-  if (!raw) return [];
-  const parsed = safeParseJson(raw, []);
-  if (!Array.isArray(parsed)) return [];
+function normalizePlayers(rawPlayers) {
   return sortPlayersByLastName(
-    parsed
+    (Array.isArray(rawPlayers) ? rawPlayers : [])
       .map((player) => ({
         id: String(player?.id || crypto.randomUUID()),
         name: normalizePlayerName(player?.name || ""),
@@ -86,9 +81,66 @@ function loadPlayers() {
   );
 }
 
+function normalizeSlots(rawSlots) {
+  return (Array.isArray(rawSlots) ? rawSlots : [])
+    .map((slot) => ({
+      id: String(slot?.id || crypto.randomUUID()),
+      time: String(slot?.time || ""),
+      playerIds: Array.isArray(slot?.playerIds)
+        ? slot.playerIds.slice(0, 3).map((value) => String(value || ""))
+        : ["", ""],
+    }))
+    .filter((slot) => slot.time);
+}
+
+function normalizeTemplate(rawTemplate) {
+  const count = Math.max(1, Number(rawTemplate?.count || 8));
+  const playerGroups = Array.isArray(rawTemplate?.playerGroups)
+    ? rawTemplate.playerGroups.map((group) => (Array.isArray(group) ? group.slice(0, 3).map((value) => String(value || "")) : ["", ""]))
+    : [];
+  return { count, playerGroups };
+}
+
+function parseRemotePayload(note, key) {
+  const parsed = safeParseJson(note || "{}", null);
+  if (!parsed) return { updatedAt: 0, value: null };
+  if (Array.isArray(parsed)) return { updatedAt: 0, value: parsed };
+  if (typeof parsed !== "object") return { updatedAt: 0, value: null };
+  const updatedAt = Number(parsed.updatedAt || 0);
+  if (parsed[key] != null) return { updatedAt, value: parsed[key] };
+  if (parsed.value != null) return { updatedAt, value: parsed.value };
+  return { updatedAt, value: parsed };
+}
+
+function loadPlayers() {
+  if (typeof window === "undefined") return [];
+  const raw = window.localStorage.getItem(PLAYERS_STORAGE_KEY);
+  if (!raw) return [];
+  const parsed = safeParseJson(raw, []);
+  return normalizePlayers(Array.isArray(parsed) ? parsed : parsed?.players);
+}
+
 function persistPlayers(players) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(PLAYERS_STORAGE_KEY, JSON.stringify(sortPlayersByLastName(players)));
+  window.localStorage.setItem(PLAYERS_STORAGE_KEY, JSON.stringify({
+    updatedAt: Date.now(),
+    players: sortPlayersByLastName(players),
+  }));
+}
+
+function loadPlayersPayload() {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(PLAYERS_STORAGE_KEY);
+  if (!raw) return null;
+  const parsed = safeParseJson(raw, null);
+  if (Array.isArray(parsed)) {
+    return { updatedAt: 0, players: normalizePlayers(parsed) };
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  return {
+    updatedAt: Number(parsed.updatedAt || 0),
+    players: normalizePlayers(parsed.players),
+  };
 }
 
 function slotStorageKey(gameId) {
@@ -100,21 +152,31 @@ function loadSlots(gameId) {
   const raw = window.localStorage.getItem(slotStorageKey(gameId));
   if (!raw) return null;
   const parsed = safeParseJson(raw, null);
-  if (!Array.isArray(parsed)) return null;
-  return parsed
-    .map((slot) => ({
-      id: String(slot?.id || crypto.randomUUID()),
-      time: String(slot?.time || ""),
-      playerIds: Array.isArray(slot?.playerIds)
-        ? slot.playerIds.slice(0, 3).map((value) => String(value || ""))
-        : ["", ""],
-    }))
-    .filter((slot) => slot.time);
+  const slots = normalizeSlots(Array.isArray(parsed) ? parsed : parsed?.slots);
+  return slots.length ? slots : null;
 }
 
 function persistSlots(gameId, slots) {
   if (typeof window === "undefined" || !gameId) return;
-  window.localStorage.setItem(slotStorageKey(gameId), JSON.stringify(slots));
+  window.localStorage.setItem(slotStorageKey(gameId), JSON.stringify({
+    updatedAt: Date.now(),
+    slots,
+  }));
+}
+
+function loadSlotsPayload(gameId) {
+  if (typeof window === "undefined" || !gameId) return null;
+  const raw = window.localStorage.getItem(slotStorageKey(gameId));
+  if (!raw) return null;
+  const parsed = safeParseJson(raw, null);
+  if (Array.isArray(parsed)) {
+    return { updatedAt: 0, slots: normalizeSlots(parsed) };
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  return {
+    updatedAt: Number(parsed.updatedAt || 0),
+    slots: normalizeSlots(parsed.slots),
+  };
 }
 
 function loadSlotTemplate() {
@@ -122,21 +184,44 @@ function loadSlotTemplate() {
   const raw = window.localStorage.getItem(SLOT_TEMPLATE_KEY);
   if (!raw) return null;
   const parsed = safeParseJson(raw, null);
-  if (!parsed || typeof parsed !== "object") return null;
-  const count = Math.max(1, Number(parsed.count || 8));
-  const playerGroups = Array.isArray(parsed.playerGroups)
-    ? parsed.playerGroups.map((group) => (Array.isArray(group) ? group.slice(0, 3).map((value) => String(value || "")) : ["", ""]))
-    : [];
-  return { count, playerGroups };
+  if (Array.isArray(parsed?.playerGroups) || Number.isFinite(parsed?.count)) {
+    return normalizeTemplate(parsed);
+  }
+  if (parsed && typeof parsed === "object" && parsed.template) {
+    return normalizeTemplate(parsed.template);
+  }
+  return null;
 }
 
 function persistSlotTemplate(slots) {
   if (typeof window === "undefined") return;
-  const payload = {
-    count: Math.max(1, slots.length),
-    playerGroups: slots.map((slot) => slot.playerIds.slice(0, 3)),
-  };
-  window.localStorage.setItem(SLOT_TEMPLATE_KEY, JSON.stringify(payload));
+  window.localStorage.setItem(SLOT_TEMPLATE_KEY, JSON.stringify({
+    updatedAt: Date.now(),
+    template: {
+      count: Math.max(1, slots.length),
+      playerGroups: slots.map((slot) => slot.playerIds.slice(0, 3)),
+    },
+  }));
+}
+
+function loadTemplatePayload() {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(SLOT_TEMPLATE_KEY);
+  if (!raw) return null;
+  const parsed = safeParseJson(raw, null);
+  if (parsed && typeof parsed === "object" && parsed.template) {
+    return {
+      updatedAt: Number(parsed.updatedAt || 0),
+      template: normalizeTemplate(parsed.template),
+    };
+  }
+  if (parsed && typeof parsed === "object") {
+    return {
+      updatedAt: 0,
+      template: normalizeTemplate(parsed),
+    };
+  }
+  return null;
 }
 
 async function fetchRemotePlayers() {
@@ -148,17 +233,11 @@ async function fetchRemotePlayers() {
     .eq("action_number", PREGAME_ACTION_PLAYERS)
     .maybeSingle();
   if (error) return null;
-  const parsed = safeParseJson(data?.note || "[]", []);
-  const remotePlayers = Array.isArray(parsed) ? parsed : [];
-  return sortPlayersByLastName(
-    remotePlayers
-      .map((player) => ({
-        id: String(player?.id || crypto.randomUUID()),
-        name: normalizePlayerName(player?.name || ""),
-        display: normalizePlayerName(player?.display || ""),
-      }))
-      .filter((player) => player.name && player.display)
-  );
+  const payload = parseRemotePayload(data?.note, "players");
+  return {
+    updatedAt: payload.updatedAt,
+    players: normalizePlayers(payload.value),
+  };
 }
 
 async function fetchRemoteSchedule(gameId) {
@@ -170,17 +249,11 @@ async function fetchRemoteSchedule(gameId) {
     .eq("action_number", PREGAME_ACTION_PLAYERS)
     .maybeSingle();
   if (error) return null;
-  const parsed = safeParseJson(data?.note || "[]", []);
-  if (!Array.isArray(parsed)) return null;
-  return parsed
-    .map((slot) => ({
-      id: String(slot?.id || crypto.randomUUID()),
-      time: String(slot?.time || ""),
-      playerIds: Array.isArray(slot?.playerIds)
-        ? slot.playerIds.slice(0, 3).map((value) => String(value || ""))
-        : ["", ""],
-    }))
-    .filter((slot) => slot.time);
+  const payload = parseRemotePayload(data?.note, "slots");
+  return {
+    updatedAt: payload.updatedAt,
+    slots: normalizeSlots(payload.value),
+  };
 }
 
 async function fetchRemoteTemplate() {
@@ -192,12 +265,11 @@ async function fetchRemoteTemplate() {
     .eq("action_number", PREGAME_ACTION_TEMPLATE)
     .maybeSingle();
   if (error) return null;
-  const parsed = safeParseJson(data?.note || "{}", {});
-  const count = Math.max(1, Number(parsed?.count || 8));
-  const playerGroups = Array.isArray(parsed?.playerGroups)
-    ? parsed.playerGroups.map((group) => (Array.isArray(group) ? group.slice(0, 3).map((value) => String(value || "")) : ["", ""]))
-    : [];
-  return { count, playerGroups };
+  const payload = parseRemotePayload(data?.note, "template");
+  return {
+    updatedAt: payload.updatedAt,
+    template: normalizeTemplate(payload.value),
+  };
 }
 
 async function saveRemotePlayers(players) {
@@ -206,7 +278,10 @@ async function saveRemotePlayers(players) {
     {
       game_id: `${PREGAME_STORE_PREFIX}${GLOBAL_ROW_ID}`,
       action_number: PREGAME_ACTION_PLAYERS,
-      note: JSON.stringify(sortPlayersByLastName(players)),
+      note: JSON.stringify({
+        updatedAt: Date.now(),
+        players: sortPlayersByLastName(players),
+      }),
     },
     { onConflict: "game_id,action_number" }
   );
@@ -218,7 +293,10 @@ async function saveRemoteSchedule(gameId, slots) {
     {
       game_id: `${PREGAME_STORE_PREFIX}${gameId}`,
       action_number: PREGAME_ACTION_PLAYERS,
-      note: JSON.stringify(slots),
+      note: JSON.stringify({
+        updatedAt: Date.now(),
+        slots,
+      }),
     },
     { onConflict: "game_id,action_number" }
   );
@@ -231,8 +309,11 @@ async function saveRemoteTemplate(slots) {
       game_id: `${PREGAME_STORE_PREFIX}${GLOBAL_ROW_ID}`,
       action_number: PREGAME_ACTION_TEMPLATE,
       note: JSON.stringify({
-        count: Math.max(1, slots.length),
-        playerGroups: slots.map((slot) => slot.playerIds.slice(0, 3)),
+        updatedAt: Date.now(),
+        template: {
+          count: Math.max(1, slots.length),
+          playerGroups: slots.map((slot) => slot.playerIds.slice(0, 3)),
+        },
       }),
     },
     { onConflict: "game_id,action_number" }
@@ -533,7 +614,7 @@ export default function PreGame() {
   const [playersHydrated, setPlayersHydrated] = useState(false);
   const [slotsHydrated, setSlotsHydrated] = useState(false);
 
-  const { data: remotePlayers } = useQuery({
+  const { data: remotePlayers, isFetched: remotePlayersFetched } = useQuery({
     queryKey: ["pregame-players-remote"],
     queryFn: fetchRemotePlayers,
     enabled: Boolean(supabase),
@@ -541,7 +622,7 @@ export default function PreGame() {
     refetchInterval: 10_000,
   });
 
-  const { data: remoteSchedule } = useQuery({
+  const { data: remoteSchedule, isFetched: remoteScheduleFetched } = useQuery({
     queryKey: ["pregame-schedule-remote", gameId],
     queryFn: () => fetchRemoteSchedule(gameId),
     enabled: Boolean(supabase && gameId),
@@ -549,7 +630,7 @@ export default function PreGame() {
     refetchInterval: 10_000,
   });
 
-  const { data: remoteTemplate } = useQuery({
+  const { data: remoteTemplate, isFetched: remoteTemplateFetched } = useQuery({
     queryKey: ["pregame-template-remote"],
     queryFn: fetchRemoteTemplate,
     enabled: Boolean(supabase),
@@ -568,48 +649,78 @@ export default function PreGame() {
 
   useEffect(() => {
     if (playersHydrated) return;
-    if (remotePlayers?.length) {
-      setPlayers(remotePlayers);
+    if (supabase && !remotePlayersFetched) return;
+    const localPayload = loadPlayersPayload();
+    const localUpdatedAt = Number(localPayload?.updatedAt || 0);
+    const remoteUpdatedAt = Number(remotePlayers?.updatedAt || 0);
+
+    if (remotePlayers?.players?.length && remoteUpdatedAt >= localUpdatedAt) {
+      setPlayers(remotePlayers.players);
+    } else if (localPayload?.players?.length) {
+      setPlayers(localPayload.players);
+    } else if (remotePlayers?.players?.length) {
+      setPlayers(remotePlayers.players);
     }
     setPlayersHydrated(true);
-  }, [playersHydrated, remotePlayers]);
+  }, [playersHydrated, remotePlayers, remotePlayersFetched]);
 
   useEffect(() => {
     if (slotsHydrated) return;
     if (!gameId || !game) return;
-    const savedLocal = loadSlots(gameId);
-    if (savedLocal?.length) {
-      setSlots(savedLocal);
+    if (supabase && (!remoteScheduleFetched || !remoteTemplateFetched)) return;
+
+    const localSchedulePayload = loadSlotsPayload(gameId);
+    const localScheduleUpdatedAt = Number(localSchedulePayload?.updatedAt || 0);
+    const remoteScheduleUpdatedAt = Number(remoteSchedule?.updatedAt || 0);
+
+    if (remoteSchedule?.slots?.length && remoteScheduleUpdatedAt >= localScheduleUpdatedAt) {
+      setSlots(remoteSchedule.slots);
       setSlotsHydrated(true);
       return;
     }
 
-    if (remoteSchedule?.length) {
-      setSlots(remoteSchedule);
+    if (localSchedulePayload?.slots?.length) {
+      setSlots(localSchedulePayload.slots);
       setSlotsHydrated(true);
-    } else {
-      const template = remoteTemplate || loadSlotTemplate();
-      if (template) {
-        setSlots(buildSlotsFromTemplate(game, template));
-      } else {
-        setSlots(buildDefaultSlots(game));
-      }
-      setSlotsHydrated(true);
+      return;
     }
-  }, [gameId, game, remoteSchedule, remoteTemplate, slotsHydrated]);
+
+    const localTemplatePayload = loadTemplatePayload();
+    const localTemplateUpdatedAt = Number(localTemplatePayload?.updatedAt || 0);
+    const remoteTemplateUpdatedAt = Number(remoteTemplate?.updatedAt || 0);
+    const selectedTemplate = remoteTemplateUpdatedAt >= localTemplateUpdatedAt
+      ? remoteTemplate?.template
+      : localTemplatePayload?.template;
+
+    if (selectedTemplate) {
+      setSlots(buildSlotsFromTemplate(game, selectedTemplate));
+    } else {
+      setSlots(buildDefaultSlots(game));
+    }
+    setSlotsHydrated(true);
+  }, [
+    gameId,
+    game,
+    remoteSchedule,
+    remoteTemplate,
+    slotsHydrated,
+    remoteScheduleFetched,
+    remoteTemplateFetched,
+  ]);
 
   useEffect(() => {
+    if (!playersHydrated) return;
     persistPlayers(players);
     saveRemotePlayers(players);
-  }, [players]);
+  }, [players, playersHydrated]);
 
   useEffect(() => {
-    if (!gameId || !slots.length) return;
+    if (!slotsHydrated || !gameId || !slots.length) return;
     persistSlots(gameId, slots);
     persistSlotTemplate(slots);
     saveRemoteSchedule(gameId, slots);
     saveRemoteTemplate(slots);
-  }, [gameId, slots]);
+  }, [gameId, slots, slotsHydrated]);
 
   const sortedPlayers = useMemo(() => sortPlayersByLastName(players), [players]);
   const playerById = useMemo(() => new Map(sortedPlayers.map((player) => [player.id, player])), [sortedPlayers]);
