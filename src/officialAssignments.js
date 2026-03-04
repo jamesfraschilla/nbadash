@@ -43,6 +43,12 @@ const ORDER_PATHS = [
 ];
 
 let publishedAssignmentsPromise = null;
+const OFFICIALS_HOMEPAGE_URL = "https://official.nba.com/";
+const HOMEPAGE_SOURCE_URLS = [
+  OFFICIALS_HOMEPAGE_URL,
+  `https://api.allorigins.win/raw?url=${encodeURIComponent(OFFICIALS_HOMEPAGE_URL)}`,
+  `https://allorigins.hexlet.app/raw?url=${encodeURIComponent(OFFICIALS_HOMEPAGE_URL)}`,
+];
 
 export function normalizeNameKey(value) {
   return String(value || "")
@@ -293,24 +299,31 @@ function parseLegacyAssignments(rendered) {
   return [];
 }
 
+async function fetchFirstWorkingHomepageAssignments() {
+  for (const url of HOMEPAGE_SOURCE_URLS) {
+    try {
+      const response = await fetch(url, { cache: "no-store" });
+      if (!response.ok) continue;
+      const html = await response.text();
+      const assignments = parseHomepageAssignments(html);
+      if (assignments.length) return assignments;
+    } catch {
+      // Try the next source.
+    }
+  }
+
+  return [];
+}
+
 async function fetchPublishedAssignments() {
   if (!publishedAssignmentsPromise) {
-    publishedAssignmentsPromise = fetch(
-      "https://official.nba.com/"
-    )
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`Failed assignments request: ${response.status}`);
-        }
-        return response.text();
-      })
-      .then((html) => {
-        const homepageAssignments = parseHomepageAssignments(html);
+    publishedAssignmentsPromise = fetchFirstWorkingHomepageAssignments()
+      .then((homepageAssignments) => {
         if (homepageAssignments.length) return homepageAssignments;
 
         return fetch(
           "https://official.nba.com/wp-json/wp/v2/posts?slug=referee-assignments&_fields=content.rendered"
-        )
+        , { cache: "no-store" })
           .then((response) => {
             if (!response.ok) {
               throw new Error(`Failed legacy assignments request: ${response.status}`);
