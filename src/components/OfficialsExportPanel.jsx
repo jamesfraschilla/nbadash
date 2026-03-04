@@ -130,7 +130,13 @@ function normalizeOfficial(official, index) {
 
 function buildOfficialsData(officials, publishedOrder) {
   const rawOfficials = Array.isArray(officials) ? officials : [];
-  const primary = orderOfficials(rawOfficials, publishedOrder).map((official, index) => normalizeOfficial(official, index));
+  const orderedPrimary = orderOfficials(rawOfficials, publishedOrder).map((official, index) => normalizeOfficial(official, index));
+  const hasCrewChief = orderedPrimary.some((official) => official.roleKey === "crewChief");
+  const primary = hasCrewChief
+    ? orderedPrimary
+    : orderedPrimary.map((official, index) => (
+      index === 0 ? { ...official, roleKey: "crewChief" } : official
+    ));
 
   const alternates = rawOfficials
     .map((official, index) => normalizeOfficial(official, index))
@@ -158,6 +164,7 @@ function getColors(themeMode) {
   return {
     background: dark ? "#000000" : "#ffffff",
     text: dark ? "#ffffff" : "#000000",
+    crewChiefText: dark ? "#FFD700" : "#C8102E",
     fallbackBox: "#E8E8E8",
     fallbackText: "#000000",
   };
@@ -430,7 +437,7 @@ function drawPortraitTemplate(primaryOfficials, alternates, imageMap, themeMode,
           size: 11,
           family: textFamily,
           weight: 600,
-          color: colors.text,
+          color: colors.crewChiefText,
         });
         currentY += 11;
       }
@@ -545,7 +552,7 @@ function drawLandscapeTemplate(primaryOfficials, alternates, imageMap, themeMode
           size: 10,
           family: textFamily,
           weight: 600,
-          color: colors.text,
+          color: colors.crewChiefText,
         });
       }
     });
