@@ -199,45 +199,122 @@ function stripNumberSuffix(value) {
     .trim();
 }
 
+function isGameLink(anchor) {
+  const href = anchor?.getAttribute("href") || "";
+  const text = anchor?.textContent?.trim() || "";
+  return href.includes("stats.nba.com") && text.includes("@");
+}
+
+function isOfficialProfileLink(anchor) {
+  const href = anchor?.getAttribute("href") || "";
+  return href.includes("ak-static.cms.nba.com");
+}
+
+function parseHomepageAssignments(html) {
+  if (!html || typeof DOMParser === "undefined") return [];
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, "text/html");
+  const anchors = Array.from(doc.querySelectorAll("a"));
+  const assignments = [];
+
+  let started = false;
+  for (let index = 0; index < anchors.length; index += 1) {
+    const anchor = anchors[index];
+    const text = anchor.textContent?.trim() || "";
+
+    if (started && /^expand$/i.test(text)) {
+      break;
+    }
+
+    if (!isGameLink(anchor)) continue;
+    started = true;
+
+    const officials = [];
+    for (let nextIndex = index + 1; nextIndex < anchors.length; nextIndex += 1) {
+      const nextAnchor = anchors[nextIndex];
+      const nextText = nextAnchor.textContent?.trim() || "";
+
+      if (isGameLink(nextAnchor) || /^expand$/i.test(nextText)) {
+        break;
+      }
+
+      if (!isOfficialProfileLink(nextAnchor)) continue;
+
+      const name = stripNumberSuffix(nextText);
+      if (!name) continue;
+
+      officials.push(name);
+      if (officials.length === 3) {
+        assignments.push({
+          game: text,
+          crewChief: officials[0],
+          referee: officials[1],
+          umpire: officials[2],
+          alternate: "",
+        });
+        break;
+      }
+    }
+  }
+
+  return assignments;
+}
+
+function parseLegacyAssignments(rendered) {
+  if (!rendered || typeof DOMParser === "undefined") return [];
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(rendered, "text/html");
+  const tables = Array.from(doc.querySelectorAll("table"));
+
+  for (const table of tables) {
+    const rows = Array.from(table.querySelectorAll("tr"));
+    const assignments = rows
+      .map((row) => Array.from(row.querySelectorAll("td")).map((cell) => cell.textContent?.trim() || ""))
+      .filter((cells) => cells.length >= 4)
+      .map((cells) => ({
+        game: cells[0],
+        crewChief: stripNumberSuffix(cells[1]),
+        referee: stripNumberSuffix(cells[2]),
+        umpire: stripNumberSuffix(cells[3]),
+        alternate: stripNumberSuffix(cells[4] || ""),
+      }))
+      .filter((row) => row.crewChief && row.referee && row.umpire);
+
+    if (assignments.length) {
+      return assignments;
+    }
+  }
+
+  return [];
+}
+
 async function fetchPublishedAssignments() {
   if (!publishedAssignmentsPromise) {
     publishedAssignmentsPromise = fetch(
-      "https://official.nba.com/wp-json/wp/v2/posts?slug=referee-assignments&_fields=content.rendered"
+      "https://official.nba.com/"
     )
       .then((response) => {
         if (!response.ok) {
           throw new Error(`Failed assignments request: ${response.status}`);
         }
-        return response.json();
+        return response.text();
       })
-      .then((payload) => {
-        const rendered = payload?.[0]?.content?.rendered;
-        if (!rendered || typeof DOMParser === "undefined") return [];
+      .then((html) => {
+        const homepageAssignments = parseHomepageAssignments(html);
+        if (homepageAssignments.length) return homepageAssignments;
 
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(rendered, "text/html");
-        const tables = Array.from(doc.querySelectorAll("table"));
-
-        for (const table of tables) {
-          const rows = Array.from(table.querySelectorAll("tr"));
-          const assignments = rows
-            .map((row) => Array.from(row.querySelectorAll("td")).map((cell) => cell.textContent?.trim() || ""))
-            .filter((cells) => cells.length >= 4)
-            .map((cells) => ({
-              game: cells[0],
-              crewChief: stripNumberSuffix(cells[1]),
-              referee: stripNumberSuffix(cells[2]),
-              umpire: stripNumberSuffix(cells[3]),
-              alternate: stripNumberSuffix(cells[4] || ""),
-            }))
-            .filter((row) => row.crewChief && row.referee && row.umpire);
-
-          if (assignments.length) {
-            return assignments;
-          }
-        }
-
-        return [];
+        return fetch(
+          "https://official.nba.com/wp-json/wp/v2/posts?slug=referee-assignments&_fields=content.rendered"
+        )
+          .then((response) => {
+            if (!response.ok) {
+              throw new Error(`Failed legacy assignments request: ${response.status}`);
+            }
+            return response.json();
+          })
+          .then((payload) => parseLegacyAssignments(payload?.[0]?.content?.rendered));
       })
       .catch(() => []);
   }
