@@ -176,21 +176,24 @@ export function sortOfficialsByRole(officials) {
 }
 
 export function orderOfficials(officials, publishedOrder = null) {
-  const primary = sortOfficialsByRole(officials);
+  const primary = [...(officials || [])].filter((official) => !isAlternateOfficial(official));
   if (!publishedOrder?.length) return primary;
 
   const rankMap = new Map(
     publishedOrder.map((name, index) => [normalizeNameKey(name), index])
   );
 
-  return [...primary].sort((a, b) => {
-    const aRank = rankMap.get(normalizeNameKey(getOfficialDisplayName(a)));
-    const bRank = rankMap.get(normalizeNameKey(getOfficialDisplayName(b)));
-    const safeARank = aRank == null ? 99 : aRank;
-    const safeBRank = bRank == null ? 99 : bRank;
-    if (safeARank !== safeBRank) return safeARank - safeBRank;
-    return 0;
-  });
+  return primary
+    .map((official, index) => ({ official, index }))
+    .sort((a, b) => {
+      const aRank = rankMap.get(normalizeNameKey(getOfficialDisplayName(a.official)));
+      const bRank = rankMap.get(normalizeNameKey(getOfficialDisplayName(b.official)));
+      const safeARank = aRank == null ? 99 : aRank;
+      const safeBRank = bRank == null ? 99 : bRank;
+      if (safeARank !== safeBRank) return safeARank - safeBRank;
+      return a.index - b.index;
+    })
+    .map(({ official }) => official);
 }
 
 function stripNumberSuffix(value) {
