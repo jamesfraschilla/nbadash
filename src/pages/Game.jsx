@@ -7,6 +7,7 @@ import { saveNote as saveDashboardNote } from "../notesStorage.js";
 import BoxScoreTable from "../components/BoxScoreTable.jsx";
 import StatBars from "../components/StatBars.jsx";
 import Officials from "../components/Officials.jsx";
+import OfficialsExportPanel from "../components/OfficialsExportPanel.jsx";
 import TransitionStats from "../components/TransitionStats.jsx";
 import MiscStats from "../components/MiscStats.jsx";
 import CreatingDisruption from "../components/CreatingDisruption.jsx";
@@ -2091,6 +2092,7 @@ export default function Game({ variant = "full" }) {
           variant={variant}
         />
       </section>
+      <OfficialsExportPanel officials={officials} gameId={gameId} />
       </div>
     </div>
   );

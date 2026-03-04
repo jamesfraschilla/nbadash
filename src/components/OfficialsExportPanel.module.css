@@ -1,0 +1,172 @@
+.container {
+  margin: 24px auto 0;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 76px;
+  gap: 18px;
+  align-items: start;
+  max-width: 1040px;
+}
+
+.contentColumn {
+  min-width: 0;
+}
+
+.header {
+  text-align: center;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.officialsRow {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16px;
+}
+
+.officialTile {
+  width: 132px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.avatarFrame {
+  width: 92px;
+  height: 92px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #e8e8e8;
+}
+
+.avatarImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+  display: block;
+  transform-origin: center top;
+}
+
+.avatarFallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #000;
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+
+.nameText {
+  margin-top: 8px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text);
+}
+
+.roleText {
+  margin-top: 3px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--muted);
+}
+
+.footer {
+  margin-top: 12px;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.emptyState {
+  margin-top: 16px;
+  text-align: center;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.buttonColumn {
+  width: 76px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.exportButton {
+  width: 76px;
+  min-height: 34px;
+  padding: 8px 6px;
+  border: 1px solid var(--text);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.exportButton:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  animation: spin 0.7s linear infinite;
+}
+
+.exportSandbox {
+  position: fixed;
+  left: -20000px;
+  top: 0;
+  pointer-events: none;
+  opacity: 0;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 768px) {
+  .container {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    padding: 16px;
+  }
+
+  .buttonColumn {
+    width: 100%;
+    max-width: 240px;
+  }
+
+  .exportButton {
+    width: 100%;
+  }
+}
