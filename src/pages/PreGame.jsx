@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
@@ -101,6 +101,12 @@ function normalizeTemplate(rawTemplate) {
   return { count, playerGroups };
 }
 
+function slotsHaveAssignments(slots) {
+  return (Array.isArray(slots) ? slots : []).some((slot) =>
+    (Array.isArray(slot?.playerIds) ? slot.playerIds : []).some((id) => String(id || "").trim())
+  );
+}
+
 function parseRemotePayload(note, key) {
   const parsed = safeParseJson(note || "{}", null);
   if (!parsed) return { updatedAt: 0, value: null };
@@ -120,10 +126,10 @@ function loadPlayers() {
   return normalizePlayers(Array.isArray(parsed) ? parsed : parsed?.players);
 }
 
-function persistPlayers(players) {
+function persistPlayers(players, updatedAt = Date.now()) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(PLAYERS_STORAGE_KEY, JSON.stringify({
-    updatedAt: Date.now(),
+    updatedAt,
     players: sortPlayersByLastName(players),
   }));
 }
@@ -156,10 +162,10 @@ function loadSlots(gameId) {
   return slots.length ? slots : null;
 }
 
-function persistSlots(gameId, slots) {
+function persistSlots(gameId, slots, updatedAt = Date.now()) {
   if (typeof window === "undefined" || !gameId) return;
   window.localStorage.setItem(slotStorageKey(gameId), JSON.stringify({
-    updatedAt: Date.now(),
+    updatedAt,
     slots,
   }));
 }
@@ -193,10 +199,10 @@ function loadSlotTemplate() {
   return null;
 }
 
-function persistSlotTemplate(slots) {
+function persistSlotTemplate(slots, updatedAt = Date.now()) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(SLOT_TEMPLATE_KEY, JSON.stringify({
-    updatedAt: Date.now(),
+    updatedAt,
     template: {
       count: Math.max(1, slots.length),
       playerGroups: slots.map((slot) => slot.playerIds.slice(0, 3)),
@@ -272,14 +278,14 @@ async function fetchRemoteTemplate() {
   };
 }
 
-async function saveRemotePlayers(players) {
+async function saveRemotePlayers(players, updatedAt = Date.now()) {
   if (!supabase) return;
   await supabase.from("pbp_highlights").upsert(
     {
       game_id: `${PREGAME_STORE_PREFIX}${GLOBAL_ROW_ID}`,
       action_number: PREGAME_ACTION_PLAYERS,
       note: JSON.stringify({
-        updatedAt: Date.now(),
+        updatedAt,
         players: sortPlayersByLastName(players),
       }),
     },
@@ -287,14 +293,14 @@ async function saveRemotePlayers(players) {
   );
 }
 
-async function saveRemoteSchedule(gameId, slots) {
+async function saveRemoteSchedule(gameId, slots, updatedAt = Date.now()) {
   if (!supabase || !gameId) return;
   await supabase.from("pbp_highlights").upsert(
     {
       game_id: `${PREGAME_STORE_PREFIX}${gameId}`,
       action_number: PREGAME_ACTION_PLAYERS,
       note: JSON.stringify({
-        updatedAt: Date.now(),
+        updatedAt,
         slots,
       }),
     },
@@ -302,14 +308,14 @@ async function saveRemoteSchedule(gameId, slots) {
   );
 }
 
-async function saveRemoteTemplate(slots) {
+async function saveRemoteTemplate(slots, updatedAt = Date.now()) {
   if (!supabase) return;
   await supabase.from("pbp_highlights").upsert(
     {
       game_id: `${PREGAME_STORE_PREFIX}${GLOBAL_ROW_ID}`,
       action_number: PREGAME_ACTION_TEMPLATE,
       note: JSON.stringify({
-        updatedAt: Date.now(),
+        updatedAt,
         template: {
           count: Math.max(1, slots.length),
           playerGroups: slots.map((slot) => slot.playerIds.slice(0, 3)),
@@ -613,6 +619,9 @@ export default function PreGame() {
   const [activePlayerCell, setActivePlayerCell] = useState(null);
   const [playersHydrated, setPlayersHydrated] = useState(false);
   const [slotsHydrated, setSlotsHydrated] = useState(false);
+  const playersUpdatedAtRef = useRef(0);
+  const slotsUpdatedAtRef = useRef(0);
+  const templateUpdatedAtRef = useRef(0);
 
   const { data: remotePlayers, isFetched: remotePlayersFetched } = useQuery({
     queryKey: ["pregame-players-remote"],
@@ -656,10 +665,13 @@ export default function PreGame() {
 
     if (remotePlayers?.players?.length && remoteUpdatedAt >= localUpdatedAt) {
       setPlayers(remotePlayers.players);
+      playersUpdatedAtRef.current = remoteUpdatedAt;
     } else if (localPayload?.players?.length) {
       setPlayers(localPayload.players);
+      playersUpdatedAtRef.current = localUpdatedAt;
     } else if (remotePlayers?.players?.length) {
       setPlayers(remotePlayers.players);
+      playersUpdatedAtRef.current = remoteUpdatedAt;
     }
     setPlayersHydrated(true);
   }, [playersHydrated, remotePlayers, remotePlayersFetched]);
@@ -672,30 +684,44 @@ export default function PreGame() {
     const localSchedulePayload = loadSlotsPayload(gameId);
     const localScheduleUpdatedAt = Number(localSchedulePayload?.updatedAt || 0);
     const remoteScheduleUpdatedAt = Number(remoteSchedule?.updatedAt || 0);
-
-    if (remoteSchedule?.slots?.length && remoteScheduleUpdatedAt >= localScheduleUpdatedAt) {
-      setSlots(remoteSchedule.slots);
-      setSlotsHydrated(true);
-      return;
-    }
-
-    if (localSchedulePayload?.slots?.length) {
-      setSlots(localSchedulePayload.slots);
-      setSlotsHydrated(true);
-      return;
-    }
-
     const localTemplatePayload = loadTemplatePayload();
     const localTemplateUpdatedAt = Number(localTemplatePayload?.updatedAt || 0);
     const remoteTemplateUpdatedAt = Number(remoteTemplate?.updatedAt || 0);
     const selectedTemplate = remoteTemplateUpdatedAt >= localTemplateUpdatedAt
       ? remoteTemplate?.template
       : localTemplatePayload?.template;
+    const templateHasAssignments = slotsHaveAssignments(
+      selectedTemplate?.playerGroups?.map((playerIds) => ({ playerIds })) || []
+    );
+
+    const remoteHasAssignments = slotsHaveAssignments(remoteSchedule?.slots);
+    const localHasAssignments = slotsHaveAssignments(localSchedulePayload?.slots);
+
+    if (
+      remoteSchedule?.slots?.length &&
+      remoteScheduleUpdatedAt >= localScheduleUpdatedAt &&
+      (remoteHasAssignments || !templateHasAssignments)
+    ) {
+      setSlots(remoteSchedule.slots);
+      slotsUpdatedAtRef.current = remoteScheduleUpdatedAt;
+      setSlotsHydrated(true);
+      return;
+    }
+
+    if (localSchedulePayload?.slots?.length && (localHasAssignments || !templateHasAssignments)) {
+      setSlots(localSchedulePayload.slots);
+      slotsUpdatedAtRef.current = localScheduleUpdatedAt;
+      setSlotsHydrated(true);
+      return;
+    }
 
     if (selectedTemplate) {
       setSlots(buildSlotsFromTemplate(game, selectedTemplate));
+      templateUpdatedAtRef.current = Math.max(localTemplateUpdatedAt, remoteTemplateUpdatedAt);
+      slotsUpdatedAtRef.current = templateUpdatedAtRef.current;
     } else {
       setSlots(buildDefaultSlots(game));
+      slotsUpdatedAtRef.current = Date.now();
     }
     setSlotsHydrated(true);
   }, [
@@ -710,17 +736,40 @@ export default function PreGame() {
 
   useEffect(() => {
     if (!playersHydrated) return;
-    persistPlayers(players);
-    saveRemotePlayers(players);
+    const updatedAt = Date.now();
+    playersUpdatedAtRef.current = updatedAt;
+    persistPlayers(players, updatedAt);
+    saveRemotePlayers(players, updatedAt);
   }, [players, playersHydrated]);
 
   useEffect(() => {
     if (!slotsHydrated || !gameId || !slots.length) return;
-    persistSlots(gameId, slots);
-    persistSlotTemplate(slots);
-    saveRemoteSchedule(gameId, slots);
-    saveRemoteTemplate(slots);
+    const updatedAt = Date.now();
+    slotsUpdatedAtRef.current = updatedAt;
+    templateUpdatedAtRef.current = updatedAt;
+    persistSlots(gameId, slots, updatedAt);
+    persistSlotTemplate(slots, updatedAt);
+    saveRemoteSchedule(gameId, slots, updatedAt);
+    saveRemoteTemplate(slots, updatedAt);
   }, [gameId, slots, slotsHydrated]);
+
+  useEffect(() => {
+    if (!playersHydrated) return;
+    const remoteUpdatedAt = Number(remotePlayers?.updatedAt || 0);
+    if (!remoteUpdatedAt || remoteUpdatedAt <= playersUpdatedAtRef.current) return;
+    setPlayers(remotePlayers.players || []);
+    playersUpdatedAtRef.current = remoteUpdatedAt;
+    persistPlayers(remotePlayers.players || [], remoteUpdatedAt);
+  }, [playersHydrated, remotePlayers]);
+
+  useEffect(() => {
+    if (!slotsHydrated || !gameId || !remoteSchedule?.slots?.length) return;
+    const remoteUpdatedAt = Number(remoteSchedule?.updatedAt || 0);
+    if (!remoteUpdatedAt || remoteUpdatedAt <= slotsUpdatedAtRef.current) return;
+    setSlots(remoteSchedule.slots);
+    slotsUpdatedAtRef.current = remoteUpdatedAt;
+    persistSlots(gameId, remoteSchedule.slots, remoteUpdatedAt);
+  }, [slotsHydrated, gameId, remoteSchedule]);
 
   const sortedPlayers = useMemo(() => sortPlayersByLastName(players), [players]);
   const playerById = useMemo(() => new Map(sortedPlayers.map((player) => [player.id, player])), [sortedPlayers]);
