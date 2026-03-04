@@ -11,10 +11,9 @@ import styles from "./PreGame.module.css";
 const PLAYERS_STORAGE_KEY = "pregame:players:v1";
 const SLOT_STORAGE_PREFIX = "pregame:slots:v1:";
 const SLOT_TEMPLATE_KEY = "pregame:slot-template:v1";
-const GLOBAL_ROW_ID = "global";
-const PREGAME_STORE_PREFIX = "pregame-store:";
-const PREGAME_ACTION_PLAYERS = 1;
-const PREGAME_ACTION_TEMPLATE = 2;
+const PREGAME_GLOBAL_PLAYERS_GAME_ID = "9999999901";
+const PREGAME_GLOBAL_TEMPLATE_GAME_ID = "9999999902";
+const PREGAME_ACTION_PAYLOAD = 900000001;
 
 const EXPORT_SPECS = {
   portrait: { logicalWidth: 384, logicalHeight: 648, outputWidth: 1536, outputHeight: 2592 },
@@ -235,8 +234,8 @@ async function fetchRemotePlayers() {
   const { data, error } = await supabase
     .from("pbp_highlights")
     .select("note")
-    .eq("game_id", `${PREGAME_STORE_PREFIX}${GLOBAL_ROW_ID}`)
-    .eq("action_number", PREGAME_ACTION_PLAYERS)
+    .eq("game_id", PREGAME_GLOBAL_PLAYERS_GAME_ID)
+    .eq("action_number", PREGAME_ACTION_PAYLOAD)
     .maybeSingle();
   if (error) return null;
   const payload = parseRemotePayload(data?.note, "players");
@@ -251,8 +250,8 @@ async function fetchRemoteSchedule(gameId) {
   const { data, error } = await supabase
     .from("pbp_highlights")
     .select("note")
-    .eq("game_id", `${PREGAME_STORE_PREFIX}${gameId}`)
-    .eq("action_number", PREGAME_ACTION_PLAYERS)
+    .eq("game_id", String(gameId))
+    .eq("action_number", PREGAME_ACTION_PAYLOAD)
     .maybeSingle();
   if (error) return null;
   const payload = parseRemotePayload(data?.note, "slots");
@@ -267,8 +266,8 @@ async function fetchRemoteTemplate() {
   const { data, error } = await supabase
     .from("pbp_highlights")
     .select("note")
-    .eq("game_id", `${PREGAME_STORE_PREFIX}${GLOBAL_ROW_ID}`)
-    .eq("action_number", PREGAME_ACTION_TEMPLATE)
+    .eq("game_id", PREGAME_GLOBAL_TEMPLATE_GAME_ID)
+    .eq("action_number", PREGAME_ACTION_PAYLOAD)
     .maybeSingle();
   if (error) return null;
   const payload = parseRemotePayload(data?.note, "template");
@@ -282,8 +281,8 @@ async function saveRemotePlayers(players, updatedAt = Date.now()) {
   if (!supabase) return;
   await supabase.from("pbp_highlights").upsert(
     {
-      game_id: `${PREGAME_STORE_PREFIX}${GLOBAL_ROW_ID}`,
-      action_number: PREGAME_ACTION_PLAYERS,
+      game_id: PREGAME_GLOBAL_PLAYERS_GAME_ID,
+      action_number: PREGAME_ACTION_PAYLOAD,
       note: JSON.stringify({
         updatedAt,
         players: sortPlayersByLastName(players),
@@ -297,8 +296,8 @@ async function saveRemoteSchedule(gameId, slots, updatedAt = Date.now()) {
   if (!supabase || !gameId) return;
   await supabase.from("pbp_highlights").upsert(
     {
-      game_id: `${PREGAME_STORE_PREFIX}${gameId}`,
-      action_number: PREGAME_ACTION_PLAYERS,
+      game_id: String(gameId),
+      action_number: PREGAME_ACTION_PAYLOAD,
       note: JSON.stringify({
         updatedAt,
         slots,
@@ -312,8 +311,8 @@ async function saveRemoteTemplate(slots, updatedAt = Date.now()) {
   if (!supabase) return;
   await supabase.from("pbp_highlights").upsert(
     {
-      game_id: `${PREGAME_STORE_PREFIX}${GLOBAL_ROW_ID}`,
-      action_number: PREGAME_ACTION_TEMPLATE,
+      game_id: PREGAME_GLOBAL_TEMPLATE_GAME_ID,
+      action_number: PREGAME_ACTION_PAYLOAD,
       note: JSON.stringify({
         updatedAt,
         template: {
