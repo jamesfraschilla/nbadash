@@ -44,8 +44,25 @@ const ORDER_PATHS = [
 
 let publishedAssignmentsPromise = null;
 const OFFICIALS_ASSIGNMENTS_URL = "https://official.nba.com/referee-assignments/";
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+
+function deriveSupabaseFunctionUrl() {
+  const raw = String(SUPABASE_URL || "").trim();
+  if (!raw) return null;
+  try {
+    const host = new URL(raw).hostname;
+    if (!host.endsWith(".supabase.co")) return null;
+    const projectRef = host.split(".")[0];
+    if (!projectRef) return null;
+    return `https://${projectRef}.functions.supabase.co/referee-assignments`;
+  } catch {
+    return null;
+  }
+}
+
 const ASSIGNMENTS_PROXY_URLS = [
   import.meta.env.VITE_ASSIGNMENTS_PROXY_URL,
+  deriveSupabaseFunctionUrl(),
   "/api/referee-assignments",
 ].filter(Boolean);
 const ASSIGNMENTS_SOURCE_URLS = [
