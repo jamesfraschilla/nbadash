@@ -577,15 +577,15 @@ export default function PreGame() {
   useEffect(() => {
     if (slotsHydrated) return;
     if (!gameId || !game) return;
-    if (remoteSchedule?.length) {
-      setSlots(remoteSchedule);
+    const savedLocal = loadSlots(gameId);
+    if (savedLocal?.length) {
+      setSlots(savedLocal);
       setSlotsHydrated(true);
       return;
     }
 
-    const savedLocal = loadSlots(gameId);
-    if (savedLocal?.length) {
-      setSlots(savedLocal);
+    if (remoteSchedule?.length) {
+      setSlots(remoteSchedule);
       setSlotsHydrated(true);
     } else {
       const template = remoteTemplate || loadSlotTemplate();
