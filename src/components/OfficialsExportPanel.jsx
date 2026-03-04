@@ -600,6 +600,31 @@ export default function OfficialsExportPanel({ officials, gameId }) {
     [officials]
   );
   const [busyFormat, setBusyFormat] = useState("");
+  const showDebug = String(gameId) === "0022500891";
+  const debugPayload = useMemo(() => {
+    if (!showDebug) return "";
+    const rows = (officials || []).map((official) => ({
+      name: readOfficialName(official),
+      jerseyNum: official?.jerseyNum,
+      assignment: official?.assignment,
+      role: official?.role,
+      title: official?.title,
+      position: official?.position,
+      officialRole: official?.officialRole,
+      roleName: official?.roleName,
+      assignmentOrder: official?.assignmentOrder,
+      sortOrder: official?.sortOrder,
+      order: official?.order,
+      sequence: official?.sequence,
+      assignmentSequence: official?.assignmentSequence,
+      sequenceNumber: official?.sequenceNumber,
+      positionOrder: official?.positionOrder,
+      officialOrder: official?.officialOrder,
+      metadata: official?.metadata,
+      assignmentObject: official?.assignment,
+    }));
+    return JSON.stringify(rows, null, 2);
+  }, [officials, showDebug]);
 
   const handleExport = async (format) => {
     if (busyFormat) return;
@@ -655,6 +680,26 @@ export default function OfficialsExportPanel({ officials, gameId }) {
           );
         })}
       </div>
+
+      {showDebug ? (
+        <pre
+          style={{
+            margin: "16px auto 0",
+            width: "min(100%, 1100px)",
+            padding: "12px",
+            overflowX: "auto",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            background: "rgba(0,0,0,0.15)",
+            color: "var(--text)",
+            border: "1px solid var(--border)",
+            fontSize: "12px",
+            lineHeight: 1.3,
+          }}
+        >
+          {debugPayload}
+        </pre>
+      ) : null}
     </section>
   );
 }
