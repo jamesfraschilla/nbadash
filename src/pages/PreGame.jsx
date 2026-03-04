@@ -322,7 +322,14 @@ function buildHeaderLine(game) {
   const away = game?.awayTeam;
   const washingtonIsAway = isWashingtonTeam(away);
   const opponent = washingtonIsAway ? home : away;
-  const opponentLabel = String(opponent?.teamName || opponent?.teamCity || "OPPONENT").toUpperCase();
+  const rawCity = String(opponent?.teamCity || "").trim();
+  const rawName = String(opponent?.teamName || "").trim();
+  const lowerName = rawName.toLowerCase();
+  let opponentLabel = rawCity ? rawCity.toUpperCase() : "OPPONENT";
+  if (rawCity.toLowerCase() === "la" || rawCity.toLowerCase() === "los angeles") {
+    if (lowerName.includes("clipper")) opponentLabel = "LA CLIPPERS";
+    if (lowerName.includes("laker")) opponentLabel = "LA LAKERS";
+  }
   return washingtonIsAway ? `@ ${opponentLabel}` : `vs ${opponentLabel}`;
 }
 
@@ -523,9 +530,12 @@ export default function PreGame() {
       </div>
 
       {playersOpen && (
-        <div className={styles.modalOverlay}>
-          <div className={styles.modal}>
-            <h2 className={styles.modalTitle}>Edit Players</h2>
+        <div className={styles.modalOverlay} onClick={() => setPlayersOpen(false)}>
+          <div className={styles.modal} onClick={(event) => event.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h2 className={styles.modalTitle}>Edit Players</h2>
+              <button type="button" className={styles.modalClose} onClick={() => setPlayersOpen(false)}>Close</button>
+            </div>
             <div className={styles.gridHeader}>
               <span>Name</span>
               <span>Display</span>
@@ -649,9 +659,12 @@ export default function PreGame() {
       )}
 
       {slotsOpen && (
-        <div className={styles.modalOverlay}>
-          <div className={styles.modal}>
-            <h2 className={styles.modalTitle}>Edit Slots</h2>
+        <div className={styles.modalOverlay} onClick={() => setSlotsOpen(false)}>
+          <div className={styles.modal} onClick={(event) => event.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h2 className={styles.modalTitle}>Edit Slots</h2>
+              <button type="button" className={styles.modalClose} onClick={() => setSlotsOpen(false)}>Close</button>
+            </div>
             <div className={styles.addSlotTop}>
               <button
                 type="button"
@@ -675,19 +688,34 @@ export default function PreGame() {
               </button>
             </div>
 
+            <div className={styles.slotHeaderRow}>
+              <span />
+              <span className={styles.slotHeaderTime}>Time</span>
+              <button
+                type="button"
+                className={styles.resetButton}
+                onClick={() => setSlotDrafts((current) => current.map((slot) => ({
+                  ...slot,
+                  playerIds: slot.playerIds.map(() => ""),
+                })))}
+              >
+                RESET
+              </button>
+              <span />
+            </div>
+
             <div className={styles.slotRows}>
               {slotDrafts.map((slot, index) => (
                 <div key={slot.id} className={styles.slotRow}>
                   <button
                     type="button"
-                    className={`${styles.iconButton} ${styles.iconDelete}`}
+                    className={styles.slotDeleteButton}
                     onClick={() => setSlotDrafts((current) => current.filter((candidate) => candidate.id !== slot.id))}
                     aria-label="Delete slot"
                   >
                     ✕
                   </button>
                   <div className={styles.slotTimeColumn}>
-                    <div className={styles.slotLabel}>Time</div>
                     <input
                       className={styles.timeInput}
                       value={slot.time}
@@ -714,7 +742,7 @@ export default function PreGame() {
                       >
                         <option value="">--</option>
                         {sortedPlayers.map((player) => (
-                          <option key={player.id} value={player.id}>{player.display}</option>
+                          <option key={player.id} value={player.id}>{player.name}</option>
                         ))}
                       </select>
                     ))}
