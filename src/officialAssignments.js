@@ -4,6 +4,44 @@ const ROLE_ORDER = {
   umpire: 2,
 };
 
+const ROLE_PATHS = [
+  "roleKey",
+  "assignment",
+  "role",
+  "title",
+  "position",
+  "officialRole",
+  "roleName",
+  "assignment.name",
+  "assignment.title",
+  "assignment.role",
+  "assignment.position",
+  "assignment.description",
+  "assignment.label",
+  "assignment.type",
+  "assignment.assignment",
+  "metadata.assignment",
+  "metadata.role",
+];
+
+const ORDER_PATHS = [
+  "assignmentOrder",
+  "sortOrder",
+  "order",
+  "sequence",
+  "assignmentSequence",
+  "sequenceNumber",
+  "positionOrder",
+  "officialOrder",
+  "assignment.order",
+  "assignment.sequence",
+  "assignment.sortOrder",
+  "assignment.position",
+  "assignment.orderNumber",
+  "metadata.order",
+  "metadata.sequence",
+];
+
 let publishedAssignmentsPromise = null;
 
 export function normalizeNameKey(value) {
@@ -15,6 +53,12 @@ export function normalizeNameKey(value) {
 }
 
 export function normalizeOfficialRole(rawValue) {
+  const numericRole = normalizeRoleOrderValue(rawValue);
+  if (numericRole != null) {
+    if (numericRole === 1) return "crewChief";
+    if (numericRole === 2) return "referee";
+    if (numericRole === 3) return "umpire";
+  }
   const compact = String(rawValue || "").replace(/[^a-z]/gi, "").toLowerCase();
   if (!compact) return null;
   if (compact.includes("alternate")) return "alternate";
@@ -24,6 +68,57 @@ export function normalizeOfficialRole(rawValue) {
   if (compact.includes("umpire")) return "umpire";
   if (compact.includes("referee")) return "referee";
   return null;
+}
+
+function getNestedValue(source, path) {
+  return path.split(".").reduce((value, key) => (value == null ? undefined : value[key]), source);
+}
+
+function normalizeRoleOrderValue(rawValue) {
+  if (typeof rawValue === "number" && Number.isFinite(rawValue)) {
+    const rounded = Math.round(rawValue);
+    return rounded >= 1 && rounded <= 3 ? rounded : null;
+  }
+
+  const text = String(rawValue ?? "").trim();
+  if (!text) return null;
+  if (!/^\d+$/.test(text)) return null;
+  const parsed = Number(text);
+  return parsed >= 1 && parsed <= 3 ? parsed : null;
+}
+
+export function getOfficialSortMeta(official) {
+  const explicitAlternate = Boolean(official?.isAlternate || official?.alternate);
+
+  let role = null;
+  for (const path of ROLE_PATHS) {
+    const candidate = getNestedValue(official, path);
+    const nextRole = normalizeOfficialRole(candidate);
+    if (nextRole) {
+      role = nextRole;
+      break;
+    }
+  }
+
+  let order = null;
+  for (const path of ORDER_PATHS) {
+    const candidate = getNestedValue(official, path);
+    const nextOrder = normalizeRoleOrderValue(candidate);
+    if (nextOrder != null) {
+      order = nextOrder;
+      break;
+    }
+  }
+
+  if (order == null && role && role !== "alternate") {
+    order = (ROLE_ORDER[role] ?? 99) + 1;
+  }
+
+  return {
+    role,
+    order,
+    isAlternate: explicitAlternate || role === "alternate",
+  };
 }
 
 export function getOfficialDisplayName(official) {
@@ -41,15 +136,7 @@ export function getOfficialDisplayName(official) {
 }
 
 export function isAlternateOfficial(official) {
-  const role = normalizeOfficialRole(
-    official?.assignment ||
-    official?.role ||
-    official?.title ||
-    official?.position ||
-    official?.officialRole ||
-    official?.roleName
-  );
-  return Boolean(official?.isAlternate || official?.alternate) || role === "alternate";
+  return getOfficialSortMeta(official).isAlternate;
 }
 
 export function sortOfficialsByRole(officials) {
@@ -57,19 +144,21 @@ export function sortOfficialsByRole(officials) {
     .map((official, index) => ({
       official,
       index,
-      role: normalizeOfficialRole(
-        official?.assignment ||
-        official?.role ||
-        official?.title ||
-        official?.position ||
-        official?.officialRole ||
-        official?.roleName
-      ),
+      ...getOfficialSortMeta(official),
     }))
-    .filter(({ official, role }) => {
-      const explicitAlternate = Boolean(official?.isAlternate || official?.alternate);
-      return !explicitAlternate && role !== "alternate";
-    });
+    .filter(({ isAlternate }) => !isAlternate);
+
+  const hasExplicitOrder = primary.some(({ order }) => order != null);
+  if (hasExplicitOrder) {
+    return primary
+      .sort((a, b) => {
+        const aOrder = a.order == null ? 99 : a.order;
+        const bOrder = b.order == null ? 99 : b.order;
+        if (aOrder !== bOrder) return aOrder - bOrder;
+        return a.index - b.index;
+      })
+      .map(({ official }) => official);
+  }
 
   const hasExplicitRole = primary.some(({ role }) => role && role !== "alternate");
   if (!hasExplicitRole) {

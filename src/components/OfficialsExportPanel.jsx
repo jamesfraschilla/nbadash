@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { normalizeOfficialRole, orderOfficials } from "../officialAssignments.js";
+import { getOfficialSortMeta, orderOfficials } from "../officialAssignments.js";
 import dinFontUrl from "../assets/fonts/DIN.ttf";
 import dinAltFontUrl from "../assets/fonts/DINalt.ttf";
 import styles from "./OfficialsExportPanel.module.css";
@@ -106,14 +106,7 @@ function splitOfficialName(official) {
 function normalizeOfficial(official, index) {
   const nameParts = splitOfficialName(official);
   const fullName = nameParts.fullName || `${nameParts.firstName} ${nameParts.lastName}`.trim();
-  const role = String(
-    official?.assignment ||
-    official?.role ||
-    official?.title ||
-    official?.position ||
-    official?.officialRole ||
-    official?.roleName
-  );
+  const sortMeta = getOfficialSortMeta(official);
 
   return {
     id: official?.personId || official?.officialId || `${fullName || "official"}-${index}`,
@@ -129,9 +122,8 @@ function normalizeOfficial(official, index) {
       official?.shirtNumber ??
       ""
     ).trim(),
-    role,
-    roleKey: normalizeOfficialRole(role),
-    isAlternate: Boolean(official?.isAlternate || official?.alternate) || String(role).toLowerCase().includes("alternate"),
+    roleKey: sortMeta.role,
+    isAlternate: sortMeta.isAlternate,
     headshotUrl: refereeHeadshotMap.get(normalizeNameKey(fullName)) || null,
   };
 }
@@ -404,7 +396,7 @@ function drawPortraitTemplate(primaryOfficials, alternates, imageMap, themeMode,
   } else {
     let currentY = listTop;
     primaryOfficials.forEach((official, index) => {
-      const roleHeight = official.role === "crewChief" ? 11 : 0;
+      const roleHeight = official.roleKey === "crewChief" ? 11 : 0;
       const blockHeight = 120 + 8 + 23 + (roleHeight ? 2 + roleHeight : 0);
       const image = imageMap.get(official.id);
 
