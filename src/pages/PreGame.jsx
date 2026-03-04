@@ -12,6 +12,9 @@ const PLAYERS_STORAGE_KEY = "pregame:players:v1";
 const SLOT_STORAGE_PREFIX = "pregame:slots:v1:";
 const SLOT_TEMPLATE_KEY = "pregame:slot-template:v1";
 const GLOBAL_ROW_ID = "global";
+const PREGAME_STORE_PREFIX = "pregame-store:";
+const PREGAME_ACTION_PLAYERS = 1;
+const PREGAME_ACTION_TEMPLATE = 2;
 
 const EXPORT_SPECS = {
   portrait: { logicalWidth: 384, logicalHeight: 648, outputWidth: 1536, outputHeight: 2592 },
@@ -139,12 +142,14 @@ function persistSlotTemplate(slots) {
 async function fetchRemotePlayers() {
   if (!supabase) return null;
   const { data, error } = await supabase
-    .from("pregame_players")
-    .select("players")
-    .eq("id", GLOBAL_ROW_ID)
+    .from("pbp_highlights")
+    .select("note")
+    .eq("game_id", `${PREGAME_STORE_PREFIX}${GLOBAL_ROW_ID}`)
+    .eq("action_number", PREGAME_ACTION_PLAYERS)
     .maybeSingle();
   if (error) return null;
-  const remotePlayers = Array.isArray(data?.players) ? data.players : [];
+  const parsed = safeParseJson(data?.note || "[]", []);
+  const remotePlayers = Array.isArray(parsed) ? parsed : [];
   return sortPlayersByLastName(
     remotePlayers
       .map((player) => ({
@@ -159,12 +164,15 @@ async function fetchRemotePlayers() {
 async function fetchRemoteSchedule(gameId) {
   if (!supabase || !gameId) return null;
   const { data, error } = await supabase
-    .from("pregame_schedules")
-    .select("slots")
-    .eq("game_id", gameId)
+    .from("pbp_highlights")
+    .select("note")
+    .eq("game_id", `${PREGAME_STORE_PREFIX}${gameId}`)
+    .eq("action_number", PREGAME_ACTION_PLAYERS)
     .maybeSingle();
-  if (error || !Array.isArray(data?.slots)) return null;
-  return data.slots
+  if (error) return null;
+  const parsed = safeParseJson(data?.note || "[]", []);
+  if (!Array.isArray(parsed)) return null;
+  return parsed
     .map((slot) => ({
       id: String(slot?.id || crypto.randomUUID()),
       time: String(slot?.time || ""),
@@ -178,41 +186,57 @@ async function fetchRemoteSchedule(gameId) {
 async function fetchRemoteTemplate() {
   if (!supabase) return null;
   const { data, error } = await supabase
-    .from("pregame_templates")
-    .select("count,player_groups")
-    .eq("id", GLOBAL_ROW_ID)
+    .from("pbp_highlights")
+    .select("note")
+    .eq("game_id", `${PREGAME_STORE_PREFIX}${GLOBAL_ROW_ID}`)
+    .eq("action_number", PREGAME_ACTION_TEMPLATE)
     .maybeSingle();
   if (error) return null;
-  const count = Math.max(1, Number(data?.count || 8));
-  const playerGroups = Array.isArray(data?.player_groups)
-    ? data.player_groups.map((group) => (Array.isArray(group) ? group.slice(0, 3).map((value) => String(value || "")) : ["", ""]))
+  const parsed = safeParseJson(data?.note || "{}", {});
+  const count = Math.max(1, Number(parsed?.count || 8));
+  const playerGroups = Array.isArray(parsed?.playerGroups)
+    ? parsed.playerGroups.map((group) => (Array.isArray(group) ? group.slice(0, 3).map((value) => String(value || "")) : ["", ""]))
     : [];
   return { count, playerGroups };
 }
 
 async function saveRemotePlayers(players) {
   if (!supabase) return;
-  await supabase.from("pregame_players").upsert({
-    id: GLOBAL_ROW_ID,
-    players: sortPlayersByLastName(players),
-  });
+  await supabase.from("pbp_highlights").upsert(
+    {
+      game_id: `${PREGAME_STORE_PREFIX}${GLOBAL_ROW_ID}`,
+      action_number: PREGAME_ACTION_PLAYERS,
+      note: JSON.stringify(sortPlayersByLastName(players)),
+    },
+    { onConflict: "game_id,action_number" }
+  );
 }
 
 async function saveRemoteSchedule(gameId, slots) {
   if (!supabase || !gameId) return;
-  await supabase.from("pregame_schedules").upsert({
-    game_id: gameId,
-    slots,
-  });
+  await supabase.from("pbp_highlights").upsert(
+    {
+      game_id: `${PREGAME_STORE_PREFIX}${gameId}`,
+      action_number: PREGAME_ACTION_PLAYERS,
+      note: JSON.stringify(slots),
+    },
+    { onConflict: "game_id,action_number" }
+  );
 }
 
 async function saveRemoteTemplate(slots) {
   if (!supabase) return;
-  await supabase.from("pregame_templates").upsert({
-    id: GLOBAL_ROW_ID,
-    count: Math.max(1, slots.length),
-    player_groups: slots.map((slot) => slot.playerIds.slice(0, 3)),
-  });
+  await supabase.from("pbp_highlights").upsert(
+    {
+      game_id: `${PREGAME_STORE_PREFIX}${GLOBAL_ROW_ID}`,
+      action_number: PREGAME_ACTION_TEMPLATE,
+      note: JSON.stringify({
+        count: Math.max(1, slots.length),
+        playerGroups: slots.map((slot) => slot.playerIds.slice(0, 3)),
+      }),
+    },
+    { onConflict: "game_id,action_number" }
+  );
 }
 
 function formatTime(dateValue) {
@@ -293,17 +317,25 @@ function drawCenteredText(context, text, x, y, width, size, color, weight = 700)
   context.fillText(text, x + (width / 2), y);
 }
 
+function drawCenteredTextMiddle(context, text, x, y, width, height, size, color, weight = 700) {
+  context.fillStyle = color;
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.font = `${weight} ${size}px "DIN", sans-serif`;
+  context.fillText(text, x + (width / 2), y + (height / 2));
+}
+
 function drawLandscapeExport(slots, playerById, headerLineTwo, logoImage, themeMode, scale = 1) {
   const spec = EXPORT_SPECS.landscape;
   const colors = getExportColors(themeMode);
   const { canvas, context } = makeCanvas(spec.logicalWidth * scale, spec.logicalHeight * scale, colors.background);
   context.scale(scale, scale);
 
-  drawCenteredText(context, "PRE-GAME COURT TIME", 0, 24, spec.logicalWidth, 54, colors.chromeText, 700);
-  drawCenteredText(context, headerLineTwo, 0, 88, spec.logicalWidth, 30, colors.chromeText, 700);
+  drawCenteredText(context, "PRE-GAME COURT TIME", 0, 42, spec.logicalWidth, 54, colors.chromeText, 700);
+  drawCenteredText(context, headerLineTwo, 0, 108, spec.logicalWidth, 30, colors.chromeText, 700);
 
   const tableX = 12;
-  const tableY = 150;
+  const tableY = 172;
   const tableWidth = spec.logicalWidth - 24;
   const colCount = Math.max(1, slots.length);
   const colWidth = tableWidth / colCount;
@@ -316,7 +348,7 @@ function drawLandscapeExport(slots, playerById, headerLineTwo, logoImage, themeM
     context.fillRect(x, tableY, colWidth, timeHeight);
     context.strokeStyle = colors.border;
     context.strokeRect(x, tableY, colWidth, timeHeight);
-    drawCenteredText(context, slot.time, x, tableY + 13, colWidth, 26, colors.timeText, 700);
+    drawCenteredTextMiddle(context, slot.time, x, tableY, colWidth, timeHeight, 26, colors.timeText, 700);
 
     const row1Y = tableY + timeHeight;
     const row2Y = row1Y + rowHeight;
@@ -330,16 +362,16 @@ function drawLandscapeExport(slots, playerById, headerLineTwo, logoImage, themeM
     const first = names[0] || "";
     const rest = names.slice(1);
     if (first) {
-      drawCenteredText(context, first.toUpperCase(), x, row1Y + 24, colWidth, 24, colors.cellText, 700);
+      drawCenteredTextMiddle(context, first.toUpperCase(), x, row1Y, colWidth, rowHeight, 24, colors.cellText, 700);
     }
     if (rest.length) {
       const restText = rest.join("  ").toUpperCase();
-      drawCenteredText(context, restText, x, row2Y + 24, colWidth, 24, colors.cellText, 700);
+      drawCenteredTextMiddle(context, restText, x, row2Y, colWidth, rowHeight, 24, colors.cellText, 700);
     }
   });
 
   if (logoImage) {
-    const size = 46;
+    const size = 40;
     const y = tableY + timeHeight + (rowHeight * 2) + 26;
     const x = (spec.logicalWidth - size) / 2;
     context.drawImage(logoImage, x, y, size, size);
@@ -354,8 +386,8 @@ function drawPortraitExport(slots, playerById, headerLineTwo, logoImage, themeMo
   const { canvas, context } = makeCanvas(spec.logicalWidth * scale, spec.logicalHeight * scale, colors.background);
   context.scale(scale, scale);
 
-  drawCenteredText(context, "PRE-GAME COURT TIME", 0, 24, spec.logicalWidth, 44, colors.chromeText, 700);
-  drawCenteredText(context, headerLineTwo.replace("@", "vs"), 0, 82, spec.logicalWidth, 27, colors.chromeText, 700);
+  drawCenteredText(context, "PRE-GAME COURT TIME", 0, 36, spec.logicalWidth, 44, colors.chromeText, 700);
+  drawCenteredText(context, headerLineTwo.replace("@", "vs"), 0, 86, spec.logicalWidth, 27, colors.chromeText, 700);
 
   const tableX = 30;
   const tableY = 132;
@@ -372,30 +404,54 @@ function drawPortraitExport(slots, playerById, headerLineTwo, logoImage, themeMo
     context.fillRect(tableX, y, timeColWidth, rowHeight);
     context.strokeStyle = colors.border;
     context.strokeRect(tableX, y, timeColWidth, rowHeight);
-    drawCenteredText(context, slot.time, tableX, y + ((rowHeight - 24) / 2), timeColWidth, 24, colors.timeText, 700);
+    drawCenteredTextMiddle(context, slot.time, tableX, y, timeColWidth, rowHeight, 24, colors.timeText, 700);
 
     const x1 = tableX + timeColWidth;
     const x2 = x1 + playerColWidth;
+    const names = slot.playerIds.map((id) => playerById.get(id)?.display || "").filter(Boolean);
+
+    if (names.length >= 3) {
+      context.fillStyle = colors.cellBg;
+      context.fillRect(x1, y, playerColWidth * 2, rowHeight);
+      context.strokeRect(x1, y, playerColWidth * 2, rowHeight);
+      const lineHeight = 24;
+      const totalHeight = lineHeight * 3;
+      const startY = y + ((rowHeight - totalHeight) / 2);
+      names.slice(0, 3).forEach((name, idx) => {
+        drawCenteredTextMiddle(
+          context,
+          name.toUpperCase(),
+          x1,
+          startY + (idx * lineHeight),
+          playerColWidth * 2,
+          lineHeight,
+          24,
+          colors.cellText,
+          700
+        );
+      });
+      return;
+    }
+
     context.fillStyle = colors.cellBg;
     context.fillRect(x1, y, playerColWidth, rowHeight);
     context.fillRect(x2, y, playerColWidth, rowHeight);
     context.strokeRect(x1, y, playerColWidth, rowHeight);
     context.strokeRect(x2, y, playerColWidth, rowHeight);
 
-    const names = slot.playerIds.map((id) => playerById.get(id)?.display || "").filter(Boolean);
     if (names[0]) {
-      drawCenteredText(context, names[0].toUpperCase(), x1, y + ((rowHeight - 24) / 2), playerColWidth, 24, colors.cellText, 700);
+      drawCenteredTextMiddle(context, names[0].toUpperCase(), x1, y, playerColWidth, rowHeight, 24, colors.cellText, 700);
     }
     if (names.length > 1) {
       const restText = names.slice(1).join("  ").toUpperCase();
-      drawCenteredText(context, restText, x2, y + ((rowHeight - 24) / 2), playerColWidth, 24, colors.cellText, 700);
+      drawCenteredTextMiddle(context, restText, x2, y, playerColWidth, rowHeight, 24, colors.cellText, 700);
     }
   });
 
   if (logoImage) {
-    const size = 44;
+    const size = 36;
     const x = (spec.logicalWidth - size) / 2;
-    const y = spec.logicalHeight - 70;
+    const y = spec.logicalHeight - 82;
     context.drawImage(logoImage, x, y, size, size);
   }
 
@@ -477,21 +533,24 @@ export default function PreGame() {
     queryKey: ["pregame-players-remote"],
     queryFn: fetchRemotePlayers,
     enabled: Boolean(supabase),
-    staleTime: 60_000,
+    staleTime: 10_000,
+    refetchInterval: 10_000,
   });
 
   const { data: remoteSchedule } = useQuery({
     queryKey: ["pregame-schedule-remote", gameId],
     queryFn: () => fetchRemoteSchedule(gameId),
     enabled: Boolean(supabase && gameId),
-    staleTime: 60_000,
+    staleTime: 10_000,
+    refetchInterval: 10_000,
   });
 
   const { data: remoteTemplate } = useQuery({
     queryKey: ["pregame-template-remote"],
     queryFn: fetchRemoteTemplate,
     enabled: Boolean(supabase),
-    staleTime: 60_000,
+    staleTime: 10_000,
+    refetchInterval: 10_000,
   });
 
   const washingtonGame = useMemo(() => (
@@ -984,7 +1043,7 @@ export default function PreGame() {
                 className={styles.resetButton}
                 onClick={() => setSlotDrafts((current) => current.map((slot) => ({
                   ...slot,
-                  playerIds: slot.playerIds.map(() => ""),
+                  playerIds: ["", ""],
                 })))}
               >
                 RESET
@@ -1039,10 +1098,11 @@ export default function PreGame() {
                           onClick={() => setSlotDrafts((current) => current.map((candidate, candidateIndex) => {
                             if (candidateIndex !== index) return candidate;
                             const nextPlayerIds = [...candidate.playerIds];
-                            nextPlayerIds[playerIndex] = "";
+                            nextPlayerIds.splice(playerIndex, 1);
+                            while (nextPlayerIds.length < 2) nextPlayerIds.push("");
                             return { ...candidate, playerIds: nextPlayerIds };
                           }))}
-                          aria-label="Clear selected player"
+                          aria-label="Delete player slot"
                         >
                           ✕
                         </button>
