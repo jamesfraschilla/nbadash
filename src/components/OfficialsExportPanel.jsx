@@ -50,7 +50,7 @@ const refereeHeadshotMap = Object.entries(IMAGE_MODULES).reduce((map, [path, url
 const loadedImageCache = new Map();
 let exportFontsPromise = null;
 const EXPORT_FONT_FAMILIES = {
-  header: "\"DIN\", sans-serif",
+  header: "\"DIN\"",
   body: "\"DINalt\", sans-serif",
 };
 
