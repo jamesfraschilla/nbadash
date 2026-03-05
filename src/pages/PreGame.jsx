@@ -773,6 +773,14 @@ export default function PreGame() {
   const sortedPlayers = useMemo(() => sortPlayersByLastName(players), [players]);
   const playerById = useMemo(() => new Map(sortedPlayers.map((player) => [player.id, player])), [sortedPlayers]);
   const headerLineTwo = useMemo(() => buildHeaderLine(game), [game]);
+  const tableTypeScale = useMemo(() => {
+    const slotCount = Math.max(1, slots.length || 1);
+    if (slotCount >= 12) return { time: "22px", player: "18px", lineGap: "2px" };
+    if (slotCount >= 10) return { time: "26px", player: "21px", lineGap: "3px" };
+    if (slotCount >= 8) return { time: "30px", player: "24px", lineGap: "4px" };
+    if (slotCount >= 6) return { time: "36px", player: "30px", lineGap: "6px" };
+    return { time: "42px", player: "34px", lineGap: "8px" };
+  }, [slots.length]);
 
   const openSlotsEditor = () => {
     setSlotDrafts(slots.map((slot) => ({ ...slot, playerIds: [...slot.playerIds] })));
@@ -886,7 +894,14 @@ export default function PreGame() {
         <div className={styles.subtitle}>{headerLineTwo}</div>
       </header>
 
-      <section className={styles.tableWrap}>
+      <section
+        className={styles.tableWrap}
+        style={{
+          "--pregame-time-font-size": tableTypeScale.time,
+          "--pregame-player-font-size": tableTypeScale.player,
+          "--pregame-cell-line-gap": tableTypeScale.lineGap,
+        }}
+      >
         <table className={styles.scheduleTable}>
           <thead>
             <tr>

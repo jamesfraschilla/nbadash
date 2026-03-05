@@ -72,7 +72,7 @@
   background: #000000;
   color: #ffffff;
   text-align: center;
-  font-size: clamp(36px, 2.8vw, 62px);
+  font-size: var(--pregame-time-font-size, clamp(36px, 2.8vw, 62px));
   padding: 8px 4px;
 }
 
@@ -81,7 +81,7 @@
   background: #d3d3d3;
   color: #000000;
   border-top: 1px solid #dfe3e8;
-  font-size: clamp(32px, 2.5vw, 58px);
+  font-size: var(--pregame-player-font-size, clamp(32px, 2.5vw, 58px));
   line-height: 1.08;
   padding: 0;
   overflow: hidden;
@@ -91,7 +91,7 @@
   background: #d3d3d3;
   color: #000000;
   border-top: 1px solid #dfe3e8;
-  font-size: clamp(32px, 2.5vw, 58px);
+  font-size: var(--pregame-player-font-size, clamp(32px, 2.5vw, 58px));
   line-height: 1.08;
   padding: 0;
 }
@@ -115,7 +115,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: var(--pregame-cell-line-gap, 8px);
   padding: 8px 4px;
   cursor: pointer;
 }
