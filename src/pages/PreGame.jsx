@@ -775,11 +775,11 @@ export default function PreGame() {
   const headerLineTwo = useMemo(() => buildHeaderLine(game), [game]);
   const tableTypeScale = useMemo(() => {
     const slotCount = Math.max(1, slots.length || 1);
-    if (slotCount >= 12) return { time: "22px", player: "18px", lineGap: "2px" };
-    if (slotCount >= 10) return { time: "26px", player: "21px", lineGap: "3px" };
-    if (slotCount >= 8) return { time: "30px", player: "24px", lineGap: "4px" };
-    if (slotCount >= 6) return { time: "36px", player: "30px", lineGap: "6px" };
-    return { time: "42px", player: "34px", lineGap: "8px" };
+    if (slotCount >= 12) return { time: "24px", player: "20px", lineGap: "3px" };
+    if (slotCount >= 10) return { time: "30px", player: "24px", lineGap: "4px" };
+    if (slotCount >= 8) return { time: "36px", player: "30px", lineGap: "6px" };
+    if (slotCount >= 6) return { time: "42px", player: "35px", lineGap: "7px" };
+    return { time: "48px", player: "40px", lineGap: "9px" };
   }, [slots.length]);
 
   const openSlotsEditor = () => {
