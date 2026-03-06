@@ -476,30 +476,27 @@ export default function Rotations() {
 
   useEffect(() => {
     if (!playersHydrated) return;
+    const remoteUpdatedAt = Number(remotePlayers?.updatedAt || 0);
+    if (!remoteUpdatedAt || remoteUpdatedAt <= playersUpdatedAtRef.current) return;
     const incomingPlayers = normalizePlayers(remotePlayers?.players || []);
-    const currentPlayers = normalizePlayers(players);
-    if (!incomingPlayers.length) return;
-    if (JSON.stringify(incomingPlayers) === JSON.stringify(currentPlayers)) return;
     setPlayers(incomingPlayers);
-    playersUpdatedAtRef.current = Number(remotePlayers?.updatedAt || Date.now());
+    playersUpdatedAtRef.current = remoteUpdatedAt;
     skipPlayersSaveRef.current = true;
-    persistPlayers(incomingPlayers, playersUpdatedAtRef.current);
-  }, [playersHydrated, remotePlayers, players]);
+    persistPlayers(incomingPlayers, remoteUpdatedAt);
+  }, [playersHydrated, remotePlayers]);
 
   useEffect(() => {
     if (!gameHydrated || !gameId || !remoteGameState?.state) return;
+    const remoteUpdatedAt = Number(remoteGameState.updatedAt || 0);
+    if (!remoteUpdatedAt || remoteUpdatedAt <= gameUpdatedAtRef.current) return;
     const incomingDepth = normalizeDepthChart(remoteGameState.state.depthChart);
     const incomingLineups = normalizeLineups(remoteGameState.state.lineups);
-    if (
-      JSON.stringify(incomingDepth) === JSON.stringify(depthChart)
-      && JSON.stringify(incomingLineups) === JSON.stringify(lineups)
-    ) return;
     setDepthChart(incomingDepth);
     setLineups(incomingLineups);
-    gameUpdatedAtRef.current = Number(remoteGameState.updatedAt || Date.now());
+    gameUpdatedAtRef.current = remoteUpdatedAt;
     skipGameSaveRef.current = true;
-    persistGameState(gameId, { depthChart: incomingDepth, lineups: incomingLineups }, gameUpdatedAtRef.current);
-  }, [gameHydrated, gameId, remoteGameState, depthChart, lineups]);
+    persistGameState(gameId, { depthChart: incomingDepth, lineups: incomingLineups }, remoteUpdatedAt);
+  }, [gameHydrated, gameId, remoteGameState]);
 
   const playerOptions = useMemo(() => {
     const unique = new Set();
