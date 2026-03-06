@@ -5,15 +5,42 @@
 }
 
 .page {
+  --table-max-width: 1120px;
+  --section-bg: #ffffff;
+  --section-border: #b7b7b7;
+  --section-header-bg: #151515;
+  --section-header-text: #ffffff;
+  --table-header-bg: #efefef;
+  --table-header-text: #141414;
+  --cell-bg: #ffffff;
+  --cell-text: #111111;
+  --border: #c8c8c8;
+  --input-bg: #ffffff;
+  --input-text: #111111;
+
   min-height: 100vh;
-  background: #f7f7f7;
-  color: #111111;
+  background: var(--bg);
+  color: var(--text);
   font-family: "DIN", sans-serif;
   padding: 16px 20px 56px;
 }
 
+:global(html[data-theme="dark"]) .page {
+  --section-bg: #000000;
+  --section-border: #6f6f6f;
+  --section-header-bg: #ffffff;
+  --section-header-text: #000000;
+  --table-header-bg: #ffffff;
+  --table-header-text: #000000;
+  --cell-bg: #000000;
+  --cell-text: #ffffff;
+  --border: #6f6f6f;
+  --input-bg: #0a0a0a;
+  --input-text: #ffffff;
+}
+
 .topRow {
-  width: min(1560px, 100%);
+  width: min(var(--table-max-width), 100%);
   margin: 0 auto 10px;
   display: flex;
   align-items: center;
@@ -24,17 +51,17 @@
 .secondaryButton {
   display: inline-block;
   padding: 6px 12px;
-  border: 1px solid #b5b5b5;
+  border: 1px solid var(--border);
   border-radius: 4px;
-  background: #ffffff;
-  color: #1b1b1b;
+  background: var(--cell-bg);
+  color: var(--cell-text);
   font-family: "DIN", sans-serif;
   font-size: 13px;
   cursor: pointer;
 }
 
 .header {
-  width: min(1560px, 100%);
+  width: min(var(--table-max-width), 100%);
   margin: 0 auto 8px;
   text-align: left;
 }
@@ -43,29 +70,21 @@
   margin: 0;
   font-size: clamp(28px, 4.2vw, 50px);
   letter-spacing: 0.2px;
-  text-transform: uppercase;
-}
-
-.subtitle {
-  margin: 2px 0 0;
-  font-size: clamp(16px, 2vw, 24px);
-  letter-spacing: 0.2px;
-  text-transform: uppercase;
 }
 
 .sheetSection {
-  width: min(1560px, 100%);
+  width: min(var(--table-max-width), 100%);
   margin: 8px auto 0;
-  border: 1px solid #b7b7b7;
-  background: #ffffff;
+  border: 1px solid var(--section-border);
+  background: var(--section-bg);
 }
 
 .sectionHeaderButton {
   width: 100%;
   border: none;
-  border-bottom: 1px solid #c8c8c8;
-  background: #151515;
-  color: #ffffff;
+  border-bottom: 1px solid var(--border);
+  background: var(--section-header-bg);
+  color: var(--section-header-text);
   font-family: "DIN", sans-serif;
   font-size: 18px;
   text-align: left;
@@ -79,6 +98,8 @@
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
+  background: var(--cell-bg);
+  color: var(--cell-text);
 }
 
 .depthTable th,
@@ -87,31 +108,33 @@
 .rotationTable td,
 .totalsTable th,
 .totalsTable td {
-  border: 1px solid #c8c8c8;
+  border: 1px solid var(--border);
   text-align: center;
   padding: 2px 4px;
   font-size: 14px;
   height: 28px;
+  background: var(--cell-bg);
+  color: var(--cell-text);
 }
 
 .depthTable thead th,
 .rotationTable thead th,
 .totalsTable thead th {
-  background: #efefef;
-  color: #141414;
+  background: var(--table-header-bg);
+  color: var(--table-header-text);
 }
 
 .playerNameInput,
 .capInput {
   width: 100%;
   height: 24px;
-  border: 1px solid #d8d8d8;
+  border: 1px solid var(--border);
   border-radius: 2px;
   padding: 0 6px;
   font-family: "DIN", sans-serif;
   font-size: 14px;
-  background: #ffffff;
-  color: #111111;
+  background: var(--input-bg);
+  color: var(--input-text);
   text-transform: uppercase;
   text-align: center;
 }
@@ -134,39 +157,47 @@
   width: 100%;
   border: none;
   background: transparent;
-  color: #111111;
+  color: inherit;
   font-family: "DIN", sans-serif;
   font-size: 14px;
   text-align: center;
   height: 24px;
 }
 
+:global(html[data-theme="dark"]) .playerSelect {
+  color-scheme: dark;
+}
+
 .duplicateCell {
-  background: #fff2cc;
+  background: #fff2cc !important;
+  color: #111111 !important;
   box-shadow: inset 0 0 0 2px #c08300;
 }
 
 .subInCell {
-  background: #d9ead3;
+  background: #d9ead3 !important;
+  color: #111111 !important;
 }
 
 .subOutCell {
-  background: #f4cccc;
+  background: #f4cccc !important;
+  color: #111111 !important;
 }
 
 .nearCapCell {
-  background: #fff2cc;
+  background: #fff2cc !important;
+  color: #111111 !important;
 }
 
 .overCapCell {
-  background: #f4cccc;
-  color: #8a0000;
+  background: #f4cccc !important;
+  color: #8a0000 !important;
   font-weight: 700;
 }
 
 .badTotalCell {
-  background: #fff2cc;
-  color: #8a0000;
+  background: #fff2cc !important;
+  color: #8a0000 !important;
   font-weight: 700;
 }
 

@@ -5,8 +5,10 @@ import { fetchGame } from "../api.js";
 import { supabase } from "../supabaseClient.js";
 import styles from "./Rotations.module.css";
 
-const STORAGE_PREFIX = "rotations:v2:";
+const PLAYERS_STORAGE_KEY = "rotations:players:v1";
+const GAME_STORAGE_PREFIX = "rotations:game:v1:";
 const ROTATIONS_ACTION_PAYLOAD = 900000021;
+const ROTATIONS_GLOBAL_PLAYERS_GAME_ID = "9999999911";
 const QUARTERS = [1, 2, 3, 4];
 const MINUTES = Array.from({ length: 12 }, (_, index) => 12 - index);
 const POSITION_COLUMNS = [1, 2, 3, 4, 5];
@@ -47,8 +49,7 @@ const createDefaultQuarterLineups = () => ({
 
 const createDefaultDepthChart = () => DEFAULT_DEPTH_ROWS.map((row) => row.slice());
 
-const createDefaultState = () => ({
-  players: DEFAULT_PLAYERS,
+const createDefaultGameState = () => ({
   depthChart: createDefaultDepthChart(),
   lineups: createDefaultQuarterLineups(),
 });
@@ -80,24 +81,11 @@ function normalizePlayers(rawPlayers) {
 
 function normalizeDepthChart(rawDepth) {
   const fallback = createDefaultDepthChart();
-  if (Array.isArray(rawDepth)) {
-    const normalizedRows = [0, 1, 2].map((rowIndex) => {
-      const row = Array.isArray(rawDepth[rowIndex]) ? rawDepth[rowIndex] : [];
-      return POSITION_COLUMNS.map((_, columnIndex) => normalizeName(row[columnIndex] || ""));
-    });
-    return normalizedRows;
-  }
-
-  // Backward compatibility with previous shape keyed by quarter.
-  if (rawDepth && typeof rawDepth === "object") {
-    const quarterOneRows = Array.isArray(rawDepth[1]) ? rawDepth[1] : fallback;
-    return [0, 1, 2].map((rowIndex) => {
-      const row = Array.isArray(quarterOneRows[rowIndex]) ? quarterOneRows[rowIndex] : [];
-      return POSITION_COLUMNS.map((_, columnIndex) => normalizeName(row[columnIndex] || ""));
-    });
-  }
-
-  return fallback;
+  if (!Array.isArray(rawDepth)) return fallback;
+  return [0, 1, 2].map((rowIndex) => {
+    const row = Array.isArray(rawDepth[rowIndex]) ? rawDepth[rowIndex] : [];
+    return POSITION_COLUMNS.map((_, columnIndex) => normalizeName(row[columnIndex] || ""));
+  });
 }
 
 function normalizeLineups(rawLineups) {
@@ -113,51 +101,108 @@ function normalizeLineups(rawLineups) {
   return result;
 }
 
-function normalizeState(rawState) {
-  if (!rawState || typeof rawState !== "object") return createDefaultState();
+function normalizeGameState(rawState) {
+  if (!rawState || typeof rawState !== "object") return createDefaultGameState();
+
+  // Backward compatibility with older payload that included players.
+  const depthSource = Array.isArray(rawState.depthChart)
+    ? rawState.depthChart
+    : (rawState.depthChart?.[1] || rawState.depthChart);
+
   return {
-    players: normalizePlayers(rawState.players),
-    depthChart: normalizeDepthChart(rawState.depthChart),
+    depthChart: normalizeDepthChart(depthSource),
     lineups: normalizeLineups(rawState.lineups),
   };
 }
 
-function localStorageKey(gameId) {
-  return `${STORAGE_PREFIX}${gameId}`;
+function loadPlayersPayload() {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(PLAYERS_STORAGE_KEY);
+  if (!raw) return null;
+  const parsed = safeParseJson(raw, null);
+  if (Array.isArray(parsed)) {
+    return { updatedAt: 0, players: normalizePlayers(parsed) };
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  return {
+    updatedAt: Number(parsed.updatedAt || 0),
+    players: normalizePlayers(parsed.players),
+  };
 }
 
-function loadLocalPayload(gameId) {
+function persistPlayers(players, updatedAt = Date.now()) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(PLAYERS_STORAGE_KEY, JSON.stringify({
+    updatedAt,
+    players: normalizePlayers(players),
+  }));
+}
+
+function gameStorageKey(gameId) {
+  return `${GAME_STORAGE_PREFIX}${gameId}`;
+}
+
+function loadGamePayload(gameId) {
   if (typeof window === "undefined" || !gameId) return null;
-  const raw = window.localStorage.getItem(localStorageKey(gameId));
+  const raw = window.localStorage.getItem(gameStorageKey(gameId));
   if (!raw) return null;
   const parsed = safeParseJson(raw, null);
   if (!parsed || typeof parsed !== "object") return null;
   return {
     updatedAt: Number(parsed.updatedAt || 0),
-    state: normalizeState(parsed.state || parsed),
+    state: normalizeGameState(parsed.state || parsed),
   };
 }
 
-function persistLocalPayload(gameId, state, updatedAt = Date.now()) {
+function persistGameState(gameId, state, updatedAt = Date.now()) {
   if (typeof window === "undefined" || !gameId) return;
-  window.localStorage.setItem(localStorageKey(gameId), JSON.stringify({
+  window.localStorage.setItem(gameStorageKey(gameId), JSON.stringify({
     updatedAt,
     state,
   }));
 }
 
-function parseRemotePayload(note) {
+function parseRemotePayload(note, key) {
   const parsed = safeParseJson(note || "{}", null);
-  if (!parsed || typeof parsed !== "object") return { updatedAt: 0, state: null };
+  if (!parsed || typeof parsed !== "object") return { updatedAt: 0, value: null };
   const updatedAt = Number(parsed.updatedAt || 0);
-  const state = parsed.state || parsed;
+  if (parsed[key] != null) return { updatedAt, value: parsed[key] };
+  if (parsed.value != null) return { updatedAt, value: parsed.value };
+  return { updatedAt, value: parsed };
+}
+
+async function fetchRemotePlayers() {
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("pbp_highlights")
+    .select("note")
+    .eq("game_id", ROTATIONS_GLOBAL_PLAYERS_GAME_ID)
+    .eq("action_number", ROTATIONS_ACTION_PAYLOAD)
+    .maybeSingle();
+  if (error) return null;
+  const payload = parseRemotePayload(data?.note, "players");
   return {
-    updatedAt,
-    state: normalizeState(state),
+    updatedAt: payload.updatedAt,
+    players: normalizePlayers(payload.value),
   };
 }
 
-async function fetchRemoteState(gameId) {
+async function saveRemotePlayers(players, updatedAt = Date.now()) {
+  if (!supabase) return;
+  await supabase.from("pbp_highlights").upsert(
+    {
+      game_id: ROTATIONS_GLOBAL_PLAYERS_GAME_ID,
+      action_number: ROTATIONS_ACTION_PAYLOAD,
+      note: JSON.stringify({
+        updatedAt,
+        players: normalizePlayers(players),
+      }),
+    },
+    { onConflict: "game_id,action_number" }
+  );
+}
+
+async function fetchRemoteGameState(gameId) {
   if (!supabase || !gameId) return null;
   const { data, error } = await supabase
     .from("pbp_highlights")
@@ -166,10 +211,14 @@ async function fetchRemoteState(gameId) {
     .eq("action_number", ROTATIONS_ACTION_PAYLOAD)
     .maybeSingle();
   if (error) return null;
-  return parseRemotePayload(data?.note);
+  const payload = parseRemotePayload(data?.note, "state");
+  return {
+    updatedAt: payload.updatedAt,
+    state: normalizeGameState(payload.value),
+  };
 }
 
-async function saveRemoteState(gameId, state, updatedAt = Date.now()) {
+async function saveRemoteGameState(gameId, state, updatedAt = Date.now()) {
   if (!supabase || !gameId) return;
   await supabase.from("pbp_highlights").upsert(
     {
@@ -190,16 +239,13 @@ function isWashingtonTeam(team) {
   return tricode === "WAS" || name.includes("washington") || name.includes("wizards");
 }
 
-function buildOpponentLabel(game) {
+function buildOpponentLine(game) {
   const away = game?.awayTeam;
   const home = game?.homeTeam;
   const washingtonAway = isWashingtonTeam(away);
   const opponent = washingtonAway ? home : away;
-  if (!opponent) return "WASHINGTON ROTATION PLAN";
-  const city = String(opponent.teamCity || "").trim();
-  const teamName = String(opponent.teamName || "").trim();
-  if (washingtonAway) return `@ ${city} ${teamName}`.trim().toUpperCase();
-  return `vs ${city} ${teamName}`.trim().toUpperCase();
+  const city = String(opponent?.teamCity || "Opponent").trim();
+  return washingtonAway ? `@ ${city}` : `vs ${city}`;
 }
 
 function quarterLabel(quarter) {
@@ -214,10 +260,12 @@ export default function Rotations() {
   const [params] = useSearchParams();
   const dateParam = params.get("d");
   const backUrl = dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`;
+
   const [players, setPlayers] = useState(DEFAULT_PLAYERS);
   const [depthChart, setDepthChart] = useState(createDefaultDepthChart());
   const [lineups, setLineups] = useState(createDefaultQuarterLineups());
-  const [hydrated, setHydrated] = useState(false);
+  const [playersHydrated, setPlayersHydrated] = useState(false);
+  const [gameHydrated, setGameHydrated] = useState(false);
   const [collapsed, setCollapsed] = useState({
     restrictions: false,
     depth: false,
@@ -226,8 +274,11 @@ export default function Rotations() {
     q3: false,
     q4: false,
   });
-  const updatedAtRef = useRef(0);
-  const skipSaveRef = useRef(false);
+
+  const playersUpdatedAtRef = useRef(0);
+  const gameUpdatedAtRef = useRef(0);
+  const skipPlayersSaveRef = useRef(false);
+  const skipGameSaveRef = useRef(false);
 
   const { data: game, isLoading, error } = useQuery({
     queryKey: ["game-rotations", gameId],
@@ -235,9 +286,17 @@ export default function Rotations() {
     enabled: Boolean(gameId),
   });
 
-  const { data: remoteState, isFetched: remoteStateFetched } = useQuery({
-    queryKey: ["rotations-remote", gameId],
-    queryFn: () => fetchRemoteState(gameId),
+  const { data: remotePlayers, isFetched: remotePlayersFetched } = useQuery({
+    queryKey: ["rotations-players-remote"],
+    queryFn: fetchRemotePlayers,
+    enabled: Boolean(supabase),
+    staleTime: 10_000,
+    refetchInterval: 10_000,
+  });
+
+  const { data: remoteGameState, isFetched: remoteGameFetched } = useQuery({
+    queryKey: ["rotations-game-remote", gameId],
+    queryFn: () => fetchRemoteGameState(gameId),
     enabled: Boolean(supabase && gameId),
     staleTime: 10_000,
     refetchInterval: 10_000,
@@ -248,66 +307,119 @@ export default function Rotations() {
   ), [game]);
 
   useEffect(() => {
-    setHydrated(false);
-    updatedAtRef.current = 0;
-    skipSaveRef.current = false;
+    setPlayersHydrated(false);
+    setGameHydrated(false);
+    playersUpdatedAtRef.current = 0;
+    gameUpdatedAtRef.current = 0;
+    skipPlayersSaveRef.current = false;
+    skipGameSaveRef.current = false;
   }, [gameId]);
 
   useEffect(() => {
-    if (hydrated || !gameId) return;
-    if (supabase && !remoteStateFetched) return;
+    if (playersHydrated) return;
+    if (supabase && !remotePlayersFetched) return;
 
-    const defaults = createDefaultState();
-    const localPayload = loadLocalPayload(gameId);
+    const localPayload = loadPlayersPayload();
     const localUpdatedAt = Number(localPayload?.updatedAt || 0);
-    const remoteUpdatedAt = Number(remoteState?.updatedAt || 0);
+    const remoteUpdatedAt = Number(remotePlayers?.updatedAt || 0);
 
-    let selected = defaults;
-    let selectedUpdatedAt = 0;
-
-    if (remoteState?.state && remoteUpdatedAt >= localUpdatedAt) {
-      selected = remoteState.state;
-      selectedUpdatedAt = remoteUpdatedAt;
-    } else if (localPayload?.state) {
-      selected = localPayload.state;
-      selectedUpdatedAt = localUpdatedAt;
+    if (remotePlayers?.players?.length && remoteUpdatedAt >= localUpdatedAt) {
+      setPlayers(remotePlayers.players);
+      playersUpdatedAtRef.current = remoteUpdatedAt;
+      skipPlayersSaveRef.current = true;
+    } else if (localPayload?.players?.length) {
+      setPlayers(localPayload.players);
+      playersUpdatedAtRef.current = localUpdatedAt;
+      skipPlayersSaveRef.current = true;
+    } else if (remotePlayers?.players?.length) {
+      setPlayers(remotePlayers.players);
+      playersUpdatedAtRef.current = remoteUpdatedAt;
+      skipPlayersSaveRef.current = true;
     }
 
-    setPlayers(selected.players);
-    setDepthChart(selected.depthChart);
-    setLineups(selected.lineups);
-    updatedAtRef.current = selectedUpdatedAt;
-    skipSaveRef.current = true;
-    setHydrated(true);
-  }, [gameId, hydrated, remoteState, remoteStateFetched]);
+    setPlayersHydrated(true);
+  }, [playersHydrated, remotePlayers, remotePlayersFetched]);
 
   useEffect(() => {
-    if (!hydrated || !gameId) return;
-    const state = { players, depthChart, lineups };
+    if (gameHydrated || !gameId) return;
+    if (supabase && !remoteGameFetched) return;
 
-    if (skipSaveRef.current) {
-      skipSaveRef.current = false;
-      persistLocalPayload(gameId, state, updatedAtRef.current || Date.now());
+    const defaults = createDefaultGameState();
+    const localPayload = loadGamePayload(gameId);
+    const localUpdatedAt = Number(localPayload?.updatedAt || 0);
+    const remoteUpdatedAt = Number(remoteGameState?.updatedAt || 0);
+
+    if (remoteGameState?.state && remoteUpdatedAt >= localUpdatedAt) {
+      setDepthChart(remoteGameState.state.depthChart);
+      setLineups(remoteGameState.state.lineups);
+      gameUpdatedAtRef.current = remoteUpdatedAt;
+      skipGameSaveRef.current = true;
+    } else if (localPayload?.state) {
+      setDepthChart(localPayload.state.depthChart);
+      setLineups(localPayload.state.lineups);
+      gameUpdatedAtRef.current = localUpdatedAt;
+      skipGameSaveRef.current = true;
+    } else {
+      setDepthChart(defaults.depthChart);
+      setLineups(defaults.lineups);
+      gameUpdatedAtRef.current = Date.now();
+      skipGameSaveRef.current = true;
+    }
+
+    setGameHydrated(true);
+  }, [gameHydrated, gameId, remoteGameState, remoteGameFetched]);
+
+  useEffect(() => {
+    if (!playersHydrated) return;
+
+    if (skipPlayersSaveRef.current) {
+      skipPlayersSaveRef.current = false;
+      persistPlayers(players, playersUpdatedAtRef.current || Date.now());
       return;
     }
 
     const updatedAt = Date.now();
-    updatedAtRef.current = updatedAt;
-    persistLocalPayload(gameId, state, updatedAt);
-    saveRemoteState(gameId, state, updatedAt);
-  }, [gameId, hydrated, players, depthChart, lineups]);
+    playersUpdatedAtRef.current = updatedAt;
+    persistPlayers(players, updatedAt);
+    saveRemotePlayers(players, updatedAt);
+  }, [players, playersHydrated]);
 
   useEffect(() => {
-    if (!hydrated || !gameId || !remoteState?.state) return;
-    const remoteUpdatedAt = Number(remoteState.updatedAt || 0);
-    if (!remoteUpdatedAt || remoteUpdatedAt <= updatedAtRef.current) return;
-    setPlayers(remoteState.state.players);
-    setDepthChart(remoteState.state.depthChart);
-    setLineups(remoteState.state.lineups);
-    updatedAtRef.current = remoteUpdatedAt;
-    skipSaveRef.current = true;
-    persistLocalPayload(gameId, remoteState.state, remoteUpdatedAt);
-  }, [gameId, hydrated, remoteState]);
+    if (!gameHydrated || !gameId) return;
+
+    const state = { depthChart, lineups };
+    if (skipGameSaveRef.current) {
+      skipGameSaveRef.current = false;
+      persistGameState(gameId, state, gameUpdatedAtRef.current || Date.now());
+      return;
+    }
+
+    const updatedAt = Date.now();
+    gameUpdatedAtRef.current = updatedAt;
+    persistGameState(gameId, state, updatedAt);
+    saveRemoteGameState(gameId, state, updatedAt);
+  }, [depthChart, lineups, gameHydrated, gameId]);
+
+  useEffect(() => {
+    if (!playersHydrated) return;
+    const remoteUpdatedAt = Number(remotePlayers?.updatedAt || 0);
+    if (!remoteUpdatedAt || remoteUpdatedAt <= playersUpdatedAtRef.current) return;
+    setPlayers(remotePlayers.players || []);
+    playersUpdatedAtRef.current = remoteUpdatedAt;
+    skipPlayersSaveRef.current = true;
+    persistPlayers(remotePlayers.players || [], remoteUpdatedAt);
+  }, [playersHydrated, remotePlayers]);
+
+  useEffect(() => {
+    if (!gameHydrated || !gameId || !remoteGameState?.state) return;
+    const remoteUpdatedAt = Number(remoteGameState.updatedAt || 0);
+    if (!remoteUpdatedAt || remoteUpdatedAt <= gameUpdatedAtRef.current) return;
+    setDepthChart(remoteGameState.state.depthChart);
+    setLineups(remoteGameState.state.lineups);
+    gameUpdatedAtRef.current = remoteUpdatedAt;
+    skipGameSaveRef.current = true;
+    persistGameState(gameId, remoteGameState.state, remoteUpdatedAt);
+  }, [gameHydrated, gameId, remoteGameState]);
 
   const playerOptions = useMemo(() => {
     const unique = new Set();
@@ -360,10 +472,7 @@ export default function Rotations() {
   }, [lineups]);
 
   const allQuarterTotal = quarterTotals[1] + quarterTotals[2] + quarterTotals[3] + quarterTotals[4];
-  const opponentLabel = useMemo(() => buildOpponentLabel(game), [game]);
-  const teamHeader = String(game?.homeTeam?.teamName && game?.awayTeam?.teamName
-    ? (isWashingtonTeam(game.awayTeam) ? game.homeTeam.teamName : game.awayTeam.teamName)
-    : "OPPONENT").toUpperCase();
+  const opponentLine = useMemo(() => buildOpponentLine(game), [game]);
 
   const updatePlayerField = (playerId, field, value) => {
     setPlayers((current) => current.map((player) => {
@@ -394,10 +503,9 @@ export default function Rotations() {
   };
 
   const resetAll = () => {
-    const next = createDefaultState();
-    setPlayers(next.players);
-    setDepthChart(next.depthChart);
-    setLineups(next.lineups);
+    const nextGame = createDefaultGameState();
+    setDepthChart(nextGame.depthChart);
+    setLineups(nextGame.lineups);
   };
 
   const toggleSection = (key) => {
@@ -441,12 +549,11 @@ export default function Rotations() {
     <div className={styles.page}>
       <div className={styles.topRow}>
         <Link className={styles.backButton} to={backUrl}>Back</Link>
-        <button type="button" className={styles.secondaryButton} onClick={resetAll}>Reset</button>
+        <button type="button" className={styles.secondaryButton} onClick={resetAll}>Reset Game Grid</button>
       </div>
 
       <header className={styles.header}>
-        <h1 className={styles.title}>{teamHeader}</h1>
-        <p className={styles.subtitle}>{opponentLabel}</p>
+        <h1 className={styles.title}>{opponentLine}</h1>
       </header>
 
       <section className={styles.sheetSection}>
