@@ -254,7 +254,7 @@ async function fetchRemotePlayers() {
 
 async function saveRemotePlayers(players, updatedAt = Date.now()) {
   if (!supabase) return;
-  await supabase.from("pbp_highlights").upsert(
+  const { error } = await supabase.from("pbp_highlights").upsert(
     {
       game_id: ROTATIONS_GLOBAL_PLAYERS_GAME_ID,
       action_number: ROTATIONS_PLAYERS_ACTION_PAYLOAD,
@@ -265,6 +265,10 @@ async function saveRemotePlayers(players, updatedAt = Date.now()) {
     },
     { onConflict: "game_id,action_number" }
   );
+  if (error) {
+    // eslint-disable-next-line no-console
+    console.error("Failed to save rotations players", error);
+  }
 }
 
 async function fetchRemoteGameState(gameId) {
@@ -285,7 +289,7 @@ async function fetchRemoteGameState(gameId) {
 
 async function saveRemoteGameState(gameId, state, updatedAt = Date.now()) {
   if (!supabase || !gameId) return;
-  await supabase.from("pbp_highlights").upsert(
+  const { error } = await supabase.from("pbp_highlights").upsert(
     {
       game_id: String(gameId),
       action_number: ROTATIONS_GAME_ACTION_PAYLOAD,
@@ -296,6 +300,10 @@ async function saveRemoteGameState(gameId, state, updatedAt = Date.now()) {
     },
     { onConflict: "game_id,action_number" }
   );
+  if (error) {
+    // eslint-disable-next-line no-console
+    console.error("Failed to save rotations game state", error);
+  }
 }
 
 async function fetchRemoteDepthTemplate() {
@@ -316,7 +324,7 @@ async function fetchRemoteDepthTemplate() {
 
 async function saveRemoteDepthTemplate(depthChart, updatedAt = Date.now()) {
   if (!supabase) return;
-  await supabase.from("pbp_highlights").upsert(
+  const { error } = await supabase.from("pbp_highlights").upsert(
     {
       game_id: ROTATIONS_GLOBAL_DEPTH_GAME_ID,
       action_number: ROTATIONS_DEPTH_ACTION_PAYLOAD,
@@ -327,6 +335,10 @@ async function saveRemoteDepthTemplate(depthChart, updatedAt = Date.now()) {
     },
     { onConflict: "game_id,action_number" }
   );
+  if (error) {
+    // eslint-disable-next-line no-console
+    console.error("Failed to save rotations depth template", error);
+  }
 }
 
 function isWashingtonTeam(team) {
@@ -591,37 +603,17 @@ export default function Rotations() {
 
   useEffect(() => {
     if (!playersHydrated) return;
-    const remoteUpdatedAt = Number(remotePlayers?.updatedAt || 0);
-    if (!remoteUpdatedAt || remoteUpdatedAt <= playersUpdatedAtRef.current) return;
-    const incomingPlayers = normalizePlayers(remotePlayers?.players || []);
-    setPlayers(incomingPlayers);
-    playersUpdatedAtRef.current = remoteUpdatedAt;
-    skipPlayersSaveRef.current = true;
-    persistPlayers(incomingPlayers, remoteUpdatedAt);
+    applyRemotePlayers(remotePlayers);
   }, [playersHydrated, remotePlayers]);
 
   useEffect(() => {
     if (!depthTemplateHydrated) return;
-    const remoteUpdatedAt = Number(remoteDepthTemplate?.updatedAt || 0);
-    if (!remoteUpdatedAt || remoteUpdatedAt <= depthTemplateUpdatedAtRef.current) return;
-    const incomingDepth = normalizeDepthChart(remoteDepthTemplate?.depthChart);
-    setDepthTemplate(incomingDepth);
-    depthTemplateUpdatedAtRef.current = remoteUpdatedAt;
-    skipDepthTemplateSaveRef.current = true;
-    persistDepthTemplate(incomingDepth, remoteUpdatedAt);
+    applyRemoteDepthTemplate(remoteDepthTemplate);
   }, [depthTemplateHydrated, remoteDepthTemplate]);
 
   useEffect(() => {
     if (!gameHydrated || !gameId || !remoteGameState?.state) return;
-    const remoteUpdatedAt = Number(remoteGameState.updatedAt || 0);
-    if (!remoteUpdatedAt || remoteUpdatedAt <= gameUpdatedAtRef.current) return;
-    const incomingDepth = normalizeDepthChart(remoteGameState.state.depthChart);
-    const incomingLineups = normalizeLineups(remoteGameState.state.lineups);
-    setDepthChart(incomingDepth);
-    setLineups(incomingLineups);
-    gameUpdatedAtRef.current = remoteUpdatedAt;
-    skipGameSaveRef.current = true;
-    persistGameState(gameId, { depthChart: incomingDepth, lineups: incomingLineups }, remoteUpdatedAt);
+    applyRemoteGameState(remoteGameState);
   }, [gameHydrated, gameId, remoteGameState]);
 
   const playerOptions = useMemo(() => {
@@ -786,6 +778,38 @@ export default function Rotations() {
     );
   };
 
+  const applyRemotePlayers = (payload) => {
+    const remoteUpdatedAt = Number(payload?.updatedAt || 0);
+    if (!remoteUpdatedAt || remoteUpdatedAt <= playersUpdatedAtRef.current) return;
+    const incomingPlayers = normalizePlayers(payload?.players || []);
+    setPlayers(incomingPlayers);
+    playersUpdatedAtRef.current = remoteUpdatedAt;
+    skipPlayersSaveRef.current = true;
+    persistPlayers(incomingPlayers, remoteUpdatedAt);
+  };
+
+  const applyRemoteDepthTemplate = (payload) => {
+    const remoteUpdatedAt = Number(payload?.updatedAt || 0);
+    if (!remoteUpdatedAt || remoteUpdatedAt <= depthTemplateUpdatedAtRef.current) return;
+    const incomingDepth = normalizeDepthChart(payload?.depthChart);
+    setDepthTemplate(incomingDepth);
+    depthTemplateUpdatedAtRef.current = remoteUpdatedAt;
+    skipDepthTemplateSaveRef.current = true;
+    persistDepthTemplate(incomingDepth, remoteUpdatedAt);
+  };
+
+  const applyRemoteGameState = (payload) => {
+    const remoteUpdatedAt = Number(payload?.updatedAt || 0);
+    if (!remoteUpdatedAt || remoteUpdatedAt <= gameUpdatedAtRef.current) return;
+    const incomingDepth = normalizeDepthChart(payload?.state?.depthChart);
+    const incomingLineups = normalizeLineups(payload?.state?.lineups);
+    setDepthChart(incomingDepth);
+    setLineups(incomingLineups);
+    gameUpdatedAtRef.current = remoteUpdatedAt;
+    skipGameSaveRef.current = true;
+    persistGameState(gameId, { depthChart: incomingDepth, lineups: incomingLineups }, remoteUpdatedAt);
+  };
+
   useEffect(() => {
     const endDragFill = () => {
       dragFillRef.current.active = false;
@@ -812,6 +836,67 @@ export default function Rotations() {
     window.addEventListener("touchmove", handleTouchMove, { passive: false });
     return () => window.removeEventListener("touchmove", handleTouchMove);
   }, []);
+
+  useEffect(() => {
+    if (!supabase || !gameId) return undefined;
+    const channel = supabase
+      .channel(`rotations-${gameId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "pbp_highlights",
+          filter: `game_id=eq.${ROTATIONS_GLOBAL_PLAYERS_GAME_ID}`,
+        },
+        (payload) => {
+          const row = payload.new || payload.old;
+          if (!row || Number(row.action_number) !== ROTATIONS_PLAYERS_ACTION_PAYLOAD) return;
+          applyRemotePlayers(parseRemotePlayersPayload(row.note));
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "pbp_highlights",
+          filter: `game_id=eq.${ROTATIONS_GLOBAL_DEPTH_GAME_ID}`,
+        },
+        (payload) => {
+          const row = payload.new || payload.old;
+          if (!row || Number(row.action_number) !== ROTATIONS_DEPTH_ACTION_PAYLOAD) return;
+          const parsed = parseRemotePayload(row.note, "depthChart");
+          applyRemoteDepthTemplate({
+            updatedAt: parsed.updatedAt,
+            depthChart: parsed.value,
+          });
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "pbp_highlights",
+          filter: `game_id=eq.${gameId}`,
+        },
+        (payload) => {
+          const row = payload.new || payload.old;
+          if (!row || Number(row.action_number) !== ROTATIONS_GAME_ACTION_PAYLOAD) return;
+          const parsed = parseRemotePayload(row.note, "state");
+          applyRemoteGameState({
+            updatedAt: parsed.updatedAt,
+            state: normalizeGameState(parsed.value),
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [gameId]);
 
   const getRowValues = (quarter, minuteIndex) => (lineups[quarter]?.[minuteIndex] || []);
 
