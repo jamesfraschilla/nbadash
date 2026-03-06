@@ -9,11 +9,11 @@ const PLAYERS_STORAGE_KEY = "rotations:players:v1";
 const DEPTH_TEMPLATE_STORAGE_KEY = "rotations:depth-template:v1";
 const GAME_STORAGE_PREFIX = "rotations:game:v1:";
 const SECTION_STATE_STORAGE_PREFIX = "rotations:sections:v1:";
-const ROTATIONS_GAME_ACTION_PAYLOAD = 900000021;
-const ROTATIONS_PLAYERS_ACTION_PAYLOAD = 900000022;
-const ROTATIONS_DEPTH_ACTION_PAYLOAD = 900000023;
-const ROTATIONS_GLOBAL_PLAYERS_GAME_ID = "9999999911";
-const ROTATIONS_GLOBAL_DEPTH_GAME_ID = "9999999912";
+const ROTATIONS_TABLE = "rotations_shared_state";
+const ROTATIONS_SCOPE_PLAYERS = "players";
+const ROTATIONS_SCOPE_DEPTH_TEMPLATE = "depth_template";
+const ROTATIONS_SCOPE_GAME = "game";
+const ROTATIONS_GLOBAL_SCOPE_KEY = "global";
 const QUARTERS = [1, 2, 3, 4];
 const MINUTES = Array.from({ length: 12 }, (_, index) => 12 - index);
 const POSITION_COLUMNS = [1, 2, 3, 4, 5];
@@ -211,59 +211,39 @@ function persistGameState(gameId, state, updatedAt = Date.now()) {
   }));
 }
 
-function parseRemotePayload(note, key) {
-  const parsed = safeParseJson(note || "{}", null);
-  if (!parsed || typeof parsed !== "object") return { updatedAt: 0, value: null };
-  const updatedAt = Number(parsed.updatedAt || 0);
-  if (parsed[key] != null) return { updatedAt, value: parsed[key] };
-  if (parsed.value != null) return { updatedAt, value: parsed.value };
-  return { updatedAt, value: parsed };
-}
-
-function parseRemotePlayersPayload(note) {
-  const parsed = safeParseJson(note || "{}", null);
-  if (!parsed || typeof parsed !== "object") return { updatedAt: 0, players: null };
-  const updatedAt = Number(parsed.updatedAt || 0);
-  if (Array.isArray(parsed.players)) {
-    return { updatedAt, players: normalizePlayers(parsed.players) };
-  }
-  return { updatedAt, players: null };
+function parseSharedStateRow(row) {
+  const updatedAt = row?.updated_at ? new Date(row.updated_at).getTime() : 0;
+  const payload = row?.payload && typeof row.payload === "object" ? row.payload : null;
+  return { updatedAt, payload };
 }
 
 async function fetchRemotePlayers() {
   if (!supabase) return null;
-  const fetchByAction = async (actionNumber) => {
-    const { data, error } = await supabase
-      .from("pbp_highlights")
-      .select("note")
-      .eq("game_id", ROTATIONS_GLOBAL_PLAYERS_GAME_ID)
-      .eq("action_number", actionNumber)
-      .maybeSingle();
-    if (error) return null;
-    return parseRemotePlayersPayload(data?.note);
-  };
-  let payload = await fetchByAction(ROTATIONS_PLAYERS_ACTION_PAYLOAD);
-  if (!payload?.players?.length) {
-    payload = await fetchByAction(ROTATIONS_GAME_ACTION_PAYLOAD);
-  }
+  const { data, error } = await supabase
+    .from(ROTATIONS_TABLE)
+    .select("payload,updated_at")
+    .eq("scope_type", ROTATIONS_SCOPE_PLAYERS)
+    .eq("scope_key", ROTATIONS_GLOBAL_SCOPE_KEY)
+    .maybeSingle();
+  if (error) return null;
+  const parsed = parseSharedStateRow(data);
   return {
-    updatedAt: Number(payload?.updatedAt || 0),
-    players: payload?.players || null,
+    updatedAt: parsed.updatedAt,
+    players: normalizePlayers(parsed.payload?.players),
   };
 }
 
 async function saveRemotePlayers(players, updatedAt = Date.now()) {
   if (!supabase) return;
-  const { error } = await supabase.from("pbp_highlights").upsert(
+  const { error } = await supabase.from(ROTATIONS_TABLE).upsert(
     {
-      game_id: ROTATIONS_GLOBAL_PLAYERS_GAME_ID,
-      action_number: ROTATIONS_PLAYERS_ACTION_PAYLOAD,
-      note: JSON.stringify({
-        updatedAt,
+      scope_type: ROTATIONS_SCOPE_PLAYERS,
+      scope_key: ROTATIONS_GLOBAL_SCOPE_KEY,
+      payload: {
         players: normalizePlayers(players),
-      }),
+      },
     },
-    { onConflict: "game_id,action_number" }
+    { onConflict: "scope_type,scope_key" }
   );
   if (error) {
     // eslint-disable-next-line no-console
@@ -274,31 +254,28 @@ async function saveRemotePlayers(players, updatedAt = Date.now()) {
 async function fetchRemoteGameState(gameId) {
   if (!supabase || !gameId) return null;
   const { data, error } = await supabase
-    .from("pbp_highlights")
-    .select("note")
-    .eq("game_id", String(gameId))
-    .eq("action_number", ROTATIONS_GAME_ACTION_PAYLOAD)
+    .from(ROTATIONS_TABLE)
+    .select("payload,updated_at")
+    .eq("scope_type", ROTATIONS_SCOPE_GAME)
+    .eq("scope_key", String(gameId))
     .maybeSingle();
   if (error) return null;
-  const payload = parseRemotePayload(data?.note, "state");
+  const parsed = parseSharedStateRow(data);
   return {
-    updatedAt: payload.updatedAt,
-    state: normalizeGameState(payload.value),
+    updatedAt: parsed.updatedAt,
+    state: normalizeGameState(parsed.payload),
   };
 }
 
 async function saveRemoteGameState(gameId, state, updatedAt = Date.now()) {
   if (!supabase || !gameId) return;
-  const { error } = await supabase.from("pbp_highlights").upsert(
+  const { error } = await supabase.from(ROTATIONS_TABLE).upsert(
     {
-      game_id: String(gameId),
-      action_number: ROTATIONS_GAME_ACTION_PAYLOAD,
-      note: JSON.stringify({
-        updatedAt,
-        state,
-      }),
+      scope_type: ROTATIONS_SCOPE_GAME,
+      scope_key: String(gameId),
+      payload: state,
     },
-    { onConflict: "game_id,action_number" }
+    { onConflict: "scope_type,scope_key" }
   );
   if (error) {
     // eslint-disable-next-line no-console
@@ -309,31 +286,30 @@ async function saveRemoteGameState(gameId, state, updatedAt = Date.now()) {
 async function fetchRemoteDepthTemplate() {
   if (!supabase) return null;
   const { data, error } = await supabase
-    .from("pbp_highlights")
-    .select("note")
-    .eq("game_id", ROTATIONS_GLOBAL_DEPTH_GAME_ID)
-    .eq("action_number", ROTATIONS_DEPTH_ACTION_PAYLOAD)
+    .from(ROTATIONS_TABLE)
+    .select("payload,updated_at")
+    .eq("scope_type", ROTATIONS_SCOPE_DEPTH_TEMPLATE)
+    .eq("scope_key", ROTATIONS_GLOBAL_SCOPE_KEY)
     .maybeSingle();
   if (error) return null;
-  const payload = parseRemotePayload(data?.note, "depthChart");
+  const parsed = parseSharedStateRow(data);
   return {
-    updatedAt: Number(payload.updatedAt || 0),
-    depthChart: normalizeDepthChart(payload.value),
+    updatedAt: parsed.updatedAt,
+    depthChart: normalizeDepthChart(parsed.payload?.depthChart),
   };
 }
 
 async function saveRemoteDepthTemplate(depthChart, updatedAt = Date.now()) {
   if (!supabase) return;
-  const { error } = await supabase.from("pbp_highlights").upsert(
+  const { error } = await supabase.from(ROTATIONS_TABLE).upsert(
     {
-      game_id: ROTATIONS_GLOBAL_DEPTH_GAME_ID,
-      action_number: ROTATIONS_DEPTH_ACTION_PAYLOAD,
-      note: JSON.stringify({
-        updatedAt,
+      scope_type: ROTATIONS_SCOPE_DEPTH_TEMPLATE,
+      scope_key: ROTATIONS_GLOBAL_SCOPE_KEY,
+      payload: {
         depthChart: normalizeDepthChart(depthChart),
-      }),
+      },
     },
-    { onConflict: "game_id,action_number" }
+    { onConflict: "scope_type,scope_key" }
   );
   if (error) {
     // eslint-disable-next-line no-console
@@ -846,30 +822,16 @@ export default function Rotations() {
         {
           event: "*",
           schema: "public",
-          table: "pbp_highlights",
-          filter: `game_id=eq.${ROTATIONS_GLOBAL_PLAYERS_GAME_ID}`,
+          table: ROTATIONS_TABLE,
+          filter: `scope_type=eq.${ROTATIONS_SCOPE_PLAYERS}`,
         },
         (payload) => {
           const row = payload.new || payload.old;
-          if (!row || Number(row.action_number) !== ROTATIONS_PLAYERS_ACTION_PAYLOAD) return;
-          applyRemotePlayers(parseRemotePlayersPayload(row.note));
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "pbp_highlights",
-          filter: `game_id=eq.${ROTATIONS_GLOBAL_DEPTH_GAME_ID}`,
-        },
-        (payload) => {
-          const row = payload.new || payload.old;
-          if (!row || Number(row.action_number) !== ROTATIONS_DEPTH_ACTION_PAYLOAD) return;
-          const parsed = parseRemotePayload(row.note, "depthChart");
-          applyRemoteDepthTemplate({
+          if (!row || row.scope_key !== ROTATIONS_GLOBAL_SCOPE_KEY) return;
+          const parsed = parseSharedStateRow(row);
+          applyRemotePlayers({
             updatedAt: parsed.updatedAt,
-            depthChart: parsed.value,
+            players: normalizePlayers(parsed.payload?.players),
           });
         }
       )
@@ -878,16 +840,34 @@ export default function Rotations() {
         {
           event: "*",
           schema: "public",
-          table: "pbp_highlights",
-          filter: `game_id=eq.${gameId}`,
+          table: ROTATIONS_TABLE,
+          filter: `scope_type=eq.${ROTATIONS_SCOPE_DEPTH_TEMPLATE}`,
         },
         (payload) => {
           const row = payload.new || payload.old;
-          if (!row || Number(row.action_number) !== ROTATIONS_GAME_ACTION_PAYLOAD) return;
-          const parsed = parseRemotePayload(row.note, "state");
+          if (!row || row.scope_key !== ROTATIONS_GLOBAL_SCOPE_KEY) return;
+          const parsed = parseSharedStateRow(row);
+          applyRemoteDepthTemplate({
+            updatedAt: parsed.updatedAt,
+            depthChart: parsed.payload?.depthChart,
+          });
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: ROTATIONS_TABLE,
+          filter: `scope_type=eq.${ROTATIONS_SCOPE_GAME}`,
+        },
+        (payload) => {
+          const row = payload.new || payload.old;
+          if (!row || row.scope_key !== String(gameId)) return;
+          const parsed = parseSharedStateRow(row);
           applyRemoteGameState({
             updatedAt: parsed.updatedAt,
-            state: normalizeGameState(parsed.value),
+            state: normalizeGameState(parsed.payload),
           });
         }
       )
