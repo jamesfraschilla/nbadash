@@ -164,6 +164,16 @@
   height: 24px;
 }
 
+.depthTable .playerSelect {
+  text-align: center;
+  text-align-last: center;
+}
+
+.rotationTable .playerSelect {
+  text-align: center;
+  text-align-last: center;
+}
+
 :global(html[data-theme="dark"]) .playerSelect {
   color-scheme: dark;
 }
@@ -214,4 +224,65 @@
   color: var(--text);
   padding: 24px;
   text-align: center;
+}
+
+.touchFillLock {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.touchFillLock .rotationTable,
+.touchFillLock .rotationTable * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: grid;
+  place-items: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.modalCard {
+  width: min(360px, 100%);
+  background: var(--cell-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.modalTitle {
+  margin: 0 0 2px;
+  font-size: 22px;
+  color: var(--cell-text);
+  text-align: center;
+}
+
+.modalPrimary,
+.modalSecondary {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  min-height: 40px;
+  font-family: "DIN", sans-serif;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.modalPrimary {
+  background: var(--table-header-bg);
+  color: var(--table-header-text);
+}
+
+.modalSecondary {
+  background: transparent;
+  color: var(--cell-text);
 }

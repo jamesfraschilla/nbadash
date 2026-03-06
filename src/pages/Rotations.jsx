@@ -7,6 +7,7 @@ import styles from "./Rotations.module.css";
 
 const PLAYERS_STORAGE_KEY = "rotations:players:v1";
 const GAME_STORAGE_PREFIX = "rotations:game:v1:";
+const SECTION_STATE_STORAGE_PREFIX = "rotations:sections:v1:";
 const ROTATIONS_GAME_ACTION_PAYLOAD = 900000021;
 const ROTATIONS_PLAYERS_ACTION_PAYLOAD = 900000022;
 const ROTATIONS_GLOBAL_PLAYERS_GAME_ID = "9999999911";
@@ -160,6 +161,10 @@ function gameStorageKey(gameId) {
   return `${GAME_STORAGE_PREFIX}${gameId}`;
 }
 
+function sectionStateStorageKey(gameId) {
+  return `${SECTION_STATE_STORAGE_PREFIX}${gameId}`;
+}
+
 function loadGamePayload(gameId) {
   if (typeof window === "undefined" || !gameId) return null;
   const raw = window.localStorage.getItem(gameStorageKey(gameId));
@@ -300,6 +305,8 @@ export default function Rotations() {
   const [lineups, setLineups] = useState(createDefaultQuarterLineups());
   const [playersHydrated, setPlayersHydrated] = useState(false);
   const [gameHydrated, setGameHydrated] = useState(false);
+  const [resetModalOpen, setResetModalOpen] = useState(false);
+  const [isTouchFillActive, setIsTouchFillActive] = useState(false);
   const [collapsed, setCollapsed] = useState({
     restrictions: false,
     depth: false,
@@ -372,24 +379,38 @@ export default function Rotations() {
   }, [gameId]);
 
   useEffect(() => {
+    if (!gameId || typeof window === "undefined") return;
+    const raw = window.localStorage.getItem(sectionStateStorageKey(gameId));
+    const parsed = safeParseJson(raw, null);
+    if (!parsed || typeof parsed !== "object") return;
+    setCollapsed((current) => ({
+      ...current,
+      restrictions: Boolean(parsed.restrictions),
+      depth: Boolean(parsed.depth),
+      q1: Boolean(parsed.q1),
+      q2: Boolean(parsed.q2),
+      q3: Boolean(parsed.q3),
+      q4: Boolean(parsed.q4),
+    }));
+  }, [gameId]);
+
+  useEffect(() => {
+    if (!gameId || typeof window === "undefined") return;
+    window.localStorage.setItem(sectionStateStorageKey(gameId), JSON.stringify(collapsed));
+  }, [collapsed, gameId]);
+
+  useEffect(() => {
     if (playersHydrated) return;
     if (supabase && !remotePlayersFetched) return;
 
     const localPayload = loadPlayersPayload();
-    const localUpdatedAt = Number(localPayload?.updatedAt || 0);
-    const remoteUpdatedAt = Number(remotePlayers?.updatedAt || 0);
-
-    if (remotePlayers?.players?.length && remoteUpdatedAt >= localUpdatedAt) {
+    if (remotePlayers?.players?.length) {
       setPlayers(remotePlayers.players);
-      playersUpdatedAtRef.current = remoteUpdatedAt;
+      playersUpdatedAtRef.current = Number(remotePlayers.updatedAt || Date.now());
       skipPlayersSaveRef.current = true;
     } else if (localPayload?.players?.length) {
       setPlayers(localPayload.players);
-      playersUpdatedAtRef.current = localUpdatedAt;
-      skipPlayersSaveRef.current = true;
-    } else if (remotePlayers?.players?.length) {
-      setPlayers(remotePlayers.players);
-      playersUpdatedAtRef.current = remoteUpdatedAt;
+      playersUpdatedAtRef.current = Number(localPayload.updatedAt || Date.now());
       skipPlayersSaveRef.current = true;
     }
 
@@ -402,18 +423,15 @@ export default function Rotations() {
 
     const defaults = createDefaultGameState();
     const localPayload = loadGamePayload(gameId);
-    const localUpdatedAt = Number(localPayload?.updatedAt || 0);
-    const remoteUpdatedAt = Number(remoteGameState?.updatedAt || 0);
-
-    if (remoteGameState?.state && remoteUpdatedAt >= localUpdatedAt) {
+    if (remoteGameState?.state) {
       setDepthChart(remoteGameState.state.depthChart);
       setLineups(remoteGameState.state.lineups);
-      gameUpdatedAtRef.current = remoteUpdatedAt;
+      gameUpdatedAtRef.current = Number(remoteGameState.updatedAt || Date.now());
       skipGameSaveRef.current = true;
     } else if (localPayload?.state) {
       setDepthChart(localPayload.state.depthChart);
       setLineups(localPayload.state.lineups);
-      gameUpdatedAtRef.current = localUpdatedAt;
+      gameUpdatedAtRef.current = Number(localPayload.updatedAt || Date.now());
       skipGameSaveRef.current = true;
     } else {
       setDepthChart(defaults.depthChart);
@@ -458,24 +476,30 @@ export default function Rotations() {
 
   useEffect(() => {
     if (!playersHydrated) return;
-    const remoteUpdatedAt = Number(remotePlayers?.updatedAt || 0);
-    if (!remoteUpdatedAt || remoteUpdatedAt <= playersUpdatedAtRef.current) return;
-    setPlayers(remotePlayers.players || []);
-    playersUpdatedAtRef.current = remoteUpdatedAt;
+    const incomingPlayers = normalizePlayers(remotePlayers?.players || []);
+    const currentPlayers = normalizePlayers(players);
+    if (!incomingPlayers.length) return;
+    if (JSON.stringify(incomingPlayers) === JSON.stringify(currentPlayers)) return;
+    setPlayers(incomingPlayers);
+    playersUpdatedAtRef.current = Number(remotePlayers?.updatedAt || Date.now());
     skipPlayersSaveRef.current = true;
-    persistPlayers(remotePlayers.players || [], remoteUpdatedAt);
-  }, [playersHydrated, remotePlayers]);
+    persistPlayers(incomingPlayers, playersUpdatedAtRef.current);
+  }, [playersHydrated, remotePlayers, players]);
 
   useEffect(() => {
     if (!gameHydrated || !gameId || !remoteGameState?.state) return;
-    const remoteUpdatedAt = Number(remoteGameState.updatedAt || 0);
-    if (!remoteUpdatedAt || remoteUpdatedAt <= gameUpdatedAtRef.current) return;
-    setDepthChart(remoteGameState.state.depthChart);
-    setLineups(remoteGameState.state.lineups);
-    gameUpdatedAtRef.current = remoteUpdatedAt;
+    const incomingDepth = normalizeDepthChart(remoteGameState.state.depthChart);
+    const incomingLineups = normalizeLineups(remoteGameState.state.lineups);
+    if (
+      JSON.stringify(incomingDepth) === JSON.stringify(depthChart)
+      && JSON.stringify(incomingLineups) === JSON.stringify(lineups)
+    ) return;
+    setDepthChart(incomingDepth);
+    setLineups(incomingLineups);
+    gameUpdatedAtRef.current = Number(remoteGameState.updatedAt || Date.now());
     skipGameSaveRef.current = true;
-    persistGameState(gameId, remoteGameState.state, remoteUpdatedAt);
-  }, [gameHydrated, gameId, remoteGameState]);
+    persistGameState(gameId, { depthChart: incomingDepth, lineups: incomingLineups }, gameUpdatedAtRef.current);
+  }, [gameHydrated, gameId, remoteGameState, depthChart, lineups]);
 
   const playerOptions = useMemo(() => {
     const unique = new Set();
@@ -577,7 +601,13 @@ export default function Rotations() {
   };
 
   const resetAll = () => {
+    setLineups(createDefaultQuarterLineups());
+    setResetModalOpen(false);
+  };
+
+  const resetToStarters = () => {
     setLineups(seedFirstQuarterRow(createDefaultQuarterLineups(), depthChart));
+    setResetModalOpen(false);
   };
 
   const toggleSection = (key) => {
@@ -595,6 +625,7 @@ export default function Rotations() {
   const stopTouchFill = () => {
     clearTouchFillTimer();
     touchFillRef.current.active = false;
+    setIsTouchFillActive(false);
     touchFillRef.current.quarter = null;
     touchFillRef.current.value = "";
     touchFillRef.current.originMinuteIndex = -1;
@@ -646,6 +677,15 @@ export default function Rotations() {
     };
   }, []);
 
+  useEffect(() => {
+    const handleTouchMove = (event) => {
+      if (!touchFillRef.current.active) return;
+      event.preventDefault();
+    };
+    window.addEventListener("touchmove", handleTouchMove, { passive: false });
+    return () => window.removeEventListener("touchmove", handleTouchMove);
+  }, []);
+
   const getRowValues = (quarter, minuteIndex) => (lineups[quarter]?.[minuteIndex] || []);
 
   const getPreviousRowValues = (quarter, minuteIndex) => {
@@ -680,11 +720,30 @@ export default function Rotations() {
   }
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} ${isTouchFillActive ? styles.touchFillLock : ""}`}>
       <div className={styles.topRow}>
         <Link className={styles.backButton} to={backUrl}>Back</Link>
-        <button type="button" className={styles.secondaryButton} onClick={resetAll}>Reset Game Grid</button>
+        <button type="button" className={styles.secondaryButton} onClick={() => setResetModalOpen(true)}>
+          Reset Minutes
+        </button>
       </div>
+
+      {resetModalOpen && (
+        <div className={styles.modalOverlay} onClick={() => setResetModalOpen(false)}>
+          <div className={styles.modalCard} onClick={(event) => event.stopPropagation()}>
+            <h3 className={styles.modalTitle}>Reset Minutes</h3>
+            <button type="button" className={styles.modalPrimary} onClick={resetAll}>
+              Reset All
+            </button>
+            <button type="button" className={styles.modalPrimary} onClick={resetToStarters}>
+              Reset to Starters
+            </button>
+            <button type="button" className={styles.modalSecondary} onClick={() => setResetModalOpen(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       <header className={styles.header}>
         <h1 className={styles.title}>{opponentLine}</h1>
@@ -876,6 +935,7 @@ export default function Rotations() {
                                 touchFillRef.current.endPositionIndex = positionIndex;
                                 touchFillRef.current.timerId = window.setTimeout(() => {
                                   touchFillRef.current.active = true;
+                                  setIsTouchFillActive(true);
                                   touchFillRef.current.timerId = null;
                                   setTouchPreview({
                                     quarter,
