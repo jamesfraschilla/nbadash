@@ -49,9 +49,22 @@ const createDefaultQuarterLineups = () => ({
 
 const createDefaultDepthChart = () => DEFAULT_DEPTH_ROWS.map((row) => row.slice());
 
+function seedFirstQuarterRow(lineups, depthChart) {
+  const nextLineups = { ...lineups };
+  const q1 = Array.isArray(nextLineups[1]) ? nextLineups[1].map((row) => [...row]) : [];
+  if (!q1.length) return lineups;
+  const firstRow = Array.isArray(q1[0]) ? [...q1[0]] : Array.from({ length: POSITION_COLUMNS.length }, () => "");
+  const shouldSeed = firstRow.every((value) => !normalizeName(value));
+  if (!shouldSeed) return lineups;
+  const topDepthRow = Array.isArray(depthChart?.[0]) ? depthChart[0] : [];
+  q1[0] = POSITION_COLUMNS.map((_, columnIndex) => normalizeName(topDepthRow[columnIndex] || ""));
+  nextLineups[1] = q1;
+  return nextLineups;
+}
+
 const createDefaultGameState = () => ({
   depthChart: createDefaultDepthChart(),
-  lineups: createDefaultQuarterLineups(),
+  lineups: seedFirstQuarterRow(createDefaultQuarterLineups(), createDefaultDepthChart()),
 });
 
 function safeParseJson(raw, fallback) {
@@ -109,9 +122,13 @@ function normalizeGameState(rawState) {
     ? rawState.depthChart
     : (rawState.depthChart?.[1] || rawState.depthChart);
 
-  return {
+  const normalized = {
     depthChart: normalizeDepthChart(depthSource),
     lineups: normalizeLineups(rawState.lineups),
+  };
+  return {
+    ...normalized,
+    lineups: seedFirstQuarterRow(normalized.lineups, normalized.depthChart),
   };
 }
 
@@ -244,8 +261,8 @@ function buildOpponentLine(game) {
   const home = game?.homeTeam;
   const washingtonAway = isWashingtonTeam(away);
   const opponent = washingtonAway ? home : away;
-  const city = String(opponent?.teamCity || "Opponent").trim();
-  return washingtonAway ? `@ ${city}` : `vs ${city}`;
+  const city = String(opponent?.teamCity || "Opponent").trim().toUpperCase();
+  return washingtonAway ? `@ ${city}` : `VS ${city}`;
 }
 
 function quarterLabel(quarter) {
@@ -279,6 +296,15 @@ export default function Rotations() {
   const gameUpdatedAtRef = useRef(0);
   const skipPlayersSaveRef = useRef(false);
   const skipGameSaveRef = useRef(false);
+  const dragFillRef = useRef({
+    active: false,
+    quarter: null,
+    value: "",
+    originMinuteIndex: -1,
+    originPositionIndex: -1,
+    lastMinuteIndex: -1,
+    lastPositionIndex: -1,
+  });
 
   const { data: game, isLoading, error } = useQuery({
     queryKey: ["game-rotations", gameId],
@@ -502,6 +528,24 @@ export default function Rotations() {
     }));
   };
 
+  const fillLineupRange = (quarter, startMinuteIndex, startPositionIndex, endMinuteIndex, endPositionIndex, value) => {
+    const normalizedValue = normalizeName(value);
+    if (!normalizedValue) return;
+    const minMinute = Math.min(startMinuteIndex, endMinuteIndex);
+    const maxMinute = Math.max(startMinuteIndex, endMinuteIndex);
+    const minPosition = Math.min(startPositionIndex, endPositionIndex);
+    const maxPosition = Math.max(startPositionIndex, endPositionIndex);
+    setLineups((current) => ({
+      ...current,
+      [quarter]: current[quarter].map((row, minuteIndex) => {
+        if (minuteIndex < minMinute || minuteIndex > maxMinute) return row;
+        return row.map((cell, positionIndex) => (
+          positionIndex < minPosition || positionIndex > maxPosition ? cell : normalizedValue
+        ));
+      }),
+    }));
+  };
+
   const resetAll = () => {
     const nextGame = createDefaultGameState();
     setDepthChart(nextGame.depthChart);
@@ -511,6 +555,14 @@ export default function Rotations() {
   const toggleSection = (key) => {
     setCollapsed((current) => ({ ...current, [key]: !current[key] }));
   };
+
+  useEffect(() => {
+    const endDragFill = () => {
+      dragFillRef.current.active = false;
+    };
+    window.addEventListener("mouseup", endDragFill);
+    return () => window.removeEventListener("mouseup", endDragFill);
+  }, []);
 
   const getRowValues = (quarter, minuteIndex) => (lineups[quarter]?.[minuteIndex] || []);
 
@@ -724,6 +776,34 @@ export default function Rotations() {
                                 className={styles.playerSelect}
                                 value={value}
                                 onChange={(event) => updateLineupCell(quarter, minuteIndex, positionIndex, event.target.value)}
+                                onMouseDown={(event) => {
+                                  if (!event.shiftKey || !normalizedValue) return;
+                                  event.preventDefault();
+                                  dragFillRef.current = {
+                                    active: true,
+                                    quarter,
+                                    value: normalizedValue,
+                                    originMinuteIndex: minuteIndex,
+                                    originPositionIndex: positionIndex,
+                                    lastMinuteIndex: minuteIndex,
+                                    lastPositionIndex: positionIndex,
+                                  };
+                                }}
+                                onMouseEnter={() => {
+                                  const drag = dragFillRef.current;
+                                  if (!drag.active || drag.quarter !== quarter) return;
+                                  if (drag.lastMinuteIndex === minuteIndex && drag.lastPositionIndex === positionIndex) return;
+                                  drag.lastMinuteIndex = minuteIndex;
+                                  drag.lastPositionIndex = positionIndex;
+                                  fillLineupRange(
+                                    quarter,
+                                    drag.originMinuteIndex,
+                                    drag.originPositionIndex,
+                                    minuteIndex,
+                                    positionIndex,
+                                    drag.value
+                                  );
+                                }}
                               >
                                 <option value=""> </option>
                                 {playerOptions.map((option) => (
