@@ -6,11 +6,14 @@ import { supabase } from "../supabaseClient.js";
 import styles from "./Rotations.module.css";
 
 const PLAYERS_STORAGE_KEY = "rotations:players:v1";
+const DEPTH_TEMPLATE_STORAGE_KEY = "rotations:depth-template:v1";
 const GAME_STORAGE_PREFIX = "rotations:game:v1:";
 const SECTION_STATE_STORAGE_PREFIX = "rotations:sections:v1:";
 const ROTATIONS_GAME_ACTION_PAYLOAD = 900000021;
 const ROTATIONS_PLAYERS_ACTION_PAYLOAD = 900000022;
+const ROTATIONS_DEPTH_ACTION_PAYLOAD = 900000023;
 const ROTATIONS_GLOBAL_PLAYERS_GAME_ID = "9999999911";
+const ROTATIONS_GLOBAL_DEPTH_GAME_ID = "9999999912";
 const QUARTERS = [1, 2, 3, 4];
 const MINUTES = Array.from({ length: 12 }, (_, index) => 12 - index);
 const POSITION_COLUMNS = [1, 2, 3, 4, 5];
@@ -157,6 +160,29 @@ function persistPlayers(players, updatedAt = Date.now()) {
   }));
 }
 
+function loadDepthTemplatePayload() {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(DEPTH_TEMPLATE_STORAGE_KEY);
+  if (!raw) return null;
+  const parsed = safeParseJson(raw, null);
+  if (!parsed || typeof parsed !== "object") return null;
+  if (Array.isArray(parsed)) {
+    return { updatedAt: 0, depthChart: normalizeDepthChart(parsed) };
+  }
+  return {
+    updatedAt: Number(parsed.updatedAt || 0),
+    depthChart: normalizeDepthChart(parsed.depthChart),
+  };
+}
+
+function persistDepthTemplate(depthChart, updatedAt = Date.now()) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(DEPTH_TEMPLATE_STORAGE_KEY, JSON.stringify({
+    updatedAt,
+    depthChart: normalizeDepthChart(depthChart),
+  }));
+}
+
 function gameStorageKey(gameId) {
   return `${GAME_STORAGE_PREFIX}${gameId}`;
 }
@@ -272,6 +298,37 @@ async function saveRemoteGameState(gameId, state, updatedAt = Date.now()) {
   );
 }
 
+async function fetchRemoteDepthTemplate() {
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("pbp_highlights")
+    .select("note")
+    .eq("game_id", ROTATIONS_GLOBAL_DEPTH_GAME_ID)
+    .eq("action_number", ROTATIONS_DEPTH_ACTION_PAYLOAD)
+    .maybeSingle();
+  if (error) return null;
+  const payload = parseRemotePayload(data?.note, "depthChart");
+  return {
+    updatedAt: Number(payload.updatedAt || 0),
+    depthChart: normalizeDepthChart(payload.value),
+  };
+}
+
+async function saveRemoteDepthTemplate(depthChart, updatedAt = Date.now()) {
+  if (!supabase) return;
+  await supabase.from("pbp_highlights").upsert(
+    {
+      game_id: ROTATIONS_GLOBAL_DEPTH_GAME_ID,
+      action_number: ROTATIONS_DEPTH_ACTION_PAYLOAD,
+      note: JSON.stringify({
+        updatedAt,
+        depthChart: normalizeDepthChart(depthChart),
+      }),
+    },
+    { onConflict: "game_id,action_number" }
+  );
+}
+
 function isWashingtonTeam(team) {
   const tricode = String(team?.teamTricode || "").toUpperCase();
   const name = `${team?.teamCity || ""} ${team?.teamName || ""}`.toLowerCase();
@@ -301,9 +358,11 @@ export default function Rotations() {
   const backUrl = dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`;
 
   const [players, setPlayers] = useState(DEFAULT_PLAYERS);
+  const [depthTemplate, setDepthTemplate] = useState(createDefaultDepthChart());
   const [depthChart, setDepthChart] = useState(createDefaultDepthChart());
   const [lineups, setLineups] = useState(createDefaultQuarterLineups());
   const [playersHydrated, setPlayersHydrated] = useState(false);
+  const [depthTemplateHydrated, setDepthTemplateHydrated] = useState(false);
   const [gameHydrated, setGameHydrated] = useState(false);
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [isTouchFillActive, setIsTouchFillActive] = useState(false);
@@ -317,8 +376,10 @@ export default function Rotations() {
   });
 
   const playersUpdatedAtRef = useRef(0);
+  const depthTemplateUpdatedAtRef = useRef(0);
   const gameUpdatedAtRef = useRef(0);
   const skipPlayersSaveRef = useRef(false);
+  const skipDepthTemplateSaveRef = useRef(false);
   const skipGameSaveRef = useRef(false);
   const dragFillRef = useRef({
     active: false,
@@ -365,16 +426,27 @@ export default function Rotations() {
     refetchInterval: 10_000,
   });
 
+  const { data: remoteDepthTemplate, isFetched: remoteDepthFetched } = useQuery({
+    queryKey: ["rotations-depth-template-remote"],
+    queryFn: fetchRemoteDepthTemplate,
+    enabled: Boolean(supabase),
+    staleTime: 10_000,
+    refetchInterval: 10_000,
+  });
+
   const washingtonGame = useMemo(() => (
     isWashingtonTeam(game?.homeTeam) || isWashingtonTeam(game?.awayTeam)
   ), [game]);
 
   useEffect(() => {
     setPlayersHydrated(false);
+    setDepthTemplateHydrated(false);
     setGameHydrated(false);
     playersUpdatedAtRef.current = 0;
+    depthTemplateUpdatedAtRef.current = 0;
     gameUpdatedAtRef.current = 0;
     skipPlayersSaveRef.current = false;
+    skipDepthTemplateSaveRef.current = false;
     skipGameSaveRef.current = false;
   }, [gameId]);
 
@@ -404,13 +476,15 @@ export default function Rotations() {
     if (supabase && !remotePlayersFetched) return;
 
     const localPayload = loadPlayersPayload();
-    if (remotePlayers?.players?.length) {
+    const localUpdatedAt = Number(localPayload?.updatedAt || 0);
+    const remoteUpdatedAt = Number(remotePlayers?.updatedAt || 0);
+    if (remotePlayers?.players?.length && remoteUpdatedAt >= localUpdatedAt) {
       setPlayers(remotePlayers.players);
-      playersUpdatedAtRef.current = Number(remotePlayers.updatedAt || Date.now());
+      playersUpdatedAtRef.current = remoteUpdatedAt;
       skipPlayersSaveRef.current = true;
     } else if (localPayload?.players?.length) {
       setPlayers(localPayload.players);
-      playersUpdatedAtRef.current = Number(localPayload.updatedAt || Date.now());
+      playersUpdatedAtRef.current = localUpdatedAt;
       skipPlayersSaveRef.current = true;
     }
 
@@ -418,20 +492,46 @@ export default function Rotations() {
   }, [playersHydrated, remotePlayers, remotePlayersFetched]);
 
   useEffect(() => {
+    if (depthTemplateHydrated) return;
+    if (supabase && !remoteDepthFetched) return;
+
+    const localPayload = loadDepthTemplatePayload();
+    const localUpdatedAt = Number(localPayload?.updatedAt || 0);
+    const remoteUpdatedAt = Number(remoteDepthTemplate?.updatedAt || 0);
+    if (remoteDepthTemplate?.depthChart && remoteUpdatedAt >= localUpdatedAt) {
+      setDepthTemplate(remoteDepthTemplate.depthChart);
+      depthTemplateUpdatedAtRef.current = remoteUpdatedAt;
+      skipDepthTemplateSaveRef.current = true;
+    } else if (localPayload?.depthChart) {
+      setDepthTemplate(localPayload.depthChart);
+      depthTemplateUpdatedAtRef.current = localUpdatedAt;
+      skipDepthTemplateSaveRef.current = true;
+    }
+
+    setDepthTemplateHydrated(true);
+  }, [depthTemplateHydrated, remoteDepthTemplate, remoteDepthFetched]);
+
+  useEffect(() => {
     if (gameHydrated || !gameId) return;
     if (supabase && !remoteGameFetched) return;
+    if (!depthTemplateHydrated) return;
 
-    const defaults = createDefaultGameState();
+    const defaults = {
+      depthChart: normalizeDepthChart(depthTemplate),
+      lineups: seedFirstQuarterRow(createDefaultQuarterLineups(), normalizeDepthChart(depthTemplate)),
+    };
     const localPayload = loadGamePayload(gameId);
-    if (remoteGameState?.state) {
+    const localUpdatedAt = Number(localPayload?.updatedAt || 0);
+    const remoteUpdatedAt = Number(remoteGameState?.updatedAt || 0);
+    if (remoteGameState?.state && remoteUpdatedAt >= localUpdatedAt) {
       setDepthChart(remoteGameState.state.depthChart);
       setLineups(remoteGameState.state.lineups);
-      gameUpdatedAtRef.current = Number(remoteGameState.updatedAt || Date.now());
+      gameUpdatedAtRef.current = remoteUpdatedAt;
       skipGameSaveRef.current = true;
     } else if (localPayload?.state) {
       setDepthChart(localPayload.state.depthChart);
       setLineups(localPayload.state.lineups);
-      gameUpdatedAtRef.current = Number(localPayload.updatedAt || Date.now());
+      gameUpdatedAtRef.current = localUpdatedAt;
       skipGameSaveRef.current = true;
     } else {
       setDepthChart(defaults.depthChart);
@@ -441,7 +541,7 @@ export default function Rotations() {
     }
 
     setGameHydrated(true);
-  }, [gameHydrated, gameId, remoteGameState, remoteGameFetched]);
+  }, [gameHydrated, gameId, remoteGameState, remoteGameFetched, depthTemplateHydrated, depthTemplate]);
 
   useEffect(() => {
     if (!playersHydrated) return;
@@ -457,6 +557,21 @@ export default function Rotations() {
     persistPlayers(players, updatedAt);
     saveRemotePlayers(players, updatedAt);
   }, [players, playersHydrated]);
+
+  useEffect(() => {
+    if (!depthTemplateHydrated) return;
+
+    if (skipDepthTemplateSaveRef.current) {
+      skipDepthTemplateSaveRef.current = false;
+      persistDepthTemplate(depthTemplate, depthTemplateUpdatedAtRef.current || Date.now());
+      return;
+    }
+
+    const updatedAt = Date.now();
+    depthTemplateUpdatedAtRef.current = updatedAt;
+    persistDepthTemplate(depthTemplate, updatedAt);
+    saveRemoteDepthTemplate(depthTemplate, updatedAt);
+  }, [depthTemplate, depthTemplateHydrated]);
 
   useEffect(() => {
     if (!gameHydrated || !gameId) return;
@@ -484,6 +599,17 @@ export default function Rotations() {
     skipPlayersSaveRef.current = true;
     persistPlayers(incomingPlayers, remoteUpdatedAt);
   }, [playersHydrated, remotePlayers]);
+
+  useEffect(() => {
+    if (!depthTemplateHydrated) return;
+    const remoteUpdatedAt = Number(remoteDepthTemplate?.updatedAt || 0);
+    if (!remoteUpdatedAt || remoteUpdatedAt <= depthTemplateUpdatedAtRef.current) return;
+    const incomingDepth = normalizeDepthChart(remoteDepthTemplate?.depthChart);
+    setDepthTemplate(incomingDepth);
+    depthTemplateUpdatedAtRef.current = remoteUpdatedAt;
+    skipDepthTemplateSaveRef.current = true;
+    persistDepthTemplate(incomingDepth, remoteUpdatedAt);
+  }, [depthTemplateHydrated, remoteDepthTemplate]);
 
   useEffect(() => {
     if (!gameHydrated || !gameId || !remoteGameState?.state) return;
@@ -563,9 +689,13 @@ export default function Rotations() {
   };
 
   const updateDepthCell = (rowIndex, columnIndex, value) => {
-    setDepthChart((current) => current.map((row, rIndex) => (
-      rIndex !== rowIndex ? row : row.map((cell, cIndex) => (cIndex === columnIndex ? normalizeName(value) : cell))
-    )));
+    setDepthChart((current) => {
+      const next = current.map((row, rIndex) => (
+        rIndex !== rowIndex ? row : row.map((cell, cIndex) => (cIndex === columnIndex ? normalizeName(value) : cell))
+      ));
+      setDepthTemplate(next);
+      return next;
+    });
   };
 
   const updateLineupCell = (quarter, minuteIndex, positionIndex, value) => {
