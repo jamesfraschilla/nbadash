@@ -8,6 +8,7 @@ import Minutes from "./pages/Minutes.jsx";
 import Notes from "./pages/Notes.jsx";
 import Drawing from "./pages/Drawing.jsx";
 import PreGame from "./pages/PreGame.jsx";
+import Rotations from "./pages/Rotations.jsx";
 
 export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem("theme") || "light");
@@ -28,6 +29,7 @@ export default function App() {
           <Route path="/g/:gameId/events" element={<PlayByPlay />} />
           <Route path="/g/:gameId/notes" element={<Notes />} />
           <Route path="/g/:gameId/pregame" element={<PreGame />} />
+          <Route path="/g/:gameId/rotations" element={<Rotations />} />
           <Route path="/m/:gameId" element={<Minutes />} />
           <Route path="/draw" element={<Drawing />} />
         </Routes>

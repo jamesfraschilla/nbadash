@@ -1,0 +1,201 @@
+@font-face {
+  font-family: "DIN";
+  src: url("../assets/fonts/DIN.ttf") format("truetype");
+  font-display: swap;
+}
+
+.page {
+  min-height: 100vh;
+  background: #f7f7f7;
+  color: #111111;
+  font-family: "DIN", sans-serif;
+  padding: 16px 20px 56px;
+}
+
+.topRow {
+  width: min(1560px, 100%);
+  margin: 0 auto 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.backButton,
+.secondaryButton {
+  display: inline-block;
+  padding: 6px 12px;
+  border: 1px solid #b5b5b5;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #1b1b1b;
+  font-family: "DIN", sans-serif;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.header {
+  width: min(1560px, 100%);
+  margin: 0 auto 10px;
+  text-align: left;
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(28px, 4.2vw, 50px);
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+}
+
+.subtitle {
+  margin: 2px 0 0;
+  font-size: clamp(16px, 2vw, 24px);
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+}
+
+.quarterSection {
+  width: min(1560px, 100%);
+  margin: 10px auto 0;
+  border: 1px solid #b7b7b7;
+  background: #ffffff;
+}
+
+.quarterLayout {
+  display: grid;
+  grid-template-columns: minmax(700px, 1fr) minmax(400px, 460px);
+  gap: 8px;
+  padding: 8px;
+}
+
+.leftColumn {
+  display: grid;
+  gap: 8px;
+}
+
+.rightColumn {
+  min-width: 0;
+}
+
+.depthTable,
+.rotationTable,
+.totalsTable {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.depthTable th,
+.depthTable td,
+.rotationTable th,
+.rotationTable td,
+.totalsTable th,
+.totalsTable td {
+  border: 1px solid #c8c8c8;
+  text-align: center;
+  padding: 2px 4px;
+  font-size: 14px;
+  height: 28px;
+}
+
+.depthTable thead tr:first-child th,
+.rotationTable thead tr:first-child th,
+.totalsTable thead tr:first-child th {
+  background: #151515;
+  color: #ffffff;
+  font-size: 16px;
+  letter-spacing: 0.2px;
+  height: 32px;
+}
+
+.depthTable thead tr:nth-child(2) th,
+.rotationTable thead tr:nth-child(2) th,
+.totalsTable thead tr:nth-child(2) th {
+  background: #efefef;
+  color: #141414;
+}
+
+.depthInput,
+.playerNameInput,
+.capInput {
+  width: 100%;
+  height: 24px;
+  border: 1px solid #d8d8d8;
+  border-radius: 2px;
+  padding: 0 6px;
+  font-family: "DIN", sans-serif;
+  font-size: 14px;
+  background: #ffffff;
+  color: #111111;
+  text-transform: uppercase;
+}
+
+.capInput {
+  text-align: center;
+}
+
+.minuteCell {
+  font-weight: 700;
+  width: 58px;
+}
+
+.playerSelect {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: #111111;
+  font-family: "DIN", sans-serif;
+  font-size: 14px;
+  text-align: center;
+  height: 24px;
+}
+
+.playerNameCell {
+  text-align: left;
+  font-weight: 700;
+}
+
+.duplicateCell {
+  background: #fff2cc;
+  box-shadow: inset 0 0 0 2px #c08300;
+}
+
+.subInCell {
+  background: #d9ead3;
+}
+
+.subOutCell {
+  background: #f4cccc;
+}
+
+.nearCapCell {
+  background: #fff2cc;
+}
+
+.overCapCell {
+  background: #f4cccc;
+  color: #8a0000;
+  font-weight: 700;
+}
+
+.badTotalCell {
+  background: #fff2cc;
+  color: #8a0000;
+  font-weight: 700;
+}
+
+.stateMessage {
+  min-height: 40vh;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  font-size: 20px;
+  color: var(--text);
+  padding: 24px;
+  text-align: center;
+}
+
+@media (max-width: 1240px) {
+  .quarterLayout {
+    grid-template-columns: 1fr;
+  }
+}

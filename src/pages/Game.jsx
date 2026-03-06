@@ -1665,6 +1665,14 @@ export default function Game({ variant = "full" }) {
               Pre-Game
             </Link>
           )}
+          {showExtras && isWashingtonGame && (
+            <Link
+              className={styles.backButton}
+              to={dateParam ? `/g/${gameId}/rotations?d=${dateParam}` : `/g/${gameId}/rotations`}
+            >
+              Rotations
+            </Link>
+          )}
         </div>
         <div className={styles.backRowCenter}>
           {isAtc && (
