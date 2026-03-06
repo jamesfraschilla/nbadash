@@ -322,6 +322,19 @@ export default function Rotations() {
     lastMinuteIndex: -1,
     lastPositionIndex: -1,
   });
+  const touchFillRef = useRef({
+    timerId: null,
+    startTouchX: 0,
+    startTouchY: 0,
+    active: false,
+    quarter: null,
+    value: "",
+    originMinuteIndex: -1,
+    originPositionIndex: -1,
+    endMinuteIndex: -1,
+    endPositionIndex: -1,
+  });
+  const [touchPreview, setTouchPreview] = useState(null);
 
   const { data: game, isLoading, error } = useQuery({
     queryKey: ["game-rotations", gameId],
@@ -564,21 +577,73 @@ export default function Rotations() {
   };
 
   const resetAll = () => {
-    const nextGame = createDefaultGameState();
-    setDepthChart(nextGame.depthChart);
-    setLineups(nextGame.lineups);
+    setLineups(seedFirstQuarterRow(createDefaultQuarterLineups(), depthChart));
   };
 
   const toggleSection = (key) => {
     setCollapsed((current) => ({ ...current, [key]: !current[key] }));
   };
 
+  const clearTouchFillTimer = () => {
+    const timerId = touchFillRef.current.timerId;
+    if (timerId) {
+      window.clearTimeout(timerId);
+      touchFillRef.current.timerId = null;
+    }
+  };
+
+  const stopTouchFill = () => {
+    clearTouchFillTimer();
+    touchFillRef.current.active = false;
+    touchFillRef.current.quarter = null;
+    touchFillRef.current.value = "";
+    touchFillRef.current.originMinuteIndex = -1;
+    touchFillRef.current.originPositionIndex = -1;
+    touchFillRef.current.endMinuteIndex = -1;
+    touchFillRef.current.endPositionIndex = -1;
+    setTouchPreview(null);
+  };
+
+  const getCellMetaFromElement = (element) => {
+    const cell = element?.closest?.("[data-quarter][data-minute-index][data-position-index]");
+    if (!cell) return null;
+    const quarter = Number.parseInt(cell.getAttribute("data-quarter") || "", 10);
+    const minuteIndex = Number.parseInt(cell.getAttribute("data-minute-index") || "", 10);
+    const positionIndex = Number.parseInt(cell.getAttribute("data-position-index") || "", 10);
+    if (!Number.isFinite(quarter) || !Number.isFinite(minuteIndex) || !Number.isFinite(positionIndex)) return null;
+    return { quarter, minuteIndex, positionIndex };
+  };
+
+  const isInTouchPreviewRange = (quarter, minuteIndex, positionIndex) => {
+    if (!touchPreview || touchPreview.quarter !== quarter) return false;
+    const minMinute = Math.min(touchPreview.startMinuteIndex, touchPreview.endMinuteIndex);
+    const maxMinute = Math.max(touchPreview.startMinuteIndex, touchPreview.endMinuteIndex);
+    const minPosition = Math.min(touchPreview.startPositionIndex, touchPreview.endPositionIndex);
+    const maxPosition = Math.max(touchPreview.startPositionIndex, touchPreview.endPositionIndex);
+    return (
+      minuteIndex >= minMinute
+      && minuteIndex <= maxMinute
+      && positionIndex >= minPosition
+      && positionIndex <= maxPosition
+    );
+  };
+
   useEffect(() => {
     const endDragFill = () => {
       dragFillRef.current.active = false;
+      if (touchFillRef.current.active) {
+        stopTouchFill();
+      }
     };
     window.addEventListener("mouseup", endDragFill);
-    return () => window.removeEventListener("mouseup", endDragFill);
+    window.addEventListener("touchend", endDragFill, { passive: true });
+    window.addEventListener("touchcancel", endDragFill, { passive: true });
+    return () => {
+      window.removeEventListener("mouseup", endDragFill);
+      window.removeEventListener("touchend", endDragFill);
+      window.removeEventListener("touchcancel", endDragFill);
+      clearTouchFillTimer();
+    };
   }, []);
 
   const getRowValues = (quarter, minuteIndex) => (lineups[quarter]?.[minuteIndex] || []);
@@ -785,10 +850,85 @@ export default function Rotations() {
                             hasDuplicate && value ? styles.duplicateCell : "",
                             isSubOut ? styles.subOutCell : "",
                             isSubIn ? styles.subInCell : "",
+                            isInTouchPreviewRange(quarter, minuteIndex, positionIndex) ? styles.touchPreviewCell : "",
                           ].filter(Boolean).join(" ");
 
                           return (
-                            <td key={`lineup-cell-${quarter}-${minute}-${position}`} className={cellClassName}>
+                            <td
+                              key={`lineup-cell-${quarter}-${minute}-${position}`}
+                              className={cellClassName}
+                              data-quarter={quarter}
+                              data-minute-index={minuteIndex}
+                              data-position-index={positionIndex}
+                              onTouchStart={(event) => {
+                                if (touchFillRef.current.active) return;
+                                if (!normalizedValue) return;
+                                const touch = event.touches?.[0];
+                                if (!touch) return;
+                                clearTouchFillTimer();
+                                touchFillRef.current.startTouchX = touch.clientX;
+                                touchFillRef.current.startTouchY = touch.clientY;
+                                touchFillRef.current.quarter = quarter;
+                                touchFillRef.current.value = normalizedValue;
+                                touchFillRef.current.originMinuteIndex = minuteIndex;
+                                touchFillRef.current.originPositionIndex = positionIndex;
+                                touchFillRef.current.endMinuteIndex = minuteIndex;
+                                touchFillRef.current.endPositionIndex = positionIndex;
+                                touchFillRef.current.timerId = window.setTimeout(() => {
+                                  touchFillRef.current.active = true;
+                                  touchFillRef.current.timerId = null;
+                                  setTouchPreview({
+                                    quarter,
+                                    startMinuteIndex: minuteIndex,
+                                    startPositionIndex: positionIndex,
+                                    endMinuteIndex: minuteIndex,
+                                    endPositionIndex: positionIndex,
+                                  });
+                                }, 1000);
+                              }}
+                              onTouchMove={(event) => {
+                                const touch = event.touches?.[0];
+                                if (!touch) return;
+
+                                if (!touchFillRef.current.active) {
+                                  const dx = Math.abs(touch.clientX - touchFillRef.current.startTouchX);
+                                  const dy = Math.abs(touch.clientY - touchFillRef.current.startTouchY);
+                                  if (dx > 8 || dy > 8) clearTouchFillTimer();
+                                  return;
+                                }
+
+                                event.preventDefault();
+                                const target = document.elementFromPoint(touch.clientX, touch.clientY);
+                                const meta = getCellMetaFromElement(target);
+                                if (!meta || meta.quarter !== touchFillRef.current.quarter) return;
+                                touchFillRef.current.endMinuteIndex = meta.minuteIndex;
+                                touchFillRef.current.endPositionIndex = meta.positionIndex;
+                                setTouchPreview({
+                                  quarter: meta.quarter,
+                                  startMinuteIndex: touchFillRef.current.originMinuteIndex,
+                                  startPositionIndex: touchFillRef.current.originPositionIndex,
+                                  endMinuteIndex: meta.minuteIndex,
+                                  endPositionIndex: meta.positionIndex,
+                                });
+                              }}
+                              onTouchEnd={(event) => {
+                                if (touchFillRef.current.active) {
+                                  event.preventDefault();
+                                  fillLineupRange(
+                                    touchFillRef.current.quarter,
+                                    touchFillRef.current.originMinuteIndex,
+                                    touchFillRef.current.originPositionIndex,
+                                    touchFillRef.current.endMinuteIndex,
+                                    touchFillRef.current.endPositionIndex,
+                                    touchFillRef.current.value
+                                  );
+                                }
+                                stopTouchFill();
+                              }}
+                              onTouchCancel={() => {
+                                stopTouchFill();
+                              }}
+                            >
                               <select
                                 className={styles.playerSelect}
                                 value={value}

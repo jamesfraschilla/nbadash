@@ -184,6 +184,10 @@
   color: #111111 !important;
 }
 
+.touchPreviewCell {
+  box-shadow: inset 0 0 0 2px #4f7cff;
+}
+
 .nearCapCell {
   background: #fff2cc !important;
   color: #111111 !important;
