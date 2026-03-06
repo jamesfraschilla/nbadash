@@ -18,6 +18,7 @@ const QUARTERS = [1, 2, 3, 4];
 const MINUTES = Array.from({ length: 12 }, (_, index) => 12 - index);
 const POSITION_COLUMNS = [1, 2, 3, 4, 5];
 const TOTAL_PER_QUARTER = MINUTES.length * POSITION_COLUMNS.length;
+const MAX_LINEUP_HISTORY = 100;
 
 const DEFAULT_PLAYERS = [
   { id: "p1", name: "BUB", cap: 48 },
@@ -339,7 +340,7 @@ export default function Rotations() {
   const [gameHydrated, setGameHydrated] = useState(false);
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [isTouchFillActive, setIsTouchFillActive] = useState(false);
-  const [canUndoLineups, setCanUndoLineups] = useState(false);
+  const [undoDepth, setUndoDepth] = useState(0);
   const [collapsed, setCollapsed] = useState({
     restrictions: false,
     depth: false,
@@ -355,7 +356,7 @@ export default function Rotations() {
   const skipPlayersSaveRef = useRef(false);
   const skipDepthTemplateSaveRef = useRef(false);
   const skipGameSaveRef = useRef(false);
-  const lastLineupsRef = useRef(null);
+  const lineupHistoryRef = useRef([]);
   const dragFillRef = useRef({
     active: false,
     quarter: null,
@@ -423,6 +424,8 @@ export default function Rotations() {
     skipPlayersSaveRef.current = false;
     skipDepthTemplateSaveRef.current = false;
     skipGameSaveRef.current = false;
+    lineupHistoryRef.current = [];
+    setUndoDepth(0);
   }, [gameId]);
 
   useEffect(() => {
@@ -656,8 +659,8 @@ export default function Rotations() {
 
   const updateLineupCell = (quarter, minuteIndex, positionIndex, value) => {
     setLineups((current) => {
-      lastLineupsRef.current = current;
-      setCanUndoLineups(true);
+      lineupHistoryRef.current = [...lineupHistoryRef.current, current].slice(-MAX_LINEUP_HISTORY);
+      setUndoDepth(lineupHistoryRef.current.length);
       return {
         ...current,
         [quarter]: current[quarter].map((row, rIndex) => (
@@ -677,8 +680,8 @@ export default function Rotations() {
     const minPosition = Math.min(startPositionIndex, endPositionIndex);
     const maxPosition = Math.max(startPositionIndex, endPositionIndex);
     setLineups((current) => {
-      lastLineupsRef.current = current;
-      setCanUndoLineups(true);
+      lineupHistoryRef.current = [...lineupHistoryRef.current, current].slice(-MAX_LINEUP_HISTORY);
+      setUndoDepth(lineupHistoryRef.current.length);
       return {
         ...current,
         [quarter]: current[quarter].map((row, minuteIndex) => {
@@ -693,8 +696,8 @@ export default function Rotations() {
 
   const resetAll = () => {
     setLineups((current) => {
-      lastLineupsRef.current = current;
-      setCanUndoLineups(true);
+      lineupHistoryRef.current = [...lineupHistoryRef.current, current].slice(-MAX_LINEUP_HISTORY);
+      setUndoDepth(lineupHistoryRef.current.length);
       return createDefaultQuarterLineups();
     });
     setResetModalOpen(false);
@@ -702,8 +705,8 @@ export default function Rotations() {
 
   const resetToStarters = () => {
     setLineups((current) => {
-      lastLineupsRef.current = current;
-      setCanUndoLineups(true);
+      lineupHistoryRef.current = [...lineupHistoryRef.current, current].slice(-MAX_LINEUP_HISTORY);
+      setUndoDepth(lineupHistoryRef.current.length);
       const next = createDefaultQuarterLineups();
       next[1][0] = POSITION_COLUMNS.map((_, columnIndex) => normalizeName(depthChart?.[0]?.[columnIndex] || ""));
       return next;
@@ -712,10 +715,11 @@ export default function Rotations() {
   };
 
   const undoLastLineupChange = () => {
-    if (!lastLineupsRef.current) return;
-    setLineups(lastLineupsRef.current);
-    lastLineupsRef.current = null;
-    setCanUndoLineups(false);
+    if (!lineupHistoryRef.current.length) return;
+    const previous = lineupHistoryRef.current[lineupHistoryRef.current.length - 1];
+    lineupHistoryRef.current = lineupHistoryRef.current.slice(0, -1);
+    setUndoDepth(lineupHistoryRef.current.length);
+    setLineups(previous);
   };
 
   const toggleSection = (key) => {
@@ -792,6 +796,8 @@ export default function Rotations() {
     if (!remoteUpdatedAt || remoteUpdatedAt <= gameUpdatedAtRef.current) return;
     const incomingDepth = normalizeDepthChart(payload?.state?.depthChart);
     const incomingLineups = normalizeLineups(payload?.state?.lineups);
+    lineupHistoryRef.current = [];
+    setUndoDepth(0);
     setDepthChart(incomingDepth);
     setLineups(incomingLineups);
     gameUpdatedAtRef.current = remoteUpdatedAt;
@@ -933,7 +939,7 @@ export default function Rotations() {
             type="button"
             className={styles.secondaryButton}
             onClick={undoLastLineupChange}
-            disabled={!canUndoLineups}
+            disabled={!undoDepth}
           >
             Undo
           </button>
