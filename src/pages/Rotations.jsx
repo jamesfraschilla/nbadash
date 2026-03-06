@@ -7,7 +7,8 @@ import styles from "./Rotations.module.css";
 
 const PLAYERS_STORAGE_KEY = "rotations:players:v1";
 const GAME_STORAGE_PREFIX = "rotations:game:v1:";
-const ROTATIONS_ACTION_PAYLOAD = 900000021;
+const ROTATIONS_GAME_ACTION_PAYLOAD = 900000021;
+const ROTATIONS_PLAYERS_ACTION_PAYLOAD = 900000022;
 const ROTATIONS_GLOBAL_PLAYERS_GAME_ID = "9999999911";
 const QUARTERS = [1, 2, 3, 4];
 const MINUTES = Array.from({ length: 12 }, (_, index) => 12 - index);
@@ -188,19 +189,35 @@ function parseRemotePayload(note, key) {
   return { updatedAt, value: parsed };
 }
 
+function parseRemotePlayersPayload(note) {
+  const parsed = safeParseJson(note || "{}", null);
+  if (!parsed || typeof parsed !== "object") return { updatedAt: 0, players: null };
+  const updatedAt = Number(parsed.updatedAt || 0);
+  if (Array.isArray(parsed.players)) {
+    return { updatedAt, players: normalizePlayers(parsed.players) };
+  }
+  return { updatedAt, players: null };
+}
+
 async function fetchRemotePlayers() {
   if (!supabase) return null;
-  const { data, error } = await supabase
-    .from("pbp_highlights")
-    .select("note")
-    .eq("game_id", ROTATIONS_GLOBAL_PLAYERS_GAME_ID)
-    .eq("action_number", ROTATIONS_ACTION_PAYLOAD)
-    .maybeSingle();
-  if (error) return null;
-  const payload = parseRemotePayload(data?.note, "players");
+  const fetchByAction = async (actionNumber) => {
+    const { data, error } = await supabase
+      .from("pbp_highlights")
+      .select("note")
+      .eq("game_id", ROTATIONS_GLOBAL_PLAYERS_GAME_ID)
+      .eq("action_number", actionNumber)
+      .maybeSingle();
+    if (error) return null;
+    return parseRemotePlayersPayload(data?.note);
+  };
+  let payload = await fetchByAction(ROTATIONS_PLAYERS_ACTION_PAYLOAD);
+  if (!payload?.players?.length) {
+    payload = await fetchByAction(ROTATIONS_GAME_ACTION_PAYLOAD);
+  }
   return {
-    updatedAt: payload.updatedAt,
-    players: normalizePlayers(payload.value),
+    updatedAt: Number(payload?.updatedAt || 0),
+    players: payload?.players || null,
   };
 }
 
@@ -209,7 +226,7 @@ async function saveRemotePlayers(players, updatedAt = Date.now()) {
   await supabase.from("pbp_highlights").upsert(
     {
       game_id: ROTATIONS_GLOBAL_PLAYERS_GAME_ID,
-      action_number: ROTATIONS_ACTION_PAYLOAD,
+      action_number: ROTATIONS_PLAYERS_ACTION_PAYLOAD,
       note: JSON.stringify({
         updatedAt,
         players: normalizePlayers(players),
@@ -225,7 +242,7 @@ async function fetchRemoteGameState(gameId) {
     .from("pbp_highlights")
     .select("note")
     .eq("game_id", String(gameId))
-    .eq("action_number", ROTATIONS_ACTION_PAYLOAD)
+    .eq("action_number", ROTATIONS_GAME_ACTION_PAYLOAD)
     .maybeSingle();
   if (error) return null;
   const payload = parseRemotePayload(data?.note, "state");
@@ -240,7 +257,7 @@ async function saveRemoteGameState(gameId, state, updatedAt = Date.now()) {
   await supabase.from("pbp_highlights").upsert(
     {
       game_id: String(gameId),
-      action_number: ROTATIONS_ACTION_PAYLOAD,
+      action_number: ROTATIONS_GAME_ACTION_PAYLOAD,
       note: JSON.stringify({
         updatedAt,
         state,
