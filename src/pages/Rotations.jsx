@@ -339,6 +339,7 @@ export default function Rotations() {
   const [gameHydrated, setGameHydrated] = useState(false);
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [isTouchFillActive, setIsTouchFillActive] = useState(false);
+  const [canUndoLineups, setCanUndoLineups] = useState(false);
   const [collapsed, setCollapsed] = useState({
     restrictions: false,
     depth: false,
@@ -354,6 +355,7 @@ export default function Rotations() {
   const skipPlayersSaveRef = useRef(false);
   const skipDepthTemplateSaveRef = useRef(false);
   const skipGameSaveRef = useRef(false);
+  const lastLineupsRef = useRef(null);
   const dragFillRef = useRef({
     active: false,
     quarter: null,
@@ -653,14 +655,18 @@ export default function Rotations() {
   };
 
   const updateLineupCell = (quarter, minuteIndex, positionIndex, value) => {
-    setLineups((current) => ({
-      ...current,
-      [quarter]: current[quarter].map((row, rIndex) => (
-        rIndex !== minuteIndex
-          ? row
-          : row.map((cell, cIndex) => (cIndex === positionIndex ? normalizeName(value) : cell))
-      )),
-    }));
+    setLineups((current) => {
+      lastLineupsRef.current = current;
+      setCanUndoLineups(true);
+      return {
+        ...current,
+        [quarter]: current[quarter].map((row, rIndex) => (
+          rIndex !== minuteIndex
+            ? row
+            : row.map((cell, cIndex) => (cIndex === positionIndex ? normalizeName(value) : cell))
+        )),
+      };
+    });
   };
 
   const fillLineupRange = (quarter, startMinuteIndex, startPositionIndex, endMinuteIndex, endPositionIndex, value) => {
@@ -670,29 +676,46 @@ export default function Rotations() {
     const maxMinute = Math.max(startMinuteIndex, endMinuteIndex);
     const minPosition = Math.min(startPositionIndex, endPositionIndex);
     const maxPosition = Math.max(startPositionIndex, endPositionIndex);
-    setLineups((current) => ({
-      ...current,
-      [quarter]: current[quarter].map((row, minuteIndex) => {
-        if (minuteIndex < minMinute || minuteIndex > maxMinute) return row;
-        return row.map((cell, positionIndex) => (
-          positionIndex < minPosition || positionIndex > maxPosition ? cell : normalizedValue
-        ));
-      }),
-    }));
+    setLineups((current) => {
+      lastLineupsRef.current = current;
+      setCanUndoLineups(true);
+      return {
+        ...current,
+        [quarter]: current[quarter].map((row, minuteIndex) => {
+          if (minuteIndex < minMinute || minuteIndex > maxMinute) return row;
+          return row.map((cell, positionIndex) => (
+            positionIndex < minPosition || positionIndex > maxPosition ? cell : normalizedValue
+          ));
+        }),
+      };
+    });
   };
 
   const resetAll = () => {
-    setLineups(createDefaultQuarterLineups());
+    setLineups((current) => {
+      lastLineupsRef.current = current;
+      setCanUndoLineups(true);
+      return createDefaultQuarterLineups();
+    });
     setResetModalOpen(false);
   };
 
   const resetToStarters = () => {
     setLineups((current) => {
+      lastLineupsRef.current = current;
+      setCanUndoLineups(true);
       const next = createDefaultQuarterLineups();
       next[1][0] = POSITION_COLUMNS.map((_, columnIndex) => normalizeName(depthChart?.[0]?.[columnIndex] || ""));
       return next;
     });
     setResetModalOpen(false);
+  };
+
+  const undoLastLineupChange = () => {
+    if (!lastLineupsRef.current) return;
+    setLineups(lastLineupsRef.current);
+    lastLineupsRef.current = null;
+    setCanUndoLineups(false);
   };
 
   const toggleSection = (key) => {
@@ -905,9 +928,19 @@ export default function Rotations() {
     <div className={`${styles.page} ${isTouchFillActive ? styles.touchFillLock : ""}`}>
       <div className={styles.topRow}>
         <Link className={styles.backButton} to={backUrl}>Back</Link>
-        <button type="button" className={styles.secondaryButton} onClick={() => setResetModalOpen(true)}>
-          Reset Minutes
-        </button>
+        <div className={styles.topRowActions}>
+          <button
+            type="button"
+            className={styles.secondaryButton}
+            onClick={undoLastLineupChange}
+            disabled={!canUndoLineups}
+          >
+            Undo
+          </button>
+          <button type="button" className={styles.secondaryButton} onClick={() => setResetModalOpen(true)}>
+            Reset Minutes
+          </button>
+        </div>
       </div>
 
       {resetModalOpen && (

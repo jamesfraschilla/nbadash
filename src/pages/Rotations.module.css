@@ -5,7 +5,7 @@
 }
 
 .page {
-  --table-max-width: 920px;
+  --table-max-width: 840px;
   --section-bg: #ffffff;
   --section-border: #b7b7b7;
   --section-header-bg: #151515;
@@ -47,6 +47,13 @@
   gap: 10px;
 }
 
+.topRowActions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .backButton,
 .secondaryButton {
   display: inline-block;
@@ -58,6 +65,11 @@
   font-family: "DIN", sans-serif;
   font-size: 13px;
   cursor: pointer;
+}
+
+.secondaryButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .header {
