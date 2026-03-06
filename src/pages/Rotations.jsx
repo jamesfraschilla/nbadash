@@ -54,22 +54,9 @@ const createDefaultQuarterLineups = () => ({
 
 const createDefaultDepthChart = () => DEFAULT_DEPTH_ROWS.map((row) => row.slice());
 
-function seedFirstQuarterRow(lineups, depthChart) {
-  const nextLineups = { ...lineups };
-  const q1 = Array.isArray(nextLineups[1]) ? nextLineups[1].map((row) => [...row]) : [];
-  if (!q1.length) return lineups;
-  const firstRow = Array.isArray(q1[0]) ? [...q1[0]] : Array.from({ length: POSITION_COLUMNS.length }, () => "");
-  const shouldSeed = firstRow.every((value) => !normalizeName(value));
-  if (!shouldSeed) return lineups;
-  const topDepthRow = Array.isArray(depthChart?.[0]) ? depthChart[0] : [];
-  q1[0] = POSITION_COLUMNS.map((_, columnIndex) => normalizeName(topDepthRow[columnIndex] || ""));
-  nextLineups[1] = q1;
-  return nextLineups;
-}
-
 const createDefaultGameState = () => ({
   depthChart: createDefaultDepthChart(),
-  lineups: seedFirstQuarterRow(createDefaultQuarterLineups(), createDefaultDepthChart()),
+  lineups: createDefaultQuarterLineups(),
 });
 
 function safeParseJson(raw, fallback) {
@@ -89,7 +76,7 @@ function normalizePlayers(rawPlayers) {
   const normalized = (Array.isArray(rawPlayers) ? rawPlayers : []).slice(0, 17).map((player, index) => ({
     id: String(player?.id || `p${index + 1}`),
     name: normalizeName(player?.name),
-    cap: Number.isFinite(Number(player?.cap)) ? Number(player.cap) : 48,
+    cap: player?.cap === "" ? "" : (Number.isFinite(Number(player?.cap)) ? Number(player.cap) : 48),
   }));
   while (normalized.length < 17) {
     normalized.push({ id: `p${normalized.length + 1}`, name: "", cap: 48 });
@@ -131,10 +118,7 @@ function normalizeGameState(rawState) {
     depthChart: normalizeDepthChart(depthSource),
     lineups: normalizeLineups(rawState.lineups),
   };
-  return {
-    ...normalized,
-    lineups: seedFirstQuarterRow(normalized.lineups, normalized.depthChart),
-  };
+  return normalized;
 }
 
 function loadPlayersPayload() {
@@ -260,6 +244,7 @@ async function fetchRemoteGameState(gameId) {
     .eq("scope_key", String(gameId))
     .maybeSingle();
   if (error) return null;
+  if (!data?.payload) return null;
   const parsed = parseSharedStateRow(data);
   return {
     updatedAt: parsed.updatedAt,
@@ -506,7 +491,7 @@ export default function Rotations() {
 
     const defaults = {
       depthChart: normalizeDepthChart(depthTemplate),
-      lineups: seedFirstQuarterRow(createDefaultQuarterLineups(), normalizeDepthChart(depthTemplate)),
+      lineups: createDefaultQuarterLineups(),
     };
     const localPayload = loadGamePayload(gameId);
     const localUpdatedAt = Number(localPayload?.updatedAt || 0);
@@ -649,8 +634,9 @@ export default function Rotations() {
     setPlayers((current) => current.map((player) => {
       if (player.id !== playerId) return player;
       if (field === "cap") {
+        if (value === "") return { ...player, cap: "" };
         const parsed = Number.parseInt(value, 10);
-        return { ...player, cap: Number.isFinite(parsed) ? parsed : 0 };
+        return { ...player, cap: Number.isFinite(parsed) ? parsed : player.cap };
       }
       return { ...player, [field]: normalizeName(value) };
     }));
@@ -701,7 +687,11 @@ export default function Rotations() {
   };
 
   const resetToStarters = () => {
-    setLineups(seedFirstQuarterRow(createDefaultQuarterLineups(), depthChart));
+    setLineups((current) => {
+      const next = createDefaultQuarterLineups();
+      next[1][0] = POSITION_COLUMNS.map((_, columnIndex) => normalizeName(depthChart?.[0]?.[columnIndex] || ""));
+      return next;
+    });
     setResetModalOpen(false);
   };
 
@@ -986,7 +976,7 @@ export default function Rotations() {
                         className={styles.capInput}
                         type="number"
                         min="0"
-                        value={cap}
+                        value={player.cap}
                         onChange={(event) => updatePlayerField(player.id, "cap", event.target.value)}
                         aria-label={`Cap for ${name || player.id}`}
                       />
