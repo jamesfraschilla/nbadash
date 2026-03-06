@@ -35,7 +35,7 @@
 
 .header {
   width: min(1560px, 100%);
-  margin: 0 auto 10px;
+  margin: 0 auto 8px;
   text-align: left;
 }
 
@@ -53,27 +53,24 @@
   text-transform: uppercase;
 }
 
-.quarterSection {
+.sheetSection {
   width: min(1560px, 100%);
-  margin: 10px auto 0;
+  margin: 8px auto 0;
   border: 1px solid #b7b7b7;
   background: #ffffff;
 }
 
-.quarterLayout {
-  display: grid;
-  grid-template-columns: minmax(700px, 1fr) minmax(400px, 460px);
-  gap: 8px;
-  padding: 8px;
-}
-
-.leftColumn {
-  display: grid;
-  gap: 8px;
-}
-
-.rightColumn {
-  min-width: 0;
+.sectionHeaderButton {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid #c8c8c8;
+  background: #151515;
+  color: #ffffff;
+  font-family: "DIN", sans-serif;
+  font-size: 18px;
+  text-align: left;
+  padding: 8px 10px;
+  cursor: pointer;
 }
 
 .depthTable,
@@ -97,24 +94,13 @@
   height: 28px;
 }
 
-.depthTable thead tr:first-child th,
-.rotationTable thead tr:first-child th,
-.totalsTable thead tr:first-child th {
-  background: #151515;
-  color: #ffffff;
-  font-size: 16px;
-  letter-spacing: 0.2px;
-  height: 32px;
-}
-
-.depthTable thead tr:nth-child(2) th,
-.rotationTable thead tr:nth-child(2) th,
-.totalsTable thead tr:nth-child(2) th {
+.depthTable thead th,
+.rotationTable thead th,
+.totalsTable thead th {
   background: #efefef;
   color: #141414;
 }
 
-.depthInput,
 .playerNameInput,
 .capInput {
   width: 100%;
@@ -127,10 +113,16 @@
   background: #ffffff;
   color: #111111;
   text-transform: uppercase;
+  text-align: center;
 }
 
 .capInput {
   text-align: center;
+}
+
+.playerNameCell {
+  text-align: center;
+  font-weight: 700;
 }
 
 .minuteCell {
@@ -147,11 +139,6 @@
   font-size: 14px;
   text-align: center;
   height: 24px;
-}
-
-.playerNameCell {
-  text-align: left;
-  font-weight: 700;
 }
 
 .duplicateCell {
@@ -192,10 +179,4 @@
   color: var(--text);
   padding: 24px;
   text-align: center;
-}
-
-@media (max-width: 1240px) {
-  .quarterLayout {
-    grid-template-columns: 1fr;
-  }
 }

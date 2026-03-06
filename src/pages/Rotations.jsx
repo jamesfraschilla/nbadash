@@ -32,8 +32,11 @@ const DEFAULT_PLAYERS = [
   { id: "p17", name: "", cap: 48 },
 ];
 
-const DEFAULT_DEPTH_ROW_ONE = ["TRAE", "TRE", "BC", "LB", "JR"];
-const DEFAULT_DEPTH_ROW_TWO = ["SC", "BUB", "JH", "WR", "AG"];
+const DEFAULT_DEPTH_ROWS = [
+  ["TRAE", "TRE", "BC", "LB", "JR"],
+  ["SC", "BUB", "JH", "WR", "AG"],
+  ["", "", "", "", ""],
+];
 
 const createDefaultQuarterLineups = () => ({
   1: MINUTES.map(() => Array.from({ length: POSITION_COLUMNS.length }, () => "")),
@@ -42,12 +45,7 @@ const createDefaultQuarterLineups = () => ({
   4: MINUTES.map(() => Array.from({ length: POSITION_COLUMNS.length }, () => "")),
 });
 
-const createDefaultDepthChart = () => ({
-  1: [DEFAULT_DEPTH_ROW_ONE.slice(), DEFAULT_DEPTH_ROW_TWO.slice()],
-  2: [DEFAULT_DEPTH_ROW_ONE.slice(), DEFAULT_DEPTH_ROW_TWO.slice()],
-  3: [DEFAULT_DEPTH_ROW_ONE.slice(), DEFAULT_DEPTH_ROW_TWO.slice()],
-  4: [DEFAULT_DEPTH_ROW_ONE.slice(), DEFAULT_DEPTH_ROW_TWO.slice()],
-});
+const createDefaultDepthChart = () => DEFAULT_DEPTH_ROWS.map((row) => row.slice());
 
 const createDefaultState = () => ({
   players: DEFAULT_PLAYERS,
@@ -82,15 +80,24 @@ function normalizePlayers(rawPlayers) {
 
 function normalizeDepthChart(rawDepth) {
   const fallback = createDefaultDepthChart();
-  const result = {};
-  QUARTERS.forEach((quarter) => {
-    const rows = Array.isArray(rawDepth?.[quarter]) ? rawDepth[quarter] : fallback[quarter];
-    result[quarter] = [0, 1].map((rowIndex) => {
-      const row = Array.isArray(rows?.[rowIndex]) ? rows[rowIndex] : [];
+  if (Array.isArray(rawDepth)) {
+    const normalizedRows = [0, 1, 2].map((rowIndex) => {
+      const row = Array.isArray(rawDepth[rowIndex]) ? rawDepth[rowIndex] : [];
       return POSITION_COLUMNS.map((_, columnIndex) => normalizeName(row[columnIndex] || ""));
     });
-  });
-  return result;
+    return normalizedRows;
+  }
+
+  // Backward compatibility with previous shape keyed by quarter.
+  if (rawDepth && typeof rawDepth === "object") {
+    const quarterOneRows = Array.isArray(rawDepth[1]) ? rawDepth[1] : fallback;
+    return [0, 1, 2].map((rowIndex) => {
+      const row = Array.isArray(quarterOneRows[rowIndex]) ? quarterOneRows[rowIndex] : [];
+      return POSITION_COLUMNS.map((_, columnIndex) => normalizeName(row[columnIndex] || ""));
+    });
+  }
+
+  return fallback;
 }
 
 function normalizeLineups(rawLineups) {
@@ -211,6 +218,14 @@ export default function Rotations() {
   const [depthChart, setDepthChart] = useState(createDefaultDepthChart());
   const [lineups, setLineups] = useState(createDefaultQuarterLineups());
   const [hydrated, setHydrated] = useState(false);
+  const [collapsed, setCollapsed] = useState({
+    restrictions: false,
+    depth: false,
+    q1: false,
+    q2: false,
+    q3: false,
+    q4: false,
+  });
   const updatedAtRef = useRef(0);
   const skipSaveRef = useRef(false);
 
@@ -361,15 +376,10 @@ export default function Rotations() {
     }));
   };
 
-  const updateDepthCell = (quarter, rowIndex, columnIndex, value) => {
-    setDepthChart((current) => ({
-      ...current,
-      [quarter]: current[quarter].map((row, rIndex) => (
-        rIndex !== rowIndex
-          ? row
-          : row.map((cell, cIndex) => (cIndex === columnIndex ? normalizeName(value) : cell))
-      )),
-    }));
+  const updateDepthCell = (rowIndex, columnIndex, value) => {
+    setDepthChart((current) => current.map((row, rIndex) => (
+      rIndex !== rowIndex ? row : row.map((cell, cIndex) => (cIndex === columnIndex ? normalizeName(value) : cell))
+    )));
   };
 
   const updateLineupCell = (quarter, minuteIndex, positionIndex, value) => {
@@ -388,6 +398,10 @@ export default function Rotations() {
     setPlayers(next.players);
     setDepthChart(next.depthChart);
     setLineups(next.lineups);
+  };
+
+  const toggleSection = (key) => {
+    setCollapsed((current) => ({ ...current, [key]: !current[key] }));
   };
 
   const getRowValues = (quarter, minuteIndex) => (lineups[quarter]?.[minuteIndex] || []);
@@ -435,44 +449,131 @@ export default function Rotations() {
         <p className={styles.subtitle}>{opponentLabel}</p>
       </header>
 
-      {QUARTERS.map((quarter) => (
-        <section key={quarter} className={styles.quarterSection}>
-          <div className={styles.quarterLayout}>
-            <div className={styles.leftColumn}>
-              <table className={styles.depthTable}>
-                <thead>
-                  <tr>
-                    <th colSpan={5}>Depth Chart</th>
-                  </tr>
-                  <tr>
-                    {POSITION_COLUMNS.map((position) => <th key={`depth-head-${quarter}-${position}`}>{position}</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {[0, 1].map((rowIndex) => (
-                    <tr key={`depth-row-${quarter}-${rowIndex}`}>
-                      {POSITION_COLUMNS.map((position) => {
-                        const columnIndex = position - 1;
-                        return (
-                          <td key={`depth-cell-${quarter}-${rowIndex}-${position}`}>
-                            <input
-                              className={styles.depthInput}
-                              value={depthChart[quarter]?.[rowIndex]?.[columnIndex] || ""}
-                              onChange={(event) => updateDepthCell(quarter, rowIndex, columnIndex, event.target.value)}
-                            />
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+      <section className={styles.sheetSection}>
+        <button type="button" className={styles.sectionHeaderButton} onClick={() => toggleSection("restrictions")}>
+          Restrictions / Totals
+        </button>
+        {!collapsed.restrictions && (
+          <table className={styles.totalsTable}>
+            <thead>
+              <tr>
+                <th>Player</th>
+                <th>Cap</th>
+                <th>1st</th>
+                <th>2nd</th>
+                <th>3rd</th>
+                <th>4th</th>
+                <th>Tot</th>
+              </tr>
+            </thead>
+            <tbody>
+              {players.map((player) => {
+                const name = normalizeName(player.name);
+                const cap = Number(player.cap) || 0;
+                const q1 = name ? (quarterCounts[1]?.[name] || 0) : 0;
+                const q2 = name ? (quarterCounts[2]?.[name] || 0) : 0;
+                const q3 = name ? (quarterCounts[3]?.[name] || 0) : 0;
+                const q4 = name ? (quarterCounts[4]?.[name] || 0) : 0;
+                const totalCount = name ? (totalCounts[name] || 0) : 0;
+                let totalClassName = "";
+                if (name && totalCount > cap) totalClassName = styles.overCapCell;
+                else if (name && totalCount >= Math.max(0, cap - 5)) totalClassName = styles.nearCapCell;
 
+                return (
+                  <tr key={`totals-row-${player.id}`}>
+                    <td className={styles.playerNameCell}>
+                      <input
+                        className={styles.playerNameInput}
+                        value={player.name}
+                        onChange={(event) => updatePlayerField(player.id, "name", event.target.value)}
+                        aria-label={`Player ${player.id}`}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        className={styles.capInput}
+                        type="number"
+                        min="0"
+                        value={cap}
+                        onChange={(event) => updatePlayerField(player.id, "cap", event.target.value)}
+                        aria-label={`Cap for ${name || player.id}`}
+                      />
+                    </td>
+                    <td>{q1}</td>
+                    <td>{q2}</td>
+                    <td>{q3}</td>
+                    <td>{q4}</td>
+                    <td className={totalClassName}>{totalCount}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td>Total</td>
+                <td />
+                <td className={quarterTotals[1] !== TOTAL_PER_QUARTER ? styles.badTotalCell : ""}>{quarterTotals[1]}</td>
+                <td className={quarterTotals[2] !== TOTAL_PER_QUARTER ? styles.badTotalCell : ""}>{quarterTotals[2]}</td>
+                <td className={quarterTotals[3] !== TOTAL_PER_QUARTER ? styles.badTotalCell : ""}>{quarterTotals[3]}</td>
+                <td className={quarterTotals[4] !== TOTAL_PER_QUARTER ? styles.badTotalCell : ""}>{quarterTotals[4]}</td>
+                <td className={allQuarterTotal !== TOTAL_PER_QUARTER * 4 ? styles.badTotalCell : ""}>{allQuarterTotal}</td>
+              </tr>
+            </tfoot>
+          </table>
+        )}
+      </section>
+
+      <section className={styles.sheetSection}>
+        <button type="button" className={styles.sectionHeaderButton} onClick={() => toggleSection("depth")}>
+          Depth Chart
+        </button>
+        {!collapsed.depth && (
+          <table className={styles.depthTable}>
+            <thead>
+              <tr>
+                {POSITION_COLUMNS.map((position) => <th key={`depth-head-${position}`}>{position}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {[0, 1, 2].map((rowIndex) => (
+                <tr key={`depth-row-${rowIndex}`}>
+                  {POSITION_COLUMNS.map((position) => {
+                    const columnIndex = position - 1;
+                    const value = depthChart[rowIndex]?.[columnIndex] || "";
+                    return (
+                      <td key={`depth-cell-${rowIndex}-${position}`}>
+                        <select
+                          className={styles.playerSelect}
+                          value={value}
+                          onChange={(event) => updateDepthCell(rowIndex, columnIndex, event.target.value)}
+                        >
+                          <option value=""> </option>
+                          {playerOptions.map((option) => (
+                            <option key={`depth-${rowIndex}-${position}-${option}`} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      {QUARTERS.map((quarter) => {
+        const sectionKey = `q${quarter}`;
+        return (
+          <section key={quarter} className={styles.sheetSection}>
+            <button type="button" className={styles.sectionHeaderButton} onClick={() => toggleSection(sectionKey)}>
+              {quarterLabel(quarter)} Quarter
+            </button>
+            {!collapsed[sectionKey] && (
               <table className={styles.rotationTable}>
                 <thead>
-                  <tr>
-                    <th colSpan={6}>{quarterLabel(quarter)} Quarter</th>
-                  </tr>
                   <tr>
                     <th>Time</th>
                     {POSITION_COLUMNS.map((position) => <th key={`pos-${quarter}-${position}`}>{position}</th>)}
@@ -532,83 +633,10 @@ export default function Rotations() {
                   })}
                 </tbody>
               </table>
-            </div>
-
-            <div className={styles.rightColumn}>
-              <table className={styles.totalsTable}>
-                <thead>
-                  <tr>
-                    <th colSpan={4}>Restrictions / Totals</th>
-                  </tr>
-                  <tr>
-                    <th>Player</th>
-                    <th>Cap</th>
-                    <th>{quarterLabel(quarter)}</th>
-                    <th>Tot</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {players.map((player) => {
-                    const name = normalizeName(player.name);
-                    const cap = Number(player.cap) || 0;
-                    const quarterCount = name ? (quarterCounts[quarter]?.[name] || 0) : 0;
-                    const totalCount = name ? (totalCounts[name] || 0) : 0;
-                    const allowEdit = quarter === 1;
-                    let totalClassName = "";
-                    if (name && totalCount > cap) totalClassName = styles.overCapCell;
-                    else if (name && totalCount >= Math.max(0, cap - 5)) totalClassName = styles.nearCapCell;
-
-                    return (
-                      <tr key={`totals-row-${quarter}-${player.id}`}>
-                        <td className={styles.playerNameCell}>
-                          {allowEdit ? (
-                            <input
-                              className={styles.playerNameInput}
-                              value={player.name}
-                              onChange={(event) => updatePlayerField(player.id, "name", event.target.value)}
-                              aria-label={`Player ${player.id}`}
-                            />
-                          ) : (
-                            name
-                          )}
-                        </td>
-                        <td>
-                          {allowEdit ? (
-                            <input
-                              className={styles.capInput}
-                              type="number"
-                              min="0"
-                              value={cap}
-                              onChange={(event) => updatePlayerField(player.id, "cap", event.target.value)}
-                              aria-label={`Cap for ${name || player.id}`}
-                            />
-                          ) : (
-                            cap
-                          )}
-                        </td>
-                        <td>{quarterCount}</td>
-                        <td className={totalClassName}>{totalCount}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td>Total</td>
-                    <td />
-                    <td className={quarterTotals[quarter] !== TOTAL_PER_QUARTER ? styles.badTotalCell : ""}>
-                      {quarterTotals[quarter]}
-                    </td>
-                    <td className={allQuarterTotal !== TOTAL_PER_QUARTER * 4 ? styles.badTotalCell : ""}>
-                      {allQuarterTotal}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </div>
-        </section>
-      ))}
+            )}
+          </section>
+        );
+      })}
     </div>
   );
 }
