@@ -701,7 +701,6 @@ export default function Rotations() {
   const [versionMenuOpen, setVersionMenuOpen] = useState(false);
   const [createVersionOpen, setCreateVersionOpen] = useState(false);
   const [createVersionName, setCreateVersionName] = useState("");
-  const [createVersionMode, setCreateVersionMode] = useState("blank");
   const [deleteVersionTarget, setDeleteVersionTarget] = useState(null);
   const [isTouchFillActive, setIsTouchFillActive] = useState(false);
   const [undoDepth, setUndoDepth] = useState(0);
@@ -1221,18 +1220,17 @@ export default function Rotations() {
 
   const openCreateVersionModal = () => {
     setVersionMenuOpen(false);
-    setCreateVersionMode("blank");
     setCreateVersionName("");
     setCreateVersionOpen(true);
   };
 
-  const createVersion = () => {
+  const createVersion = (mode) => {
     const name = String(createVersionName || "").trim();
     if (!name) return;
     const nextVersion = createVersionState({
       name,
-      depthChart: createVersionMode === "copy" ? depthChart : [0, 1, 2].map(() => POSITION_COLUMNS.map(() => "")),
-      lineups: createVersionMode === "copy" ? lineups : createDefaultQuarterLineups(),
+      depthChart: mode === "copy" ? depthChart : [0, 1, 2].map(() => POSITION_COLUMNS.map(() => "")),
+      lineups: mode === "copy" ? lineups : createDefaultQuarterLineups(),
       inheritDepthTemplate: false,
     });
     lineupHistoryRef.current = [];
@@ -1542,6 +1540,7 @@ export default function Rotations() {
             </button>
           </div>
           <div className={styles.versionSelectWrap} ref={versionMenuRef}>
+            <div className={styles.versionLabel}>Version</div>
             <button
               type="button"
               className={styles.versionTrigger}
@@ -1624,31 +1623,30 @@ export default function Rotations() {
         <div className={styles.modalOverlay} onClick={() => setCreateVersionOpen(false)}>
           <div className={styles.modalCard} onClick={(event) => event.stopPropagation()}>
             <h3 className={styles.modalTitle}>Create New Version</h3>
-            <div className={styles.modalOptionRow}>
-              <button
-                type="button"
-                className={createVersionMode === "blank" ? styles.modalPrimary : styles.modalSecondary}
-                onClick={() => setCreateVersionMode("blank")}
-              >
-                Start From Blank
-              </button>
-              <button
-                type="button"
-                className={createVersionMode === "copy" ? styles.modalPrimary : styles.modalSecondary}
-                onClick={() => setCreateVersionMode("copy")}
-              >
-                Copy Current Version
-              </button>
-            </div>
             <input
               className={styles.versionNameInput}
               value={createVersionName}
               onChange={(event) => setCreateVersionName(event.target.value)}
               placeholder="Version name"
             />
-            <button type="button" className={styles.modalPrimary} onClick={createVersion} disabled={!createVersionName.trim()}>
-              Create Version
-            </button>
+            <div className={styles.modalOptionRow}>
+              <button
+                type="button"
+                className={styles.modalPrimary}
+                onClick={() => createVersion("blank")}
+                disabled={!createVersionName.trim()}
+              >
+                Start From Blank
+              </button>
+              <button
+                type="button"
+                className={styles.modalPrimary}
+                onClick={() => createVersion("copy")}
+                disabled={!createVersionName.trim()}
+              >
+                Copy Current Version
+              </button>
+            </div>
             <button type="button" className={styles.modalSecondary} onClick={() => setCreateVersionOpen(false)}>
               Cancel
             </button>

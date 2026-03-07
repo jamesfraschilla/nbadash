@@ -85,6 +85,14 @@
   width: min(260px, 100%);
 }
 
+.versionLabel {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--cell-text);
+  text-align: left;
+}
+
 .versionTrigger {
   width: 100%;
   display: flex;
