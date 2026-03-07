@@ -380,7 +380,7 @@ function renderExportQuarterTable(quarter, lineups) {
       <table class="export-table">
         <thead>
           <tr>
-            <th>Time</th>
+            <th></th>
             ${POSITION_COLUMNS.map((position) => `<th>${position}</th>`).join("")}
           </tr>
         </thead>
@@ -420,7 +420,7 @@ function buildRotationsPdfHtml({ headerLine, depthChart, lineups, logoUrl, fontU
         <style>
           @page {
             size: 8.5in 11in;
-            margin: 0.3in;
+            margin: 0.12in;
           }
 
           @font-face {
@@ -447,8 +447,9 @@ function buildRotationsPdfHtml({ headerLine, depthChart, lineups, logoUrl, fontU
 
           .pdf-page {
             width: 100%;
-            min-height: 10.4in;
+            min-height: 10.76in;
             page-break-after: always;
+            display: flex;
           }
 
           .pdf-page:last-child {
@@ -456,15 +457,20 @@ function buildRotationsPdfHtml({ headerLine, depthChart, lineups, logoUrl, fontU
           }
 
           .pdf-column {
-            width: 4.1in;
+            width: 4.23in;
+            min-height: 10.76in;
+            display: flex;
+            flex-direction: column;
           }
 
           .pdf-page.left .pdf-column {
             margin-right: auto;
+            margin-left: 0;
           }
 
           .pdf-page.right .pdf-column {
             margin-left: auto;
+            margin-right: 0;
           }
 
           .pdf-header {
@@ -512,7 +518,8 @@ function buildRotationsPdfHtml({ headerLine, depthChart, lineups, logoUrl, fontU
           .pdf-logo-wrap {
             display: flex;
             justify-content: center;
-            margin-top: 0.18in;
+            margin-top: auto;
+            padding-top: 0.12in;
           }
 
           .pdf-logo {
