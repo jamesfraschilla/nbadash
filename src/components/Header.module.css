@@ -122,6 +122,23 @@
   border-color: var(--header-button-border-hover);
 }
 
+.lockButton {
+  background-color: var(--header-button-bg);
+  border: 1px solid var(--header-button-border);
+  border-radius: 6px;
+  padding: 0 10px;
+  color: var(--header-text);
+  font-size: 0.75rem;
+  cursor: pointer;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.lockButton:hover {
+  background-color: var(--header-button-hover);
+  border-color: var(--header-button-border-hover);
+}
+
 .modeGroup {
   display: flex;
   align-items: center;

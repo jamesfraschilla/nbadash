@@ -6,7 +6,7 @@ import { formatDateInput, formatDateLabel, parseDateInput } from "../utils.js";
 import GameCard from "./GameCard.jsx";
 import styles from "./Header.module.css";
 
-export default function Header({ theme, onToggleTheme }) {
+export default function Header({ theme, onToggleTheme, onLock }) {
   const [params, setParams] = useSearchParams();
   const inputRef = useRef(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -55,6 +55,9 @@ export default function Header({ theme, onToggleTheme }) {
           <span className={styles.modeLabel}>Mode</span>
           <button className={styles.themeToggle} onClick={onToggleTheme} type="button" aria-label="Toggle theme">
             {theme === "dark" ? "☾" : "☀"}
+          </button>
+          <button className={styles.lockButton} onClick={onLock} type="button">
+            Lock
           </button>
         </div>
 
