@@ -1,12 +1,11 @@
 .container {
-  --calls-team-width: 150px;
-  --calls-total-width: 90px;
-  --official-column-width: 132px;
-  margin: 24px auto 0;
-  padding: 18px 0;
+  --calls-team-width: 92px;
+  --calls-total-width: 54px;
+  --official-column-width: 120px;
+  margin: 20px auto 0;
+  padding: 10px 0 0;
   border: 1px solid var(--border);
   background: var(--panel);
-  position: relative;
   width: min(100%, calc(var(--calls-team-width) + var(--calls-total-width) + (var(--official-column-width) * 3)));
 }
 
@@ -14,6 +13,14 @@
   width: calc(var(--calls-team-width) + var(--calls-total-width) + (var(--official-column-width) * 3));
   margin: 0 auto;
   min-width: 0;
+  position: relative;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 6px;
+  position: relative;
 }
 
 .officialsRow {
@@ -32,14 +39,14 @@
   text-align: center;
 }
 
-.rowSpacer {
+.rowSpacerCompact {
   width: 100%;
 }
 
 .avatarFrame {
-  width: 92px;
-  height: 92px;
-  border-radius: 16px;
+  width: 84px;
+  height: 84px;
+  border-radius: 14px;
   overflow: hidden;
   background: #e8e8e8;
 }
@@ -65,16 +72,16 @@
 }
 
 .nameText {
-  margin-top: 8px;
-  font-size: 0.9rem;
+  margin-top: 6px;
+  font-size: 0.82rem;
   font-weight: 400;
   line-height: 1;
   color: var(--text);
 }
 
 .roleText {
-  margin-top: 3px;
-  font-size: 0.7rem;
+  margin-top: 2px;
+  font-size: 0.64rem;
   font-weight: 600;
   line-height: 1;
   color: var(--muted);
@@ -98,26 +105,43 @@
   color: var(--muted);
 }
 
-.buttonColumn {
-  width: 76px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.downloadButton {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--text);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.exportMenu {
   position: absolute;
-  left: 20px;
-  top: 50%;
-  transform: translateY(-50%);
+  top: calc(100% + 6px);
+  right: 0;
+  width: 112px;
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  z-index: 10;
 }
 
 .exportButton {
-  width: 76px;
-  min-height: 34px;
-  padding: 8px 6px;
+  width: 100%;
+  min-height: 30px;
+  padding: 6px 6px;
   border: 1px solid var(--text);
-  border-radius: 0;
+  border-radius: 6px;
   background: transparent;
   color: var(--text);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 600;
   cursor: pointer;
   display: inline-flex;
@@ -171,15 +195,7 @@
     min-width: calc(var(--calls-team-width) + var(--calls-total-width) + (var(--official-column-width) * 3));
   }
 
-  .buttonColumn {
-    position: static;
-    transform: none;
-    width: 100%;
-    max-width: 240px;
-    margin: 12px auto 0;
-  }
-
-  .exportButton {
-    width: 100%;
+  .exportMenu {
+    width: 100px;
   }
 }

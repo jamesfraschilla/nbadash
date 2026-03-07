@@ -633,6 +633,7 @@ export default function OfficialsExportPanel({ officials, gameId, publishedOrder
     [officials, publishedOrder]
   );
   const [busyFormat, setBusyFormat] = useState("");
+  const [exportOpen, setExportOpen] = useState(false);
 
   const handleExport = async (format) => {
     if (busyFormat) return;
@@ -646,6 +647,7 @@ export default function OfficialsExportPanel({ officials, gameId, publishedOrder
 
       const canvas = await buildExportCanvas(format, primary, alternates, getThemeMode());
       downloadCanvas(canvas, `officials-${gameId || "game"}-${format}.png`);
+      setExportOpen(false);
     } catch (error) {
       console.error("Failed to export officials graphic.", error);
     } finally {
@@ -655,30 +657,41 @@ export default function OfficialsExportPanel({ officials, gameId, publishedOrder
 
   return (
     <section className={styles.container} aria-label="Tonight's officials">
-      {primary.length ? (
-        <div className={styles.buttonColumn}>
-          {["portrait", "landscape", "was"].map((format) => {
-            const busy = busyFormat === format;
-            return (
-              <button
-                key={format}
-                type="button"
-                className={styles.exportButton}
-                onClick={() => handleExport(format)}
-                disabled={Boolean(busyFormat)}
-              >
-                {busy ? <Spinner /> : EXPORT_SPECS[format].label}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
-
       <div className={styles.contentColumn}>
         {primary.length ? (
+          <div className={styles.toolbar}>
+            <button
+              type="button"
+              className={styles.downloadButton}
+              onClick={() => setExportOpen((current) => !current)}
+              aria-label="Open referee export formats"
+            >
+              ↓
+            </button>
+            {exportOpen ? (
+              <div className={styles.exportMenu}>
+                {["portrait", "landscape", "was"].map((format) => {
+                  const busy = busyFormat === format;
+                  return (
+                    <button
+                      key={format}
+                      type="button"
+                      className={styles.exportButton}
+                      onClick={() => handleExport(format)}
+                      disabled={Boolean(busyFormat)}
+                    >
+                      {busy ? <Spinner /> : EXPORT_SPECS[format].label}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {primary.length ? (
           <div className={styles.officialsRow}>
-            <div className={styles.rowSpacer} aria-hidden="true" />
-            <div className={styles.rowSpacer} aria-hidden="true" />
+            <div className={styles.rowSpacerCompact} aria-hidden="true" />
+            <div className={styles.rowSpacerCompact} aria-hidden="true" />
             {primary.map((official) => (
               <VisibleOfficialTile key={official.id} official={official} />
             ))}
