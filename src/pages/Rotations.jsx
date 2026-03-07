@@ -457,20 +457,20 @@ function buildRotationsPdfHtml({ headerLine, depthChart, lineups, logoUrl, fontU
           }
 
           .pdf-column {
-            width: 4.23in;
+            width: 4in;
+            max-width: calc(50% - 0.08in);
             min-height: 10.76in;
             display: flex;
             flex-direction: column;
+            padding-bottom: 0.18in;
           }
 
-          .pdf-page.left .pdf-column {
-            margin-right: auto;
-            margin-left: 0;
+          .pdf-page.left {
+            justify-content: flex-start;
           }
 
-          .pdf-page.right .pdf-column {
-            margin-left: auto;
-            margin-right: 0;
+          .pdf-page.right {
+            justify-content: flex-end;
           }
 
           .pdf-header {
@@ -519,7 +519,7 @@ function buildRotationsPdfHtml({ headerLine, depthChart, lineups, logoUrl, fontU
             display: flex;
             justify-content: center;
             margin-top: auto;
-            padding-top: 0.12in;
+            padding-top: 0.08in;
           }
 
           .pdf-logo {
