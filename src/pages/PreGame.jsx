@@ -417,6 +417,17 @@ function buildSlotsFromTemplate(game, template) {
   }));
 }
 
+function buildSlotsWithLocalTimes(game, slots) {
+  const normalizedSlots = normalizeSlots(slots);
+  const seeded = buildDefaultSlots(game, Math.max(1, normalizedSlots.length || 8));
+  return seeded.map((slot, index) => ({
+    ...slot,
+    playerIds: Array.isArray(normalizedSlots[index]?.playerIds)
+      ? normalizedSlots[index].playerIds.slice(0, 3).map((value) => String(value || ""))
+      : ["", ""],
+  }));
+}
+
 function ensureExportFonts() {
   if (typeof document === "undefined" || typeof FontFace === "undefined") {
     return Promise.resolve();
@@ -751,7 +762,7 @@ export default function PreGame() {
     if (
       remoteSchedule?.slots?.length &&
       remoteScheduleUpdatedAt >= localScheduleUpdatedAt &&
-      (remoteHasAssignments || !templateHasAssignments)
+      remoteHasAssignments
     ) {
       setSlots(remoteSchedule.slots);
       slotsUpdatedAtRef.current = remoteScheduleUpdatedAt;
@@ -759,8 +770,24 @@ export default function PreGame() {
       return;
     }
 
-    if (localSchedulePayload?.slots?.length && (localHasAssignments || !templateHasAssignments)) {
+    if (localSchedulePayload?.slots?.length && localHasAssignments) {
       setSlots(localSchedulePayload.slots);
+      slotsUpdatedAtRef.current = localScheduleUpdatedAt;
+      setSlotsHydrated(true);
+      return;
+    }
+
+    if (remoteSchedule?.slots?.length && remoteScheduleUpdatedAt >= localScheduleUpdatedAt && !remoteHasAssignments) {
+      const migratedRemoteSlots = buildSlotsWithLocalTimes(game, remoteSchedule.slots);
+      setSlots(migratedRemoteSlots);
+      slotsUpdatedAtRef.current = remoteScheduleUpdatedAt;
+      setSlotsHydrated(true);
+      return;
+    }
+
+    if (localSchedulePayload?.slots?.length && !localHasAssignments) {
+      const migratedLocalSlots = buildSlotsWithLocalTimes(game, localSchedulePayload.slots);
+      setSlots(migratedLocalSlots);
       slotsUpdatedAtRef.current = localScheduleUpdatedAt;
       setSlotsHydrated(true);
       return;
