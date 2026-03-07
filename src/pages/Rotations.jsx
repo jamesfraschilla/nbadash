@@ -16,6 +16,8 @@ const ROTATIONS_SCOPE_PLAYERS = "players";
 const ROTATIONS_SCOPE_DEPTH_TEMPLATE = "depth_template";
 const ROTATIONS_SCOPE_GAME = "game";
 const ROTATIONS_GLOBAL_SCOPE_KEY = "global";
+const FINAL_VERSION_ID = "final";
+const CREATE_VERSION_OPTION = "__create_new_version__";
 const QUARTERS = [1, 2, 3, 4];
 const MINUTES = Array.from({ length: 12 }, (_, index) => 12 - index);
 const POSITION_COLUMNS = [1, 2, 3, 4, 5];
@@ -57,10 +59,33 @@ const createDefaultQuarterLineups = () => ({
 
 const createDefaultDepthChart = () => DEFAULT_DEPTH_ROWS.map((row) => row.slice());
 
+function createVersionState({
+  id,
+  name,
+  depthChart = createDefaultDepthChart(),
+  lineups = createDefaultQuarterLineups(),
+  inheritDepthTemplate = false,
+}) {
+  return {
+    id: String(id || (typeof crypto !== "undefined" ? crypto.randomUUID() : `version-${Date.now()}`)),
+    name: String(name || "Version").trim() || "Version",
+    depthChart: normalizeDepthChart(depthChart),
+    lineups: normalizeLineups(lineups),
+    inheritDepthTemplate: Boolean(inheritDepthTemplate),
+  };
+}
+
 const createDefaultGameState = () => ({
-  depthChart: createDefaultDepthChart(),
-  lineups: createDefaultQuarterLineups(),
-  inheritDepthTemplate: true,
+  activeVersionId: FINAL_VERSION_ID,
+  versions: [
+    createVersionState({
+      id: FINAL_VERSION_ID,
+      name: "Final",
+      depthChart: createDefaultDepthChart(),
+      lineups: createDefaultQuarterLineups(),
+      inheritDepthTemplate: true,
+    }),
+  ],
 });
 
 function safeParseJson(raw, fallback) {
@@ -119,20 +144,59 @@ function hasAnyFilledLineups(lineups) {
 function normalizeGameState(rawState) {
   if (!rawState || typeof rawState !== "object") return createDefaultGameState();
 
+  if (Array.isArray(rawState.versions)) {
+    const normalizedVersions = rawState.versions.map((version, index) => createVersionState({
+      id: version?.id || `version-${index + 1}`,
+      name: version?.name || `Version ${index + 1}`,
+      depthChart: version?.depthChart,
+      lineups: version?.lineups,
+      inheritDepthTemplate: version?.inheritDepthTemplate,
+    }));
+
+    const finalVersion = normalizedVersions.find((version) => version.id === FINAL_VERSION_ID)
+      || createVersionState({
+        id: FINAL_VERSION_ID,
+        name: "Final",
+        depthChart: rawState.depthChart,
+        lineups: rawState.lineups,
+        inheritDepthTemplate: rawState.inheritDepthTemplate ?? true,
+      });
+
+    const otherVersions = normalizedVersions.filter((version) => version.id !== FINAL_VERSION_ID);
+    const versions = [finalVersion, ...otherVersions];
+    const activeVersionId = versions.some((version) => version.id === rawState.activeVersionId)
+      ? rawState.activeVersionId
+      : FINAL_VERSION_ID;
+
+    return { activeVersionId, versions };
+  }
+
   // Backward compatibility with older payload that included players.
   const depthSource = Array.isArray(rawState.depthChart)
     ? rawState.depthChart
     : (rawState.depthChart?.[1] || rawState.depthChart);
 
-  const normalized = {
-    depthChart: normalizeDepthChart(depthSource),
-    lineups: normalizeLineups(rawState.lineups),
-    inheritDepthTemplate:
-      typeof rawState.inheritDepthTemplate === "boolean"
-        ? rawState.inheritDepthTemplate
-        : !hasAnyFilledLineups(rawState.lineups),
+  return {
+    activeVersionId: FINAL_VERSION_ID,
+    versions: [
+      createVersionState({
+        id: FINAL_VERSION_ID,
+        name: "Final",
+        depthChart: normalizeDepthChart(depthSource),
+        lineups: normalizeLineups(rawState.lineups),
+        inheritDepthTemplate:
+          typeof rawState.inheritDepthTemplate === "boolean"
+            ? rawState.inheritDepthTemplate
+            : !hasAnyFilledLineups(rawState.lineups),
+      }),
+    ],
   };
-  return normalized;
+}
+
+function getVersionById(gameState, versionId) {
+  return gameState?.versions?.find((version) => version.id === versionId)
+    || gameState?.versions?.[0]
+    || createDefaultGameState().versions[0];
 }
 
 function loadPlayersPayload() {
@@ -625,14 +689,17 @@ export default function Rotations() {
 
   const [players, setPlayers] = useState(DEFAULT_PLAYERS);
   const [depthTemplate, setDepthTemplate] = useState(createDefaultDepthChart());
-  const [depthChart, setDepthChart] = useState(createDefaultDepthChart());
-  const [lineups, setLineups] = useState(createDefaultQuarterLineups());
-  const [inheritDepthTemplate, setInheritDepthTemplate] = useState(true);
+  const [gameState, setGameState] = useState(createDefaultGameState());
   const [playersHydrated, setPlayersHydrated] = useState(false);
   const [depthTemplateHydrated, setDepthTemplateHydrated] = useState(false);
   const [gameHydrated, setGameHydrated] = useState(false);
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [confirmResetTarget, setConfirmResetTarget] = useState(null);
+  const [versionMenuOpen, setVersionMenuOpen] = useState(false);
+  const [createVersionOpen, setCreateVersionOpen] = useState(false);
+  const [createVersionName, setCreateVersionName] = useState("");
+  const [createVersionMode, setCreateVersionMode] = useState("blank");
+  const [deleteVersionTarget, setDeleteVersionTarget] = useState(null);
   const [isTouchFillActive, setIsTouchFillActive] = useState(false);
   const [undoDepth, setUndoDepth] = useState(0);
   const [collapsed, setCollapsed] = useState({
@@ -652,6 +719,7 @@ export default function Rotations() {
   const skipDepthTemplateSaveRef = useRef(false);
   const skipGameSaveRef = useRef(false);
   const lineupHistoryRef = useRef([]);
+  const versionMenuRef = useRef(null);
   const dragFillRef = useRef({
     active: false,
     quarter: null,
@@ -708,6 +776,11 @@ export default function Rotations() {
   const washingtonGame = useMemo(() => (
     isWashingtonTeam(game?.homeTeam) || isWashingtonTeam(game?.awayTeam)
   ), [game]);
+  const activeVersion = useMemo(() => getVersionById(gameState, gameState.activeVersionId), [gameState]);
+  const activeVersionId = activeVersion.id;
+  const depthChart = activeVersion.depthChart;
+  const lineups = activeVersion.lineups;
+  const inheritDepthTemplate = activeVersion.inheritDepthTemplate;
 
   useEffect(() => {
     setPlayersHydrated(false);
@@ -722,7 +795,20 @@ export default function Rotations() {
     skipGameSaveRef.current = false;
     lineupHistoryRef.current = [];
     setUndoDepth(0);
+    setVersionMenuOpen(false);
+    setCreateVersionOpen(false);
+    setDeleteVersionTarget(null);
   }, [gameId]);
+
+  useEffect(() => {
+    if (!versionMenuOpen) return undefined;
+    const handlePointerDown = (event) => {
+      if (versionMenuRef.current?.contains(event.target)) return;
+      setVersionMenuOpen(false);
+    };
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => window.removeEventListener("pointerdown", handlePointerDown);
+  }, [versionMenuOpen]);
 
   useEffect(() => {
     if (!gameId || typeof window === "undefined") return;
@@ -792,36 +878,38 @@ export default function Rotations() {
     if (supabase && !remoteGameFetched) return;
     if (!depthTemplateHydrated) return;
 
-    const defaults = {
-      depthChart: normalizeDepthChart(depthTemplate),
-      lineups: createDefaultQuarterLineups(),
-      inheritDepthTemplate: true,
-    };
+    const defaults = createDefaultGameState();
+    defaults.versions[0].depthChart = normalizeDepthChart(depthTemplate);
     const shouldInheritFutureTemplate = (state) => {
       const sourceGameId = Number(depthTemplateSourceGameIdRef.current || 0);
       const currentGameNumeric = Number(gameId || 0);
       if (!sourceGameId || !currentGameNumeric || currentGameNumeric <= sourceGameId) return false;
-      return Boolean(state?.inheritDepthTemplate);
+      return Boolean(getVersionById(state, FINAL_VERSION_ID)?.inheritDepthTemplate);
+    };
+    const applyInheritedTemplate = (state) => {
+      if (!shouldInheritFutureTemplate(state)) return state;
+      return {
+        ...state,
+        versions: state.versions.map((version) => (
+          version.id !== FINAL_VERSION_ID
+            ? version
+            : { ...version, depthChart: normalizeDepthChart(depthTemplate) }
+        )),
+      };
     };
     const localPayload = loadGamePayload(gameId);
     const localUpdatedAt = Number(localPayload?.updatedAt || 0);
     const remoteUpdatedAt = Number(remoteGameState?.updatedAt || 0);
     if (remoteGameState?.state && remoteUpdatedAt >= localUpdatedAt) {
-      setDepthChart(shouldInheritFutureTemplate(remoteGameState.state) ? defaults.depthChart : remoteGameState.state.depthChart);
-      setLineups(remoteGameState.state.lineups);
-      setInheritDepthTemplate(remoteGameState.state.inheritDepthTemplate);
+      setGameState(applyInheritedTemplate(remoteGameState.state));
       gameUpdatedAtRef.current = remoteUpdatedAt;
       skipGameSaveRef.current = true;
     } else if (localPayload?.state) {
-      setDepthChart(shouldInheritFutureTemplate(localPayload.state) ? defaults.depthChart : localPayload.state.depthChart);
-      setLineups(localPayload.state.lineups);
-      setInheritDepthTemplate(localPayload.state.inheritDepthTemplate);
+      setGameState(applyInheritedTemplate(localPayload.state));
       gameUpdatedAtRef.current = localUpdatedAt;
       skipGameSaveRef.current = true;
     } else {
-      setDepthChart(defaults.depthChart);
-      setLineups(defaults.lineups);
-      setInheritDepthTemplate(defaults.inheritDepthTemplate);
+      setGameState(defaults);
       gameUpdatedAtRef.current = Date.now();
       skipGameSaveRef.current = true;
     }
@@ -866,7 +954,7 @@ export default function Rotations() {
   useEffect(() => {
     if (!gameHydrated || !gameId) return;
 
-    const state = { depthChart, lineups, inheritDepthTemplate };
+    const state = gameState;
     if (skipGameSaveRef.current) {
       skipGameSaveRef.current = false;
       persistGameState(gameId, state, gameUpdatedAtRef.current || Date.now());
@@ -877,7 +965,7 @@ export default function Rotations() {
     gameUpdatedAtRef.current = updatedAt;
     persistGameState(gameId, state, updatedAt);
     saveRemoteGameState(gameId, state, updatedAt);
-  }, [depthChart, lineups, inheritDepthTemplate, gameHydrated, gameId]);
+  }, [gameState, gameHydrated, gameId]);
 
   useEffect(() => {
     if (!playersHydrated) return;
@@ -947,6 +1035,25 @@ export default function Rotations() {
   const allQuarterTotal = quarterTotals[1] + quarterTotals[2] + quarterTotals[3] + quarterTotals[4];
   const opponentLine = useMemo(() => buildOpponentLine(game), [game]);
   const exportHeaderLine = useMemo(() => `WASHINGTON ${opponentLine}`, [opponentLine]);
+  const versionOptions = useMemo(() => gameState.versions, [gameState.versions]);
+
+  const updateActiveVersion = (updater) => {
+    setGameState((current) => ({
+      ...current,
+      versions: current.versions.map((version) => (
+        version.id !== current.activeVersionId ? version : updater(version)
+      )),
+    }));
+  };
+
+  const setActiveVersionId = (versionId) => {
+    lineupHistoryRef.current = [];
+    setUndoDepth(0);
+    setGameState((current) => (
+      current.activeVersionId === versionId ? current : { ...current, activeVersionId: versionId }
+    ));
+    setVersionMenuOpen(false);
+  };
 
   const updatePlayerField = (playerId, field, value) => {
     setPlayers((current) => current.map((player) => {
@@ -961,37 +1068,52 @@ export default function Rotations() {
   };
 
   const updateDepthCell = (rowIndex, columnIndex, value) => {
-    setDepthChart((current) => {
-      const next = current.map((row, rIndex) => (
+    updateActiveVersion((currentVersion) => {
+      const next = currentVersion.depthChart.map((row, rIndex) => (
         rIndex !== rowIndex ? row : row.map((cell, cIndex) => (cIndex === columnIndex ? normalizeName(value) : cell))
       ));
-      depthTemplateSourceGameIdRef.current = String(gameId || "");
-      setInheritDepthTemplate(false);
-      setDepthTemplate(next);
-      return next;
+      if (activeVersionId === FINAL_VERSION_ID) {
+        depthTemplateSourceGameIdRef.current = String(gameId || "");
+        setDepthTemplate(next);
+      }
+      return {
+        ...currentVersion,
+        depthChart: next,
+        inheritDepthTemplate: activeVersionId === FINAL_VERSION_ID ? false : currentVersion.inheritDepthTemplate,
+      };
     });
   };
 
   const resetDepthChart = () => {
     const emptyDepthChart = [0, 1, 2].map(() => POSITION_COLUMNS.map(() => ""));
-    depthTemplateSourceGameIdRef.current = String(gameId || "");
-    setInheritDepthTemplate(false);
-    setDepthChart(emptyDepthChart);
-    setDepthTemplate(emptyDepthChart);
+    updateActiveVersion((currentVersion) => {
+      if (activeVersionId === FINAL_VERSION_ID) {
+        depthTemplateSourceGameIdRef.current = String(gameId || "");
+        setDepthTemplate(emptyDepthChart);
+      }
+      return {
+        ...currentVersion,
+        depthChart: emptyDepthChart,
+        inheritDepthTemplate: activeVersionId === FINAL_VERSION_ID ? false : currentVersion.inheritDepthTemplate,
+      };
+    });
   };
 
   const updateLineupCell = (quarter, minuteIndex, positionIndex, value) => {
-    setLineups((current) => {
-      lineupHistoryRef.current = [...lineupHistoryRef.current, current].slice(-MAX_LINEUP_HISTORY);
+    updateActiveVersion((currentVersion) => {
+      lineupHistoryRef.current = [...lineupHistoryRef.current, currentVersion.lineups].slice(-MAX_LINEUP_HISTORY);
       setUndoDepth(lineupHistoryRef.current.length);
-      setInheritDepthTemplate(false);
       return {
-        ...current,
-        [quarter]: current[quarter].map((row, rIndex) => (
+        ...currentVersion,
+        lineups: {
+          ...currentVersion.lineups,
+          [quarter]: currentVersion.lineups[quarter].map((row, rIndex) => (
           rIndex !== minuteIndex
             ? row
             : row.map((cell, cIndex) => (cIndex === positionIndex ? normalizeName(value) : cell))
-        )),
+          )),
+        },
+        inheritDepthTemplate: activeVersionId === FINAL_VERSION_ID ? false : currentVersion.inheritDepthTemplate,
       };
     });
   };
@@ -1003,52 +1125,64 @@ export default function Rotations() {
     const maxMinute = Math.max(startMinuteIndex, endMinuteIndex);
     const minPosition = Math.min(startPositionIndex, endPositionIndex);
     const maxPosition = Math.max(startPositionIndex, endPositionIndex);
-    setLineups((current) => {
-      lineupHistoryRef.current = [...lineupHistoryRef.current, current].slice(-MAX_LINEUP_HISTORY);
+    updateActiveVersion((currentVersion) => {
+      lineupHistoryRef.current = [...lineupHistoryRef.current, currentVersion.lineups].slice(-MAX_LINEUP_HISTORY);
       setUndoDepth(lineupHistoryRef.current.length);
-      setInheritDepthTemplate(false);
       return {
-        ...current,
-        [quarter]: current[quarter].map((row, minuteIndex) => {
+        ...currentVersion,
+        lineups: {
+          ...currentVersion.lineups,
+          [quarter]: currentVersion.lineups[quarter].map((row, minuteIndex) => {
           if (minuteIndex < minMinute || minuteIndex > maxMinute) return row;
           return row.map((cell, positionIndex) => (
             positionIndex < minPosition || positionIndex > maxPosition ? cell : normalizedValue
           ));
-        }),
+          }),
+        },
+        inheritDepthTemplate: activeVersionId === FINAL_VERSION_ID ? false : currentVersion.inheritDepthTemplate,
       };
     });
   };
 
   const resetAll = () => {
-    setLineups((current) => {
-      lineupHistoryRef.current = [...lineupHistoryRef.current, current].slice(-MAX_LINEUP_HISTORY);
+    updateActiveVersion((currentVersion) => {
+      lineupHistoryRef.current = [...lineupHistoryRef.current, currentVersion.lineups].slice(-MAX_LINEUP_HISTORY);
       setUndoDepth(lineupHistoryRef.current.length);
-      setInheritDepthTemplate(false);
-      return createDefaultQuarterLineups();
+      return {
+        ...currentVersion,
+        lineups: createDefaultQuarterLineups(),
+        inheritDepthTemplate: activeVersionId === FINAL_VERSION_ID ? false : currentVersion.inheritDepthTemplate,
+      };
     });
     setResetModalOpen(false);
   };
 
   const resetToStarters = () => {
-    setLineups((current) => {
-      lineupHistoryRef.current = [...lineupHistoryRef.current, current].slice(-MAX_LINEUP_HISTORY);
+    updateActiveVersion((currentVersion) => {
+      lineupHistoryRef.current = [...lineupHistoryRef.current, currentVersion.lineups].slice(-MAX_LINEUP_HISTORY);
       setUndoDepth(lineupHistoryRef.current.length);
-      setInheritDepthTemplate(false);
       const next = createDefaultQuarterLineups();
       next[1][0] = POSITION_COLUMNS.map((_, columnIndex) => normalizeName(depthChart?.[0]?.[columnIndex] || ""));
-      return next;
+      return {
+        ...currentVersion,
+        lineups: next,
+        inheritDepthTemplate: activeVersionId === FINAL_VERSION_ID ? false : currentVersion.inheritDepthTemplate,
+      };
     });
     setResetModalOpen(false);
   };
 
   const resetQuarterMinutes = (quarter) => {
-    setLineups((current) => {
-      lineupHistoryRef.current = [...lineupHistoryRef.current, current].slice(-MAX_LINEUP_HISTORY);
+    updateActiveVersion((currentVersion) => {
+      lineupHistoryRef.current = [...lineupHistoryRef.current, currentVersion.lineups].slice(-MAX_LINEUP_HISTORY);
       setUndoDepth(lineupHistoryRef.current.length);
-      setInheritDepthTemplate(false);
       return {
-        ...current,
-        [quarter]: createDefaultQuarterLineups()[quarter],
+        ...currentVersion,
+        lineups: {
+          ...currentVersion.lineups,
+          [quarter]: createDefaultQuarterLineups()[quarter],
+        },
+        inheritDepthTemplate: activeVersionId === FINAL_VERSION_ID ? false : currentVersion.inheritDepthTemplate,
       };
     });
   };
@@ -1076,7 +1210,49 @@ export default function Rotations() {
     const previous = lineupHistoryRef.current[lineupHistoryRef.current.length - 1];
     lineupHistoryRef.current = lineupHistoryRef.current.slice(0, -1);
     setUndoDepth(lineupHistoryRef.current.length);
-    setLineups(previous);
+    updateActiveVersion((currentVersion) => ({
+      ...currentVersion,
+      lineups: previous,
+    }));
+  };
+
+  const openCreateVersionModal = () => {
+    setVersionMenuOpen(false);
+    setCreateVersionMode("blank");
+    setCreateVersionName("");
+    setCreateVersionOpen(true);
+  };
+
+  const createVersion = () => {
+    const name = String(createVersionName || "").trim();
+    if (!name) return;
+    const nextVersion = createVersionState({
+      name,
+      depthChart: createVersionMode === "copy" ? depthChart : [0, 1, 2].map(() => POSITION_COLUMNS.map(() => "")),
+      lineups: createVersionMode === "copy" ? lineups : createDefaultQuarterLineups(),
+      inheritDepthTemplate: false,
+    });
+    lineupHistoryRef.current = [];
+    setUndoDepth(0);
+    setGameState((current) => ({
+      ...current,
+      activeVersionId: nextVersion.id,
+      versions: [...current.versions, nextVersion],
+    }));
+    setCreateVersionOpen(false);
+  };
+
+  const confirmDeleteVersion = () => {
+    if (!deleteVersionTarget || deleteVersionTarget.id === FINAL_VERSION_ID) return;
+    lineupHistoryRef.current = [];
+    setUndoDepth(0);
+    setGameState((current) => {
+      const versions = current.versions.filter((version) => version.id !== deleteVersionTarget.id);
+      const activeId = current.activeVersionId === deleteVersionTarget.id ? FINAL_VERSION_ID : current.activeVersionId;
+      return { ...current, versions, activeVersionId: activeId };
+    });
+    setDeleteVersionTarget(null);
+    setVersionMenuOpen(false);
   };
 
   const handleExportPdf = () => {
@@ -1202,20 +1378,13 @@ export default function Rotations() {
   const applyRemoteGameState = (payload) => {
     const remoteUpdatedAt = Number(payload?.updatedAt || 0);
     if (!remoteUpdatedAt || remoteUpdatedAt <= gameUpdatedAtRef.current) return;
-    const incomingDepth = normalizeDepthChart(payload?.state?.depthChart);
-    const incomingLineups = normalizeLineups(payload?.state?.lineups);
+    const incomingState = normalizeGameState(payload?.state);
     lineupHistoryRef.current = [];
     setUndoDepth(0);
-    setDepthChart(incomingDepth);
-    setLineups(incomingLineups);
-    setInheritDepthTemplate(Boolean(payload?.state?.inheritDepthTemplate));
+    setGameState(incomingState);
     gameUpdatedAtRef.current = remoteUpdatedAt;
     skipGameSaveRef.current = true;
-    persistGameState(
-      gameId,
-      { depthChart: incomingDepth, lineups: incomingLineups, inheritDepthTemplate: Boolean(payload?.state?.inheritDepthTemplate) },
-      remoteUpdatedAt
-    );
+    persistGameState(gameId, incomingState, remoteUpdatedAt);
   };
 
   useEffect(() => {
@@ -1348,25 +1517,68 @@ export default function Rotations() {
     <div className={`${styles.page} ${isTouchFillActive ? styles.touchFillLock : ""}`}>
       <div className={styles.topRow}>
         <Link className={styles.backButton} to={backUrl}>Back</Link>
-        <div className={styles.topRowActions}>
-          <button
-            type="button"
-            className={styles.secondaryButton}
-            onClick={handleExportPdf}
-          >
-            Export PDF
-          </button>
-          <button
-            type="button"
-            className={styles.secondaryButton}
-            onClick={undoLastLineupChange}
-            disabled={!undoDepth}
-          >
-            Undo
-          </button>
-          <button type="button" className={styles.secondaryButton} onClick={() => setResetModalOpen(true)}>
-            Reset Minutes
-          </button>
+        <div className={styles.controlsColumn}>
+          <div className={styles.topRowActions}>
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              onClick={handleExportPdf}
+            >
+              Export PDF
+            </button>
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              onClick={undoLastLineupChange}
+              disabled={!undoDepth}
+            >
+              Undo
+            </button>
+            <button type="button" className={styles.secondaryButton} onClick={() => setResetModalOpen(true)}>
+              Reset Minutes
+            </button>
+          </div>
+          <div className={styles.versionSelectWrap} ref={versionMenuRef}>
+            <button
+              type="button"
+              className={styles.versionTrigger}
+              onClick={() => setVersionMenuOpen((current) => !current)}
+            >
+              <span>{activeVersion.name}</span>
+              <span className={styles.versionChevron}>{versionMenuOpen ? "▴" : "▾"}</span>
+            </button>
+            {versionMenuOpen && (
+              <div className={styles.versionMenu}>
+                {versionOptions.map((version) => (
+                  <div key={version.id} className={styles.versionMenuRow}>
+                    <button
+                      type="button"
+                      className={`${styles.versionMenuItem} ${version.id === activeVersionId ? styles.versionMenuItemActive : ""}`}
+                      onClick={() => setActiveVersionId(version.id)}
+                    >
+                      {version.name}
+                    </button>
+                    {version.id !== FINAL_VERSION_ID && (
+                      <button
+                        type="button"
+                        className={styles.versionDeleteButton}
+                        onClick={() => setDeleteVersionTarget(version)}
+                      >
+                        X
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  className={styles.versionCreateButton}
+                  onClick={openCreateVersionModal}
+                >
+                  *CREATE NEW VERSION*
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1399,6 +1611,56 @@ export default function Rotations() {
               Yes, Reset
             </button>
             <button type="button" className={styles.modalSecondary} onClick={closeResetConfirmation}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {createVersionOpen && (
+        <div className={styles.modalOverlay} onClick={() => setCreateVersionOpen(false)}>
+          <div className={styles.modalCard} onClick={(event) => event.stopPropagation()}>
+            <h3 className={styles.modalTitle}>Create New Version</h3>
+            <div className={styles.modalOptionRow}>
+              <button
+                type="button"
+                className={createVersionMode === "blank" ? styles.modalPrimary : styles.modalSecondary}
+                onClick={() => setCreateVersionMode("blank")}
+              >
+                Start From Blank
+              </button>
+              <button
+                type="button"
+                className={createVersionMode === "copy" ? styles.modalPrimary : styles.modalSecondary}
+                onClick={() => setCreateVersionMode("copy")}
+              >
+                Copy Current Version
+              </button>
+            </div>
+            <input
+              className={styles.versionNameInput}
+              value={createVersionName}
+              onChange={(event) => setCreateVersionName(event.target.value)}
+              placeholder="Version name"
+            />
+            <button type="button" className={styles.modalPrimary} onClick={createVersion} disabled={!createVersionName.trim()}>
+              Create Version
+            </button>
+            <button type="button" className={styles.modalSecondary} onClick={() => setCreateVersionOpen(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {deleteVersionTarget && (
+        <div className={styles.modalOverlay} onClick={() => setDeleteVersionTarget(null)}>
+          <div className={styles.modalCard} onClick={(event) => event.stopPropagation()}>
+            <h3 className={styles.modalTitle}>{`Delete "${deleteVersionTarget.name}"?`}</h3>
+            <button type="button" className={styles.modalPrimary} onClick={confirmDeleteVersion}>
+              Yes, Delete
+            </button>
+            <button type="button" className={styles.modalSecondary} onClick={() => setDeleteVersionTarget(null)}>
               Cancel
             </button>
           </div>
