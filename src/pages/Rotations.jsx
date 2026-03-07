@@ -3,6 +3,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchGame } from "../api.js";
 import { supabase } from "../supabaseClient.js";
+import wizardsLogoUrl from "../assets/WWizards_Primary_Icon.png";
+import dinFontUrl from "../assets/fonts/DIN.ttf";
 import styles from "./Rotations.module.css";
 
 const PLAYERS_STORAGE_KEY = "rotations:players:v1";
@@ -342,6 +344,192 @@ function quarterLabel(quarter) {
   return "4th";
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function renderExportDepthChart(depthChart) {
+  return `
+    <section class="export-section">
+      <div class="export-section-title">Depth Chart</div>
+      <table class="export-table">
+        <thead>
+          <tr>${POSITION_COLUMNS.map((position) => `<th>${position}</th>`).join("")}</tr>
+        </thead>
+        <tbody>
+          ${[0, 1, 2].map((rowIndex) => `
+            <tr>
+              ${POSITION_COLUMNS.map((_, columnIndex) => `<td>${escapeHtml(depthChart?.[rowIndex]?.[columnIndex] || "")}</td>`).join("")}
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </section>
+  `;
+}
+
+function renderExportQuarterTable(quarter, lineups) {
+  return `
+    <section class="export-section">
+      <div class="export-section-title">${quarterLabel(quarter)} Quarter</div>
+      <table class="export-table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            ${POSITION_COLUMNS.map((position) => `<th>${position}</th>`).join("")}
+          </tr>
+        </thead>
+        <tbody>
+          ${MINUTES.map((minute, minuteIndex) => `
+            <tr>
+              <td>${minute}</td>
+              ${POSITION_COLUMNS.map((_, columnIndex) => `<td>${escapeHtml(lineups?.[quarter]?.[minuteIndex]?.[columnIndex] || "")}</td>`).join("")}
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </section>
+  `;
+}
+
+function buildRotationsPdfHtml({ headerLine, depthChart, lineups, logoUrl, fontUrl }) {
+  const pageMarkup = (quarters, side) => `
+    <section class="pdf-page ${side}">
+      <div class="pdf-column">
+        <div class="pdf-header">${escapeHtml(headerLine)}</div>
+        ${renderExportDepthChart(depthChart)}
+        ${quarters.map((quarter) => renderExportQuarterTable(quarter, lineups)).join("")}
+        <div class="pdf-logo-wrap">
+          <img class="pdf-logo" src="${escapeHtml(logoUrl)}" alt="Washington Wizards" />
+        </div>
+      </div>
+    </section>
+  `;
+
+  return `
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Rotations PDF Export</title>
+        <style>
+          @page {
+            size: 8.5in 11in;
+            margin: 0.3in;
+          }
+
+          @font-face {
+            font-family: "DIN Export";
+            src: url("${escapeHtml(fontUrl)}") format("truetype");
+          }
+
+          * {
+            box-sizing: border-box;
+          }
+
+          html, body {
+            margin: 0;
+            padding: 0;
+            background: #ffffff;
+            color: #111111;
+            font-family: "DIN Export", "DIN", sans-serif;
+          }
+
+          body {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+
+          .pdf-page {
+            width: 100%;
+            min-height: 10.4in;
+            page-break-after: always;
+          }
+
+          .pdf-page:last-child {
+            page-break-after: auto;
+          }
+
+          .pdf-column {
+            width: 4.1in;
+          }
+
+          .pdf-page.left .pdf-column {
+            margin-right: auto;
+          }
+
+          .pdf-page.right .pdf-column {
+            margin-left: auto;
+          }
+
+          .pdf-header {
+            margin-bottom: 0.14in;
+            font-size: 24px;
+            font-weight: 700;
+            text-align: center;
+          }
+
+          .export-section {
+            margin-bottom: 0.12in;
+          }
+
+          .export-section-title {
+            background: #000000;
+            color: #ffffff;
+            font-size: 16px;
+            font-weight: 700;
+            text-align: left;
+            padding: 6px 8px;
+          }
+
+          .export-table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+          }
+
+          .export-table th,
+          .export-table td {
+            border: 1px solid #8c8c8c;
+            text-align: center;
+            vertical-align: middle;
+            padding: 4px 3px;
+            height: 24px;
+            font-size: 12px;
+          }
+
+          .export-table thead th {
+            background: #efefef;
+            color: #111111;
+            font-weight: 700;
+          }
+
+          .pdf-logo-wrap {
+            display: flex;
+            justify-content: center;
+            margin-top: 0.18in;
+          }
+
+          .pdf-logo {
+            width: 0.62in;
+            height: 0.62in;
+            object-fit: contain;
+          }
+        </style>
+      </head>
+      <body>
+        ${pageMarkup([1, 2], "left")}
+        ${pageMarkup([3, 4], "right")}
+      </body>
+    </html>
+  `;
+}
+
 export default function Rotations() {
   const { gameId } = useParams();
   const [params] = useSearchParams();
@@ -670,6 +858,7 @@ export default function Rotations() {
 
   const allQuarterTotal = quarterTotals[1] + quarterTotals[2] + quarterTotals[3] + quarterTotals[4];
   const opponentLine = useMemo(() => buildOpponentLine(game), [game]);
+  const exportHeaderLine = useMemo(() => `WASHINGTON ${opponentLine}`, [opponentLine]);
 
   const updatePlayerField = (playerId, field, value) => {
     setPlayers((current) => current.map((player) => {
@@ -764,12 +953,53 @@ export default function Rotations() {
     setResetModalOpen(false);
   };
 
+  const resetQuarterMinutes = (quarter) => {
+    setLineups((current) => {
+      lineupHistoryRef.current = [...lineupHistoryRef.current, current].slice(-MAX_LINEUP_HISTORY);
+      setUndoDepth(lineupHistoryRef.current.length);
+      setInheritDepthTemplate(false);
+      return {
+        ...current,
+        [quarter]: createDefaultQuarterLineups()[quarter],
+      };
+    });
+  };
+
   const undoLastLineupChange = () => {
     if (!lineupHistoryRef.current.length) return;
     const previous = lineupHistoryRef.current[lineupHistoryRef.current.length - 1];
     lineupHistoryRef.current = lineupHistoryRef.current.slice(0, -1);
     setUndoDepth(lineupHistoryRef.current.length);
     setLineups(previous);
+  };
+
+  const handleExportPdf = () => {
+    if (typeof window === "undefined") return;
+    const exportWindow = window.open("", "_blank", "noopener,noreferrer");
+    if (!exportWindow) return;
+
+    const logoUrl = new URL(wizardsLogoUrl, window.location.href).href;
+    const fontUrl = new URL(dinFontUrl, window.location.href).href;
+    const html = buildRotationsPdfHtml({
+      headerLine: exportHeaderLine,
+      depthChart,
+      lineups,
+      logoUrl,
+      fontUrl,
+    });
+
+    exportWindow.document.open();
+    exportWindow.document.write(html);
+    exportWindow.document.close();
+
+    const triggerPrint = () => {
+      exportWindow.focus();
+      exportWindow.print();
+    };
+
+    exportWindow.onload = () => {
+      window.setTimeout(triggerPrint, 250);
+    };
   };
 
   const toggleSection = (key) => {
@@ -995,6 +1225,13 @@ export default function Rotations() {
           <button
             type="button"
             className={styles.secondaryButton}
+            onClick={handleExportPdf}
+          >
+            Export PDF
+          </button>
+          <button
+            type="button"
+            className={styles.secondaryButton}
             onClick={undoLastLineupChange}
             disabled={!undoDepth}
           >
@@ -1155,9 +1392,18 @@ export default function Rotations() {
         const sectionKey = `q${quarter}`;
         return (
           <section key={quarter} className={styles.sheetSection}>
-            <button type="button" className={styles.sectionHeaderButton} onClick={() => toggleSection(sectionKey)}>
-              {quarterLabel(quarter)} Quarter
-            </button>
+            <div className={styles.sectionHeaderRow}>
+              <button type="button" className={styles.sectionHeaderButton} onClick={() => toggleSection(sectionKey)}>
+                {quarterLabel(quarter)} Quarter
+              </button>
+              <button
+                type="button"
+                className={styles.sectionHeaderAction}
+                onClick={() => resetQuarterMinutes(quarter)}
+              >
+                {`Reset Q${quarter} Minutes`}
+              </button>
+            </div>
             {!collapsed[sectionKey] && (
               <table className={styles.rotationTable}>
                 <thead>
