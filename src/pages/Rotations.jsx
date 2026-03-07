@@ -400,10 +400,12 @@ function renderExportQuarterTable(quarter, lineups) {
 function buildRotationsPdfHtml({ headerLine, depthChart, lineups, logoUrl, fontUrl }) {
   const pageMarkup = (quarters, side) => `
     <section class="pdf-page ${side}">
+      <div class="pdf-header">${escapeHtml(headerLine)}</div>
       <div class="pdf-column">
-        <div class="pdf-header">${escapeHtml(headerLine)}</div>
+        <div class="pdf-sections">
         ${renderExportDepthChart(depthChart)}
         ${quarters.map((quarter) => renderExportQuarterTable(quarter, lineups)).join("")}
+        </div>
         <div class="pdf-logo-wrap">
           <img class="pdf-logo" src="${escapeHtml(logoUrl)}" alt="Washington Wizards" />
         </div>
@@ -420,7 +422,7 @@ function buildRotationsPdfHtml({ headerLine, depthChart, lineups, logoUrl, fontU
         <style>
           @page {
             size: 8.5in 11in;
-            margin: 0.12in;
+            margin: 0;
           }
 
           @font-face {
@@ -446,10 +448,11 @@ function buildRotationsPdfHtml({ headerLine, depthChart, lineups, logoUrl, fontU
           }
 
           .pdf-page {
-            width: 100%;
-            min-height: 10.76in;
+            position: relative;
+            width: 8.5in;
+            height: 11in;
             page-break-after: always;
-            display: flex;
+            overflow: hidden;
           }
 
           .pdf-page:last-child {
@@ -457,27 +460,32 @@ function buildRotationsPdfHtml({ headerLine, depthChart, lineups, logoUrl, fontU
           }
 
           .pdf-column {
-            width: 4in;
-            max-width: calc(50% - 0.08in);
-            min-height: 10.76in;
-            display: flex;
-            flex-direction: column;
-            padding-bottom: 0.18in;
+            position: absolute;
+            top: 0.58in;
+            bottom: 0.3in;
+            width: 4.12in;
           }
 
-          .pdf-page.left {
-            justify-content: flex-start;
+          .pdf-page.left .pdf-column {
+            left: 0.1in;
           }
 
-          .pdf-page.right {
-            justify-content: flex-end;
+          .pdf-page.right .pdf-column {
+            right: 0.1in;
           }
 
           .pdf-header {
-            margin-bottom: 0.14in;
+            position: absolute;
+            top: 0.16in;
+            left: 0;
+            width: 100%;
             font-size: 24px;
             font-weight: 700;
             text-align: center;
+          }
+
+          .pdf-sections {
+            padding-bottom: 0.95in;
           }
 
           .export-section {
@@ -516,10 +524,12 @@ function buildRotationsPdfHtml({ headerLine, depthChart, lineups, logoUrl, fontU
           }
 
           .pdf-logo-wrap {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0.22in;
             display: flex;
             justify-content: center;
-            margin-top: auto;
-            padding-top: 0.08in;
           }
 
           .pdf-logo {
