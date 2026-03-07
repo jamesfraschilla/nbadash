@@ -17,12 +17,14 @@ const ROTATIONS_SCOPE_DEPTH_TEMPLATE = "depth_template";
 const ROTATIONS_SCOPE_GAME = "game";
 const ROTATIONS_GLOBAL_SCOPE_KEY = "global";
 const FINAL_VERSION_ID = "final";
-const CREATE_VERSION_OPTION = "__create_new_version__";
 const QUARTERS = [1, 2, 3, 4];
 const MINUTES = Array.from({ length: 12 }, (_, index) => 12 - index);
 const POSITION_COLUMNS = [1, 2, 3, 4, 5];
 const TOTAL_PER_QUARTER = MINUTES.length * POSITION_COLUMNS.length;
 const MAX_LINEUP_HISTORY = 100;
+const DEFAULT_VERSION_OPTIONS = {
+  hideNamesOnDuplicateRows: false,
+};
 
 const DEFAULT_PLAYERS = [
   { id: "p1", name: "BUB", cap: 48 },
@@ -65,6 +67,7 @@ function createVersionState({
   depthChart = createDefaultDepthChart(),
   lineups = createDefaultQuarterLineups(),
   inheritDepthTemplate = false,
+  options = DEFAULT_VERSION_OPTIONS,
 }) {
   return {
     id: String(id || (typeof crypto !== "undefined" ? crypto.randomUUID() : `version-${Date.now()}`)),
@@ -72,6 +75,7 @@ function createVersionState({
     depthChart: normalizeDepthChart(depthChart),
     lineups: normalizeLineups(lineups),
     inheritDepthTemplate: Boolean(inheritDepthTemplate),
+    options: normalizeVersionOptions(options),
   };
 }
 
@@ -135,6 +139,12 @@ function normalizeLineups(rawLineups) {
   return result;
 }
 
+function normalizeVersionOptions(rawOptions) {
+  return {
+    hideNamesOnDuplicateRows: Boolean(rawOptions?.hideNamesOnDuplicateRows),
+  };
+}
+
 function hasAnyFilledLineups(lineups) {
   return QUARTERS.some((quarter) => (
     (lineups?.[quarter] || []).some((row) => row.some((value) => normalizeName(value)))
@@ -151,6 +161,7 @@ function normalizeGameState(rawState) {
       depthChart: version?.depthChart,
       lineups: version?.lineups,
       inheritDepthTemplate: version?.inheritDepthTemplate,
+      options: version?.options,
     }));
 
     const finalVersion = normalizedVersions.find((version) => version.id === FINAL_VERSION_ID)
@@ -160,6 +171,7 @@ function normalizeGameState(rawState) {
         depthChart: rawState.depthChart,
         lineups: rawState.lineups,
         inheritDepthTemplate: rawState.inheritDepthTemplate ?? true,
+        options: rawState.options,
       });
 
     const otherVersions = normalizedVersions.filter((version) => version.id !== FINAL_VERSION_ID);
@@ -188,6 +200,7 @@ function normalizeGameState(rawState) {
           typeof rawState.inheritDepthTemplate === "boolean"
             ? rawState.inheritDepthTemplate
             : !hasAnyFilledLineups(rawState.lineups),
+        options: rawState.options,
       }),
     ],
   };
@@ -699,6 +712,7 @@ export default function Rotations() {
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [confirmResetTarget, setConfirmResetTarget] = useState(null);
   const [versionMenuOpen, setVersionMenuOpen] = useState(false);
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const [createVersionOpen, setCreateVersionOpen] = useState(false);
   const [createVersionName, setCreateVersionName] = useState("");
   const [deleteVersionTarget, setDeleteVersionTarget] = useState(null);
@@ -783,6 +797,7 @@ export default function Rotations() {
   const depthChart = activeVersion.depthChart;
   const lineups = activeVersion.lineups;
   const inheritDepthTemplate = activeVersion.inheritDepthTemplate;
+  const versionDisplayOptions = normalizeVersionOptions(activeVersion.options);
 
   useEffect(() => {
     setPlayersHydrated(false);
@@ -1057,6 +1072,16 @@ export default function Rotations() {
     setVersionMenuOpen(false);
   };
 
+  const updateActiveVersionOptions = (key, checked) => {
+    updateActiveVersion((currentVersion) => ({
+      ...currentVersion,
+      options: {
+        ...normalizeVersionOptions(currentVersion.options),
+        [key]: Boolean(checked),
+      },
+    }));
+  };
+
   const updatePlayerField = (playerId, field, value) => {
     setPlayers((current) => current.map((player) => {
       if (player.id !== playerId) return player;
@@ -1232,6 +1257,7 @@ export default function Rotations() {
       depthChart: mode === "copy" ? depthChart : [0, 1, 2].map(() => POSITION_COLUMNS.map(() => "")),
       lineups: mode === "copy" ? lineups : createDefaultQuarterLineups(),
       inheritDepthTemplate: false,
+      options: mode === "copy" ? versionDisplayOptions : DEFAULT_VERSION_OPTIONS,
     });
     lineupHistoryRef.current = [];
     setUndoDepth(0);
@@ -1581,6 +1607,28 @@ export default function Rotations() {
               </div>
             )}
           </div>
+          <div className={styles.optionsWrap}>
+            <button
+              type="button"
+              className={styles.optionsToggle}
+              onClick={() => setOptionsOpen((current) => !current)}
+            >
+              <span className={styles.optionsBullet}>{optionsOpen ? "▾" : "▸"}</span>
+              <span>Options</span>
+            </button>
+            {optionsOpen && (
+              <div className={styles.optionsPanel}>
+                <label className={styles.optionRow}>
+                  <input
+                    type="checkbox"
+                    checked={versionDisplayOptions.hideNamesOnDuplicateRows}
+                    onChange={(event) => updateActiveVersionOptions("hideNamesOnDuplicateRows", event.target.checked)}
+                  />
+                  <span>Hide Names on Duplicate Rows</span>
+                </label>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1827,6 +1875,19 @@ export default function Rotations() {
                     const hasDuplicate = new Set(nonBlank).size !== nonBlank.length;
                     const previousRowValues = getPreviousRowValues(quarter, minuteIndex);
                     const nextRowValues = getNextRowValues(quarter, minuteIndex);
+                    const rowHasSubIn = rowValues.some((value) => {
+                      const normalizedValue = normalizeName(value);
+                      return Boolean(
+                        normalizedValue
+                        && previousRowValues
+                        && !previousRowValues.some((entry) => normalizeName(entry) === normalizedValue)
+                      );
+                    });
+                    const hideRowNames = (
+                      versionDisplayOptions.hideNamesOnDuplicateRows
+                      && minuteIndex > 0
+                      && !rowHasSubIn
+                    );
 
                     return (
                       <tr key={`minute-row-${quarter}-${minute}`}>
@@ -1850,6 +1911,7 @@ export default function Rotations() {
                             hasDuplicate && value ? styles.duplicateCell : "",
                             isSubOut ? styles.subOutCell : "",
                             isSubIn ? styles.subInCell : "",
+                            hideRowNames && normalizedValue ? styles.hiddenNameCell : "",
                             isInTouchPreviewRange(quarter, minuteIndex, positionIndex) ? styles.touchPreviewCell : "",
                           ].filter(Boolean).join(" ");
 

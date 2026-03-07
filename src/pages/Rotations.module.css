@@ -109,6 +109,49 @@
   cursor: pointer;
 }
 
+.optionsWrap {
+  width: min(260px, 100%);
+}
+
+.optionsToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--cell-text);
+  font-family: "DIN", sans-serif;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.optionsBullet {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.optionsPanel {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--cell-bg);
+}
+
+.optionRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--cell-text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.optionRow input {
+  margin: 0;
+}
+
 .versionChevron {
   font-size: 11px;
 }
@@ -344,6 +387,14 @@
 
 .touchPreviewCell {
   box-shadow: inset 0 0 0 2px #4f7cff;
+}
+
+.hiddenNameCell .playerSelect {
+  color: transparent;
+}
+
+.hiddenNameCell .playerSelect:focus {
+  color: inherit;
 }
 
 .nearCapCell {
