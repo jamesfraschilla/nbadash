@@ -328,7 +328,7 @@ async function fetchRemoteGameState(gameId) {
   if (!data?.payload) return null;
   const parsed = parseSharedStateRow(data);
   return {
-    updatedAt: parsed.updatedAt,
+    updatedAt: Number(parsed.payload?.updatedAt || parsed.updatedAt || 0),
     state: normalizeGameState(parsed.payload),
   };
 }
@@ -339,7 +339,10 @@ async function saveRemoteGameState(gameId, state, updatedAt = Date.now()) {
     {
       scope_type: ROTATIONS_SCOPE_GAME,
       scope_key: String(gameId),
-      payload: state,
+      payload: {
+        ...state,
+        updatedAt,
+      },
     },
     { onConflict: "scope_type,scope_key" }
   );
@@ -1468,7 +1471,7 @@ export default function Rotations() {
           if (!row || row.scope_key !== String(gameId)) return;
           const parsed = parseSharedStateRow(row);
           applyRemoteGameState({
-            updatedAt: parsed.updatedAt,
+            updatedAt: Number(parsed.payload?.updatedAt || parsed.updatedAt || 0),
             state: normalizeGameState(parsed.payload),
           });
         }
