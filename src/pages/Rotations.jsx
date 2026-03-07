@@ -461,7 +461,7 @@ function buildRotationsPdfHtml({ headerLine, depthChart, lineups, logoUrl, fontU
 
           .pdf-column {
             position: absolute;
-            top: 0.58in;
+            top: 0.72in;
             bottom: 0.3in;
             width: 4.12in;
           }
@@ -476,12 +476,19 @@ function buildRotationsPdfHtml({ headerLine, depthChart, lineups, logoUrl, fontU
 
           .pdf-header {
             position: absolute;
-            top: 0.16in;
-            left: 0;
-            width: 100%;
+            top: 0.28in;
+            width: 4.12in;
             font-size: 24px;
             font-weight: 700;
             text-align: center;
+          }
+
+          .pdf-page.left .pdf-header {
+            left: 0.1in;
+          }
+
+          .pdf-page.right .pdf-header {
+            right: 0.1in;
           }
 
           .pdf-sections {
