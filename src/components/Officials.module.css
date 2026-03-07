@@ -2,6 +2,7 @@
   --calls-team-width: 92px;
   --calls-total-width: 54px;
   --official-column-width: 120px;
+  --calls-align-nudge: -10px;
   margin-top: 8px;
   margin-bottom: 2.5rem;
   font-size: 0.875rem;
@@ -11,7 +12,7 @@
   align-self: center;
   width: min(100%, calc(var(--calls-team-width) + var(--calls-total-width) + (var(--official-column-width) * 3)));
   position: relative;
-  left: calc((var(--calls-total-width) - var(--calls-team-width)) / 2);
+  left: calc(((var(--calls-total-width) - var(--calls-team-width)) / 2) + var(--calls-align-nudge));
 }
 
 .callsTable {
