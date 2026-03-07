@@ -469,17 +469,30 @@ function getExportNextRowValues(lineups, quarter, minuteIndex) {
   return null;
 }
 
-function getExportQuarterCellClass(lineups, quarter, minuteIndex, positionIndex) {
-  const rowValues = getExportRowValues(lineups, quarter, minuteIndex);
+function rowHasSubIn(rowValues, previousRowValues) {
+  return rowValues.some((value) => {
+    const normalizedValue = normalizeName(value);
+    return Boolean(
+      normalizedValue
+      && previousRowValues
+      && !previousRowValues.some((entry) => normalizeName(entry) === normalizedValue)
+    );
+  });
+}
+
+function shouldHideRowNames(hideNamesOnDuplicateRows, minuteIndex, previousRowValues, rowValues) {
+  return Boolean(
+    hideNamesOnDuplicateRows
+    && minuteIndex > 0
+    && !rowHasSubIn(rowValues, previousRowValues)
+  );
+}
+
+function getQuarterCellState({ rowValues, previousRowValues, nextRowValues, positionIndex, hideNamesOnDuplicateRows, minuteIndex }) {
   const value = rowValues[positionIndex] || "";
   const normalizedValue = normalizeName(value);
-  if (!normalizedValue) return "";
-
   const nonBlank = rowValues.filter((entry) => normalizeName(entry));
   const hasDuplicate = new Set(nonBlank).size !== nonBlank.length;
-  const previousRowValues = getExportPreviousRowValues(lineups, quarter, minuteIndex);
-  const nextRowValues = getExportNextRowValues(lineups, quarter, minuteIndex);
-
   const isSubIn = Boolean(
     normalizedValue
       && previousRowValues
@@ -490,14 +503,40 @@ function getExportQuarterCellClass(lineups, quarter, minuteIndex, positionIndex)
       && nextRowValues
       && !nextRowValues.some((entry) => normalizeName(entry) === normalizedValue)
   );
+  const hideRowNames = shouldHideRowNames(hideNamesOnDuplicateRows, minuteIndex, previousRowValues, rowValues);
 
-  if (isSubOut) return "export-sub-out";
-  if (isSubIn) return "export-sub-in";
-  if (hasDuplicate) return "export-duplicate";
+  return {
+    value,
+    normalizedValue,
+    hasDuplicate,
+    isSubIn,
+    isSubOut,
+    hideRowNames,
+  };
+}
+
+function getExportQuarterCellClass(lineups, quarter, minuteIndex, positionIndex, hideNamesOnDuplicateRows) {
+  const rowValues = getExportRowValues(lineups, quarter, minuteIndex);
+  const previousRowValues = getExportPreviousRowValues(lineups, quarter, minuteIndex);
+  const nextRowValues = getExportNextRowValues(lineups, quarter, minuteIndex);
+  const cellState = getQuarterCellState({
+    rowValues,
+    previousRowValues,
+    nextRowValues,
+    positionIndex,
+    hideNamesOnDuplicateRows,
+    minuteIndex,
+  });
+
+  if (!cellState.normalizedValue) return "";
+  if (cellState.hideRowNames) return cellState.isSubIn ? "export-sub-in" : "";
+  if (cellState.isSubOut) return "export-sub-out";
+  if (cellState.isSubIn) return "export-sub-in";
+  if (cellState.hasDuplicate) return "export-duplicate";
   return "";
 }
 
-function renderExportQuarterTable(quarter, lineups) {
+function renderExportQuarterTable(quarter, lineups, hideNamesOnDuplicateRows = false) {
   return `
     <section class="export-section">
       <div class="export-section-title">${quarterLabel(quarter)} Quarter</div>
@@ -513,8 +552,17 @@ function renderExportQuarterTable(quarter, lineups) {
             <tr>
               <td>${minute}</td>
               ${POSITION_COLUMNS.map((_, columnIndex) => `
-                <td class="${getExportQuarterCellClass(lineups, quarter, minuteIndex, columnIndex)}">
-                  ${escapeHtml(lineups?.[quarter]?.[minuteIndex]?.[columnIndex] || "")}
+                <td class="${getExportQuarterCellClass(lineups, quarter, minuteIndex, columnIndex, hideNamesOnDuplicateRows)}">
+                  ${escapeHtml(
+    shouldHideRowNames(
+      hideNamesOnDuplicateRows,
+      minuteIndex,
+      getExportPreviousRowValues(lineups, quarter, minuteIndex),
+      getExportRowValues(lineups, quarter, minuteIndex)
+    )
+      ? ""
+      : (lineups?.[quarter]?.[minuteIndex]?.[columnIndex] || "")
+  )}
                 </td>
               `).join("")}
             </tr>
@@ -525,14 +573,14 @@ function renderExportQuarterTable(quarter, lineups) {
   `;
 }
 
-function buildRotationsPdfHtml({ headerLine, depthChart, lineups, logoUrl, fontUrl }) {
+function buildRotationsPdfHtml({ headerLine, depthChart, lineups, logoUrl, fontUrl, hideNamesOnDuplicateRows = false }) {
   const pageMarkup = (quarters, side) => `
     <section class="pdf-page ${side}">
       <div class="pdf-header">${escapeHtml(headerLine)}</div>
       <div class="pdf-column">
         <div class="pdf-sections">
         ${renderExportDepthChart(depthChart)}
-        ${quarters.map((quarter) => renderExportQuarterTable(quarter, lineups)).join("")}
+        ${quarters.map((quarter) => renderExportQuarterTable(quarter, lineups, hideNamesOnDuplicateRows)).join("")}
         </div>
         <div class="pdf-logo-wrap">
           <img class="pdf-logo" src="${escapeHtml(logoUrl)}" alt="Washington Wizards" />
@@ -1292,6 +1340,7 @@ export default function Rotations() {
       lineups,
       logoUrl,
       fontUrl,
+      hideNamesOnDuplicateRows: versionDisplayOptions.hideNamesOnDuplicateRows,
     });
     const blob = new Blob([html], { type: "text/html" });
     const blobUrl = window.URL.createObjectURL(blob);
@@ -1871,47 +1920,28 @@ export default function Rotations() {
                 <tbody>
                   {MINUTES.map((minute, minuteIndex) => {
                     const rowValues = lineups[quarter]?.[minuteIndex] || [];
-                    const nonBlank = rowValues.filter((value) => normalizeName(value));
-                    const hasDuplicate = new Set(nonBlank).size !== nonBlank.length;
                     const previousRowValues = getPreviousRowValues(quarter, minuteIndex);
                     const nextRowValues = getNextRowValues(quarter, minuteIndex);
-                    const rowHasSubIn = rowValues.some((value) => {
-                      const normalizedValue = normalizeName(value);
-                      return Boolean(
-                        normalizedValue
-                        && previousRowValues
-                        && !previousRowValues.some((entry) => normalizeName(entry) === normalizedValue)
-                      );
-                    });
-                    const hideRowNames = (
-                      versionDisplayOptions.hideNamesOnDuplicateRows
-                      && minuteIndex > 0
-                      && !rowHasSubIn
-                    );
 
                     return (
                       <tr key={`minute-row-${quarter}-${minute}`}>
                         <td className={styles.minuteCell}>{minute}</td>
                         {POSITION_COLUMNS.map((position) => {
                           const positionIndex = position - 1;
-                          const value = rowValues[positionIndex] || "";
-                          const normalizedValue = normalizeName(value);
-                          const isSubIn = Boolean(
-                            normalizedValue
-                              && previousRowValues
-                              && !previousRowValues.some((entry) => normalizeName(entry) === normalizedValue)
-                          );
-                          const isSubOut = Boolean(
-                            normalizedValue
-                              && nextRowValues
-                              && !nextRowValues.some((entry) => normalizeName(entry) === normalizedValue)
-                          );
+                          const cellState = getQuarterCellState({
+                            rowValues,
+                            previousRowValues,
+                            nextRowValues,
+                            positionIndex,
+                            hideNamesOnDuplicateRows: versionDisplayOptions.hideNamesOnDuplicateRows,
+                            minuteIndex,
+                          });
 
                           const cellClassName = [
-                            hasDuplicate && value ? styles.duplicateCell : "",
-                            isSubOut ? styles.subOutCell : "",
-                            isSubIn ? styles.subInCell : "",
-                            hideRowNames && normalizedValue ? styles.hiddenNameCell : "",
+                            cellState.hasDuplicate && cellState.value ? styles.duplicateCell : "",
+                            !cellState.hideRowNames && cellState.isSubOut ? styles.subOutCell : "",
+                            cellState.isSubIn ? styles.subInCell : "",
+                            cellState.hideRowNames && cellState.normalizedValue ? styles.hiddenNameCell : "",
                             isInTouchPreviewRange(quarter, minuteIndex, positionIndex) ? styles.touchPreviewCell : "",
                           ].filter(Boolean).join(" ");
 
@@ -1924,14 +1954,14 @@ export default function Rotations() {
                               data-position-index={positionIndex}
                               onTouchStart={(event) => {
                                 if (touchFillRef.current.active) return;
-                                if (!normalizedValue) return;
+                                if (!cellState.normalizedValue) return;
                                 const touch = event.touches?.[0];
                                 if (!touch) return;
                                 clearTouchFillTimer();
                                 touchFillRef.current.startTouchX = touch.clientX;
                                 touchFillRef.current.startTouchY = touch.clientY;
                                 touchFillRef.current.quarter = quarter;
-                                touchFillRef.current.value = normalizedValue;
+                                touchFillRef.current.value = cellState.normalizedValue;
                                 touchFillRef.current.originMinuteIndex = minuteIndex;
                                 touchFillRef.current.originPositionIndex = positionIndex;
                                 touchFillRef.current.endMinuteIndex = minuteIndex;
@@ -1994,15 +2024,15 @@ export default function Rotations() {
                             >
                               <select
                                 className={styles.playerSelect}
-                                value={value}
+                                value={cellState.value}
                                 onChange={(event) => updateLineupCell(quarter, minuteIndex, positionIndex, event.target.value)}
                                 onMouseDown={(event) => {
-                                  if (!event.shiftKey || !normalizedValue) return;
+                                  if (!event.shiftKey || !cellState.normalizedValue) return;
                                   event.preventDefault();
                                   dragFillRef.current = {
                                     active: true,
                                     quarter,
-                                    value: normalizedValue,
+                                    value: cellState.normalizedValue,
                                     originMinuteIndex: minuteIndex,
                                     originPositionIndex: positionIndex,
                                     lastMinuteIndex: minuteIndex,

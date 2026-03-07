@@ -1,6 +1,6 @@
 @font-face {
-  font-family: "DIN";
-  src: url("../assets/fonts/DIN.ttf") format("truetype");
+  font-family: "DINalt";
+  src: url("../assets/fonts/DINalt.ttf") format("truetype");
   font-display: swap;
 }
 
@@ -21,7 +21,7 @@
   min-height: 100vh;
   background: var(--bg);
   color: var(--text);
-  font-family: "DIN", sans-serif;
+  font-family: "DINalt", sans-serif;
   padding: 16px 20px 56px;
 }
 
@@ -70,7 +70,7 @@
   border-radius: 4px;
   background: var(--cell-bg);
   color: var(--cell-text);
-  font-family: "DIN", sans-serif;
+  font-family: "DINalt", sans-serif;
   font-size: 13px;
   cursor: pointer;
 }
@@ -104,7 +104,7 @@
   border-radius: 4px;
   background: var(--cell-bg);
   color: var(--cell-text);
-  font-family: "DIN", sans-serif;
+  font-family: "DINalt", sans-serif;
   font-size: 13px;
   cursor: pointer;
 }
@@ -121,7 +121,7 @@
   border: none;
   background: transparent;
   color: var(--cell-text);
-  font-family: "DIN", sans-serif;
+  font-family: "DINalt", sans-serif;
   font-size: 13px;
   cursor: pointer;
 }
@@ -181,7 +181,7 @@
   border: none;
   background: transparent;
   color: var(--cell-text);
-  font-family: "DIN", sans-serif;
+  font-family: "DINalt", sans-serif;
   font-size: 13px;
 }
 
@@ -242,7 +242,7 @@
   border: none;
   background: var(--section-header-bg);
   color: var(--section-header-text);
-  font-family: "DIN", sans-serif;
+  font-family: "DINalt", sans-serif;
   font-size: 18px;
   text-align: left;
   padding: 8px 10px;
@@ -261,7 +261,7 @@
   border-left: 1px solid rgba(255, 255, 255, 0.18);
   background: var(--section-header-bg);
   color: var(--section-header-text);
-  font-family: "DIN", sans-serif;
+  font-family: "DINalt", sans-serif;
   font-size: 12px;
   padding: 0 10px;
   height: 32px;
@@ -318,7 +318,7 @@
   border: 1px solid var(--border);
   border-radius: 2px;
   padding: 0 6px;
-  font-family: "DIN", sans-serif;
+  font-family: "DINalt", sans-serif;
   font-size: 14px;
   background: var(--input-bg);
   color: var(--input-text);
@@ -349,7 +349,7 @@
   border: none;
   background: transparent;
   color: inherit;
-  font-family: "DIN", sans-serif;
+  font-family: "DINalt", sans-serif;
   font-size: 14px;
   text-align: center;
   height: 24px;
@@ -475,7 +475,7 @@
   border: 1px solid var(--border);
   border-radius: 6px;
   min-height: 40px;
-  font-family: "DIN", sans-serif;
+  font-family: "DINalt", sans-serif;
   font-size: 16px;
   cursor: pointer;
 }
@@ -503,6 +503,6 @@
   padding: 0 10px;
   background: var(--input-bg);
   color: var(--input-text);
-  font-family: "DIN", sans-serif;
+  font-family: "DINalt", sans-serif;
   font-size: 15px;
 }
