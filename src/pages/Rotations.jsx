@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchGame } from "../api.js";
 import { supabase } from "../supabaseClient.js";
 import wizardsLogoUrl from "../assets/WWizards_Primary_Icon.png";
-import dinFontUrl from "../assets/fonts/DIN.ttf";
+import dinAltFontUrl from "../assets/fonts/DINalt.ttf";
 import styles from "./Rotations.module.css";
 
 const PLAYERS_STORAGE_KEY = "rotations:players:v1";
@@ -373,6 +373,50 @@ function renderExportDepthChart(depthChart) {
   `;
 }
 
+function getExportRowValues(lineups, quarter, minuteIndex) {
+  return lineups?.[quarter]?.[minuteIndex] || [];
+}
+
+function getExportPreviousRowValues(lineups, quarter, minuteIndex) {
+  if (minuteIndex > 0) return getExportRowValues(lineups, quarter, minuteIndex - 1);
+  if (quarter > 1) return getExportRowValues(lineups, quarter - 1, MINUTES.length - 1);
+  return null;
+}
+
+function getExportNextRowValues(lineups, quarter, minuteIndex) {
+  if (minuteIndex < MINUTES.length - 1) return getExportRowValues(lineups, quarter, minuteIndex + 1);
+  if (quarter < 4) return getExportRowValues(lineups, quarter + 1, 0);
+  return null;
+}
+
+function getExportQuarterCellClass(lineups, quarter, minuteIndex, positionIndex) {
+  const rowValues = getExportRowValues(lineups, quarter, minuteIndex);
+  const value = rowValues[positionIndex] || "";
+  const normalizedValue = normalizeName(value);
+  if (!normalizedValue) return "";
+
+  const nonBlank = rowValues.filter((entry) => normalizeName(entry));
+  const hasDuplicate = new Set(nonBlank).size !== nonBlank.length;
+  const previousRowValues = getExportPreviousRowValues(lineups, quarter, minuteIndex);
+  const nextRowValues = getExportNextRowValues(lineups, quarter, minuteIndex);
+
+  const isSubIn = Boolean(
+    normalizedValue
+      && previousRowValues
+      && !previousRowValues.some((entry) => normalizeName(entry) === normalizedValue)
+  );
+  const isSubOut = Boolean(
+    normalizedValue
+      && nextRowValues
+      && !nextRowValues.some((entry) => normalizeName(entry) === normalizedValue)
+  );
+
+  if (isSubOut) return "export-sub-out";
+  if (isSubIn) return "export-sub-in";
+  if (hasDuplicate) return "export-duplicate";
+  return "";
+}
+
 function renderExportQuarterTable(quarter, lineups) {
   return `
     <section class="export-section">
@@ -388,7 +432,11 @@ function renderExportQuarterTable(quarter, lineups) {
           ${MINUTES.map((minute, minuteIndex) => `
             <tr>
               <td>${minute}</td>
-              ${POSITION_COLUMNS.map((_, columnIndex) => `<td>${escapeHtml(lineups?.[quarter]?.[minuteIndex]?.[columnIndex] || "")}</td>`).join("")}
+              ${POSITION_COLUMNS.map((_, columnIndex) => `
+                <td class="${getExportQuarterCellClass(lineups, quarter, minuteIndex, columnIndex)}">
+                  ${escapeHtml(lineups?.[quarter]?.[minuteIndex]?.[columnIndex] || "")}
+                </td>
+              `).join("")}
             </tr>
           `).join("")}
         </tbody>
@@ -528,6 +576,21 @@ function buildRotationsPdfHtml({ headerLine, depthChart, lineups, logoUrl, fontU
             background: #efefef;
             color: #111111;
             font-weight: 700;
+          }
+
+          .export-duplicate {
+            background: #fff2cc;
+            color: #111111;
+          }
+
+          .export-sub-in {
+            background: #d9ead3;
+            color: #111111;
+          }
+
+          .export-sub-out {
+            background: #f4cccc;
+            color: #111111;
           }
 
           .pdf-logo-wrap {
@@ -1019,7 +1082,7 @@ export default function Rotations() {
   const handleExportPdf = () => {
     if (typeof window === "undefined") return;
     const logoUrl = new URL(wizardsLogoUrl, window.location.href).href;
-    const fontUrl = new URL(dinFontUrl, window.location.href).href;
+    const fontUrl = new URL(dinAltFontUrl, window.location.href).href;
     const html = buildRotationsPdfHtml({
       headerLine: exportHeaderLine,
       depthChart,
