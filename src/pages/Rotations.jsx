@@ -545,6 +545,7 @@ export default function Rotations() {
   const [depthTemplateHydrated, setDepthTemplateHydrated] = useState(false);
   const [gameHydrated, setGameHydrated] = useState(false);
   const [resetModalOpen, setResetModalOpen] = useState(false);
+  const [confirmResetTarget, setConfirmResetTarget] = useState(null);
   const [isTouchFillActive, setIsTouchFillActive] = useState(false);
   const [undoDepth, setUndoDepth] = useState(0);
   const [collapsed, setCollapsed] = useState({
@@ -965,6 +966,24 @@ export default function Rotations() {
     });
   };
 
+  const openResetConfirmation = (target) => {
+    setConfirmResetTarget(target);
+  };
+
+  const closeResetConfirmation = () => {
+    setConfirmResetTarget(null);
+  };
+
+  const confirmResetAction = () => {
+    if (!confirmResetTarget) return;
+    if (confirmResetTarget.type === "depth") {
+      resetDepthChart();
+    } else if (confirmResetTarget.type === "quarter" && Number.isFinite(confirmResetTarget.quarter)) {
+      resetQuarterMinutes(confirmResetTarget.quarter);
+    }
+    setConfirmResetTarget(null);
+  };
+
   const undoLastLineupChange = () => {
     if (!lineupHistoryRef.current.length) return;
     const previous = lineupHistoryRef.current[lineupHistoryRef.current.length - 1];
@@ -975,9 +994,6 @@ export default function Rotations() {
 
   const handleExportPdf = () => {
     if (typeof window === "undefined") return;
-    const exportWindow = window.open("", "_blank", "noopener,noreferrer");
-    if (!exportWindow) return;
-
     const logoUrl = new URL(wizardsLogoUrl, window.location.href).href;
     const fontUrl = new URL(dinFontUrl, window.location.href).href;
     const html = buildRotationsPdfHtml({
@@ -987,19 +1003,43 @@ export default function Rotations() {
       logoUrl,
       fontUrl,
     });
+    const blob = new Blob([html], { type: "text/html" });
+    const blobUrl = window.URL.createObjectURL(blob);
+    const exportWindow = window.open(blobUrl, "_blank");
+    if (!exportWindow) {
+      window.URL.revokeObjectURL(blobUrl);
+      return;
+    }
 
-    exportWindow.document.open();
-    exportWindow.document.write(html);
-    exportWindow.document.close();
+    const cleanup = () => {
+      window.setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
+    };
 
     const triggerPrint = () => {
-      exportWindow.focus();
-      exportWindow.print();
+      try {
+        exportWindow.focus();
+        exportWindow.print();
+      } finally {
+        cleanup();
+      }
     };
 
-    exportWindow.onload = () => {
-      window.setTimeout(triggerPrint, 250);
-    };
+    const pollReady = window.setInterval(() => {
+      try {
+        if (exportWindow.closed) {
+          window.clearInterval(pollReady);
+          cleanup();
+          return;
+        }
+        if (exportWindow.document?.readyState === "complete") {
+          window.clearInterval(pollReady);
+          window.setTimeout(triggerPrint, 250);
+        }
+      } catch {
+        window.clearInterval(pollReady);
+        cleanup();
+      }
+    }, 100);
   };
 
   const toggleSection = (key) => {
@@ -1260,6 +1300,24 @@ export default function Rotations() {
         </div>
       )}
 
+      {confirmResetTarget && (
+        <div className={styles.modalOverlay} onClick={closeResetConfirmation}>
+          <div className={styles.modalCard} onClick={(event) => event.stopPropagation()}>
+            <h3 className={styles.modalTitle}>
+              {confirmResetTarget.type === "depth"
+                ? "Reset Depth Chart?"
+                : `Reset Q${confirmResetTarget.quarter} Minutes?`}
+            </h3>
+            <button type="button" className={styles.modalPrimary} onClick={confirmResetAction}>
+              Yes, Reset
+            </button>
+            <button type="button" className={styles.modalSecondary} onClick={closeResetConfirmation}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       <header className={styles.header}>
         <h1 className={styles.title}>{opponentLine}</h1>
       </header>
@@ -1346,7 +1404,7 @@ export default function Rotations() {
           <button
             type="button"
             className={styles.sectionHeaderAction}
-            onClick={resetDepthChart}
+            onClick={() => openResetConfirmation({ type: "depth" })}
           >
             Reset Depth Chart
           </button>
@@ -1399,7 +1457,7 @@ export default function Rotations() {
               <button
                 type="button"
                 className={styles.sectionHeaderAction}
-                onClick={() => resetQuarterMinutes(quarter)}
+                onClick={() => openResetConfirmation({ type: "quarter", quarter })}
               >
                 {`Reset Q${quarter} Minutes`}
               </button>
