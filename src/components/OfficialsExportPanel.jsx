@@ -659,42 +659,49 @@ export default function OfficialsExportPanel({ officials, gameId, publishedOrder
     <section className={styles.container} aria-label="Tonight's officials">
       <div className={styles.contentColumn}>
         {primary.length ? (
-          <div className={styles.toolbar}>
-            <button
-              type="button"
-              className={styles.downloadButton}
-              onClick={() => setExportOpen((current) => !current)}
-              aria-label="Open referee export formats"
-            >
-              ↓
-            </button>
-            {exportOpen ? (
-              <div className={styles.exportMenu}>
-                {["portrait", "landscape", "was"].map((format) => {
-                  const busy = busyFormat === format;
-                  return (
-                    <button
-                      key={format}
-                      type="button"
-                      className={styles.exportButton}
-                      onClick={() => handleExport(format)}
-                      disabled={Boolean(busyFormat)}
-                    >
-                      {busy ? <Spinner /> : EXPORT_SPECS[format].label}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-        {primary.length ? (
-          <div className={styles.officialsRow}>
-            <div className={styles.rowSpacerCompact} aria-hidden="true" />
-            <div className={styles.rowSpacerCompact} aria-hidden="true" />
+          <div className={styles.officialsShell}>
+            <div className={styles.officialsRow}>
             {primary.map((official) => (
               <VisibleOfficialTile key={official.id} official={official} />
             ))}
+            </div>
+            <div className={styles.downloadWrap}>
+              <button
+                type="button"
+                className={styles.downloadButton}
+                onClick={() => setExportOpen((current) => !current)}
+                aria-label="Open referee export formats"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" className={styles.downloadIcon}>
+                  <path
+                    d="M12 3v10m0 0 4-4m-4 4-4-4M5 16v3h14v-3"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+              {exportOpen ? (
+                <div className={styles.exportMenu}>
+                  {["portrait", "landscape", "was"].map((format) => {
+                    const busy = busyFormat === format;
+                    return (
+                      <button
+                        key={format}
+                        type="button"
+                        className={styles.exportButton}
+                        onClick={() => handleExport(format)}
+                        disabled={Boolean(busyFormat)}
+                      >
+                        {busy ? <Spinner /> : EXPORT_SPECS[format].label}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
           </div>
         ) : (
           <div className={styles.emptyState}>Officials not posted.</div>

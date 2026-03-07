@@ -30,22 +30,22 @@ export default function Officials({
       <table className={styles.callsTable}>
         <colgroup>
           <col className={styles.teamCol} />
-          <col className={styles.totalCol} />
           {orderedOfficials.map((official) => (
             <col key={`col-${official.personId}`} className={styles.officialCol} />
           ))}
+          <col className={styles.totalCol} />
         </colgroup>
         <thead>
           <tr className={styles.headerRow}>
             <th className={styles.headerCellLeft}>
               <div className={styles.callsAgainstLabel}>Calls Against</div>
             </th>
-            <th className={styles.headerCell}>Total</th>
             {orderedOfficials.map((official) => (
               <th key={official.personId} className={styles.headerCell} aria-hidden="true">
                 <span className={styles.columnSpacer} />
               </th>
             ))}
+            <th className={styles.headerCell}>Total</th>
           </tr>
         </thead>
         <tbody>
@@ -57,12 +57,12 @@ export default function Officials({
                 awayAbr
               )}
             </td>
-            <td className={styles.dataCell}>{awayTotal}</td>
             {orderedOfficials.map((official) => (
               <td key={official.personId} className={styles.dataCell}>
                 {callsAgainst?.[official.personId]?.[awayAbr] ?? 0}
               </td>
             ))}
+            <td className={styles.dataCell}>{awayTotal}</td>
           </tr>
           <tr>
             <td className={styles.teamCell}>
@@ -72,12 +72,12 @@ export default function Officials({
                 homeAbr
               )}
             </td>
-            <td className={styles.dataCell}>{homeTotal}</td>
             {orderedOfficials.map((official) => (
               <td key={official.personId} className={styles.dataCell}>
                 {callsAgainst?.[official.personId]?.[homeAbr] ?? 0}
               </td>
             ))}
+            <td className={styles.dataCell}>{homeTotal}</td>
           </tr>
         </tbody>
       </table>

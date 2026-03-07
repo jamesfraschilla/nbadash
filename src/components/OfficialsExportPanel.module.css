@@ -1,34 +1,30 @@
 .container {
-  --calls-team-width: 92px;
-  --calls-total-width: 54px;
   --official-column-width: 120px;
   margin: 20px auto 0;
-  padding: 10px 0 0;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  width: min(100%, calc(var(--calls-team-width) + var(--calls-total-width) + (var(--official-column-width) * 3)));
+  padding: 0;
+  width: min(100%, calc((var(--official-column-width) * 3) + 36px));
 }
 
 .contentColumn {
-  width: calc(var(--calls-team-width) + var(--calls-total-width) + (var(--official-column-width) * 3));
+  width: 100%;
   margin: 0 auto;
   min-width: 0;
-  position: relative;
 }
 
-.toolbar {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 6px;
-  position: relative;
+.officialsShell {
+  display: grid;
+  grid-template-columns: repeat(3, var(--official-column-width)) 28px;
+  justify-content: center;
+  align-items: start;
+  column-gap: 8px;
 }
 
 .officialsRow {
   display: grid;
-  grid-template-columns: var(--calls-team-width) var(--calls-total-width) repeat(3, var(--official-column-width));
-  justify-content: start;
+  grid-column: 1 / 4;
+  grid-template-columns: repeat(3, var(--official-column-width));
+  justify-content: center;
   align-items: start;
-  overflow-x: auto;
 }
 
 .officialTile {
@@ -37,10 +33,6 @@
   flex-direction: column;
   align-items: center;
   text-align: center;
-}
-
-.rowSpacerCompact {
-  width: 100%;
 }
 
 .avatarFrame {
@@ -105,24 +97,36 @@
   color: var(--muted);
 }
 
+.downloadWrap {
+  position: relative;
+  grid-column: 4;
+  justify-self: start;
+  padding-top: 26px;
+}
+
 .downloadButton {
-  width: 30px;
-  height: 30px;
+  width: 24px;
+  height: 24px;
   border: 1px solid var(--text);
-  border-radius: 6px;
+  border-radius: 5px;
   background: transparent;
   color: var(--text);
-  font-size: 1rem;
-  font-weight: 600;
+  padding: 0;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
+.downloadIcon {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
 .exportMenu {
   position: absolute;
-  top: calc(100% + 6px);
+  top: calc(100% + 4px);
   right: 0;
   width: 112px;
   display: grid;
@@ -183,16 +187,20 @@
 
 @media (max-width: 768px) {
   .container {
-    padding: 16px;
+    width: 100%;
   }
 
   .contentColumn {
     width: 100%;
   }
 
+  .officialsShell {
+    grid-template-columns: repeat(3, var(--official-column-width)) 28px;
+    min-width: calc((var(--official-column-width) * 3) + 28px);
+  }
+
   .officialsRow {
-    width: 100%;
-    min-width: calc(var(--calls-team-width) + var(--calls-total-width) + (var(--official-column-width) * 3));
+    min-width: calc(var(--official-column-width) * 3);
   }
 
   .exportMenu {
