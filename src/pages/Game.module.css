@@ -786,29 +786,6 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   margin: 0 auto;
 }
 
-.debugSection {
-  width: min(100%, 1220px);
-  margin: 16px auto 32px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-}
-
-.debugTitle {
-  margin: 0 0 8px;
-  font-size: 0.95rem;
-  color: var(--text);
-}
-
-.debugBlock {
-  margin: 0;
-  font-size: 0.75rem;
-  line-height: 1.4;
-  color: var(--text);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
 @media (max-width: 900px) {
   .scoreboard {
     display: grid;

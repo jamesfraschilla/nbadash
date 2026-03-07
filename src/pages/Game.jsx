@@ -12,7 +12,7 @@ import TransitionStats from "../components/TransitionStats.jsx";
 import MiscStats from "../components/MiscStats.jsx";
 import CreatingDisruption from "../components/CreatingDisruption.jsx";
 import SegmentSelector from "../components/SegmentSelector.jsx";
-import { fetchPublishedOrderForOfficials, getOfficialDisplayName, getOfficialSortMeta } from "../officialAssignments.js";
+import { fetchPublishedOrderForOfficials } from "../officialAssignments.js";
 import rosters from "../data/rosters.json";
 import {
   aggregateSegmentStats,
@@ -612,16 +612,6 @@ export default function Game({ variant = "full" }) {
     });
     setHighlightedMap(next);
   }, [highlightRows]);
-
-  const officialsDebugRows = useMemo(() => {
-    if (String(gameId) !== "0022500916") return [];
-    return (officials || []).map((official, index) => ({
-      index,
-      name: getOfficialDisplayName(official),
-      meta: getOfficialSortMeta(official),
-      raw: official,
-    }));
-  }, [gameId, officials]);
 
   const basePlayers = [
     ...(boxScore?.away?.players || []),
@@ -2153,12 +2143,6 @@ export default function Game({ variant = "full" }) {
         awayTeam={awayTeam}
         publishedOrder={publishedOfficialOrder}
       />
-      {officialsDebugRows.length ? (
-        <section className={styles.debugSection}>
-          <h3 className={styles.debugTitle}>Officials Debug</h3>
-          <pre className={styles.debugBlock}>{JSON.stringify(officialsDebugRows, null, 2)}</pre>
-        </section>
-      ) : null}
       </div>
     </div>
   );

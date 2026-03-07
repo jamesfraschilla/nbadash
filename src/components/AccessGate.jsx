@@ -20,7 +20,7 @@ export default function AccessGate({ onUnlock }) {
     <div className={styles.page}>
       <div className={styles.card}>
         <h1 className={styles.title}>Access Required</h1>
-        <p className={styles.subtitle}>Enter the site access code to continue. Access lasts for 14 days on this device.</p>
+        <p className={styles.subtitle}>Enter the site access code to continue.</p>
         <form className={styles.form} onSubmit={handleSubmit}>
           <label className={styles.label} htmlFor="site-access-code">Access Code</label>
           <input
