@@ -152,19 +152,21 @@ function loadDepthTemplatePayload() {
   const parsed = safeParseJson(raw, null);
   if (!parsed || typeof parsed !== "object") return null;
   if (Array.isArray(parsed)) {
-    return { updatedAt: 0, depthChart: normalizeDepthChart(parsed) };
+    return { updatedAt: 0, depthChart: normalizeDepthChart(parsed), sourceGameId: "" };
   }
   return {
     updatedAt: Number(parsed.updatedAt || 0),
     depthChart: normalizeDepthChart(parsed.depthChart),
+    sourceGameId: String(parsed.sourceGameId || ""),
   };
 }
 
-function persistDepthTemplate(depthChart, updatedAt = Date.now()) {
+function persistDepthTemplate(depthChart, updatedAt = Date.now(), sourceGameId = "") {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(DEPTH_TEMPLATE_STORAGE_KEY, JSON.stringify({
     updatedAt,
     depthChart: normalizeDepthChart(depthChart),
+    sourceGameId: String(sourceGameId || ""),
   }));
 }
 
@@ -282,10 +284,11 @@ async function fetchRemoteDepthTemplate() {
   return {
     updatedAt: parsed.updatedAt,
     depthChart: normalizeDepthChart(parsed.payload?.depthChart),
+    sourceGameId: String(parsed.payload?.sourceGameId || ""),
   };
 }
 
-async function saveRemoteDepthTemplate(depthChart, updatedAt = Date.now()) {
+async function saveRemoteDepthTemplate(depthChart, updatedAt = Date.now(), sourceGameId = "") {
   if (!supabase) return;
   const { error } = await supabase.from(ROTATIONS_TABLE).upsert(
     {
@@ -293,6 +296,7 @@ async function saveRemoteDepthTemplate(depthChart, updatedAt = Date.now()) {
       scope_key: ROTATIONS_GLOBAL_SCOPE_KEY,
       payload: {
         depthChart: normalizeDepthChart(depthChart),
+        sourceGameId: String(sourceGameId || ""),
       },
     },
     { onConflict: "scope_type,scope_key" }
@@ -325,6 +329,12 @@ function quarterLabel(quarter) {
   return "4th";
 }
 
+function hasAnyFilledLineups(lineups) {
+  return QUARTERS.some((quarter) => (
+    (lineups?.[quarter] || []).some((row) => row.some((value) => normalizeName(value)))
+  ));
+}
+
 export default function Rotations() {
   const { gameId } = useParams();
   const [params] = useSearchParams();
@@ -352,6 +362,7 @@ export default function Rotations() {
 
   const playersUpdatedAtRef = useRef(0);
   const depthTemplateUpdatedAtRef = useRef(0);
+  const depthTemplateSourceGameIdRef = useRef("");
   const gameUpdatedAtRef = useRef(0);
   const skipPlayersSaveRef = useRef(false);
   const skipDepthTemplateSaveRef = useRef(false);
@@ -420,6 +431,7 @@ export default function Rotations() {
     setGameHydrated(false);
     playersUpdatedAtRef.current = 0;
     depthTemplateUpdatedAtRef.current = 0;
+    depthTemplateSourceGameIdRef.current = "";
     gameUpdatedAtRef.current = 0;
     skipPlayersSaveRef.current = false;
     skipDepthTemplateSaveRef.current = false;
@@ -479,10 +491,12 @@ export default function Rotations() {
     if (remoteDepthTemplate?.depthChart && remoteUpdatedAt >= localUpdatedAt) {
       setDepthTemplate(remoteDepthTemplate.depthChart);
       depthTemplateUpdatedAtRef.current = remoteUpdatedAt;
+      depthTemplateSourceGameIdRef.current = String(remoteDepthTemplate.sourceGameId || "");
       skipDepthTemplateSaveRef.current = true;
     } else if (localPayload?.depthChart) {
       setDepthTemplate(localPayload.depthChart);
       depthTemplateUpdatedAtRef.current = localUpdatedAt;
+      depthTemplateSourceGameIdRef.current = String(localPayload.sourceGameId || "");
       skipDepthTemplateSaveRef.current = true;
     }
 
@@ -498,16 +512,22 @@ export default function Rotations() {
       depthChart: normalizeDepthChart(depthTemplate),
       lineups: createDefaultQuarterLineups(),
     };
+    const shouldInheritFutureTemplate = (state) => {
+      const sourceGameId = Number(depthTemplateSourceGameIdRef.current || 0);
+      const currentGameNumeric = Number(gameId || 0);
+      if (!sourceGameId || !currentGameNumeric || currentGameNumeric <= sourceGameId) return false;
+      return !hasAnyFilledLineups(state?.lineups);
+    };
     const localPayload = loadGamePayload(gameId);
     const localUpdatedAt = Number(localPayload?.updatedAt || 0);
     const remoteUpdatedAt = Number(remoteGameState?.updatedAt || 0);
     if (remoteGameState?.state && remoteUpdatedAt >= localUpdatedAt) {
-      setDepthChart(remoteGameState.state.depthChart);
+      setDepthChart(shouldInheritFutureTemplate(remoteGameState.state) ? defaults.depthChart : remoteGameState.state.depthChart);
       setLineups(remoteGameState.state.lineups);
       gameUpdatedAtRef.current = remoteUpdatedAt;
       skipGameSaveRef.current = true;
     } else if (localPayload?.state) {
-      setDepthChart(localPayload.state.depthChart);
+      setDepthChart(shouldInheritFutureTemplate(localPayload.state) ? defaults.depthChart : localPayload.state.depthChart);
       setLineups(localPayload.state.lineups);
       gameUpdatedAtRef.current = localUpdatedAt;
       skipGameSaveRef.current = true;
@@ -541,14 +561,18 @@ export default function Rotations() {
 
     if (skipDepthTemplateSaveRef.current) {
       skipDepthTemplateSaveRef.current = false;
-      persistDepthTemplate(depthTemplate, depthTemplateUpdatedAtRef.current || Date.now());
+      persistDepthTemplate(
+        depthTemplate,
+        depthTemplateUpdatedAtRef.current || Date.now(),
+        depthTemplateSourceGameIdRef.current
+      );
       return;
     }
 
     const updatedAt = Date.now();
     depthTemplateUpdatedAtRef.current = updatedAt;
-    persistDepthTemplate(depthTemplate, updatedAt);
-    saveRemoteDepthTemplate(depthTemplate, updatedAt);
+    persistDepthTemplate(depthTemplate, updatedAt, depthTemplateSourceGameIdRef.current);
+    saveRemoteDepthTemplate(depthTemplate, updatedAt, depthTemplateSourceGameIdRef.current);
   }, [depthTemplate, depthTemplateHydrated]);
 
   useEffect(() => {
@@ -652,9 +676,17 @@ export default function Rotations() {
       const next = current.map((row, rIndex) => (
         rIndex !== rowIndex ? row : row.map((cell, cIndex) => (cIndex === columnIndex ? normalizeName(value) : cell))
       ));
+      depthTemplateSourceGameIdRef.current = String(gameId || "");
       setDepthTemplate(next);
       return next;
     });
+  };
+
+  const resetDepthChart = () => {
+    const emptyDepthChart = [0, 1, 2].map(() => POSITION_COLUMNS.map(() => ""));
+    depthTemplateSourceGameIdRef.current = String(gameId || "");
+    setDepthChart(emptyDepthChart);
+    setDepthTemplate(emptyDepthChart);
   };
 
   const updateLineupCell = (quarter, minuteIndex, positionIndex, value) => {
@@ -787,8 +819,9 @@ export default function Rotations() {
     const incomingDepth = normalizeDepthChart(payload?.depthChart);
     setDepthTemplate(incomingDepth);
     depthTemplateUpdatedAtRef.current = remoteUpdatedAt;
+    depthTemplateSourceGameIdRef.current = String(payload?.sourceGameId || "");
     skipDepthTemplateSaveRef.current = true;
-    persistDepthTemplate(incomingDepth, remoteUpdatedAt);
+    persistDepthTemplate(incomingDepth, remoteUpdatedAt, payload?.sourceGameId);
   };
 
   const applyRemoteGameState = (payload) => {
@@ -869,6 +902,7 @@ export default function Rotations() {
           applyRemoteDepthTemplate({
             updatedAt: parsed.updatedAt,
             depthChart: parsed.payload?.depthChart,
+            sourceGameId: parsed.payload?.sourceGameId,
           });
         }
       )
@@ -1045,9 +1079,18 @@ export default function Rotations() {
       </section>
 
       <section className={styles.sheetSection}>
-        <button type="button" className={styles.sectionHeaderButton} onClick={() => toggleSection("depth")}>
-          Depth Chart
-        </button>
+        <div className={styles.sectionHeaderRow}>
+          <button type="button" className={styles.sectionHeaderButton} onClick={() => toggleSection("depth")}>
+            Depth Chart
+          </button>
+          <button
+            type="button"
+            className={styles.sectionHeaderAction}
+            onClick={resetDepthChart}
+          >
+            Reset Depth Chart
+          </button>
+        </div>
         {!collapsed.depth && (
           <table className={styles.depthTable}>
             <thead>

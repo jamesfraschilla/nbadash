@@ -91,10 +91,16 @@
   background: var(--section-bg);
 }
 
+.sectionHeaderRow {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--border);
+  background: var(--section-header-bg);
+}
+
 .sectionHeaderButton {
   width: 100%;
   border: none;
-  border-bottom: 1px solid var(--border);
   background: var(--section-header-bg);
   color: var(--section-header-text);
   font-family: "DIN", sans-serif;
@@ -105,6 +111,26 @@
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
+}
+
+.sectionHeaderRow .sectionHeaderButton {
+  border-bottom: none;
+}
+
+.sectionHeaderAction {
+  border: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.18);
+  background: var(--section-header-bg);
+  color: var(--section-header-text);
+  font-family: "DIN", sans-serif;
+  font-size: 13px;
+  padding: 0 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+:global(html[data-theme="dark"]) .sectionHeaderAction {
+  border-left-color: rgba(0, 0, 0, 0.18);
 }
 
 .depthTable,
