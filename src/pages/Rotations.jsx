@@ -58,6 +58,7 @@ const createDefaultDepthChart = () => DEFAULT_DEPTH_ROWS.map((row) => row.slice(
 const createDefaultGameState = () => ({
   depthChart: createDefaultDepthChart(),
   lineups: createDefaultQuarterLineups(),
+  inheritDepthTemplate: true,
 });
 
 function safeParseJson(raw, fallback) {
@@ -107,6 +108,12 @@ function normalizeLineups(rawLineups) {
   return result;
 }
 
+function hasAnyFilledLineups(lineups) {
+  return QUARTERS.some((quarter) => (
+    (lineups?.[quarter] || []).some((row) => row.some((value) => normalizeName(value)))
+  ));
+}
+
 function normalizeGameState(rawState) {
   if (!rawState || typeof rawState !== "object") return createDefaultGameState();
 
@@ -118,6 +125,10 @@ function normalizeGameState(rawState) {
   const normalized = {
     depthChart: normalizeDepthChart(depthSource),
     lineups: normalizeLineups(rawState.lineups),
+    inheritDepthTemplate:
+      typeof rawState.inheritDepthTemplate === "boolean"
+        ? rawState.inheritDepthTemplate
+        : !hasAnyFilledLineups(rawState.lineups),
   };
   return normalized;
 }
@@ -213,6 +224,7 @@ async function fetchRemotePlayers() {
     .eq("scope_key", ROTATIONS_GLOBAL_SCOPE_KEY)
     .maybeSingle();
   if (error) return null;
+  if (!data?.payload) return null;
   const parsed = parseSharedStateRow(data);
   return {
     updatedAt: parsed.updatedAt,
@@ -280,6 +292,7 @@ async function fetchRemoteDepthTemplate() {
     .eq("scope_key", ROTATIONS_GLOBAL_SCOPE_KEY)
     .maybeSingle();
   if (error) return null;
+  if (!data?.payload) return null;
   const parsed = parseSharedStateRow(data);
   return {
     updatedAt: parsed.updatedAt,
@@ -329,12 +342,6 @@ function quarterLabel(quarter) {
   return "4th";
 }
 
-function hasAnyFilledLineups(lineups) {
-  return QUARTERS.some((quarter) => (
-    (lineups?.[quarter] || []).some((row) => row.some((value) => normalizeName(value)))
-  ));
-}
-
 export default function Rotations() {
   const { gameId } = useParams();
   const [params] = useSearchParams();
@@ -345,6 +352,7 @@ export default function Rotations() {
   const [depthTemplate, setDepthTemplate] = useState(createDefaultDepthChart());
   const [depthChart, setDepthChart] = useState(createDefaultDepthChart());
   const [lineups, setLineups] = useState(createDefaultQuarterLineups());
+  const [inheritDepthTemplate, setInheritDepthTemplate] = useState(true);
   const [playersHydrated, setPlayersHydrated] = useState(false);
   const [depthTemplateHydrated, setDepthTemplateHydrated] = useState(false);
   const [gameHydrated, setGameHydrated] = useState(false);
@@ -511,12 +519,13 @@ export default function Rotations() {
     const defaults = {
       depthChart: normalizeDepthChart(depthTemplate),
       lineups: createDefaultQuarterLineups(),
+      inheritDepthTemplate: true,
     };
     const shouldInheritFutureTemplate = (state) => {
       const sourceGameId = Number(depthTemplateSourceGameIdRef.current || 0);
       const currentGameNumeric = Number(gameId || 0);
       if (!sourceGameId || !currentGameNumeric || currentGameNumeric <= sourceGameId) return false;
-      return !hasAnyFilledLineups(state?.lineups);
+      return Boolean(state?.inheritDepthTemplate);
     };
     const localPayload = loadGamePayload(gameId);
     const localUpdatedAt = Number(localPayload?.updatedAt || 0);
@@ -524,16 +533,19 @@ export default function Rotations() {
     if (remoteGameState?.state && remoteUpdatedAt >= localUpdatedAt) {
       setDepthChart(shouldInheritFutureTemplate(remoteGameState.state) ? defaults.depthChart : remoteGameState.state.depthChart);
       setLineups(remoteGameState.state.lineups);
+      setInheritDepthTemplate(remoteGameState.state.inheritDepthTemplate);
       gameUpdatedAtRef.current = remoteUpdatedAt;
       skipGameSaveRef.current = true;
     } else if (localPayload?.state) {
       setDepthChart(shouldInheritFutureTemplate(localPayload.state) ? defaults.depthChart : localPayload.state.depthChart);
       setLineups(localPayload.state.lineups);
+      setInheritDepthTemplate(localPayload.state.inheritDepthTemplate);
       gameUpdatedAtRef.current = localUpdatedAt;
       skipGameSaveRef.current = true;
     } else {
       setDepthChart(defaults.depthChart);
       setLineups(defaults.lineups);
+      setInheritDepthTemplate(defaults.inheritDepthTemplate);
       gameUpdatedAtRef.current = Date.now();
       skipGameSaveRef.current = true;
     }
@@ -578,7 +590,7 @@ export default function Rotations() {
   useEffect(() => {
     if (!gameHydrated || !gameId) return;
 
-    const state = { depthChart, lineups };
+    const state = { depthChart, lineups, inheritDepthTemplate };
     if (skipGameSaveRef.current) {
       skipGameSaveRef.current = false;
       persistGameState(gameId, state, gameUpdatedAtRef.current || Date.now());
@@ -589,7 +601,7 @@ export default function Rotations() {
     gameUpdatedAtRef.current = updatedAt;
     persistGameState(gameId, state, updatedAt);
     saveRemoteGameState(gameId, state, updatedAt);
-  }, [depthChart, lineups, gameHydrated, gameId]);
+  }, [depthChart, lineups, inheritDepthTemplate, gameHydrated, gameId]);
 
   useEffect(() => {
     if (!playersHydrated) return;
@@ -677,6 +689,7 @@ export default function Rotations() {
         rIndex !== rowIndex ? row : row.map((cell, cIndex) => (cIndex === columnIndex ? normalizeName(value) : cell))
       ));
       depthTemplateSourceGameIdRef.current = String(gameId || "");
+      setInheritDepthTemplate(false);
       setDepthTemplate(next);
       return next;
     });
@@ -685,6 +698,7 @@ export default function Rotations() {
   const resetDepthChart = () => {
     const emptyDepthChart = [0, 1, 2].map(() => POSITION_COLUMNS.map(() => ""));
     depthTemplateSourceGameIdRef.current = String(gameId || "");
+    setInheritDepthTemplate(false);
     setDepthChart(emptyDepthChart);
     setDepthTemplate(emptyDepthChart);
   };
@@ -693,6 +707,7 @@ export default function Rotations() {
     setLineups((current) => {
       lineupHistoryRef.current = [...lineupHistoryRef.current, current].slice(-MAX_LINEUP_HISTORY);
       setUndoDepth(lineupHistoryRef.current.length);
+      setInheritDepthTemplate(false);
       return {
         ...current,
         [quarter]: current[quarter].map((row, rIndex) => (
@@ -714,6 +729,7 @@ export default function Rotations() {
     setLineups((current) => {
       lineupHistoryRef.current = [...lineupHistoryRef.current, current].slice(-MAX_LINEUP_HISTORY);
       setUndoDepth(lineupHistoryRef.current.length);
+      setInheritDepthTemplate(false);
       return {
         ...current,
         [quarter]: current[quarter].map((row, minuteIndex) => {
@@ -730,6 +746,7 @@ export default function Rotations() {
     setLineups((current) => {
       lineupHistoryRef.current = [...lineupHistoryRef.current, current].slice(-MAX_LINEUP_HISTORY);
       setUndoDepth(lineupHistoryRef.current.length);
+      setInheritDepthTemplate(false);
       return createDefaultQuarterLineups();
     });
     setResetModalOpen(false);
@@ -739,6 +756,7 @@ export default function Rotations() {
     setLineups((current) => {
       lineupHistoryRef.current = [...lineupHistoryRef.current, current].slice(-MAX_LINEUP_HISTORY);
       setUndoDepth(lineupHistoryRef.current.length);
+      setInheritDepthTemplate(false);
       const next = createDefaultQuarterLineups();
       next[1][0] = POSITION_COLUMNS.map((_, columnIndex) => normalizeName(depthChart?.[0]?.[columnIndex] || ""));
       return next;
@@ -833,9 +851,14 @@ export default function Rotations() {
     setUndoDepth(0);
     setDepthChart(incomingDepth);
     setLineups(incomingLineups);
+    setInheritDepthTemplate(Boolean(payload?.state?.inheritDepthTemplate));
     gameUpdatedAtRef.current = remoteUpdatedAt;
     skipGameSaveRef.current = true;
-    persistGameState(gameId, { depthChart: incomingDepth, lineups: incomingLineups }, remoteUpdatedAt);
+    persistGameState(
+      gameId,
+      { depthChart: incomingDepth, lineups: incomingLineups, inheritDepthTemplate: Boolean(payload?.state?.inheritDepthTemplate) },
+      remoteUpdatedAt
+    );
   };
 
   useEffect(() => {
