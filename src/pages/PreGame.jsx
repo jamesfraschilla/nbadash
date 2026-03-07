@@ -14,6 +14,38 @@ const SLOT_TEMPLATE_KEY = "pregame:slot-template:v1";
 const PREGAME_GLOBAL_PLAYERS_GAME_ID = "9999999901";
 const PREGAME_GLOBAL_TEMPLATE_GAME_ID = "9999999902";
 const PREGAME_ACTION_PAYLOAD = 900000001;
+const TEAM_TIME_ZONES = {
+  ATL: "America/New_York",
+  BKN: "America/New_York",
+  BOS: "America/New_York",
+  CHA: "America/New_York",
+  CHI: "America/Chicago",
+  CLE: "America/New_York",
+  DAL: "America/Chicago",
+  DEN: "America/Denver",
+  DET: "America/New_York",
+  GSW: "America/Los_Angeles",
+  HOU: "America/Chicago",
+  IND: "America/New_York",
+  LAC: "America/Los_Angeles",
+  LAL: "America/Los_Angeles",
+  MEM: "America/Chicago",
+  MIA: "America/New_York",
+  MIL: "America/Chicago",
+  MIN: "America/Chicago",
+  NOP: "America/Chicago",
+  NYK: "America/New_York",
+  OKC: "America/Chicago",
+  ORL: "America/New_York",
+  PHI: "America/New_York",
+  PHX: "America/Phoenix",
+  POR: "America/Los_Angeles",
+  SAC: "America/Los_Angeles",
+  SAS: "America/Chicago",
+  TOR: "America/Toronto",
+  UTA: "America/Denver",
+  WAS: "America/New_York",
+};
 
 const EXPORT_SPECS = {
   portrait: { logicalWidth: 384, logicalHeight: 648, outputWidth: 1536, outputHeight: 2592 },
@@ -325,7 +357,26 @@ async function saveRemoteTemplate(slots, updatedAt = Date.now()) {
   );
 }
 
-function formatTime(dateValue) {
+function getGameTimeZone(game) {
+  const homeTricode = String(game?.homeTeam?.teamTricode || "").toUpperCase();
+  return TEAM_TIME_ZONES[homeTricode] || "America/New_York";
+}
+
+function formatTime(dateValue, timeZone = "America/New_York") {
+  try {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+    const parts = formatter.formatToParts(dateValue);
+    const hour = parts.find((part) => part.type === "hour")?.value;
+    const minute = parts.find((part) => part.type === "minute")?.value;
+    if (hour && minute) return `${hour}:${minute}`;
+  } catch {
+    // Fall through to local formatting below.
+  }
   return format(dateValue, "h:mm");
 }
 
@@ -342,13 +393,14 @@ function parseGameStart(game) {
 
 function buildDefaultSlots(game, count = 8) {
   const start = parseGameStart(game);
+  const timeZone = getGameTimeZone(game);
   const finalSlot = new Date(start.getTime() - (45 * 60 * 1000));
   const firstSlot = new Date(finalSlot.getTime() - ((count - 1) * 15 * 60 * 1000));
   return Array.from({ length: count }, (_, index) => {
     const slotTime = new Date(firstSlot.getTime() + (index * 15 * 60 * 1000));
     return {
       id: crypto.randomUUID(),
-      time: formatTime(slotTime),
+      time: formatTime(slotTime, timeZone),
       playerIds: ["", ""],
     };
   });
