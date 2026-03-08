@@ -9,15 +9,12 @@ import wizardsLogoUrl from "../assets/WWizards_Primary_Icon.png";
 import dinAltFontUrl from "../assets/fonts/DINalt.ttf";
 import styles from "./Rotations.module.css";
 
-const PLAYERS_STORAGE_KEY = "rotations:players:v1";
-const DEPTH_TEMPLATE_STORAGE_KEY = "rotations:depth-template:v1";
 const GAME_STORAGE_PREFIX = "rotations:game:v1:";
 const SECTION_STATE_STORAGE_PREFIX = "rotations:sections:v1:";
 const ROTATIONS_TABLE = "rotations_shared_state";
 const ROTATIONS_SCOPE_PLAYERS = "players";
 const ROTATIONS_SCOPE_DEPTH_TEMPLATE = "depth_template";
 const ROTATIONS_SCOPE_GAME = "game";
-const ROTATIONS_GLOBAL_SCOPE_KEY = "global";
 const FINAL_VERSION_ID = "final";
 const QUARTERS = [1, 2, 3, 4];
 const MINUTES = Array.from({ length: 12 }, (_, index) => 12 - index);
@@ -28,34 +25,79 @@ const DEFAULT_VERSION_OPTIONS = {
   hideNamesOnDuplicateRows: false,
 };
 
-const DEFAULT_PLAYERS = [
-  { id: "p1", name: "BUB", cap: 48 },
-  { id: "p2", name: "BC", cap: 48 },
-  { id: "p3", name: "TRE", cap: 48 },
-  { id: "p4", name: "KG", cap: 48 },
-  { id: "p5", name: "JC", cap: 48 },
-  { id: "p6", name: "ALEX", cap: 48 },
-  { id: "p7", name: "TV", cap: 48 },
-  { id: "p8", name: "SC", cap: 48 },
-  { id: "p9", name: "WR", cap: 48 },
-  { id: "p10", name: "JW", cap: 48 },
-  { id: "p11", name: "AG", cap: 48 },
-  { id: "p12", name: "JH", cap: 48 },
-  { id: "p13", name: "JR", cap: 48 },
-  { id: "p14", name: "LB", cap: 48 },
-  { id: "p15", name: "", cap: 48 },
-  { id: "p16", name: "", cap: 48 },
-  { id: "p17", name: "", cap: 48 },
-];
+const TEAM_ROTATIONS_CONFIG = {
+  washington: {
+    key: "washington",
+    label: "WASHINGTON",
+    matches(team) {
+      const tricode = String(team?.teamTricode || "").toUpperCase();
+      const name = `${team?.teamCity || ""} ${team?.teamName || ""}`.toLowerCase();
+      return tricode === "WAS" || name.includes("washington") || name.includes("wizards");
+    },
+    defaultPlayers: [
+      { id: "p1", name: "BUB", cap: 48 },
+      { id: "p2", name: "BC", cap: 48 },
+      { id: "p3", name: "TRE", cap: 48 },
+      { id: "p4", name: "KG", cap: 48 },
+      { id: "p5", name: "JC", cap: 48 },
+      { id: "p6", name: "ALEX", cap: 48 },
+      { id: "p7", name: "TV", cap: 48 },
+      { id: "p8", name: "SC", cap: 48 },
+      { id: "p9", name: "WR", cap: 48 },
+      { id: "p10", name: "JW", cap: 48 },
+      { id: "p11", name: "AG", cap: 48 },
+      { id: "p12", name: "JH", cap: 48 },
+      { id: "p13", name: "JR", cap: 48 },
+      { id: "p14", name: "LB", cap: 48 },
+      { id: "p15", name: "", cap: 48 },
+      { id: "p16", name: "", cap: 48 },
+      { id: "p17", name: "", cap: 48 },
+    ],
+    defaultDepthRows: [
+      ["TRAE", "TRE", "BC", "LB", "JR"],
+      ["SC", "BUB", "JH", "WR", "AG"],
+      ["", "", "", "", ""],
+      ["", "", "", "", ""],
+    ],
+  },
+  capital_city: {
+    key: "capital_city",
+    label: "CAPITAL CITY",
+    matches(team) {
+      const tricode = String(team?.teamTricode || "").toUpperCase();
+      const name = `${team?.teamCity || ""} ${team?.teamName || ""}`.toLowerCase();
+      return tricode === "CCG" || name.includes("capital city") || name.includes("go-go") || name.includes("gogo");
+    },
+    defaultPlayers: Array.from({ length: 17 }, (_, index) => ({
+      id: `p${index + 1}`,
+      name: "",
+      cap: 48,
+    })),
+    defaultDepthRows: Array.from({ length: 4 }, () => POSITION_COLUMNS.map(() => "")),
+  },
+};
 
-const DEFAULT_DEPTH_ROWS = [
-  ["TRAE", "TRE", "BC", "LB", "JR"],
-  ["SC", "BUB", "JH", "WR", "AG"],
-  ["", "", "", "", ""],
-  ["", "", "", "", ""],
-];
+const DEPTH_ROW_INDICES = TEAM_ROTATIONS_CONFIG.washington.defaultDepthRows.map((_, index) => index);
 
-const DEPTH_ROW_INDICES = DEFAULT_DEPTH_ROWS.map((_, index) => index);
+function getRotationsTeamConfig(team) {
+  return Object.values(TEAM_ROTATIONS_CONFIG).find((config) => config.matches(team)) || null;
+}
+
+function getRotationsScopeForGame(game) {
+  return getRotationsTeamConfig(game?.homeTeam) || getRotationsTeamConfig(game?.awayTeam);
+}
+
+function playersStorageKey(teamScope) {
+  return `rotations:${teamScope}:players:v1`;
+}
+
+function depthTemplateStorageKey(teamScope) {
+  return `rotations:${teamScope}:depth-template:v1`;
+}
+
+function globalScopeKey(teamScope) {
+  return `${teamScope}:global`;
+}
 
 const createDefaultQuarterLineups = () => ({
   1: MINUTES.map(() => Array.from({ length: POSITION_COLUMNS.length }, () => "")),
@@ -64,7 +106,15 @@ const createDefaultQuarterLineups = () => ({
   4: MINUTES.map(() => Array.from({ length: POSITION_COLUMNS.length }, () => "")),
 });
 
-const createDefaultDepthChart = () => DEFAULT_DEPTH_ROWS.map((row) => row.slice());
+const createDefaultPlayers = (teamScope = "washington") => (
+  (TEAM_ROTATIONS_CONFIG[teamScope]?.defaultPlayers || TEAM_ROTATIONS_CONFIG.washington.defaultPlayers)
+    .map((player) => ({ ...player }))
+);
+
+const createDefaultDepthChart = (teamScope = "washington") => (
+  (TEAM_ROTATIONS_CONFIG[teamScope]?.defaultDepthRows || TEAM_ROTATIONS_CONFIG.washington.defaultDepthRows)
+    .map((row) => row.slice())
+);
 
 function createVersionState({
   id,
@@ -73,26 +123,28 @@ function createVersionState({
   lineups = createDefaultQuarterLineups(),
   inheritDepthTemplate = false,
   options = DEFAULT_VERSION_OPTIONS,
+  teamScope = "washington",
 }) {
   return {
     id: String(id || (typeof crypto !== "undefined" ? crypto.randomUUID() : `version-${Date.now()}`)),
     name: String(name || "Version").trim() || "Version",
-    depthChart: normalizeDepthChart(depthChart),
+    depthChart: normalizeDepthChart(depthChart, teamScope),
     lineups: normalizeLineups(lineups),
     inheritDepthTemplate: Boolean(inheritDepthTemplate),
     options: normalizeVersionOptions(options),
   };
 }
 
-const createDefaultGameState = () => ({
+const createDefaultGameState = (teamScope = "washington") => ({
   activeVersionId: FINAL_VERSION_ID,
   versions: [
     createVersionState({
       id: FINAL_VERSION_ID,
       name: "Final",
-      depthChart: createDefaultDepthChart(),
+      depthChart: createDefaultDepthChart(teamScope),
       lineups: createDefaultQuarterLineups(),
       inheritDepthTemplate: true,
+      teamScope,
     }),
   ],
 });
@@ -110,7 +162,7 @@ function normalizeName(value) {
   return String(value || "").trim().replace(/\s+/g, " ").toUpperCase();
 }
 
-function normalizePlayers(rawPlayers) {
+function normalizePlayers(rawPlayers, teamScope = "washington") {
   const normalized = (Array.isArray(rawPlayers) ? rawPlayers : []).slice(0, 17).map((player, index) => ({
     id: String(player?.id || `p${index + 1}`),
     name: normalizeName(player?.name),
@@ -119,11 +171,15 @@ function normalizePlayers(rawPlayers) {
   while (normalized.length < 17) {
     normalized.push({ id: `p${normalized.length + 1}`, name: "", cap: 48 });
   }
-  return normalized;
+  const defaults = createDefaultPlayers(teamScope);
+  return normalized.map((player, index) => ({
+    ...defaults[index],
+    ...player,
+  }));
 }
 
-function normalizeDepthChart(rawDepth) {
-  const fallback = createDefaultDepthChart();
+function normalizeDepthChart(rawDepth, teamScope = "washington") {
+  const fallback = createDefaultDepthChart(teamScope);
   if (!Array.isArray(rawDepth)) return fallback;
   return DEPTH_ROW_INDICES.map((rowIndex) => {
     const row = Array.isArray(rawDepth[rowIndex]) ? rawDepth[rowIndex] : [];
@@ -156,8 +212,8 @@ function hasAnyFilledLineups(lineups) {
   ));
 }
 
-function normalizeGameState(rawState) {
-  if (!rawState || typeof rawState !== "object") return createDefaultGameState();
+function normalizeGameState(rawState, teamScope = "washington") {
+  if (!rawState || typeof rawState !== "object") return createDefaultGameState(teamScope);
 
   if (Array.isArray(rawState.versions)) {
     const normalizedVersions = rawState.versions.map((version, index) => createVersionState({
@@ -167,6 +223,7 @@ function normalizeGameState(rawState) {
       lineups: version?.lineups,
       inheritDepthTemplate: version?.inheritDepthTemplate,
       options: version?.options,
+      teamScope,
     }));
 
     const finalVersion = normalizedVersions.find((version) => version.id === FINAL_VERSION_ID)
@@ -177,6 +234,7 @@ function normalizeGameState(rawState) {
         lineups: rawState.lineups,
         inheritDepthTemplate: rawState.inheritDepthTemplate ?? true,
         options: rawState.options,
+        teamScope,
       });
 
     const otherVersions = normalizedVersions.filter((version) => version.id !== FINAL_VERSION_ID);
@@ -199,68 +257,69 @@ function normalizeGameState(rawState) {
       createVersionState({
         id: FINAL_VERSION_ID,
         name: "Final",
-        depthChart: normalizeDepthChart(depthSource),
+        depthChart: normalizeDepthChart(depthSource, teamScope),
         lineups: normalizeLineups(rawState.lineups),
         inheritDepthTemplate:
           typeof rawState.inheritDepthTemplate === "boolean"
             ? rawState.inheritDepthTemplate
             : !hasAnyFilledLineups(rawState.lineups),
         options: rawState.options,
+        teamScope,
       }),
     ],
   };
 }
 
-function getVersionById(gameState, versionId) {
+function getVersionById(gameState, versionId, teamScope = "washington") {
   return gameState?.versions?.find((version) => version.id === versionId)
     || gameState?.versions?.[0]
-    || createDefaultGameState().versions[0];
+    || createDefaultGameState(teamScope).versions[0];
 }
 
-function loadPlayersPayload() {
-  if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(PLAYERS_STORAGE_KEY);
+function loadPlayersPayload(teamScope) {
+  if (typeof window === "undefined" || !teamScope) return null;
+  const raw = window.localStorage.getItem(playersStorageKey(teamScope));
   if (!raw) return null;
   const parsed = safeParseJson(raw, null);
   if (Array.isArray(parsed)) {
-    return { updatedAt: 0, players: normalizePlayers(parsed) };
+    return { updatedAt: 0, players: normalizePlayers(parsed, teamScope) };
   }
   if (!parsed || typeof parsed !== "object") return null;
   return {
     updatedAt: Number(parsed.updatedAt || 0),
-    players: normalizePlayers(parsed.players),
+    players: normalizePlayers(parsed.players, teamScope),
   };
 }
 
-function persistPlayers(players, updatedAt = Date.now()) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(PLAYERS_STORAGE_KEY, JSON.stringify({
+function persistPlayers(teamScope, players, updatedAt = Date.now()) {
+  if (typeof window === "undefined" || !teamScope) return;
+  window.localStorage.setItem(playersStorageKey(teamScope), JSON.stringify({
     updatedAt,
-    players: normalizePlayers(players),
+    players: normalizePlayers(players, teamScope),
   }));
 }
 
-function loadDepthTemplatePayload() {
-  if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(DEPTH_TEMPLATE_STORAGE_KEY);
+function loadDepthTemplatePayload(teamScope) {
+  if (typeof window === "undefined" || !teamScope) return null;
+  const raw = window.localStorage.getItem(depthTemplateStorageKey(teamScope));
   if (!raw) return null;
   const parsed = safeParseJson(raw, null);
   if (!parsed || typeof parsed !== "object") return null;
   if (Array.isArray(parsed)) {
-    return { updatedAt: 0, depthChart: normalizeDepthChart(parsed), sourceGameId: "" };
+    return { updatedAt: 0, depthChart: normalizeDepthChart(parsed, teamScope), sourceGameId: "" };
   }
   return {
     updatedAt: Number(parsed.updatedAt || 0),
-    depthChart: normalizeDepthChart(parsed.depthChart),
+    depthChart: normalizeDepthChart(parsed.depthChart, teamScope),
     sourceGameId: String(parsed.sourceGameId || ""),
   };
 }
 
-function persistDepthTemplate(depthChart, updatedAt = Date.now(), sourceGameId = "") {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(DEPTH_TEMPLATE_STORAGE_KEY, JSON.stringify({
+function persistDepthTemplate(teamScope, depthChart, updatedAt = Date.now(), sourceGameId = "") {
+  if (typeof window === "undefined" || !teamScope) return;
+  window.localStorage.setItem(depthTemplateStorageKey(teamScope), JSON.stringify({
     updatedAt,
-    depthChart: normalizeDepthChart(depthChart),
+    depthChart: normalizeDepthChart(depthChart, teamScope),
     sourceGameId: String(sourceGameId || ""),
   }));
 }
@@ -281,7 +340,7 @@ function loadGamePayload(gameId) {
   if (!parsed || typeof parsed !== "object") return null;
   return {
     updatedAt: Number(parsed.updatedAt || 0),
-    state: normalizeGameState(parsed.state || parsed),
+    state: parsed.state || parsed,
   };
 }
 
@@ -299,31 +358,31 @@ function parseSharedStateRow(row) {
   return { updatedAt, payload };
 }
 
-async function fetchRemotePlayers() {
-  if (!supabase) return null;
+async function fetchRemotePlayers(teamScope) {
+  if (!supabase || !teamScope) return null;
   const { data, error } = await supabase
     .from(ROTATIONS_TABLE)
     .select("payload,updated_at")
     .eq("scope_type", ROTATIONS_SCOPE_PLAYERS)
-    .eq("scope_key", ROTATIONS_GLOBAL_SCOPE_KEY)
+    .eq("scope_key", globalScopeKey(teamScope))
     .maybeSingle();
   if (error) return null;
   if (!data?.payload) return null;
   const parsed = parseSharedStateRow(data);
   return {
     updatedAt: parsed.updatedAt,
-    players: normalizePlayers(parsed.payload?.players),
+    players: normalizePlayers(parsed.payload?.players, teamScope),
   };
 }
 
-async function saveRemotePlayers(players, updatedAt = Date.now()) {
-  if (!supabase) return;
+async function saveRemotePlayers(teamScope, players, updatedAt = Date.now()) {
+  if (!supabase || !teamScope) return;
   const { error } = await supabase.from(ROTATIONS_TABLE).upsert(
     {
       scope_type: ROTATIONS_SCOPE_PLAYERS,
-      scope_key: ROTATIONS_GLOBAL_SCOPE_KEY,
+      scope_key: globalScopeKey(teamScope),
       payload: {
-        players: normalizePlayers(players),
+        players: normalizePlayers(players, teamScope),
       },
     },
     { onConflict: "scope_type,scope_key" }
@@ -334,8 +393,8 @@ async function saveRemotePlayers(players, updatedAt = Date.now()) {
   }
 }
 
-async function fetchRemoteGameState(gameId) {
-  if (!supabase || !gameId) return null;
+async function fetchRemoteGameState(gameId, teamScope) {
+  if (!supabase || !gameId || !teamScope) return null;
   const { data, error } = await supabase
     .from(ROTATIONS_TABLE)
     .select("payload,updated_at")
@@ -347,7 +406,7 @@ async function fetchRemoteGameState(gameId) {
   const parsed = parseSharedStateRow(data);
   return {
     updatedAt: Number(parsed.payload?.updatedAt || parsed.updatedAt || 0),
-    state: normalizeGameState(parsed.payload),
+    state: normalizeGameState(parsed.payload, teamScope),
   };
 }
 
@@ -370,32 +429,32 @@ async function saveRemoteGameState(gameId, state, updatedAt = Date.now()) {
   }
 }
 
-async function fetchRemoteDepthTemplate() {
-  if (!supabase) return null;
+async function fetchRemoteDepthTemplate(teamScope) {
+  if (!supabase || !teamScope) return null;
   const { data, error } = await supabase
     .from(ROTATIONS_TABLE)
     .select("payload,updated_at")
     .eq("scope_type", ROTATIONS_SCOPE_DEPTH_TEMPLATE)
-    .eq("scope_key", ROTATIONS_GLOBAL_SCOPE_KEY)
+    .eq("scope_key", globalScopeKey(teamScope))
     .maybeSingle();
   if (error) return null;
   if (!data?.payload) return null;
   const parsed = parseSharedStateRow(data);
   return {
     updatedAt: parsed.updatedAt,
-    depthChart: normalizeDepthChart(parsed.payload?.depthChart),
+    depthChart: normalizeDepthChart(parsed.payload?.depthChart, teamScope),
     sourceGameId: String(parsed.payload?.sourceGameId || ""),
   };
 }
 
-async function saveRemoteDepthTemplate(depthChart, updatedAt = Date.now(), sourceGameId = "") {
-  if (!supabase) return;
+async function saveRemoteDepthTemplate(teamScope, depthChart, updatedAt = Date.now(), sourceGameId = "") {
+  if (!supabase || !teamScope) return;
   const { error } = await supabase.from(ROTATIONS_TABLE).upsert(
     {
       scope_type: ROTATIONS_SCOPE_DEPTH_TEMPLATE,
-      scope_key: ROTATIONS_GLOBAL_SCOPE_KEY,
+      scope_key: globalScopeKey(teamScope),
       payload: {
-        depthChart: normalizeDepthChart(depthChart),
+        depthChart: normalizeDepthChart(depthChart, teamScope),
         sourceGameId: String(sourceGameId || ""),
       },
     },
@@ -407,19 +466,13 @@ async function saveRemoteDepthTemplate(depthChart, updatedAt = Date.now(), sourc
   }
 }
 
-function isWashingtonTeam(team) {
-  const tricode = String(team?.teamTricode || "").toUpperCase();
-  const name = `${team?.teamCity || ""} ${team?.teamName || ""}`.toLowerCase();
-  return tricode === "WAS" || name.includes("washington") || name.includes("wizards");
-}
-
-function buildOpponentLine(game) {
+function buildOpponentLine(game, monitoredTeam) {
   const away = game?.awayTeam;
   const home = game?.homeTeam;
-  const washingtonAway = isWashingtonTeam(away);
-  const opponent = washingtonAway ? home : away;
+  const monitoredAway = monitoredTeam?.matches(away);
+  const opponent = monitoredAway ? home : away;
   const city = String(opponent?.teamCity || "Opponent").trim().toUpperCase();
-  return washingtonAway ? `@ ${city}` : `VS ${city}`;
+  return monitoredAway ? `@ ${city}` : `VS ${city}`;
 }
 
 function quarterLabel(quarter) {
@@ -1028,7 +1081,7 @@ export default function Rotations() {
   const dateParam = params.get("d");
   const backUrl = dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`;
 
-  const [players, setPlayers] = useState(DEFAULT_PLAYERS);
+  const [players, setPlayers] = useState(createDefaultPlayers());
   const [depthTemplate, setDepthTemplate] = useState(createDefaultDepthChart());
   const [gameState, setGameState] = useState(createDefaultGameState());
   const [playersHydrated, setPlayersHydrated] = useState(false);
@@ -1090,34 +1143,38 @@ export default function Rotations() {
     enabled: Boolean(gameId),
   });
 
+  const monitoredTeam = useMemo(() => getRotationsScopeForGame(game), [game]);
+  const monitoredTeamScope = monitoredTeam?.key || null;
+  const rotationsAvailable = Boolean(monitoredTeamScope);
+
   const { data: remotePlayers, isFetched: remotePlayersFetched } = useQuery({
-    queryKey: ["rotations-players-remote"],
-    queryFn: fetchRemotePlayers,
-    enabled: Boolean(supabase),
+    queryKey: ["rotations-players-remote", monitoredTeamScope],
+    queryFn: () => fetchRemotePlayers(monitoredTeamScope),
+    enabled: Boolean(supabase && monitoredTeamScope),
     staleTime: 10_000,
     refetchInterval: 10_000,
   });
 
   const { data: remoteGameState, isFetched: remoteGameFetched } = useQuery({
-    queryKey: ["rotations-game-remote", gameId],
-    queryFn: () => fetchRemoteGameState(gameId),
-    enabled: Boolean(supabase && gameId),
+    queryKey: ["rotations-game-remote", gameId, monitoredTeamScope],
+    queryFn: () => fetchRemoteGameState(gameId, monitoredTeamScope),
+    enabled: Boolean(supabase && gameId && monitoredTeamScope),
     staleTime: 10_000,
     refetchInterval: 10_000,
   });
 
   const { data: remoteDepthTemplate, isFetched: remoteDepthFetched } = useQuery({
-    queryKey: ["rotations-depth-template-remote"],
-    queryFn: fetchRemoteDepthTemplate,
-    enabled: Boolean(supabase),
+    queryKey: ["rotations-depth-template-remote", monitoredTeamScope],
+    queryFn: () => fetchRemoteDepthTemplate(monitoredTeamScope),
+    enabled: Boolean(supabase && monitoredTeamScope),
     staleTime: 10_000,
     refetchInterval: 10_000,
   });
 
-  const washingtonGame = useMemo(() => (
-    isWashingtonTeam(game?.homeTeam) || isWashingtonTeam(game?.awayTeam)
-  ), [game]);
-  const activeVersion = useMemo(() => getVersionById(gameState, gameState.activeVersionId), [gameState]);
+  const activeVersion = useMemo(
+    () => getVersionById(gameState, gameState.activeVersionId, monitoredTeamScope || "washington"),
+    [gameState, monitoredTeamScope]
+  );
   const activeVersionId = activeVersion.id;
   const depthChart = activeVersion.depthChart;
   const lineups = activeVersion.lineups;
@@ -1140,7 +1197,7 @@ export default function Rotations() {
     setVersionMenuOpen(false);
     setCreateVersionOpen(false);
     setDeleteVersionTarget(null);
-  }, [gameId]);
+  }, [gameId, monitoredTeamScope]);
 
   useEffect(() => {
     if (!versionMenuOpen) return undefined;
@@ -1177,7 +1234,8 @@ export default function Rotations() {
     if (playersHydrated) return;
     if (supabase && !remotePlayersFetched) return;
 
-    const localPayload = loadPlayersPayload();
+    if (!monitoredTeamScope) return;
+    const localPayload = loadPlayersPayload(monitoredTeamScope);
     const localUpdatedAt = Number(localPayload?.updatedAt || 0);
     const remoteUpdatedAt = Number(remotePlayers?.updatedAt || 0);
     if (remotePlayers?.players?.length && remoteUpdatedAt >= localUpdatedAt) {
@@ -1188,16 +1246,21 @@ export default function Rotations() {
       setPlayers(localPayload.players);
       playersUpdatedAtRef.current = localUpdatedAt;
       skipPlayersSaveRef.current = true;
+    } else {
+      setPlayers(createDefaultPlayers(monitoredTeamScope));
+      playersUpdatedAtRef.current = Date.now();
+      skipPlayersSaveRef.current = true;
     }
 
     setPlayersHydrated(true);
-  }, [playersHydrated, remotePlayers, remotePlayersFetched]);
+  }, [playersHydrated, remotePlayers, remotePlayersFetched, monitoredTeamScope]);
 
   useEffect(() => {
     if (depthTemplateHydrated) return;
     if (supabase && !remoteDepthFetched) return;
 
-    const localPayload = loadDepthTemplatePayload();
+    if (!monitoredTeamScope) return;
+    const localPayload = loadDepthTemplatePayload(monitoredTeamScope);
     const localUpdatedAt = Number(localPayload?.updatedAt || 0);
     const remoteUpdatedAt = Number(remoteDepthTemplate?.updatedAt || 0);
     if (remoteDepthTemplate?.depthChart && remoteUpdatedAt >= localUpdatedAt) {
@@ -1210,23 +1273,28 @@ export default function Rotations() {
       depthTemplateUpdatedAtRef.current = localUpdatedAt;
       depthTemplateSourceGameIdRef.current = String(localPayload.sourceGameId || "");
       skipDepthTemplateSaveRef.current = true;
+    } else {
+      setDepthTemplate(createDefaultDepthChart(monitoredTeamScope));
+      depthTemplateUpdatedAtRef.current = Date.now();
+      skipDepthTemplateSaveRef.current = true;
     }
 
     setDepthTemplateHydrated(true);
-  }, [depthTemplateHydrated, remoteDepthTemplate, remoteDepthFetched]);
+  }, [depthTemplateHydrated, remoteDepthTemplate, remoteDepthFetched, monitoredTeamScope]);
 
   useEffect(() => {
     if (gameHydrated || !gameId) return;
     if (supabase && !remoteGameFetched) return;
     if (!depthTemplateHydrated) return;
 
-    const defaults = createDefaultGameState();
-    defaults.versions[0].depthChart = normalizeDepthChart(depthTemplate);
+    if (!monitoredTeamScope) return;
+    const defaults = createDefaultGameState(monitoredTeamScope);
+    defaults.versions[0].depthChart = normalizeDepthChart(depthTemplate, monitoredTeamScope);
     const shouldInheritFutureTemplate = (state) => {
       const sourceGameId = Number(depthTemplateSourceGameIdRef.current || 0);
       const currentGameNumeric = Number(gameId || 0);
       if (!sourceGameId || !currentGameNumeric || currentGameNumeric <= sourceGameId) return false;
-      return Boolean(getVersionById(state, FINAL_VERSION_ID)?.inheritDepthTemplate);
+      return Boolean(getVersionById(state, FINAL_VERSION_ID, monitoredTeamScope)?.inheritDepthTemplate);
     };
     const applyInheritedTemplate = (state) => {
       if (!shouldInheritFutureTemplate(state)) return state;
@@ -1235,7 +1303,7 @@ export default function Rotations() {
         versions: state.versions.map((version) => (
           version.id !== FINAL_VERSION_ID
             ? version
-            : { ...version, depthChart: normalizeDepthChart(depthTemplate) }
+            : { ...version, depthChart: normalizeDepthChart(depthTemplate, monitoredTeamScope) }
         )),
       };
     };
@@ -1243,11 +1311,11 @@ export default function Rotations() {
     const localUpdatedAt = Number(localPayload?.updatedAt || 0);
     const remoteUpdatedAt = Number(remoteGameState?.updatedAt || 0);
     if (remoteGameState?.state && remoteUpdatedAt >= localUpdatedAt) {
-      setGameState(applyInheritedTemplate(remoteGameState.state));
+      setGameState(applyInheritedTemplate(normalizeGameState(remoteGameState.state, monitoredTeamScope)));
       gameUpdatedAtRef.current = remoteUpdatedAt;
       skipGameSaveRef.current = true;
     } else if (localPayload?.state) {
-      setGameState(applyInheritedTemplate(localPayload.state));
+      setGameState(applyInheritedTemplate(normalizeGameState(localPayload.state, monitoredTeamScope)));
       gameUpdatedAtRef.current = localUpdatedAt;
       skipGameSaveRef.current = true;
     } else {
@@ -1257,29 +1325,32 @@ export default function Rotations() {
     }
 
     setGameHydrated(true);
-  }, [gameHydrated, gameId, remoteGameState, remoteGameFetched, depthTemplateHydrated, depthTemplate]);
+  }, [gameHydrated, gameId, remoteGameState, remoteGameFetched, depthTemplateHydrated, depthTemplate, monitoredTeamScope]);
 
   useEffect(() => {
+    if (!monitoredTeamScope) return;
     if (!playersHydrated) return;
 
     if (skipPlayersSaveRef.current) {
       skipPlayersSaveRef.current = false;
-      persistPlayers(players, playersUpdatedAtRef.current || Date.now());
+      persistPlayers(monitoredTeamScope, players, playersUpdatedAtRef.current || Date.now());
       return;
     }
 
     const updatedAt = Date.now();
     playersUpdatedAtRef.current = updatedAt;
-    persistPlayers(players, updatedAt);
-    saveRemotePlayers(players, updatedAt);
-  }, [players, playersHydrated]);
+    persistPlayers(monitoredTeamScope, players, updatedAt);
+    saveRemotePlayers(monitoredTeamScope, players, updatedAt);
+  }, [players, playersHydrated, monitoredTeamScope]);
 
   useEffect(() => {
+    if (!monitoredTeamScope) return;
     if (!depthTemplateHydrated) return;
 
     if (skipDepthTemplateSaveRef.current) {
       skipDepthTemplateSaveRef.current = false;
       persistDepthTemplate(
+        monitoredTeamScope,
         depthTemplate,
         depthTemplateUpdatedAtRef.current || Date.now(),
         depthTemplateSourceGameIdRef.current
@@ -1289,11 +1360,12 @@ export default function Rotations() {
 
     const updatedAt = Date.now();
     depthTemplateUpdatedAtRef.current = updatedAt;
-    persistDepthTemplate(depthTemplate, updatedAt, depthTemplateSourceGameIdRef.current);
-    saveRemoteDepthTemplate(depthTemplate, updatedAt, depthTemplateSourceGameIdRef.current);
-  }, [depthTemplate, depthTemplateHydrated]);
+    persistDepthTemplate(monitoredTeamScope, depthTemplate, updatedAt, depthTemplateSourceGameIdRef.current);
+    saveRemoteDepthTemplate(monitoredTeamScope, depthTemplate, updatedAt, depthTemplateSourceGameIdRef.current);
+  }, [depthTemplate, depthTemplateHydrated, monitoredTeamScope]);
 
   useEffect(() => {
+    if (!monitoredTeamScope) return;
     if (!gameHydrated || !gameId) return;
 
     const state = gameState;
@@ -1307,7 +1379,7 @@ export default function Rotations() {
     gameUpdatedAtRef.current = updatedAt;
     persistGameState(gameId, state, updatedAt);
     saveRemoteGameState(gameId, state, updatedAt);
-  }, [gameState, gameHydrated, gameId]);
+  }, [gameState, gameHydrated, gameId, monitoredTeamScope]);
 
   useEffect(() => {
     if (!playersHydrated) return;
@@ -1375,8 +1447,11 @@ export default function Rotations() {
   }, [lineups]);
 
   const allQuarterTotal = quarterTotals[1] + quarterTotals[2] + quarterTotals[3] + quarterTotals[4];
-  const opponentLine = useMemo(() => buildOpponentLine(game), [game]);
-  const exportHeaderLine = useMemo(() => `WASHINGTON ${opponentLine}`, [opponentLine]);
+  const opponentLine = useMemo(() => buildOpponentLine(game, monitoredTeam), [game, monitoredTeam]);
+  const exportHeaderLine = useMemo(
+    () => `${monitoredTeam?.label || "WASHINGTON"} ${opponentLine}`,
+    [monitoredTeam, opponentLine]
+  );
   const versionOptions = useMemo(() => gameState.versions, [gameState.versions]);
 
   const updateActiveVersion = (updater) => {
@@ -1583,6 +1658,7 @@ export default function Rotations() {
       lineups: mode === "copy" ? lineups : createDefaultQuarterLineups(),
       inheritDepthTemplate: false,
       options: mode === "copy" ? versionDisplayOptions : DEFAULT_VERSION_OPTIONS,
+      teamScope: monitoredTeamScope || "washington",
     });
     lineupHistoryRef.current = [];
     setUndoDepth(0);
@@ -1709,28 +1785,28 @@ export default function Rotations() {
   const applyRemotePlayers = (payload) => {
     const remoteUpdatedAt = Number(payload?.updatedAt || 0);
     if (!remoteUpdatedAt || remoteUpdatedAt <= playersUpdatedAtRef.current) return;
-    const incomingPlayers = normalizePlayers(payload?.players || []);
+    const incomingPlayers = normalizePlayers(payload?.players || [], monitoredTeamScope || "washington");
     setPlayers(incomingPlayers);
     playersUpdatedAtRef.current = remoteUpdatedAt;
     skipPlayersSaveRef.current = true;
-    persistPlayers(incomingPlayers, remoteUpdatedAt);
+    persistPlayers(monitoredTeamScope, incomingPlayers, remoteUpdatedAt);
   };
 
   const applyRemoteDepthTemplate = (payload) => {
     const remoteUpdatedAt = Number(payload?.updatedAt || 0);
     if (!remoteUpdatedAt || remoteUpdatedAt <= depthTemplateUpdatedAtRef.current) return;
-    const incomingDepth = normalizeDepthChart(payload?.depthChart);
+    const incomingDepth = normalizeDepthChart(payload?.depthChart, monitoredTeamScope || "washington");
     setDepthTemplate(incomingDepth);
     depthTemplateUpdatedAtRef.current = remoteUpdatedAt;
     depthTemplateSourceGameIdRef.current = String(payload?.sourceGameId || "");
     skipDepthTemplateSaveRef.current = true;
-    persistDepthTemplate(incomingDepth, remoteUpdatedAt, payload?.sourceGameId);
+    persistDepthTemplate(monitoredTeamScope, incomingDepth, remoteUpdatedAt, payload?.sourceGameId);
   };
 
   const applyRemoteGameState = (payload) => {
     const remoteUpdatedAt = Number(payload?.updatedAt || 0);
     if (!remoteUpdatedAt || remoteUpdatedAt <= gameUpdatedAtRef.current) return;
-    const incomingState = normalizeGameState(payload?.state);
+    const incomingState = normalizeGameState(payload?.state, monitoredTeamScope || "washington");
     lineupHistoryRef.current = [];
     setUndoDepth(0);
     setGameState(incomingState);
@@ -1767,9 +1843,9 @@ export default function Rotations() {
   }, []);
 
   useEffect(() => {
-    if (!supabase || !gameId) return undefined;
+    if (!supabase || !gameId || !monitoredTeamScope) return undefined;
     const channel = supabase
-      .channel(`rotations-${gameId}`)
+      .channel(`rotations-${monitoredTeamScope}-${gameId}`)
       .on(
         "postgres_changes",
         {
@@ -1780,11 +1856,11 @@ export default function Rotations() {
         },
         (payload) => {
           const row = payload.new || payload.old;
-          if (!row || row.scope_key !== ROTATIONS_GLOBAL_SCOPE_KEY) return;
+          if (!row || row.scope_key !== globalScopeKey(monitoredTeamScope)) return;
           const parsed = parseSharedStateRow(row);
           applyRemotePlayers({
             updatedAt: parsed.updatedAt,
-            players: normalizePlayers(parsed.payload?.players),
+            players: normalizePlayers(parsed.payload?.players, monitoredTeamScope),
           });
         }
       )
@@ -1798,7 +1874,7 @@ export default function Rotations() {
         },
         (payload) => {
           const row = payload.new || payload.old;
-          if (!row || row.scope_key !== ROTATIONS_GLOBAL_SCOPE_KEY) return;
+          if (!row || row.scope_key !== globalScopeKey(monitoredTeamScope)) return;
           const parsed = parseSharedStateRow(row);
           applyRemoteDepthTemplate({
             updatedAt: parsed.updatedAt,
@@ -1821,7 +1897,7 @@ export default function Rotations() {
           const parsed = parseSharedStateRow(row);
           applyRemoteGameState({
             updatedAt: Number(parsed.payload?.updatedAt || parsed.updatedAt || 0),
-            state: normalizeGameState(parsed.payload),
+            state: normalizeGameState(parsed.payload, monitoredTeamScope),
           });
         }
       )
@@ -1830,7 +1906,7 @@ export default function Rotations() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [gameId]);
+  }, [gameId, monitoredTeamScope]);
 
   const getRowValues = (quarter, minuteIndex) => (lineups[quarter]?.[minuteIndex] || []);
 
@@ -1854,13 +1930,13 @@ export default function Rotations() {
     return <div className={styles.stateMessage}>Unable to load rotations.</div>;
   }
 
-  if (!washingtonGame) {
+  if (!rotationsAvailable) {
     return (
       <div className={styles.page}>
         <div className={styles.topRow}>
           <Link className={styles.backButton} to={backUrl}>Back</Link>
         </div>
-        <div className={styles.stateMessage}>Rotations is available only for Washington games.</div>
+        <div className={styles.stateMessage}>Rotations is available only for Washington and Capital City games.</div>
       </div>
     );
   }

@@ -322,6 +322,14 @@ const isWashingtonTeam = (team) => {
   return tricode === "WAS" || name.includes("washington") || name.includes("wizards");
 };
 
+const isCapitalCityTeam = (team) => {
+  const tricode = String(team?.teamTricode || "").toUpperCase();
+  const name = `${team?.teamCity || ""} ${team?.teamName || ""}`.toLowerCase();
+  return tricode === "CCG" || name.includes("capital city") || name.includes("go-go") || name.includes("gogo");
+};
+
+const isRotationsTeam = (team) => isWashingtonTeam(team) || isCapitalCityTeam(team);
+
 const parseTeamFoulMarker = (description) => {
   if (!description) return null;
   const text = String(description);
@@ -553,6 +561,7 @@ export default function Game({ variant = "full" }) {
 
   const { homeTeam, awayTeam, teamStats, boxScore, officials, callsAgainst } = game || {};
   const isWashingtonGame = isWashingtonTeam(homeTeam) || isWashingtonTeam(awayTeam);
+  const isRotationsGame = isRotationsTeam(homeTeam) || isRotationsTeam(awayTeam);
   const [publishedOfficialOrder, setPublishedOfficialOrder] = useState(null);
   const timeouts = game?.timeouts;
   const isPregame = game?.gameStatus === 1;
@@ -1665,7 +1674,7 @@ export default function Game({ variant = "full" }) {
               Pre-Game
             </Link>
           )}
-          {showExtras && isWashingtonGame && (
+          {showExtras && isRotationsGame && (
             <Link
               className={styles.backButton}
               to={dateParam ? `/g/${gameId}/rotations?d=${dateParam}` : `/g/${gameId}/rotations`}
