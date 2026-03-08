@@ -823,10 +823,10 @@ function drawRotationsPdfPage(page, { headerLine, depthChart, lineups, logoImage
   const pageHeight = page.getHeight();
   const columnWidth = 4.05 * 72;
   const columnX = side === "left" ? (0.1 * 72) : (pageWidth - (0.1 * 72) - columnWidth);
-  const headerTop = pageHeight - (0.84 * 72);
-  const contentTop = pageHeight - (1.22 * 72);
+  const headerTop = pageHeight - (0.54 * 72);
+  const contentTop = pageHeight - (0.92 * 72);
   const logoSize = 0.62 * 72;
-  const logoBottom = 0.22 * 72;
+  const logoBottom = 0.52 * 72;
 
   drawCenteredPdfText(page, headerLine, font, 18, columnX, headerTop, columnWidth, PDF_COLORS.bodyText);
 
