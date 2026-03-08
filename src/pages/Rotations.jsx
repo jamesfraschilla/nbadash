@@ -590,6 +590,7 @@ function hexToRgbColor(hex) {
 
 const PDF_COLORS = {
   black: hexToRgbColor("#000000"),
+  red: hexToRgbColor("#c8102e"),
   white: hexToRgbColor("#ffffff"),
   border: hexToRgbColor("#8c8c8c"),
   headerFill: hexToRgbColor("#efefef"),
@@ -695,7 +696,7 @@ function drawPdfDepthChart(page, font, x, topY, width, depthChart) {
     y: topY - titleHeight,
     width: tableWidth,
     height: titleHeight,
-    color: PDF_COLORS.black,
+    color: PDF_COLORS.red,
     borderColor: PDF_COLORS.border,
     borderWidth: 1,
   });
@@ -751,7 +752,7 @@ function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideN
     y: topY - titleHeight,
     width,
     height: titleHeight,
-    color: PDF_COLORS.black,
+    color: PDF_COLORS.red,
     borderColor: PDF_COLORS.border,
     borderWidth: 1,
   });
