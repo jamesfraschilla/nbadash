@@ -52,7 +52,10 @@ const DEFAULT_DEPTH_ROWS = [
   ["TRAE", "TRE", "BC", "LB", "JR"],
   ["SC", "BUB", "JH", "WR", "AG"],
   ["", "", "", "", ""],
+  ["", "", "", "", ""],
 ];
+
+const DEPTH_ROW_INDICES = DEFAULT_DEPTH_ROWS.map((_, index) => index);
 
 const createDefaultQuarterLineups = () => ({
   1: MINUTES.map(() => Array.from({ length: POSITION_COLUMNS.length }, () => "")),
@@ -122,7 +125,7 @@ function normalizePlayers(rawPlayers) {
 function normalizeDepthChart(rawDepth) {
   const fallback = createDefaultDepthChart();
   if (!Array.isArray(rawDepth)) return fallback;
-  return [0, 1, 2].map((rowIndex) => {
+  return DEPTH_ROW_INDICES.map((rowIndex) => {
     const row = Array.isArray(rawDepth[rowIndex]) ? rawDepth[rowIndex] : [];
     return POSITION_COLUMNS.map((_, columnIndex) => normalizeName(row[columnIndex] || ""));
   });
@@ -444,7 +447,7 @@ function renderExportDepthChart(depthChart) {
           <tr>${POSITION_COLUMNS.map((position) => `<th>${position}</th>`).join("")}</tr>
         </thead>
         <tbody>
-          ${[0, 1, 2].map((rowIndex) => `
+          ${DEPTH_ROW_INDICES.map((rowIndex) => `
             <tr>
               ${POSITION_COLUMNS.map((_, columnIndex) => `<td>${escapeHtml(depthChart?.[rowIndex]?.[columnIndex] || "")}</td>`).join("")}
             </tr>
@@ -722,7 +725,7 @@ function drawPdfDepthChart(page, font, x, topY, width, depthChart) {
     });
   });
 
-  [0, 1, 2].forEach((rowIndex) => {
+  DEPTH_ROW_INDICES.forEach((rowIndex) => {
     const rowY = headerY - ((rowIndex + 1) * rowHeight);
     POSITION_COLUMNS.forEach((_, index) => {
       drawPdfCell(page, {
@@ -737,7 +740,7 @@ function drawPdfDepthChart(page, font, x, topY, width, depthChart) {
     });
   });
 
-  return titleHeight + headerHeight + (rowHeight * 3);
+  return titleHeight + headerHeight + (rowHeight * DEPTH_ROW_INDICES.length);
 }
 
 function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideNamesOnDuplicateRows) {
@@ -1576,7 +1579,7 @@ export default function Rotations() {
     if (!name) return;
     const nextVersion = createVersionState({
       name,
-      depthChart: mode === "copy" ? depthChart : [0, 1, 2].map(() => POSITION_COLUMNS.map(() => "")),
+      depthChart: mode === "copy" ? depthChart : DEPTH_ROW_INDICES.map(() => POSITION_COLUMNS.map(() => "")),
       lineups: mode === "copy" ? lineups : createDefaultQuarterLineups(),
       inheritDepthTemplate: false,
       options: mode === "copy" ? versionDisplayOptions : DEFAULT_VERSION_OPTIONS,
@@ -2137,7 +2140,7 @@ export default function Rotations() {
               </tr>
             </thead>
             <tbody>
-              {[0, 1, 2].map((rowIndex) => (
+              {DEPTH_ROW_INDICES.map((rowIndex) => (
                 <tr key={`depth-row-${rowIndex}`}>
                   {POSITION_COLUMNS.map((position) => {
                     const columnIndex = position - 1;
