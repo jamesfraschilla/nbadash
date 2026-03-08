@@ -818,8 +818,8 @@ function drawRotationsPdfPage(page, { headerLine, depthChart, lineups, logoImage
   const pageHeight = page.getHeight();
   const columnWidth = 4.12 * 72;
   const columnX = side === "left" ? (0.1 * 72) : (pageWidth - (0.1 * 72) - columnWidth);
-  const headerTop = pageHeight - (0.28 * 72);
-  const contentTop = pageHeight - (0.72 * 72);
+  const headerTop = pageHeight - (0.44 * 72);
+  const contentTop = pageHeight - (0.82 * 72);
   const logoSize = 0.62 * 72;
   const logoBottom = 0.22 * 72;
 
