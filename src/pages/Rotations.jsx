@@ -162,10 +162,14 @@ function normalizeName(value) {
   return String(value || "").trim().replace(/\s+/g, " ").toUpperCase();
 }
 
+function normalizePlayerNameInput(value) {
+  return String(value || "").toUpperCase();
+}
+
 function normalizePlayers(rawPlayers, teamScope = "washington") {
   const normalized = (Array.isArray(rawPlayers) ? rawPlayers : []).slice(0, 17).map((player, index) => ({
     id: String(player?.id || `p${index + 1}`),
-    name: normalizeName(player?.name),
+    name: normalizePlayerNameInput(player?.name),
     cap: player?.cap === "" ? "" : (Number.isFinite(Number(player?.cap)) ? Number(player.cap) : 48),
   }));
   while (normalized.length < 17) {
@@ -1337,10 +1341,14 @@ export default function Rotations() {
       return;
     }
 
-    const updatedAt = Date.now();
-    playersUpdatedAtRef.current = updatedAt;
-    persistPlayers(monitoredTeamScope, players, updatedAt);
-    saveRemotePlayers(monitoredTeamScope, players, updatedAt);
+    const timeoutId = window.setTimeout(() => {
+      const updatedAt = Date.now();
+      playersUpdatedAtRef.current = updatedAt;
+      persistPlayers(monitoredTeamScope, players, updatedAt);
+      saveRemotePlayers(monitoredTeamScope, players, updatedAt);
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
   }, [players, playersHydrated, monitoredTeamScope]);
 
   useEffect(() => {
@@ -1490,7 +1498,7 @@ export default function Rotations() {
         const parsed = Number.parseInt(value, 10);
         return { ...player, cap: Number.isFinite(parsed) ? parsed : player.cap };
       }
-      return { ...player, [field]: normalizeName(value) };
+      return { ...player, [field]: normalizePlayerNameInput(value) };
     }));
   };
 
