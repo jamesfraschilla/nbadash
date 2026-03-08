@@ -696,6 +696,8 @@ function drawPdfDepthChart(page, font, x, topY, width, depthChart) {
     width: tableWidth,
     height: titleHeight,
     color: PDF_COLORS.black,
+    borderColor: PDF_COLORS.border,
+    borderWidth: 1,
   });
   page.drawText("Depth Chart", {
     x: x + 6,
@@ -750,6 +752,8 @@ function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideN
     width,
     height: titleHeight,
     color: PDF_COLORS.black,
+    borderColor: PDF_COLORS.border,
+    borderWidth: 1,
   });
   page.drawText(`${quarterLabel(quarter)} Quarter`, {
     x: x + 6,
