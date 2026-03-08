@@ -1,6 +1,8 @@
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import fontkit from "@pdf-lib/fontkit";
+import { PDFDocument, rgb } from "pdf-lib";
 import { fetchGame } from "../api.js";
 import { supabase } from "../supabaseClient.js";
 import wizardsLogoUrl from "../assets/WWizards_Primary_Icon.png";
@@ -571,6 +573,273 @@ function renderExportQuarterTable(quarter, lineups, hideNamesOnDuplicateRows = f
       </table>
     </section>
   `;
+}
+
+function hexToRgbColor(hex) {
+  const normalized = String(hex || "").replace("#", "");
+  const expanded = normalized.length === 3
+    ? normalized.split("").map((char) => `${char}${char}`).join("")
+    : normalized;
+  const safeHex = expanded.padEnd(6, "0").slice(0, 6);
+  const value = Number.parseInt(safeHex, 16);
+  const red = ((value >> 16) & 255) / 255;
+  const green = ((value >> 8) & 255) / 255;
+  const blue = (value & 255) / 255;
+  return rgb(red, green, blue);
+}
+
+const PDF_COLORS = {
+  black: hexToRgbColor("#000000"),
+  white: hexToRgbColor("#ffffff"),
+  border: hexToRgbColor("#8c8c8c"),
+  headerFill: hexToRgbColor("#efefef"),
+  bodyText: hexToRgbColor("#111111"),
+  duplicateFill: hexToRgbColor("#fff2cc"),
+  subInFill: hexToRgbColor("#d9ead3"),
+  subOutFill: hexToRgbColor("#f4cccc"),
+};
+
+function drawCenteredPdfText(page, text, font, size, x, y, width, color = PDF_COLORS.bodyText) {
+  const safeText = String(text || "");
+  const textWidth = font.widthOfTextAtSize(safeText, size);
+  page.drawText(safeText, {
+    x: x + Math.max(0, (width - textWidth) / 2),
+    y,
+    size,
+    font,
+    color,
+  });
+}
+
+function drawPdfCell(page, {
+  x,
+  y,
+  width,
+  height,
+  text = "",
+  font,
+  fontSize = 10,
+  fillColor = PDF_COLORS.white,
+  textColor = PDF_COLORS.bodyText,
+  borderColor = PDF_COLORS.border,
+}) {
+  page.drawRectangle({
+    x,
+    y,
+    width,
+    height,
+    color: fillColor,
+    borderColor,
+    borderWidth: 1,
+  });
+
+  if (text) {
+    const textWidth = font.widthOfTextAtSize(text, fontSize);
+    const textX = x + Math.max(0, (width - textWidth) / 2);
+    const textY = y + (height - fontSize) / 2 + 1;
+    page.drawText(text, {
+      x: textX,
+      y: textY,
+      size: fontSize,
+      font,
+      color: textColor,
+    });
+  }
+}
+
+function getExportCellDisplay(lineups, quarter, minuteIndex, positionIndex, hideNamesOnDuplicateRows) {
+  const rowValues = getExportRowValues(lineups, quarter, minuteIndex);
+  const previousRowValues = getExportPreviousRowValues(lineups, quarter, minuteIndex);
+  const nextRowValues = getExportNextRowValues(lineups, quarter, minuteIndex);
+  const cellState = getQuarterCellState({
+    rowValues,
+    previousRowValues,
+    nextRowValues,
+    positionIndex,
+    hideNamesOnDuplicateRows,
+    minuteIndex,
+  });
+
+  if (!cellState.normalizedValue) {
+    return { text: "", fillColor: PDF_COLORS.white };
+  }
+
+  if (cellState.hideRowNames) {
+    return {
+      text: "",
+      fillColor: cellState.isSubIn ? PDF_COLORS.subInFill : PDF_COLORS.white,
+    };
+  }
+
+  if (cellState.isSubOut) {
+    return { text: cellState.value, fillColor: PDF_COLORS.subOutFill };
+  }
+  if (cellState.isSubIn) {
+    return { text: cellState.value, fillColor: PDF_COLORS.subInFill };
+  }
+  if (cellState.hasDuplicate) {
+    return { text: cellState.value, fillColor: PDF_COLORS.duplicateFill };
+  }
+  return { text: cellState.value, fillColor: PDF_COLORS.white };
+}
+
+function drawPdfDepthChart(page, font, x, topY, width, depthChart) {
+  const titleHeight = 20;
+  const headerHeight = 18;
+  const rowHeight = 18;
+  const tableWidth = width;
+  const colWidth = tableWidth / POSITION_COLUMNS.length;
+
+  page.drawRectangle({
+    x,
+    y: topY - titleHeight,
+    width: tableWidth,
+    height: titleHeight,
+    color: PDF_COLORS.black,
+  });
+  page.drawText("Depth Chart", {
+    x: x + 6,
+    y: topY - titleHeight + 5,
+    size: 10,
+    font,
+    color: PDF_COLORS.white,
+  });
+
+  const headerY = topY - titleHeight - headerHeight;
+  POSITION_COLUMNS.forEach((position, index) => {
+    drawPdfCell(page, {
+      x: x + (index * colWidth),
+      y: headerY,
+      width: colWidth,
+      height: headerHeight,
+      text: String(position),
+      font,
+      fontSize: 9,
+      fillColor: PDF_COLORS.headerFill,
+    });
+  });
+
+  [0, 1, 2].forEach((rowIndex) => {
+    const rowY = headerY - ((rowIndex + 1) * rowHeight);
+    POSITION_COLUMNS.forEach((_, index) => {
+      drawPdfCell(page, {
+        x: x + (index * colWidth),
+        y: rowY,
+        width: colWidth,
+        height: rowHeight,
+        text: depthChart?.[rowIndex]?.[index] || "",
+        font,
+        fontSize: 8.5,
+      });
+    });
+  });
+
+  return titleHeight + headerHeight + (rowHeight * 3);
+}
+
+function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideNamesOnDuplicateRows) {
+  const titleHeight = 20;
+  const headerHeight = 18;
+  const rowHeight = 18;
+  const timeColWidth = 30;
+  const playerColWidth = (width - timeColWidth) / POSITION_COLUMNS.length;
+
+  page.drawRectangle({
+    x,
+    y: topY - titleHeight,
+    width,
+    height: titleHeight,
+    color: PDF_COLORS.black,
+  });
+  page.drawText(`${quarterLabel(quarter)} Quarter`, {
+    x: x + 6,
+    y: topY - titleHeight + 5,
+    size: 10,
+    font,
+    color: PDF_COLORS.white,
+  });
+
+  const headerY = topY - titleHeight - headerHeight;
+  drawPdfCell(page, {
+    x,
+    y: headerY,
+    width: timeColWidth,
+    height: headerHeight,
+    text: "",
+    font,
+    fontSize: 9,
+    fillColor: PDF_COLORS.headerFill,
+  });
+  POSITION_COLUMNS.forEach((position, index) => {
+    drawPdfCell(page, {
+      x: x + timeColWidth + (index * playerColWidth),
+      y: headerY,
+      width: playerColWidth,
+      height: headerHeight,
+      text: String(position),
+      font,
+      fontSize: 9,
+      fillColor: PDF_COLORS.headerFill,
+    });
+  });
+
+  MINUTES.forEach((minute, minuteIndex) => {
+    const rowY = headerY - ((minuteIndex + 1) * rowHeight);
+    drawPdfCell(page, {
+      x,
+      y: rowY,
+      width: timeColWidth,
+      height: rowHeight,
+      text: String(minute),
+      font,
+      fontSize: 8.5,
+    });
+
+    POSITION_COLUMNS.forEach((_, index) => {
+      const display = getExportCellDisplay(lineups, quarter, minuteIndex, index, hideNamesOnDuplicateRows);
+      drawPdfCell(page, {
+        x: x + timeColWidth + (index * playerColWidth),
+        y: rowY,
+        width: playerColWidth,
+        height: rowHeight,
+        text: display.text,
+        font,
+        fontSize: 8.2,
+        fillColor: display.fillColor,
+      });
+    });
+  });
+
+  return titleHeight + headerHeight + (rowHeight * MINUTES.length);
+}
+
+function drawRotationsPdfPage(page, { headerLine, depthChart, lineups, logoImage, font, side, hideNamesOnDuplicateRows }) {
+  const pageWidth = page.getWidth();
+  const pageHeight = page.getHeight();
+  const columnWidth = 4.12 * 72;
+  const columnX = side === "left" ? (0.1 * 72) : (pageWidth - (0.1 * 72) - columnWidth);
+  const headerTop = pageHeight - (0.28 * 72);
+  const contentTop = pageHeight - (0.72 * 72);
+  const logoSize = 0.62 * 72;
+  const logoBottom = 0.22 * 72;
+
+  drawCenteredPdfText(page, headerLine, font, 18, columnX, headerTop, columnWidth, PDF_COLORS.bodyText);
+
+  let currentTop = contentTop;
+  currentTop -= drawPdfDepthChart(page, font, columnX, currentTop, columnWidth, depthChart);
+  currentTop -= 8;
+  currentTop -= drawPdfQuarterTable(page, font, columnX, currentTop, columnWidth, side === "left" ? 1 : 3, lineups, hideNamesOnDuplicateRows);
+  currentTop -= 8;
+  currentTop -= drawPdfQuarterTable(page, font, columnX, currentTop, columnWidth, side === "left" ? 2 : 4, lineups, hideNamesOnDuplicateRows);
+
+  if (logoImage) {
+    page.drawImage(logoImage, {
+      x: columnX + ((columnWidth - logoSize) / 2),
+      y: logoBottom,
+      width: logoSize,
+      height: logoSize,
+    });
+  }
 }
 
 function buildRotationsPdfHtml({ headerLine, depthChart, lineups, logoUrl, fontUrl, hideNamesOnDuplicateRows = false }) {
@@ -1330,55 +1599,54 @@ export default function Rotations() {
     setVersionMenuOpen(false);
   };
 
-  const handleExportPdf = () => {
+  const handleExportPdf = async () => {
     if (typeof window === "undefined") return;
-    const logoUrl = new URL(wizardsLogoUrl, window.location.href).href;
     const fontUrl = new URL(dinAltFontUrl, window.location.href).href;
-    const html = buildRotationsPdfHtml({
+    const logoUrl = new URL(wizardsLogoUrl, window.location.href).href;
+    const [fontResponse, logoResponse] = await Promise.all([
+      fetch(fontUrl),
+      fetch(logoUrl),
+    ]);
+    const [fontBytes, logoBytes] = await Promise.all([
+      fontResponse.arrayBuffer(),
+      logoResponse.arrayBuffer(),
+    ]);
+
+    const pdfDoc = await PDFDocument.create();
+    pdfDoc.registerFontkit(fontkit);
+    const pdfFont = await pdfDoc.embedFont(fontBytes, { subset: true });
+    const logoImage = await pdfDoc.embedPng(logoBytes);
+
+    const pageOne = pdfDoc.addPage([612, 792]);
+    const pageTwo = pdfDoc.addPage([612, 792]);
+
+    drawRotationsPdfPage(pageOne, {
       headerLine: exportHeaderLine,
       depthChart,
       lineups,
-      logoUrl,
-      fontUrl,
+      logoImage,
+      font: pdfFont,
+      side: "left",
       hideNamesOnDuplicateRows: versionDisplayOptions.hideNamesOnDuplicateRows,
     });
-    const blob = new Blob([html], { type: "text/html" });
+    drawRotationsPdfPage(pageTwo, {
+      headerLine: exportHeaderLine,
+      depthChart,
+      lineups,
+      logoImage,
+      font: pdfFont,
+      side: "right",
+      hideNamesOnDuplicateRows: versionDisplayOptions.hideNamesOnDuplicateRows,
+    });
+
+    const pdfBytes = await pdfDoc.save();
+    const blob = new Blob([pdfBytes], { type: "application/pdf" });
     const blobUrl = window.URL.createObjectURL(blob);
-    const exportWindow = window.open(blobUrl, "_blank");
-    if (!exportWindow) {
-      window.URL.revokeObjectURL(blobUrl);
-      return;
-    }
-
-    const cleanup = () => {
-      window.setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
-    };
-
-    const triggerPrint = () => {
-      try {
-        exportWindow.focus();
-        exportWindow.print();
-      } finally {
-        cleanup();
-      }
-    };
-
-    const pollReady = window.setInterval(() => {
-      try {
-        if (exportWindow.closed) {
-          window.clearInterval(pollReady);
-          cleanup();
-          return;
-        }
-        if (exportWindow.document?.readyState === "complete") {
-          window.clearInterval(pollReady);
-          window.setTimeout(triggerPrint, 250);
-        }
-      } catch {
-        window.clearInterval(pollReady);
-        cleanup();
-      }
-    }, 100);
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.download = `rotations-${gameId || "game"}.pdf`;
+    link.click();
+    window.setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
   };
 
   const toggleSection = (key) => {
