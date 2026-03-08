@@ -816,7 +816,7 @@ function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideN
 function drawRotationsPdfPage(page, { headerLine, depthChart, lineups, logoImage, font, side, hideNamesOnDuplicateRows }) {
   const pageWidth = page.getWidth();
   const pageHeight = page.getHeight();
-  const columnWidth = 4.12 * 72;
+  const columnWidth = 4.05 * 72;
   const columnX = side === "left" ? (0.1 * 72) : (pageWidth - (0.1 * 72) - columnWidth);
   const headerTop = pageHeight - (0.44 * 72);
   const contentTop = pageHeight - (0.82 * 72);
