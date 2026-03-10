@@ -1868,6 +1868,20 @@ export default function Rotations() {
     });
   };
 
+  const backUpDepthChartNow = () => {
+    if (!monitoredTeamScope) return;
+    const nextDepthChart = normalizeDepthChart(depthChart, monitoredTeamScope);
+    const sourceGameId = String(gameId || "");
+    const updatedAt = Date.now();
+    depthTemplateSourceGameIdRef.current = sourceGameId;
+    depthTemplateUpdatedAtRef.current = updatedAt;
+    depthTemplateStateKeyRef.current = depthChartStateKey(nextDepthChart);
+    skipDepthTemplateSaveRef.current = true;
+    persistDepthTemplate(monitoredTeamScope, nextDepthChart, updatedAt, sourceGameId);
+    saveRemoteDepthTemplate(monitoredTeamScope, nextDepthChart, updatedAt, sourceGameId);
+    setDepthTemplate(nextDepthChart);
+  };
+
   const updateLineupCell = (quarter, minuteIndex, positionIndex, value) => {
     updateActiveVersion((currentVersion) => {
       lineupHistoryRef.current = [...lineupHistoryRef.current, currentVersion.lineups].slice(-MAX_LINEUP_HISTORY);
@@ -2750,6 +2764,13 @@ export default function Rotations() {
         <div className={styles.sectionHeaderRow}>
           <button type="button" className={styles.sectionHeaderButton} onClick={() => toggleSection("depth")}>
             Depth Chart
+          </button>
+          <button
+            type="button"
+            className={styles.sectionHeaderAction}
+            onClick={backUpDepthChartNow}
+          >
+            Back Up Now
           </button>
           <button
             type="button"
