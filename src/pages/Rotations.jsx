@@ -2027,7 +2027,11 @@ export default function Rotations() {
 
   const handleExportPdf = async () => {
     if (typeof window === "undefined") return;
-    const pdfWindow = window.open("", "_blank", "noopener,noreferrer");
+    const pdfWindow = window.open("", "_blank");
+    if (pdfWindow?.document) {
+      pdfWindow.document.title = "Generating Rotations PDF...";
+      pdfWindow.document.body.innerHTML = "<p style=\"font-family: sans-serif; padding: 16px;\">Generating PDF...</p>";
+    }
     const fontUrl = new URL(dinAltFontUrl, window.location.href).href;
     const logoUrl = new URL(wizardsLogoUrl, window.location.href).href;
     const [fontResponse, logoResponse] = await Promise.all([
@@ -2070,7 +2074,12 @@ export default function Rotations() {
     const blob = new Blob([pdfBytes], { type: "application/pdf" });
     const blobUrl = window.URL.createObjectURL(blob);
     if (pdfWindow) {
-      pdfWindow.location.replace(blobUrl);
+      pdfWindow.location.href = blobUrl;
+      try {
+        pdfWindow.opener = null;
+      } catch {
+        // Ignore browsers that do not allow resetting opener.
+      }
     } else {
       window.open(blobUrl, "_blank", "noopener,noreferrer");
     }
