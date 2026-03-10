@@ -13,7 +13,6 @@ import MiscStats from "../components/MiscStats.jsx";
 import CreatingDisruption from "../components/CreatingDisruption.jsx";
 import SegmentSelector from "../components/SegmentSelector.jsx";
 import { fetchPublishedOrderForOfficials } from "../officialAssignments.js";
-import rosters from "../data/rosters.json";
 import {
   aggregateSegmentStats,
   computeKills,
@@ -1071,19 +1070,10 @@ export default function Game({ variant = "full" }) {
         isPregame || player.minutes !== "00:00" || player.points > 0 || player.reboundsTotal > 0
       ));
 
-  const getRosterPlayers = (teamId) => {
-    const key = teamId != null ? String(teamId) : "";
-    const entry = rosters?.[key] ?? rosters?.[Number(key)];
-    if (!entry) return [];
-    if (Array.isArray(entry)) return entry;
-    if (Array.isArray(entry.players)) return entry.players;
-    return [];
-  };
-
   const hasBoxScorePlayers =
     (boxScore?.away?.players?.length || 0) > 0 || (boxScore?.home?.players?.length || 0) > 0;
-  const awaySourcePlayers = hasBoxScorePlayers ? (boxScore?.away?.players || []) : getRosterPlayers(awayTeam?.teamId);
-  const homeSourcePlayers = hasBoxScorePlayers ? (boxScore?.home?.players || []) : getRosterPlayers(homeTeam?.teamId);
+  const awaySourcePlayers = boxScore?.away?.players || [];
+  const homeSourcePlayers = boxScore?.home?.players || [];
   const awayPlayers = buildPlayers(awaySourcePlayers, { forceZeros: !hasBoxScorePlayers });
   const homePlayers = buildPlayers(homeSourcePlayers, { forceZeros: !hasBoxScorePlayers });
 
