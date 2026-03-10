@@ -1848,7 +1848,7 @@ export default function Rotations() {
       return {
         ...currentVersion,
         depthChart: next,
-        inheritDepthTemplate: activeVersionId === FINAL_VERSION_ID ? false : currentVersion.inheritDepthTemplate,
+        inheritDepthTemplate: currentVersion.inheritDepthTemplate,
       };
     });
   };
@@ -1863,7 +1863,7 @@ export default function Rotations() {
       return {
         ...currentVersion,
         depthChart: emptyDepthChart,
-        inheritDepthTemplate: activeVersionId === FINAL_VERSION_ID ? false : currentVersion.inheritDepthTemplate,
+        inheritDepthTemplate: currentVersion.inheritDepthTemplate,
       };
     });
   };
@@ -2770,7 +2770,7 @@ export default function Rotations() {
             className={styles.sectionHeaderAction}
             onClick={backUpDepthChartNow}
           >
-            Back Up Now
+            Sync
           </button>
           <button
             type="button"
