@@ -362,6 +362,24 @@ function parseSharedStateRow(row) {
   return { updatedAt, payload };
 }
 
+function playersStateKey(players) {
+  return JSON.stringify(
+    (players || []).map((player) => ({
+      id: String(player?.id || ""),
+      name: String(player?.name || ""),
+      cap: player?.cap === "" ? "" : Number(player?.cap || 0),
+    }))
+  );
+}
+
+function depthChartStateKey(depthChart) {
+  return JSON.stringify(depthChart || []);
+}
+
+function gameStateKey(state) {
+  return JSON.stringify(state || {});
+}
+
 async function fetchRemotePlayers(teamScope) {
   if (!supabase || !teamScope) return null;
   const { data, error } = await supabase
@@ -1113,6 +1131,9 @@ export default function Rotations() {
   const depthTemplateUpdatedAtRef = useRef(0);
   const depthTemplateSourceGameIdRef = useRef("");
   const gameUpdatedAtRef = useRef(0);
+  const playersStateKeyRef = useRef(playersStateKey(createDefaultPlayers()));
+  const depthTemplateStateKeyRef = useRef(depthChartStateKey(createDefaultDepthChart()));
+  const gameStateKeyRef = useRef(gameStateKey(createDefaultGameState()));
   const skipPlayersSaveRef = useRef(false);
   const skipDepthTemplateSaveRef = useRef(false);
   const skipGameSaveRef = useRef(false);
@@ -1245,14 +1266,18 @@ export default function Rotations() {
     if (remotePlayers?.players?.length && remoteUpdatedAt >= localUpdatedAt) {
       setPlayers(remotePlayers.players);
       playersUpdatedAtRef.current = remoteUpdatedAt;
+      playersStateKeyRef.current = playersStateKey(remotePlayers.players);
       skipPlayersSaveRef.current = true;
     } else if (localPayload?.players?.length) {
       setPlayers(localPayload.players);
       playersUpdatedAtRef.current = localUpdatedAt;
+      playersStateKeyRef.current = playersStateKey(localPayload.players);
       skipPlayersSaveRef.current = true;
     } else {
-      setPlayers(createDefaultPlayers(monitoredTeamScope));
+      const defaultPlayers = createDefaultPlayers(monitoredTeamScope);
+      setPlayers(defaultPlayers);
       playersUpdatedAtRef.current = Date.now();
+      playersStateKeyRef.current = playersStateKey(defaultPlayers);
       skipPlayersSaveRef.current = true;
     }
 
@@ -1271,15 +1296,19 @@ export default function Rotations() {
       setDepthTemplate(remoteDepthTemplate.depthChart);
       depthTemplateUpdatedAtRef.current = remoteUpdatedAt;
       depthTemplateSourceGameIdRef.current = String(remoteDepthTemplate.sourceGameId || "");
+      depthTemplateStateKeyRef.current = depthChartStateKey(remoteDepthTemplate.depthChart);
       skipDepthTemplateSaveRef.current = true;
     } else if (localPayload?.depthChart) {
       setDepthTemplate(localPayload.depthChart);
       depthTemplateUpdatedAtRef.current = localUpdatedAt;
       depthTemplateSourceGameIdRef.current = String(localPayload.sourceGameId || "");
+      depthTemplateStateKeyRef.current = depthChartStateKey(localPayload.depthChart);
       skipDepthTemplateSaveRef.current = true;
     } else {
-      setDepthTemplate(createDefaultDepthChart(monitoredTeamScope));
+      const defaultDepth = createDefaultDepthChart(monitoredTeamScope);
+      setDepthTemplate(defaultDepth);
       depthTemplateUpdatedAtRef.current = Date.now();
+      depthTemplateStateKeyRef.current = depthChartStateKey(defaultDepth);
       skipDepthTemplateSaveRef.current = true;
     }
 
@@ -1315,16 +1344,21 @@ export default function Rotations() {
     const localUpdatedAt = Number(localPayload?.updatedAt || 0);
     const remoteUpdatedAt = Number(remoteGameState?.updatedAt || 0);
     if (remoteGameState?.state && remoteUpdatedAt >= localUpdatedAt) {
-      setGameState(applyInheritedTemplate(normalizeGameState(remoteGameState.state, monitoredTeamScope)));
+      const incomingState = applyInheritedTemplate(normalizeGameState(remoteGameState.state, monitoredTeamScope));
+      setGameState(incomingState);
       gameUpdatedAtRef.current = remoteUpdatedAt;
+      gameStateKeyRef.current = gameStateKey(incomingState);
       skipGameSaveRef.current = true;
     } else if (localPayload?.state) {
-      setGameState(applyInheritedTemplate(normalizeGameState(localPayload.state, monitoredTeamScope)));
+      const incomingState = applyInheritedTemplate(normalizeGameState(localPayload.state, monitoredTeamScope));
+      setGameState(incomingState);
       gameUpdatedAtRef.current = localUpdatedAt;
+      gameStateKeyRef.current = gameStateKey(incomingState);
       skipGameSaveRef.current = true;
     } else {
       setGameState(defaults);
       gameUpdatedAtRef.current = Date.now();
+      gameStateKeyRef.current = gameStateKey(defaults);
       skipGameSaveRef.current = true;
     }
 
@@ -1352,6 +1386,10 @@ export default function Rotations() {
   }, [players, playersHydrated, monitoredTeamScope]);
 
   useEffect(() => {
+    playersStateKeyRef.current = playersStateKey(players);
+  }, [players]);
+
+  useEffect(() => {
     if (!monitoredTeamScope) return;
     if (!depthTemplateHydrated) return;
 
@@ -1373,6 +1411,10 @@ export default function Rotations() {
   }, [depthTemplate, depthTemplateHydrated, monitoredTeamScope]);
 
   useEffect(() => {
+    depthTemplateStateKeyRef.current = depthChartStateKey(depthTemplate);
+  }, [depthTemplate]);
+
+  useEffect(() => {
     if (!monitoredTeamScope) return;
     if (!gameHydrated || !gameId) return;
 
@@ -1388,6 +1430,10 @@ export default function Rotations() {
     persistGameState(gameId, state, updatedAt);
     saveRemoteGameState(gameId, state, updatedAt);
   }, [gameState, gameHydrated, gameId, monitoredTeamScope]);
+
+  useEffect(() => {
+    gameStateKeyRef.current = gameStateKey(gameState);
+  }, [gameState]);
 
   useEffect(() => {
     if (!playersHydrated) return;
@@ -1794,8 +1840,14 @@ export default function Rotations() {
     const remoteUpdatedAt = Number(payload?.updatedAt || 0);
     if (!remoteUpdatedAt || remoteUpdatedAt <= playersUpdatedAtRef.current) return;
     const incomingPlayers = normalizePlayers(payload?.players || [], monitoredTeamScope || "washington");
+    const incomingKey = playersStateKey(incomingPlayers);
+    if (incomingKey === playersStateKeyRef.current) {
+      playersUpdatedAtRef.current = remoteUpdatedAt;
+      return;
+    }
     setPlayers(incomingPlayers);
     playersUpdatedAtRef.current = remoteUpdatedAt;
+    playersStateKeyRef.current = incomingKey;
     skipPlayersSaveRef.current = true;
     persistPlayers(monitoredTeamScope, incomingPlayers, remoteUpdatedAt);
   };
@@ -1804,9 +1856,16 @@ export default function Rotations() {
     const remoteUpdatedAt = Number(payload?.updatedAt || 0);
     if (!remoteUpdatedAt || remoteUpdatedAt <= depthTemplateUpdatedAtRef.current) return;
     const incomingDepth = normalizeDepthChart(payload?.depthChart, monitoredTeamScope || "washington");
+    const incomingKey = depthChartStateKey(incomingDepth);
+    if (incomingKey === depthTemplateStateKeyRef.current) {
+      depthTemplateUpdatedAtRef.current = remoteUpdatedAt;
+      depthTemplateSourceGameIdRef.current = String(payload?.sourceGameId || "");
+      return;
+    }
     setDepthTemplate(incomingDepth);
     depthTemplateUpdatedAtRef.current = remoteUpdatedAt;
     depthTemplateSourceGameIdRef.current = String(payload?.sourceGameId || "");
+    depthTemplateStateKeyRef.current = incomingKey;
     skipDepthTemplateSaveRef.current = true;
     persistDepthTemplate(monitoredTeamScope, incomingDepth, remoteUpdatedAt, payload?.sourceGameId);
   };
@@ -1815,10 +1874,16 @@ export default function Rotations() {
     const remoteUpdatedAt = Number(payload?.updatedAt || 0);
     if (!remoteUpdatedAt || remoteUpdatedAt <= gameUpdatedAtRef.current) return;
     const incomingState = normalizeGameState(payload?.state, monitoredTeamScope || "washington");
+    const incomingKey = gameStateKey(incomingState);
+    if (incomingKey === gameStateKeyRef.current) {
+      gameUpdatedAtRef.current = remoteUpdatedAt;
+      return;
+    }
     lineupHistoryRef.current = [];
     setUndoDepth(0);
     setGameState(incomingState);
     gameUpdatedAtRef.current = remoteUpdatedAt;
+    gameStateKeyRef.current = incomingKey;
     skipGameSaveRef.current = true;
     persistGameState(gameId, incomingState, remoteUpdatedAt);
   };
