@@ -218,6 +218,16 @@
   cursor: pointer;
 }
 
+.savedLineupCreateButtonPrimary {
+  color: #1b7f3a;
+  border-top: 1px solid var(--border);
+}
+
+.savedLineupCreateButtonDanger {
+  color: #c62828;
+  border-top: 1px solid var(--border);
+}
+
 .versionMenuRow {
   display: flex;
   align-items: stretch;

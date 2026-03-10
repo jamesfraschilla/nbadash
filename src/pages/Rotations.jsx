@@ -243,7 +243,10 @@ function normalizeGameState(rawState, teamScope = "washington") {
       name: version?.name || `Version ${index + 1}`,
       depthChart: version?.depthChart,
       lineups: version?.lineups,
-      inheritDepthTemplate: version?.inheritDepthTemplate,
+      inheritDepthTemplate:
+        typeof version?.inheritDepthTemplate === "boolean"
+          ? version.inheritDepthTemplate
+          : version?.id === FINAL_VERSION_ID,
       options: version?.options,
       teamScope,
     }));
@@ -1796,9 +1799,13 @@ export default function Rotations() {
               : POSITION_COLUMNS.map((_, playerIndex) => normalizeName(lineupPlayers?.[playerIndex] || ""))
           )),
         },
-        inheritDepthTemplate: activeVersionId === FINAL_VERSION_ID ? false : currentVersion.inheritDepthTemplate,
+        inheritDepthTemplate: currentVersion.inheritDepthTemplate,
       };
     });
+  };
+
+  const clearLineupRow = (quarter, minuteIndex) => {
+    applySavedLineupToRow(quarter, minuteIndex, POSITION_COLUMNS.map(() => ""));
   };
 
   const openCreateSavedLineupModal = (target) => {
@@ -1875,7 +1882,7 @@ export default function Rotations() {
             : row.map((cell, cIndex) => (cIndex === positionIndex ? normalizeName(value) : cell))
           )),
         },
-        inheritDepthTemplate: activeVersionId === FINAL_VERSION_ID ? false : currentVersion.inheritDepthTemplate,
+        inheritDepthTemplate: currentVersion.inheritDepthTemplate,
       };
     });
   };
@@ -1901,7 +1908,7 @@ export default function Rotations() {
           ));
           }),
         },
-        inheritDepthTemplate: activeVersionId === FINAL_VERSION_ID ? false : currentVersion.inheritDepthTemplate,
+        inheritDepthTemplate: currentVersion.inheritDepthTemplate,
       };
     });
   };
@@ -1913,7 +1920,7 @@ export default function Rotations() {
       return {
         ...currentVersion,
         lineups: createDefaultQuarterLineups(),
-        inheritDepthTemplate: activeVersionId === FINAL_VERSION_ID ? false : currentVersion.inheritDepthTemplate,
+        inheritDepthTemplate: currentVersion.inheritDepthTemplate,
       };
     });
     setResetModalOpen(false);
@@ -1928,7 +1935,7 @@ export default function Rotations() {
       return {
         ...currentVersion,
         lineups: next,
-        inheritDepthTemplate: activeVersionId === FINAL_VERSION_ID ? false : currentVersion.inheritDepthTemplate,
+        inheritDepthTemplate: currentVersion.inheritDepthTemplate,
       };
     });
     setResetModalOpen(false);
@@ -1944,7 +1951,7 @@ export default function Rotations() {
           ...currentVersion.lineups,
           [quarter]: createDefaultQuarterLineups()[quarter],
         },
-        inheritDepthTemplate: activeVersionId === FINAL_VERSION_ID ? false : currentVersion.inheritDepthTemplate,
+        inheritDepthTemplate: currentVersion.inheritDepthTemplate,
       };
     });
   };
@@ -2622,13 +2629,23 @@ export default function Rotations() {
           ))}
           <button
             type="button"
-            className={styles.savedLineupCreateButton}
+            className={`${styles.savedLineupCreateButton} ${styles.savedLineupCreateButtonPrimary}`}
             onClick={() => openCreateSavedLineupModal({
               quarter: savedLineupMenu.quarter,
               minuteIndex: savedLineupMenu.minuteIndex,
             })}
           >
-            *SAVE LINEUP*
+            Save Lineup
+          </button>
+          <button
+            type="button"
+            className={`${styles.savedLineupCreateButton} ${styles.savedLineupCreateButtonDanger}`}
+            onClick={() => {
+              clearLineupRow(savedLineupMenu.quarter, savedLineupMenu.minuteIndex);
+              setSavedLineupMenu(null);
+            }}
+          >
+            Clear Row
           </button>
         </div>
       )}
