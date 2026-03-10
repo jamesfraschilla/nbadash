@@ -1265,6 +1265,8 @@ export default function Game({ variant = "full" }) {
   };
   const awayChances = awayPossessions + (advancedAwayTotals.reboundsOffensive || 0);
   const homeChances = homePossessions + (advancedHomeTotals.reboundsOffensive || 0);
+  const displayAwayChances = isPregame ? 0 : awayChances;
+  const displayHomeChances = isPregame ? 0 : homeChances;
   const transitionStatsDerived = (teamTotals, possessionsCount) => ({
     transitionRate: (teamTotals.transitionPossessions || 0)
       ? ((teamTotals.transitionPossessions || 0) / possessionsCount) * 100
@@ -1527,6 +1529,7 @@ export default function Game({ variant = "full" }) {
     : (awayPossessions + homePossessions) / 2;
 
   const paceValue = paceFrom(basePace);
+  const displayPaceValue = isPregame ? 0 : paceValue;
 
   const currentPeriod = game.period || 1;
   const foulLimit = 5;
@@ -1612,7 +1615,7 @@ export default function Game({ variant = "full" }) {
         })}
       </div>
       <div className={styles.mandatoryLine}>
-        {showMandatory ? (
+        {isLive && showMandatory ? (
           <span className={styles.mandatoryActive}>NEXT MANDATORY</span>
         ) : null}
       </div>
@@ -1735,7 +1738,7 @@ export default function Game({ variant = "full" }) {
               <div className={styles.statValue}>{netAway >= 0 ? "+" : ""}{netAway}</div>
             </>
           )}
-          {showExtras && <div className={styles.statValue}>{formatChancesValue(awayChances)}</div>}
+          {showExtras && <div className={styles.statValue}>{formatChancesValue(displayAwayChances)}</div>}
           </div>
 
           <div className={styles.centerColumn}>
@@ -1748,7 +1751,7 @@ export default function Game({ variant = "full" }) {
             </>
           )}
           {showExtras && <div className={styles.statLabel}>CHANCES</div>}
-          {showExtras && <div className={styles.paceRow}>PACE: {paceValue.toFixed(1)}</div>}
+          {showExtras && <div className={styles.paceRow}>PACE: {displayPaceValue.toFixed(1)}</div>}
           <div className={`${styles.status} ${isLive ? styles.statusLive : ""}`}>
             {status || game.gameStatusText}
           </div>
@@ -1788,7 +1791,7 @@ export default function Game({ variant = "full" }) {
               <div className={styles.statValue}>{netHome >= 0 ? "+" : ""}{netHome}</div>
             </>
           )}
-          {showExtras && <div className={styles.statValue}>{formatChancesValue(homeChances)}</div>}
+          {showExtras && <div className={styles.statValue}>{formatChancesValue(displayHomeChances)}</div>}
           </div>
 
           <div className={`${styles.teamLogoColumn} ${styles.homeLogoColumn}`}>
