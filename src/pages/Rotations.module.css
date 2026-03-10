@@ -169,6 +169,55 @@
   overflow: hidden;
 }
 
+.savedLineupMenu {
+  position: fixed;
+  min-width: 220px;
+  max-width: min(280px, calc(100vw - 24px));
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--cell-bg);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+  z-index: 1150;
+  overflow: hidden;
+}
+
+.savedLineupMenuRow {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--border);
+}
+
+.savedLineupMenuItem,
+.savedLineupCreateButton,
+.savedLineupDeleteButton {
+  border: none;
+  background: transparent;
+  color: var(--cell-text);
+  font-family: "DINalt", sans-serif;
+  font-size: 13px;
+}
+
+.savedLineupMenuItem {
+  flex: 1;
+  text-align: left;
+  padding: 9px 12px;
+  cursor: pointer;
+}
+
+.savedLineupDeleteButton {
+  width: 38px;
+  color: #c62828;
+  border-left: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.savedLineupCreateButton {
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
 .versionMenuRow {
   display: flex;
   align-items: stretch;

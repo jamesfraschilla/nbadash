@@ -15,12 +15,14 @@ const ROTATIONS_TABLE = "rotations_shared_state";
 const ROTATIONS_SCOPE_PLAYERS = "players";
 const ROTATIONS_SCOPE_DEPTH_TEMPLATE = "depth_template";
 const ROTATIONS_SCOPE_GAME = "game";
+const ROTATIONS_SCOPE_SAVED_LINEUPS = "saved_lineups";
 const FINAL_VERSION_ID = "final";
 const QUARTERS = [1, 2, 3, 4];
 const MINUTES = Array.from({ length: 12 }, (_, index) => 12 - index);
 const POSITION_COLUMNS = [1, 2, 3, 4, 5];
 const TOTAL_PER_QUARTER = MINUTES.length * POSITION_COLUMNS.length;
 const MAX_LINEUP_HISTORY = 100;
+const LONG_PRESS_DURATION_MS = 700;
 const DEFAULT_VERSION_OPTIONS = {
   hideNamesOnDuplicateRows: false,
 };
@@ -93,6 +95,10 @@ function playersStorageKey(teamScope) {
 
 function depthTemplateStorageKey(teamScope) {
   return `rotations:${teamScope}:depth-template:v1`;
+}
+
+function savedLineupsStorageKey(teamScope) {
+  return `rotations:${teamScope}:saved-lineups:v1`;
 }
 
 function globalScopeKey(teamScope) {
@@ -206,6 +212,14 @@ function normalizeLineups(rawLineups) {
     });
   });
   return result;
+}
+
+function normalizeSavedLineups(rawLineups) {
+  return (Array.isArray(rawLineups) ? rawLineups : []).map((lineup, index) => ({
+    id: String(lineup?.id || `saved-lineup-${index + 1}`),
+    name: String(lineup?.name || "").trim(),
+    players: POSITION_COLUMNS.map((_, playerIndex) => normalizeName(lineup?.players?.[playerIndex] || "")),
+  })).filter((lineup) => lineup.name);
 }
 
 function normalizeVersionOptions(rawOptions) {
@@ -332,6 +346,29 @@ function persistDepthTemplate(teamScope, depthChart, updatedAt = Date.now(), sou
   }));
 }
 
+function loadSavedLineupsPayload(teamScope) {
+  if (typeof window === "undefined" || !teamScope) return null;
+  const raw = window.localStorage.getItem(savedLineupsStorageKey(teamScope));
+  if (!raw) return null;
+  const parsed = safeParseJson(raw, null);
+  if (Array.isArray(parsed)) {
+    return { updatedAt: 0, lineups: normalizeSavedLineups(parsed) };
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  return {
+    updatedAt: Number(parsed.updatedAt || 0),
+    lineups: normalizeSavedLineups(parsed.lineups),
+  };
+}
+
+function persistSavedLineups(teamScope, lineups, updatedAt = Date.now()) {
+  if (typeof window === "undefined" || !teamScope) return;
+  window.localStorage.setItem(savedLineupsStorageKey(teamScope), JSON.stringify({
+    updatedAt,
+    lineups: normalizeSavedLineups(lineups),
+  }));
+}
+
 function gameStorageKey(gameId) {
   return `${GAME_STORAGE_PREFIX}${gameId}`;
 }
@@ -380,6 +417,10 @@ function depthChartStateKey(depthChart) {
   return JSON.stringify(depthChart || []);
 }
 
+function savedLineupsStateKey(lineups) {
+  return JSON.stringify(normalizeSavedLineups(lineups || []));
+}
+
 function gameStateKey(state) {
   return JSON.stringify(state || {});
 }
@@ -416,6 +457,41 @@ async function saveRemotePlayers(teamScope, players, updatedAt = Date.now()) {
   if (error) {
     // eslint-disable-next-line no-console
     console.error("Failed to save rotations players", error);
+  }
+}
+
+async function fetchRemoteSavedLineups(teamScope) {
+  if (!supabase || !teamScope) return null;
+  const { data, error } = await supabase
+    .from(ROTATIONS_TABLE)
+    .select("payload,updated_at")
+    .eq("scope_type", ROTATIONS_SCOPE_SAVED_LINEUPS)
+    .eq("scope_key", globalScopeKey(teamScope))
+    .maybeSingle();
+  if (error) return null;
+  if (!data?.payload) return null;
+  const parsed = parseSharedStateRow(data);
+  return {
+    updatedAt: parsed.updatedAt,
+    lineups: normalizeSavedLineups(parsed.payload?.lineups),
+  };
+}
+
+async function saveRemoteSavedLineups(teamScope, lineups, updatedAt = Date.now()) {
+  if (!supabase || !teamScope) return;
+  const { error } = await supabase.from(ROTATIONS_TABLE).upsert(
+    {
+      scope_type: ROTATIONS_SCOPE_SAVED_LINEUPS,
+      scope_key: globalScopeKey(teamScope),
+      payload: {
+        lineups: normalizeSavedLineups(lineups),
+      },
+    },
+    { onConflict: "scope_type,scope_key" }
+  );
+  if (error) {
+    // eslint-disable-next-line no-console
+    console.error("Failed to save rotations saved lineups", error);
   }
 }
 
@@ -1109,9 +1185,11 @@ export default function Rotations() {
 
   const [players, setPlayers] = useState(createDefaultPlayers());
   const [playerNameDrafts, setPlayerNameDrafts] = useState(() => buildPlayerNameDrafts(createDefaultPlayers()));
+  const [savedLineups, setSavedLineups] = useState([]);
   const [depthTemplate, setDepthTemplate] = useState(createDefaultDepthChart());
   const [gameState, setGameState] = useState(createDefaultGameState());
   const [playersHydrated, setPlayersHydrated] = useState(false);
+  const [savedLineupsHydrated, setSavedLineupsHydrated] = useState(false);
   const [depthTemplateHydrated, setDepthTemplateHydrated] = useState(false);
   const [gameHydrated, setGameHydrated] = useState(false);
   const [resetModalOpen, setResetModalOpen] = useState(false);
@@ -1121,6 +1199,10 @@ export default function Rotations() {
   const [createVersionOpen, setCreateVersionOpen] = useState(false);
   const [createVersionName, setCreateVersionName] = useState("");
   const [deleteVersionTarget, setDeleteVersionTarget] = useState(null);
+  const [savedLineupMenu, setSavedLineupMenu] = useState(null);
+  const [createSavedLineupTarget, setCreateSavedLineupTarget] = useState(null);
+  const [savedLineupName, setSavedLineupName] = useState("");
+  const [deleteSavedLineupTarget, setDeleteSavedLineupTarget] = useState(null);
   const [isTouchFillActive, setIsTouchFillActive] = useState(false);
   const [undoDepth, setUndoDepth] = useState(0);
   const [collapsed, setCollapsed] = useState({
@@ -1133,18 +1215,30 @@ export default function Rotations() {
   });
 
   const playersUpdatedAtRef = useRef(0);
+  const savedLineupsUpdatedAtRef = useRef(0);
   const editingPlayerNameIdRef = useRef(null);
   const depthTemplateUpdatedAtRef = useRef(0);
   const depthTemplateSourceGameIdRef = useRef("");
   const gameUpdatedAtRef = useRef(0);
   const playersStateKeyRef = useRef(playersStateKey(createDefaultPlayers()));
+  const savedLineupsStateKeyRef = useRef(savedLineupsStateKey([]));
   const depthTemplateStateKeyRef = useRef(depthChartStateKey(createDefaultDepthChart()));
   const gameStateKeyRef = useRef(gameStateKey(createDefaultGameState()));
   const skipPlayersSaveRef = useRef(false);
+  const skipSavedLineupsSaveRef = useRef(false);
   const skipDepthTemplateSaveRef = useRef(false);
   const skipGameSaveRef = useRef(false);
   const lineupHistoryRef = useRef([]);
   const versionMenuRef = useRef(null);
+  const savedLineupMenuRef = useRef(null);
+  const savedLineupPressRef = useRef({
+    timerId: null,
+    pointerId: null,
+    pointerType: "",
+    startX: 0,
+    startY: 0,
+    target: null,
+  });
   const dragFillRef = useRef({
     active: false,
     quarter: null,
@@ -1186,6 +1280,14 @@ export default function Rotations() {
     refetchInterval: 10_000,
   });
 
+  const { data: remoteSavedLineups, isFetched: remoteSavedLineupsFetched } = useQuery({
+    queryKey: ["rotations-saved-lineups-remote", monitoredTeamScope],
+    queryFn: () => fetchRemoteSavedLineups(monitoredTeamScope),
+    enabled: Boolean(supabase && monitoredTeamScope),
+    staleTime: 10_000,
+    refetchInterval: 10_000,
+  });
+
   const { data: remoteGameState, isFetched: remoteGameFetched } = useQuery({
     queryKey: ["rotations-game-remote", gameId, monitoredTeamScope],
     queryFn: () => fetchRemoteGameState(gameId, monitoredTeamScope),
@@ -1212,20 +1314,49 @@ export default function Rotations() {
   const inheritDepthTemplate = activeVersion.inheritDepthTemplate;
   const versionDisplayOptions = normalizeVersionOptions(activeVersion.options);
 
+  const shouldInheritFutureTemplate = (state) => {
+    const sourceGameId = Number(depthTemplateSourceGameIdRef.current || 0);
+    const currentGameNumeric = Number(gameId || 0);
+    if (!sourceGameId || !currentGameNumeric || currentGameNumeric <= sourceGameId) return false;
+    return Boolean(getVersionById(state, FINAL_VERSION_ID, monitoredTeamScope || "washington")?.inheritDepthTemplate);
+  };
+
+  const applyInheritedTemplate = (state) => {
+    if (!shouldInheritFutureTemplate(state)) return state;
+    const nextDepthChart = normalizeDepthChart(depthTemplate, monitoredTeamScope || "washington");
+    const currentFinalVersion = getVersionById(state, FINAL_VERSION_ID, monitoredTeamScope || "washington");
+    if (depthChartStateKey(currentFinalVersion.depthChart) === depthChartStateKey(nextDepthChart)) return state;
+    return {
+      ...state,
+      versions: state.versions.map((version) => (
+        version.id !== FINAL_VERSION_ID
+          ? version
+          : { ...version, depthChart: nextDepthChart }
+      )),
+    };
+  };
+
   useEffect(() => {
     setPlayersHydrated(false);
+    setSavedLineupsHydrated(false);
     setDepthTemplateHydrated(false);
     setGameHydrated(false);
     playersUpdatedAtRef.current = 0;
+    savedLineupsUpdatedAtRef.current = 0;
     depthTemplateUpdatedAtRef.current = 0;
     depthTemplateSourceGameIdRef.current = "";
     gameUpdatedAtRef.current = 0;
     skipPlayersSaveRef.current = false;
+    skipSavedLineupsSaveRef.current = false;
     skipDepthTemplateSaveRef.current = false;
     skipGameSaveRef.current = false;
     lineupHistoryRef.current = [];
     setUndoDepth(0);
     setVersionMenuOpen(false);
+    setSavedLineupMenu(null);
+    setCreateSavedLineupTarget(null);
+    setSavedLineupName("");
+    setDeleteSavedLineupTarget(null);
     setCreateVersionOpen(false);
     setDeleteVersionTarget(null);
   }, [gameId, monitoredTeamScope]);
@@ -1239,6 +1370,16 @@ export default function Rotations() {
     window.addEventListener("pointerdown", handlePointerDown);
     return () => window.removeEventListener("pointerdown", handlePointerDown);
   }, [versionMenuOpen]);
+
+  useEffect(() => {
+    if (!savedLineupMenu) return undefined;
+    const handlePointerDown = (event) => {
+      if (savedLineupMenuRef.current?.contains(event.target)) return;
+      setSavedLineupMenu(null);
+    };
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => window.removeEventListener("pointerdown", handlePointerDown);
+  }, [savedLineupMenu]);
 
   useEffect(() => {
     if (!gameId || typeof window === "undefined") return;
@@ -1291,6 +1432,34 @@ export default function Rotations() {
   }, [playersHydrated, remotePlayers, remotePlayersFetched, monitoredTeamScope]);
 
   useEffect(() => {
+    if (savedLineupsHydrated) return;
+    if (supabase && !remoteSavedLineupsFetched) return;
+
+    if (!monitoredTeamScope) return;
+    const localPayload = loadSavedLineupsPayload(monitoredTeamScope);
+    const localUpdatedAt = Number(localPayload?.updatedAt || 0);
+    const remoteUpdatedAt = Number(remoteSavedLineups?.updatedAt || 0);
+    if (remoteSavedLineups?.lineups && remoteUpdatedAt >= localUpdatedAt) {
+      setSavedLineups(remoteSavedLineups.lineups);
+      savedLineupsUpdatedAtRef.current = remoteUpdatedAt;
+      savedLineupsStateKeyRef.current = savedLineupsStateKey(remoteSavedLineups.lineups);
+      skipSavedLineupsSaveRef.current = true;
+    } else if (localPayload?.lineups) {
+      setSavedLineups(localPayload.lineups);
+      savedLineupsUpdatedAtRef.current = localUpdatedAt;
+      savedLineupsStateKeyRef.current = savedLineupsStateKey(localPayload.lineups);
+      skipSavedLineupsSaveRef.current = true;
+    } else {
+      setSavedLineups([]);
+      savedLineupsUpdatedAtRef.current = Date.now();
+      savedLineupsStateKeyRef.current = savedLineupsStateKey([]);
+      skipSavedLineupsSaveRef.current = true;
+    }
+
+    setSavedLineupsHydrated(true);
+  }, [savedLineupsHydrated, remoteSavedLineups, remoteSavedLineupsFetched, monitoredTeamScope]);
+
+  useEffect(() => {
     if (depthTemplateHydrated) return;
     if (supabase && !remoteDepthFetched) return;
 
@@ -1329,23 +1498,6 @@ export default function Rotations() {
     if (!monitoredTeamScope) return;
     const defaults = createDefaultGameState(monitoredTeamScope);
     defaults.versions[0].depthChart = normalizeDepthChart(depthTemplate, monitoredTeamScope);
-    const shouldInheritFutureTemplate = (state) => {
-      const sourceGameId = Number(depthTemplateSourceGameIdRef.current || 0);
-      const currentGameNumeric = Number(gameId || 0);
-      if (!sourceGameId || !currentGameNumeric || currentGameNumeric <= sourceGameId) return false;
-      return Boolean(getVersionById(state, FINAL_VERSION_ID, monitoredTeamScope)?.inheritDepthTemplate);
-    };
-    const applyInheritedTemplate = (state) => {
-      if (!shouldInheritFutureTemplate(state)) return state;
-      return {
-        ...state,
-        versions: state.versions.map((version) => (
-          version.id !== FINAL_VERSION_ID
-            ? version
-            : { ...version, depthChart: normalizeDepthChart(depthTemplate, monitoredTeamScope) }
-        )),
-      };
-    };
     const localPayload = loadGamePayload(gameId);
     const localUpdatedAt = Number(localPayload?.updatedAt || 0);
     const remoteUpdatedAt = Number(remoteGameState?.updatedAt || 0);
@@ -1372,6 +1524,14 @@ export default function Rotations() {
   }, [gameHydrated, gameId, remoteGameState, remoteGameFetched, depthTemplateHydrated, depthTemplate, monitoredTeamScope]);
 
   useEffect(() => {
+    if (!gameHydrated || !gameId || !depthTemplateHydrated || !monitoredTeamScope) return;
+    setGameState((current) => {
+      const next = applyInheritedTemplate(current);
+      return next === current ? current : next;
+    });
+  }, [gameHydrated, gameId, depthTemplateHydrated, depthTemplate, monitoredTeamScope]);
+
+  useEffect(() => {
     if (!monitoredTeamScope) return;
     if (!playersHydrated) return;
 
@@ -1394,6 +1554,26 @@ export default function Rotations() {
   useEffect(() => {
     playersStateKeyRef.current = playersStateKey(players);
   }, [players]);
+
+  useEffect(() => {
+    if (!monitoredTeamScope) return;
+    if (!savedLineupsHydrated) return;
+
+    if (skipSavedLineupsSaveRef.current) {
+      skipSavedLineupsSaveRef.current = false;
+      persistSavedLineups(monitoredTeamScope, savedLineups, savedLineupsUpdatedAtRef.current || Date.now());
+      return;
+    }
+
+    const updatedAt = Date.now();
+    savedLineupsUpdatedAtRef.current = updatedAt;
+    persistSavedLineups(monitoredTeamScope, savedLineups, updatedAt);
+    saveRemoteSavedLineups(monitoredTeamScope, savedLineups, updatedAt);
+  }, [savedLineups, savedLineupsHydrated, monitoredTeamScope]);
+
+  useEffect(() => {
+    savedLineupsStateKeyRef.current = savedLineupsStateKey(savedLineups);
+  }, [savedLineups]);
 
   useEffect(() => {
     setPlayerNameDrafts((current) => {
@@ -1475,6 +1655,11 @@ export default function Rotations() {
     if (!playersHydrated) return;
     applyRemotePlayers(remotePlayers);
   }, [playersHydrated, remotePlayers]);
+
+  useEffect(() => {
+    if (!savedLineupsHydrated) return;
+    applyRemoteSavedLineups(remoteSavedLineups);
+  }, [savedLineupsHydrated, remoteSavedLineups]);
 
   useEffect(() => {
     if (!depthTemplateHydrated) return;
@@ -1595,6 +1780,53 @@ export default function Rotations() {
     setPlayers((current) => current.map((player) => (
       player.id !== playerId || player.name === draftValue ? player : { ...player, name: draftValue }
     )));
+  };
+
+  const applySavedLineupToRow = (quarter, minuteIndex, lineupPlayers) => {
+    updateActiveVersion((currentVersion) => {
+      lineupHistoryRef.current = [...lineupHistoryRef.current, currentVersion.lineups].slice(-MAX_LINEUP_HISTORY);
+      setUndoDepth(lineupHistoryRef.current.length);
+      return {
+        ...currentVersion,
+        lineups: {
+          ...currentVersion.lineups,
+          [quarter]: currentVersion.lineups[quarter].map((row, rowIndex) => (
+            rowIndex !== minuteIndex
+              ? row
+              : POSITION_COLUMNS.map((_, playerIndex) => normalizeName(lineupPlayers?.[playerIndex] || ""))
+          )),
+        },
+        inheritDepthTemplate: activeVersionId === FINAL_VERSION_ID ? false : currentVersion.inheritDepthTemplate,
+      };
+    });
+  };
+
+  const openCreateSavedLineupModal = (target) => {
+    setSavedLineupMenu(null);
+    setSavedLineupName("");
+    setCreateSavedLineupTarget(target);
+  };
+
+  const confirmCreateSavedLineup = () => {
+    if (!createSavedLineupTarget) return;
+    const name = String(savedLineupName || "").trim();
+    if (!name) return;
+    const rowPlayers = lineups?.[createSavedLineupTarget.quarter]?.[createSavedLineupTarget.minuteIndex] || [];
+    const nextLineup = {
+      id: typeof crypto !== "undefined" ? crypto.randomUUID() : `saved-lineup-${Date.now()}`,
+      name,
+      players: POSITION_COLUMNS.map((_, playerIndex) => normalizeName(rowPlayers[playerIndex] || "")),
+    };
+    setSavedLineups((current) => [...current, nextLineup]);
+    setCreateSavedLineupTarget(null);
+    setSavedLineupName("");
+  };
+
+  const confirmDeleteSavedLineup = () => {
+    if (!deleteSavedLineupTarget) return;
+    setSavedLineups((current) => current.filter((lineup) => lineup.id !== deleteSavedLineupTarget.id));
+    setDeleteSavedLineupTarget(null);
+    setSavedLineupMenu(null);
   };
 
   const updateDepthCell = (rowIndex, columnIndex, value) => {
@@ -1788,6 +2020,7 @@ export default function Rotations() {
 
   const handleExportPdf = async () => {
     if (typeof window === "undefined") return;
+    const pdfWindow = window.open("", "_blank", "noopener,noreferrer");
     const fontUrl = new URL(dinAltFontUrl, window.location.href).href;
     const logoUrl = new URL(wizardsLogoUrl, window.location.href).href;
     const [fontResponse, logoResponse] = await Promise.all([
@@ -1829,10 +2062,11 @@ export default function Rotations() {
     const pdfBytes = await pdfDoc.save();
     const blob = new Blob([pdfBytes], { type: "application/pdf" });
     const blobUrl = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = blobUrl;
-    link.download = `rotations-${gameId || "game"}.pdf`;
-    link.click();
+    if (pdfWindow) {
+      pdfWindow.location.replace(blobUrl);
+    } else {
+      window.open(blobUrl, "_blank", "noopener,noreferrer");
+    }
     window.setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
   };
 
@@ -1846,6 +2080,46 @@ export default function Rotations() {
       window.clearTimeout(timerId);
       touchFillRef.current.timerId = null;
     }
+  };
+
+  const clearSavedLineupPressTimer = () => {
+    const timerId = savedLineupPressRef.current.timerId;
+    if (timerId) {
+      window.clearTimeout(timerId);
+      savedLineupPressRef.current.timerId = null;
+    }
+  };
+
+  const openSavedLineupMenu = (quarter, minuteIndex, anchorRect) => {
+    setSavedLineupMenu({
+      quarter,
+      minuteIndex,
+      top: anchorRect.bottom + 6,
+      left: anchorRect.left,
+    });
+  };
+
+  const startSavedLineupPress = (event, quarter, minuteIndex) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    clearSavedLineupPressTimer();
+    savedLineupPressRef.current.pointerId = event.pointerId;
+    savedLineupPressRef.current.pointerType = event.pointerType || "mouse";
+    savedLineupPressRef.current.startX = event.clientX;
+    savedLineupPressRef.current.startY = event.clientY;
+    savedLineupPressRef.current.target = { quarter, minuteIndex, element: event.currentTarget };
+    savedLineupPressRef.current.timerId = window.setTimeout(() => {
+      const target = savedLineupPressRef.current.target;
+      if (!target?.element) return;
+      openSavedLineupMenu(target.quarter, target.minuteIndex, target.element.getBoundingClientRect());
+      savedLineupPressRef.current.timerId = null;
+    }, LONG_PRESS_DURATION_MS);
+  };
+
+  const cancelSavedLineupPress = () => {
+    clearSavedLineupPressTimer();
+    savedLineupPressRef.current.pointerId = null;
+    savedLineupPressRef.current.pointerType = "";
+    savedLineupPressRef.current.target = null;
   };
 
   const stopTouchFill = () => {
@@ -1901,6 +2175,22 @@ export default function Rotations() {
     persistPlayers(monitoredTeamScope, incomingPlayers, remoteUpdatedAt);
   };
 
+  const applyRemoteSavedLineups = (payload) => {
+    const remoteUpdatedAt = Number(payload?.updatedAt || 0);
+    if (!remoteUpdatedAt || remoteUpdatedAt <= savedLineupsUpdatedAtRef.current) return;
+    const incomingLineups = normalizeSavedLineups(payload?.lineups || []);
+    const incomingKey = savedLineupsStateKey(incomingLineups);
+    if (incomingKey === savedLineupsStateKeyRef.current) {
+      savedLineupsUpdatedAtRef.current = remoteUpdatedAt;
+      return;
+    }
+    setSavedLineups(incomingLineups);
+    savedLineupsUpdatedAtRef.current = remoteUpdatedAt;
+    savedLineupsStateKeyRef.current = incomingKey;
+    skipSavedLineupsSaveRef.current = true;
+    persistSavedLineups(monitoredTeamScope, incomingLineups, remoteUpdatedAt);
+  };
+
   const applyRemoteDepthTemplate = (payload) => {
     const remoteUpdatedAt = Number(payload?.updatedAt || 0);
     if (!remoteUpdatedAt || remoteUpdatedAt <= depthTemplateUpdatedAtRef.current) return;
@@ -1940,17 +2230,23 @@ export default function Rotations() {
   useEffect(() => {
     const endDragFill = () => {
       dragFillRef.current.active = false;
+      cancelSavedLineupPress();
       if (touchFillRef.current.active) {
         stopTouchFill();
       }
     };
+    window.addEventListener("pointerup", endDragFill);
+    window.addEventListener("pointercancel", endDragFill);
     window.addEventListener("mouseup", endDragFill);
     window.addEventListener("touchend", endDragFill, { passive: true });
     window.addEventListener("touchcancel", endDragFill, { passive: true });
     return () => {
+      window.removeEventListener("pointerup", endDragFill);
+      window.removeEventListener("pointercancel", endDragFill);
       window.removeEventListener("mouseup", endDragFill);
       window.removeEventListener("touchend", endDragFill);
       window.removeEventListener("touchcancel", endDragFill);
+      clearSavedLineupPressTimer();
       clearTouchFillTimer();
     };
   }, []);
@@ -1983,6 +2279,24 @@ export default function Rotations() {
           applyRemotePlayers({
             updatedAt: parsed.updatedAt,
             players: normalizePlayers(parsed.payload?.players, monitoredTeamScope),
+          });
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: ROTATIONS_TABLE,
+          filter: `scope_type=eq.${ROTATIONS_SCOPE_SAVED_LINEUPS}`,
+        },
+        (payload) => {
+          const row = payload.new || payload.old;
+          if (!row || row.scope_key !== globalScopeKey(monitoredTeamScope)) return;
+          const parsed = parseSharedStateRow(row);
+          applyRemoteSavedLineups({
+            updatedAt: parsed.updatedAt,
+            lineups: normalizeSavedLineups(parsed.payload?.lineups),
           });
         }
       )
@@ -2239,6 +2553,86 @@ export default function Rotations() {
         </div>
       )}
 
+      {createSavedLineupTarget && (
+        <div className={styles.modalOverlay} onClick={() => setCreateSavedLineupTarget(null)}>
+          <div className={styles.modalCard} onClick={(event) => event.stopPropagation()}>
+            <h3 className={styles.modalTitle}>Save Lineup</h3>
+            <input
+              className={styles.versionNameInput}
+              value={savedLineupName}
+              onChange={(event) => setSavedLineupName(event.target.value)}
+              placeholder="Lineup name"
+            />
+            <button
+              type="button"
+              className={styles.modalPrimary}
+              onClick={confirmCreateSavedLineup}
+              disabled={!savedLineupName.trim()}
+            >
+              Save
+            </button>
+            <button type="button" className={styles.modalSecondary} onClick={() => setCreateSavedLineupTarget(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {deleteSavedLineupTarget && (
+        <div className={styles.modalOverlay} onClick={() => setDeleteSavedLineupTarget(null)}>
+          <div className={styles.modalCard} onClick={(event) => event.stopPropagation()}>
+            <h3 className={styles.modalTitle}>{`Delete "${deleteSavedLineupTarget.name}"?`}</h3>
+            <button type="button" className={styles.modalPrimary} onClick={confirmDeleteSavedLineup}>
+              Yes, Delete
+            </button>
+            <button type="button" className={styles.modalSecondary} onClick={() => setDeleteSavedLineupTarget(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {savedLineupMenu && (
+        <div
+          ref={savedLineupMenuRef}
+          className={styles.savedLineupMenu}
+          style={{ top: savedLineupMenu.top, left: savedLineupMenu.left }}
+        >
+          {savedLineups.map((savedLineup) => (
+            <div key={savedLineup.id} className={styles.savedLineupMenuRow}>
+              <button
+                type="button"
+                className={styles.savedLineupMenuItem}
+                onClick={() => {
+                  applySavedLineupToRow(savedLineupMenu.quarter, savedLineupMenu.minuteIndex, savedLineup.players);
+                  setSavedLineupMenu(null);
+                }}
+              >
+                {savedLineup.name}
+              </button>
+              <button
+                type="button"
+                className={styles.savedLineupDeleteButton}
+                onClick={() => setDeleteSavedLineupTarget(savedLineup)}
+                aria-label={`Delete saved lineup ${savedLineup.name}`}
+              >
+                X
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            className={styles.savedLineupCreateButton}
+            onClick={() => openCreateSavedLineupModal({
+              quarter: savedLineupMenu.quarter,
+              minuteIndex: savedLineupMenu.minuteIndex,
+            })}
+          >
+            *SAVE LINEUP*
+          </button>
+        </div>
+      )}
+
       <header className={styles.header}>
         <h1 className={styles.title}>{opponentLine}</h1>
       </header>
@@ -2408,7 +2802,25 @@ export default function Rotations() {
 
                     return (
                       <tr key={`minute-row-${quarter}-${minute}`}>
-                        <td className={styles.minuteCell}>{minute}</td>
+                        <td
+                          className={styles.minuteCell}
+                          onContextMenu={(event) => {
+                            event.preventDefault();
+                            openSavedLineupMenu(quarter, minuteIndex, event.currentTarget.getBoundingClientRect());
+                          }}
+                          onPointerDown={(event) => startSavedLineupPress(event, quarter, minuteIndex)}
+                          onPointerUp={() => cancelSavedLineupPress()}
+                          onPointerLeave={() => cancelSavedLineupPress()}
+                          onPointerCancel={() => cancelSavedLineupPress()}
+                          onPointerMove={(event) => {
+                            if (!savedLineupPressRef.current.timerId) return;
+                            const dx = Math.abs(event.clientX - savedLineupPressRef.current.startX);
+                            const dy = Math.abs(event.clientY - savedLineupPressRef.current.startY);
+                            if (dx > 8 || dy > 8) cancelSavedLineupPress();
+                          }}
+                        >
+                          {minute}
+                        </td>
                         {POSITION_COLUMNS.map((position) => {
                           const positionIndex = position - 1;
                           const cellState = getQuarterCellState({
