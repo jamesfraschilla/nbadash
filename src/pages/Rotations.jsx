@@ -182,6 +182,10 @@ function normalizePlayers(rawPlayers, teamScope = "washington") {
   }));
 }
 
+function buildPlayerNameDrafts(players) {
+  return Object.fromEntries((players || []).map((player) => [player.id, String(player?.name || "")]));
+}
+
 function normalizeDepthChart(rawDepth, teamScope = "washington") {
   const fallback = createDefaultDepthChart(teamScope);
   if (!Array.isArray(rawDepth)) return fallback;
@@ -1104,6 +1108,7 @@ export default function Rotations() {
   const backUrl = dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`;
 
   const [players, setPlayers] = useState(createDefaultPlayers());
+  const [playerNameDrafts, setPlayerNameDrafts] = useState(() => buildPlayerNameDrafts(createDefaultPlayers()));
   const [depthTemplate, setDepthTemplate] = useState(createDefaultDepthChart());
   const [gameState, setGameState] = useState(createDefaultGameState());
   const [playersHydrated, setPlayersHydrated] = useState(false);
@@ -1128,6 +1133,7 @@ export default function Rotations() {
   });
 
   const playersUpdatedAtRef = useRef(0);
+  const editingPlayerNameIdRef = useRef(null);
   const depthTemplateUpdatedAtRef = useRef(0);
   const depthTemplateSourceGameIdRef = useRef("");
   const gameUpdatedAtRef = useRef(0);
@@ -1390,6 +1396,36 @@ export default function Rotations() {
   }, [players]);
 
   useEffect(() => {
+    setPlayerNameDrafts((current) => {
+      const next = buildPlayerNameDrafts(players);
+      const editingId = editingPlayerNameIdRef.current;
+      if (editingId && Object.hasOwn(current, editingId)) {
+        next[editingId] = current[editingId];
+      }
+      return next;
+    });
+  }, [players]);
+
+  useEffect(() => {
+    if (!playersHydrated) return undefined;
+    const timeoutId = window.setTimeout(() => {
+      setPlayers((current) => {
+        let changed = false;
+        const next = current.map((player) => {
+          const draftValue = playerNameDrafts[player.id];
+          const normalizedDraft = draftValue == null ? player.name : normalizePlayerNameInput(draftValue);
+          if (normalizedDraft === player.name) return player;
+          changed = true;
+          return { ...player, name: normalizedDraft };
+        });
+        return changed ? next : current;
+      });
+    }, 150);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [playerNameDrafts, playersHydrated]);
+
+  useEffect(() => {
     if (!monitoredTeamScope) return;
     if (!depthTemplateHydrated) return;
 
@@ -1546,6 +1582,19 @@ export default function Rotations() {
       }
       return { ...player, [field]: normalizePlayerNameInput(value) };
     }));
+  };
+
+  const updatePlayerNameDraft = (playerId, value) => {
+    setPlayerNameDrafts((current) => (
+      current[playerId] === value ? current : { ...current, [playerId]: normalizePlayerNameInput(value) }
+    ));
+  };
+
+  const commitPlayerNameDraft = (playerId) => {
+    const draftValue = normalizePlayerNameInput(playerNameDrafts[playerId] || "");
+    setPlayers((current) => current.map((player) => (
+      player.id !== playerId || player.name === draftValue ? player : { ...player, name: draftValue }
+    )));
   };
 
   const updateDepthCell = (rowIndex, columnIndex, value) => {
@@ -2229,8 +2278,17 @@ export default function Rotations() {
                     <td className={styles.playerNameCell}>
                       <input
                         className={styles.playerNameInput}
-                        value={player.name}
-                        onChange={(event) => updatePlayerField(player.id, "name", event.target.value)}
+                        value={playerNameDrafts[player.id] ?? player.name}
+                        onChange={(event) => updatePlayerNameDraft(player.id, event.target.value)}
+                        onFocus={() => {
+                          editingPlayerNameIdRef.current = player.id;
+                        }}
+                        onBlur={() => {
+                          commitPlayerNameDraft(player.id);
+                          if (editingPlayerNameIdRef.current === player.id) {
+                            editingPlayerNameIdRef.current = null;
+                          }
+                        }}
                         aria-label={`Player ${player.id}`}
                       />
                     </td>
