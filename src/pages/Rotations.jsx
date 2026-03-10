@@ -2469,7 +2469,7 @@ export default function Rotations() {
                   className={styles.versionCreateButton}
                   onClick={openCreateVersionModal}
                 >
-                  *CREATE NEW VERSION*
+                  Create New Version
                 </button>
               </div>
             )}
