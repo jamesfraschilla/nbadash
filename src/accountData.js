@@ -271,33 +271,30 @@ export async function importLegacyLocalNotes(actorId) {
     };
   }
 
-  const { data, error } = await supabase
-    .from("user_notes")
-    .insert(rowsToInsert)
-    .select("*");
-
-  if (error) throw error;
-
-  if (Array.isArray(data) && data.length) {
-    await supabase.from("user_note_versions").upsert(
-      data.map((note) => ({
-        note_id: note.id,
-        version_number: 1,
-        snapshot: note,
-        created_by: actorId,
-      })),
-      { onConflict: "note_id,version_number" }
-    );
+  const importedNotes = [];
+  for (const row of rowsToInsert) {
+    const importedNote = await createNote({
+      legacyLocalId: row.legacy_local_id,
+      gameId: row.game_id,
+      periodLabel: row.period_label,
+      minutes: row.minutes,
+      seconds: row.seconds,
+      text: row.text,
+      tags: row.tags,
+      sharingScope: row.sharing_scope,
+      createdAtIso: row.created_at,
+    }, actorId);
+    importedNotes.push(importedNote);
   }
 
   await insertAuditLog(actorId, "note_import", null, "imported_legacy_local_notes", {
-    importedCount: data?.length || 0,
+    importedCount: importedNotes.length,
     sourceCount: localNotes.length,
   });
 
   return {
-    importedCount: data?.length || 0,
-    skippedCount: Math.max(0, dedupedRows.length - (data?.length || 0)),
+    importedCount: importedNotes.length,
+    skippedCount: Math.max(0, dedupedRows.length - importedNotes.length),
   };
 }
 
