@@ -106,48 +106,50 @@ export async function fetchPendingInvites() {
 }
 
 export async function createUserInvite({ accessToken, email, displayName, role, teamScopes }) {
-  const response = await fetch("/api/admin-users", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({
+  requireSupabase();
+  const { data, error } = await supabase.functions.invoke("admin-users", {
+    body: {
       action: "invite",
       email,
       displayName,
       role,
       teamScopes,
-    }),
+    },
+    headers: accessToken ? {
+      Authorization: `Bearer ${accessToken}`,
+    } : undefined,
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(payload?.error || "Unable to create invite.");
+  if (error) {
+    throw new Error(error.message || "Unable to create invite.");
   }
-  return payload;
+  if (data?.error) {
+    throw new Error(data.error);
+  }
+  return data;
 }
 
 export async function createManagedUser({ accessToken, email, password, displayName, role, teamScopes }) {
-  const response = await fetch("/api/admin-users", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({
+  requireSupabase();
+  const { data, error } = await supabase.functions.invoke("admin-users", {
+    body: {
       action: "create_user",
       email,
       password,
       displayName,
       role,
       teamScopes,
-    }),
+    },
+    headers: accessToken ? {
+      Authorization: `Bearer ${accessToken}`,
+    } : undefined,
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(payload?.error || "Unable to create user.");
+  if (error) {
+    throw new Error(error.message || "Unable to create user.");
   }
-  return payload;
+  if (data?.error) {
+    throw new Error(data.error);
+  }
+  return data;
 }
 
 export async function listNotesForGame(gameId) {
