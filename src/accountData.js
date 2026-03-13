@@ -105,8 +105,17 @@ export async function fetchPendingInvites() {
   return data || [];
 }
 
+async function getCurrentAccessToken(explicitAccessToken) {
+  if (explicitAccessToken) return explicitAccessToken;
+  requireSupabase();
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw error;
+  return data?.session?.access_token || "";
+}
+
 export async function createUserInvite({ accessToken, email, displayName, role, teamScopes }) {
   requireSupabase();
+  const currentAccessToken = await getCurrentAccessToken(accessToken);
   const { data, error } = await supabase.functions.invoke("admin-users", {
     body: {
       action: "invite",
@@ -115,8 +124,8 @@ export async function createUserInvite({ accessToken, email, displayName, role, 
       role,
       teamScopes,
     },
-    headers: accessToken ? {
-      Authorization: `Bearer ${accessToken}`,
+    headers: currentAccessToken ? {
+      Authorization: `Bearer ${currentAccessToken}`,
     } : undefined,
   });
   if (error) {
@@ -130,6 +139,7 @@ export async function createUserInvite({ accessToken, email, displayName, role, 
 
 export async function createManagedUser({ accessToken, email, password, displayName, role, teamScopes }) {
   requireSupabase();
+  const currentAccessToken = await getCurrentAccessToken(accessToken);
   const { data, error } = await supabase.functions.invoke("admin-users", {
     body: {
       action: "create_user",
@@ -139,8 +149,8 @@ export async function createManagedUser({ accessToken, email, password, displayN
       role,
       teamScopes,
     },
-    headers: accessToken ? {
-      Authorization: `Bearer ${accessToken}`,
+    headers: currentAccessToken ? {
+      Authorization: `Bearer ${currentAccessToken}`,
     } : undefined,
   });
   if (error) {
