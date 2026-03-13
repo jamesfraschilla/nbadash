@@ -33,7 +33,6 @@ export default function AuthGate() {
         <h1 className={styles.title}>Sign in to your account</h1>
 
         <form className={styles.form} onSubmit={handleSubmit}>
-          <label className={styles.label} htmlFor="auth-email">Work Email</label>
           <input
             id="auth-email"
             className={styles.input}

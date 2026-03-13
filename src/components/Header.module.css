@@ -5,19 +5,19 @@
   top: 0;
   z-index: 50;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
-  overflow-x: auto;
+  overflow: visible;
   padding-top: env(safe-area-inset-top);
 }
 
-.header::-webkit-scrollbar {
+.gamesWrapper::-webkit-scrollbar {
   height: 8px;
 }
 
-.header::-webkit-scrollbar-track {
+.gamesWrapper::-webkit-scrollbar-track {
   background: var(--header-scroll-track);
 }
 
-.header::-webkit-scrollbar-thumb {
+.gamesWrapper::-webkit-scrollbar-thumb {
   background: var(--header-scroll-thumb);
   border-radius: 4px;
 }
@@ -27,7 +27,7 @@
   align-items: center;
   gap: 12px;
   padding: calc(32px + env(safe-area-inset-top)) 16px 6px;
-  min-width: max-content;
+  width: 100%;
   min-height: 48px;
 }
 
@@ -88,11 +88,15 @@
 .gamesWrapper {
   display: flex;
   flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: visible;
 }
 
 .gamesList {
   display: flex;
   gap: 12px;
+  min-width: max-content;
 }
 
 .noGames {
