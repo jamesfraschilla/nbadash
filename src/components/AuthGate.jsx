@@ -67,7 +67,7 @@ export default function AuthGate() {
             {submitting ? "Signing In..." : "Sign In"}
           </button>
           <div className={styles.helpText}>
-            Forgot password? Contact jfraschilla@monumentalsports.com to reset your login info
+            Forgot password? Contact jfraschilla@monumentalsports.com
           </div>
         </form>
       </div>
