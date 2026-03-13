@@ -53,6 +53,7 @@ export default function Drawing() {
   const [selectedDrawingId, setSelectedDrawingId] = useState(null);
   const [boardTitle, setBoardTitle] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
+  const [savingBoard, setSavingBoard] = useState(false);
   const [shareDrawing, setShareDrawing] = useState(null);
   const [historyDrawing, setHistoryDrawing] = useState(null);
 
@@ -292,6 +293,7 @@ export default function Drawing() {
   };
 
   const saveBoard = async () => {
+    if (savingBoard) return;
     const payload = {
       gameId: gameIdParam || null,
       title: boardTitle,
@@ -299,6 +301,8 @@ export default function Drawing() {
       strokes: strokesRef.current,
     };
     try {
+      setSavingBoard(true);
+      setStatusMessage("Saving...");
       const saved = selectedDrawing
         ? await updateDrawingRecord(selectedDrawing.id, payload, user?.id)
         : await createDrawing(payload, user?.id);
@@ -307,6 +311,8 @@ export default function Drawing() {
       setStatusMessage("Board saved.");
     } catch (error) {
       setStatusMessage(error?.message || "Unable to save board.");
+    } finally {
+      setSavingBoard(false);
     }
   };
 
@@ -347,8 +353,8 @@ export default function Drawing() {
         <button type="button" className={styles.secondaryButton} onClick={startNewBoard}>
           New Board
         </button>
-        <button type="button" className={styles.primaryButton} onClick={saveBoard}>
-          {selectedDrawing ? "Update Board" : "Save Board"}
+        <button type="button" className={styles.primaryButton} onClick={saveBoard} disabled={savingBoard}>
+          {savingBoard ? "Saving..." : selectedDrawing ? "Update Board" : "Save Board"}
         </button>
         {selectedDrawing ? (
           <>

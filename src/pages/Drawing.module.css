@@ -46,6 +46,13 @@
   border: 1px solid var(--border);
 }
 
+.primaryButton:disabled,
+.secondaryButton:disabled,
+.deleteButton:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
 .primaryButton {
   background: var(--highlight-text);
   color: var(--bg);

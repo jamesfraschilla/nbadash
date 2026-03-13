@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { fetchGamesByDate } from "../api.js";
@@ -9,7 +9,9 @@ import styles from "./Header.module.css";
 export default function Header({ theme, onToggleTheme, onSignOut, profile, isAdmin }) {
   const [params, setParams] = useSearchParams();
   const inputRef = useRef(null);
+  const menuRef = useRef(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const dateParam = params.get("d");
   const date = dateParam ? parseDateInput(dateParam) : new Date();
@@ -48,6 +50,30 @@ export default function Header({ theme, onToggleTheme, onSignOut, profile, isAdm
     inputRef.current?.focus();
   };
 
+  useEffect(() => {
+    if (!isMenuOpen) return undefined;
+
+    const handlePointerDown = (event) => {
+      if (!menuRef.current?.contains(event.target)) {
+        setIsMenuOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setIsMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isMenuOpen]);
+
   return (
     <header className={styles.header}>
       <div className={styles.container}>
@@ -56,20 +82,6 @@ export default function Header({ theme, onToggleTheme, onSignOut, profile, isAdm
           <button className={styles.themeToggle} onClick={onToggleTheme} type="button" aria-label="Toggle theme">
             {theme === "dark" ? "☾" : "☀"}
           </button>
-          {isAdmin ? (
-            <Link className={styles.adminButton} to="/admin">
-              Admin
-            </Link>
-          ) : null}
-          <button className={styles.lockButton} onClick={onSignOut} type="button">
-            Sign Out
-          </button>
-          {profile ? (
-            <Link to="/me" className={styles.userChip}>
-              <span className={styles.userName}>{profile.display_name || profile.email}</span>
-              <span className={styles.userRole}>{profile.role}</span>
-            </Link>
-          ) : null}
         </div>
 
         <Link to="/" className={styles.logoLink}>
@@ -78,6 +90,51 @@ export default function Header({ theme, onToggleTheme, onSignOut, profile, isAdm
             <div className={styles.logoLine2}>Stats</div>
           </div>
         </Link>
+        {profile ? (
+          <div className={styles.userMenu} ref={menuRef}>
+            <button
+              type="button"
+              className={styles.userChip}
+              onClick={() => setIsMenuOpen((prev) => !prev)}
+              aria-haspopup="menu"
+              aria-expanded={isMenuOpen}
+            >
+              <span className={styles.userName}>{profile.display_name || profile.email}</span>
+              <span className={styles.userRole}>{profile.role}</span>
+              <span className={styles.userCaret} aria-hidden="true">
+                ▾
+              </span>
+            </button>
+            {isMenuOpen ? (
+              <div className={styles.userDropdown} role="menu">
+                <Link to="/me" className={styles.dropdownItem} role="menuitem" onClick={() => setIsMenuOpen(false)}>
+                  My Vault
+                </Link>
+                {isAdmin ? (
+                  <Link
+                    to="/admin"
+                    className={styles.dropdownItem}
+                    role="menuitem"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Admin
+                  </Link>
+                ) : null}
+                <button
+                  type="button"
+                  className={styles.dropdownItemButton}
+                  role="menuitem"
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    onSignOut();
+                  }}
+                >
+                  Sign Out
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         <div className={styles.datePickerWrapper}>
           {isOpen && <div className={styles.backdrop} onClick={() => setIsOpen(false)} />}
           <button className={styles.dateButton} onClick={openPicker} type="button">

@@ -238,6 +238,11 @@
   cursor: pointer;
 }
 
+.noteActions button:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
 .noteCancel {
   background: var(--border);
   color: var(--text);
@@ -254,6 +259,15 @@
   padding: 8px 10px;
   background: #fee2e2;
   color: #991b1b;
+  font-size: 13px;
+}
+
+.modalStatus {
+  margin-top: 10px;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #e0f2fe;
+  color: #0c4a6e;
   font-size: 13px;
 }
 

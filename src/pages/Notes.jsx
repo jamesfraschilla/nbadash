@@ -70,6 +70,7 @@ export default function Notes() {
   const [editNote, setEditNote] = useState(null);
   const [editDraft, setEditDraft] = useState({ text: "", tags: [] });
   const [editError, setEditError] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
   const [shareNote, setShareNote] = useState(null);
   const [historyNote, setHistoryNote] = useState(null);
 
@@ -139,11 +140,14 @@ export default function Notes() {
     setEditNote(null);
     setEditDraft({ text: "", tags: [] });
     setEditError("");
+    setSavingEdit(false);
   };
 
   const saveEdit = async () => {
-    if (!editNote) return;
+    if (!editNote || savingEdit) return;
     try {
+      setSavingEdit(true);
+      setEditError("");
       await updateNoteRecord(editNote.id, {
         text: String(editDraft.text || "").trim(),
         tags: Array.isArray(editDraft.tags) ? editDraft.tags : [],
@@ -152,6 +156,7 @@ export default function Notes() {
       closeEdit();
     } catch (saveError) {
       setEditError(saveError?.message || "Unable to save note.");
+      setSavingEdit(false);
     }
   };
 
@@ -308,13 +313,14 @@ export default function Notes() {
               value={editDraft.text}
               onChange={(event) => setEditDraft((prev) => ({ ...prev, text: event.target.value }))}
             />
+            {savingEdit ? <div className={styles.modalStatus}>Saving...</div> : null}
             {editError ? <div className={styles.modalError}>{editError}</div> : null}
             <div className={styles.noteActions}>
-              <button type="button" className={styles.noteCancel} onClick={closeEdit}>
+              <button type="button" className={styles.noteCancel} onClick={closeEdit} disabled={savingEdit}>
                 Cancel
               </button>
-              <button type="button" className={styles.noteSave} onClick={saveEdit}>
-                Save
+              <button type="button" className={styles.noteSave} onClick={saveEdit} disabled={savingEdit}>
+                {savingEdit ? "Saving..." : "Save"}
               </button>
             </div>
           </div>

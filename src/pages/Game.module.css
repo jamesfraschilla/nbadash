@@ -372,6 +372,11 @@ html[data-theme="dark"] .pbpWheel {
   cursor: pointer;
 }
 
+.noteActions button:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
 .noteRemove {
   background: #ffe4e4;
   color: #7a0c0c;

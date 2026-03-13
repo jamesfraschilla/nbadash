@@ -39,30 +39,6 @@
   line-height: 1.4;
 }
 
-.modeTabs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.modeTab {
-  border: 1px solid #d1d5db;
-  background: #f3f4f6;
-  color: #374151;
-  border-radius: 10px;
-  padding: 10px 12px;
-  font-size: 0.875rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.modeTabActive {
-  background: #111827;
-  color: #ffffff;
-  border-color: #111827;
-}
-
 .form {
   display: grid;
   gap: 12px;
@@ -115,4 +91,11 @@
 .submitButton:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.helpText {
+  margin-top: -2px;
+  color: #6b7280;
+  font-size: 0.75rem;
+  line-height: 1.4;
 }

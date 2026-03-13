@@ -377,6 +377,7 @@ export default function Game({ variant = "full" }) {
   const [noteEditor, setNoteEditor] = useState({ open: false, actionNumber: null });
   const [noteDraft, setNoteDraft] = useState("");
   const [noteModalOpen, setNoteModalOpen] = useState(false);
+  const [savingNewNote, setSavingNewNote] = useState(false);
   const [noteForm, setNoteForm] = useState({
     period: "--",
     minutes: "--",
@@ -882,6 +883,7 @@ export default function Game({ variant = "full" }) {
 
   const closeAddNote = () => {
     setNoteModalOpen(false);
+    setSavingNewNote(false);
   };
 
   const requestCancelNote = () => {
@@ -889,7 +891,7 @@ export default function Game({ variant = "full" }) {
   };
 
   const saveNewNote = async () => {
-    if (!gameId) return;
+    if (!gameId || savingNewNote) return;
     const minutesValue = noteForm.minutes === "--" ? null : Number(noteForm.minutes);
     const secondsValue = noteForm.seconds === "--" ? null : Number(noteForm.seconds);
     const payload = {
@@ -901,9 +903,11 @@ export default function Game({ variant = "full" }) {
       tags: Array.isArray(noteForm.tags) ? noteForm.tags : [],
     };
     try {
+      setSavingNewNote(true);
       await createNote(payload, user?.id);
       closeAddNote();
     } catch (error) {
+      setSavingNewNote(false);
       window.alert(error?.message || "Unable to save note.");
     }
   };
@@ -2104,11 +2108,11 @@ export default function Game({ variant = "full" }) {
               }
             />
             <div className={styles.noteActions}>
-              <button type="button" className={styles.noteCancel} onClick={requestCancelNote}>
+              <button type="button" className={styles.noteCancel} onClick={requestCancelNote} disabled={savingNewNote}>
                 Cancel
               </button>
-              <button type="button" className={styles.noteSave} onClick={saveNewNote}>
-                OK
+              <button type="button" className={styles.noteSave} onClick={saveNewNote} disabled={savingNewNote}>
+                {savingNewNote ? "Saving..." : "OK"}
               </button>
             </div>
           </div>
