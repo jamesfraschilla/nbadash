@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { useQueries, useQuery } from "@tanstack/react-query";
-import { listOwnedDrawings, listOwnedNotes } from "../accountData.js";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { deleteDrawingRecord, deleteNoteRecord, listOwnedDrawings, listOwnedNotes } from "../accountData.js";
 import { useAuth } from "../auth/useAuth.js";
 import { fetchGame } from "../api.js";
 import styles from "./UserContent.module.css";
@@ -87,11 +87,13 @@ function buildGameMeta(game) {
 
 export default function UserContent() {
   const { user, profile } = useAuth();
+  const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") === "drawings" ? "drawings" : "notes";
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [opponentFilter, setOpponentFilter] = useState("all");
+  const [deletingKey, setDeletingKey] = useState("");
 
   const { data: notes = [], isLoading: loadingNotes } = useQuery({
     queryKey: ["owned-notes", user?.id],
@@ -178,6 +180,36 @@ export default function UserContent() {
     const nextParams = new URLSearchParams(params);
     nextParams.set("tab", nextTab);
     setParams(nextParams, { replace: true });
+  };
+
+  const handleDeleteNote = async (note) => {
+    if (!user?.id) return;
+    const confirmed = window.confirm("Delete this saved note?");
+    if (!confirmed) return;
+    const key = `note:${note.id}`;
+    try {
+      setDeletingKey(key);
+      await deleteNoteRecord(note.id, user.id);
+      await queryClient.invalidateQueries({ queryKey: ["owned-notes", user.id] });
+      await queryClient.invalidateQueries({ queryKey: ["notes"] });
+    } finally {
+      setDeletingKey("");
+    }
+  };
+
+  const handleDeleteDrawing = async (drawing) => {
+    if (!user?.id) return;
+    const confirmed = window.confirm(`Delete "${drawing.title || "Untitled board"}"?`);
+    if (!confirmed) return;
+    const key = `drawing:${drawing.id}`;
+    try {
+      setDeletingKey(key);
+      await deleteDrawingRecord(drawing.id, user.id);
+      await queryClient.invalidateQueries({ queryKey: ["owned-drawings", user.id] });
+      await queryClient.invalidateQueries({ queryKey: ["drawings"] });
+    } finally {
+      setDeletingKey("");
+    }
   };
 
   return (
@@ -273,6 +305,7 @@ export default function UserContent() {
             <div className={styles.list}>
               {filteredNotes.map((note) => {
                 const meta = gameMetaById.get(String(note.game_id || "").trim());
+                const isDeleting = deletingKey === `note:${note.id}`;
                 return (
                   <article key={note.id} className={styles.card}>
                     <div className={styles.cardHeader}>
@@ -282,9 +315,19 @@ export default function UserContent() {
                           {meta?.gameDate || "Unknown date"} · {note.period_label || "--"} · {formatClock(note)} · {note.sharing_scope}
                         </div>
                       </div>
-                      <Link className={styles.cardLink} to={`/g/${note.game_id}/notes`}>
-                        Open Notes
-                      </Link>
+                      <div className={styles.cardActions}>
+                        <Link className={styles.cardLink} to={`/g/${note.game_id}/notes`}>
+                          Open Notes
+                        </Link>
+                        <button
+                          type="button"
+                          className={styles.deleteButton}
+                          onClick={() => handleDeleteNote(note)}
+                          disabled={isDeleting}
+                        >
+                          {isDeleting ? "Deleting..." : "Delete"}
+                        </button>
+                      </div>
                     </div>
                     <div className={styles.cardBody}>{note.text || "—"}</div>
                     {Array.isArray(note.tags) && note.tags.length ? (
@@ -311,6 +354,7 @@ export default function UserContent() {
             <div className={styles.list}>
               {filteredDrawings.map((drawing) => {
                 const meta = gameMetaById.get(String(drawing.game_id || "").trim());
+                const isDeleting = deletingKey === `drawing:${drawing.id}`;
                 return (
                   <article key={drawing.id} className={styles.card}>
                     <div className={styles.cardHeader}>
@@ -324,16 +368,26 @@ export default function UserContent() {
                           {drawing.court_mode} court · {drawing.sharing_scope}
                         </div>
                       </div>
-                      <Link
-                        className={styles.cardLink}
-                        to={`/draw?${new URLSearchParams({
-                          ...(drawing.game_id ? { gameId: drawing.game_id } : {}),
-                          boardId: drawing.id,
-                          back: "/me?tab=drawings",
-                        }).toString()}`}
-                      >
-                        Open Board
-                      </Link>
+                      <div className={styles.cardActions}>
+                        <Link
+                          className={styles.cardLink}
+                          to={`/draw?${new URLSearchParams({
+                            ...(drawing.game_id ? { gameId: drawing.game_id } : {}),
+                            boardId: drawing.id,
+                            back: "/me?tab=drawings",
+                          }).toString()}`}
+                        >
+                          Open Board
+                        </Link>
+                        <button
+                          type="button"
+                          className={styles.deleteButton}
+                          onClick={() => handleDeleteDrawing(drawing)}
+                          disabled={isDeleting}
+                        >
+                          {isDeleting ? "Deleting..." : "Delete"}
+                        </button>
+                      </div>
                     </div>
                     <div className={styles.cardBody}>
                       Saved board
