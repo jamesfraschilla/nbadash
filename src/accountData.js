@@ -245,9 +245,35 @@ export async function importLegacyLocalNotes(actorId) {
     };
   });
 
+  const dedupedRows = Array.from(
+    new Map(rows.map((row) => [row.legacy_local_id, row])).values()
+  );
+
+  const legacyIds = dedupedRows
+    .map((row) => row.legacy_local_id)
+    .filter(Boolean);
+
+  const { data: existingRows, error: existingError } = await supabase
+    .from("user_notes")
+    .select("legacy_local_id")
+    .eq("owner_id", actorId)
+    .in("legacy_local_id", legacyIds);
+
+  if (existingError) throw existingError;
+
+  const existingLegacyIds = new Set((existingRows || []).map((row) => row.legacy_local_id));
+  const rowsToInsert = dedupedRows.filter((row) => !existingLegacyIds.has(row.legacy_local_id));
+
+  if (!rowsToInsert.length) {
+    return {
+      importedCount: 0,
+      skippedCount: dedupedRows.length,
+    };
+  }
+
   const { data, error } = await supabase
     .from("user_notes")
-    .upsert(rows, { onConflict: "owner_id,legacy_local_id" })
+    .insert(rowsToInsert)
     .select("*");
 
   if (error) throw error;
@@ -271,7 +297,7 @@ export async function importLegacyLocalNotes(actorId) {
 
   return {
     importedCount: data?.length || 0,
-    skippedCount: Math.max(0, localNotes.length - (data?.length || 0)),
+    skippedCount: Math.max(0, dedupedRows.length - (data?.length || 0)),
   };
 }
 
