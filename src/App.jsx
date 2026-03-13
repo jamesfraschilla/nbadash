@@ -2,6 +2,10 @@ import { useEffect, useState } from "react";
 import { Route, Routes } from "react-router-dom";
 import Header from "./components/Header.jsx";
 import AccessGate from "./components/AccessGate.jsx";
+import AuthGate from "./components/AuthGate.jsx";
+import LegacyNotesImportPrompt from "./components/LegacyNotesImportPrompt.jsx";
+import PasswordResetGate from "./components/PasswordResetGate.jsx";
+import { useAuth } from "./auth/useAuth.js";
 import Home from "./pages/Home.jsx";
 import Game from "./pages/Game.jsx";
 import PlayByPlay from "./pages/PlayByPlay.jsx";
@@ -10,6 +14,8 @@ import Notes from "./pages/Notes.jsx";
 import Drawing from "./pages/Drawing.jsx";
 import PreGame from "./pages/PreGame.jsx";
 import Rotations from "./pages/Rotations.jsx";
+import Admin from "./pages/Admin.jsx";
+import UserContent from "./pages/UserContent.jsx";
 
 const ACCESS_SESSION_STORAGE_KEY = "site-access-session:v1";
 const ACCESS_SESSION_DURATION_MS = 14 * 24 * 60 * 60 * 1000;
@@ -38,6 +44,15 @@ function loadAccessSession() {
 export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem("theme") || "light");
   const [isUnlocked, setIsUnlocked] = useState(loadAccessSession);
+  const {
+    accountsEnabled,
+    loading,
+    user,
+    profile,
+    requiresPasswordReset,
+    signOut,
+    isAdmin,
+  } = useAuth();
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -60,20 +75,56 @@ export default function App() {
     setIsUnlocked(false);
   };
 
-  if (!isUnlocked) {
+  if (accountsEnabled) {
+    if (loading) {
+      return <div style={{ padding: "40px 16px", textAlign: "center" }}>Loading account...</div>;
+    }
+
+    if (!user) {
+      return <AuthGate />;
+    }
+
+    if (requiresPasswordReset) {
+      return <PasswordResetGate />;
+    }
+
+    if (!profile) {
+      return (
+        <div style={{ padding: "40px 16px", textAlign: "center" }}>
+          Your account is signed in, but no profile was found yet.
+        </div>
+      );
+    }
+
+    if (profile.status !== "active") {
+      return (
+        <div style={{ padding: "40px 16px", textAlign: "center" }}>
+          <div>Your account is currently {profile.status}.</div>
+          <button type="button" onClick={signOut} style={{ marginTop: 12 }}>
+            Sign Out
+          </button>
+        </div>
+      );
+    }
+  } else if (!isUnlocked) {
     return <AccessGate onUnlock={unlockSite} />;
   }
 
   return (
     <div>
+      {accountsEnabled ? <LegacyNotesImportPrompt /> : null}
       <Header
         theme={theme}
         onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
-        onLock={lockSite}
+        onSignOut={accountsEnabled ? signOut : lockSite}
+        profile={profile}
+        isAdmin={isAdmin}
       />
       <main>
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/me" element={<UserContent />} />
+          <Route path="/admin" element={<Admin />} />
           <Route path="/g/:gameId" element={<Game />} />
           <Route path="/g/:gameId/atc" element={<Game variant="atc" />} />
           <Route path="/g/:gameId/events" element={<PlayByPlay />} />

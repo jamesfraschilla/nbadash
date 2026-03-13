@@ -1,6 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { deleteNote, loadNotesForGame, updateNote } from "../notesStorage.js";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  deleteNoteRecord,
+  listNoteShares,
+  listNoteVersions,
+  listNotesForGame,
+  updateNoteRecord,
+  updateNoteShares,
+} from "../accountData.js";
+import ShareDialog from "../components/ShareDialog.jsx";
+import VersionHistoryDialog from "../components/VersionHistoryDialog.jsx";
+import { useAuth } from "../auth/useAuth.js";
 import styles from "./Notes.module.css";
 
 const periodOrder = {
@@ -26,7 +37,7 @@ const filterTags = [
 ];
 const noteTags = filterTags.filter((tag) => tag !== "All");
 
-const getPeriodOrder = (note) => periodOrder[note.periodLabel] || 99;
+const getPeriodOrder = (note) => periodOrder[note.period_label] || 99;
 
 const getRemainingSeconds = (note) => {
   if (note.minutes == null || note.seconds == null) return -1;
@@ -38,26 +49,51 @@ const formatClock = (note) => {
   return `${note.minutes}:${String(note.seconds).padStart(2, "0")}`;
 };
 
+function describeVersion(version) {
+  const snapshot = version.snapshot || {};
+  const header = `${snapshot.period_label || "--"} ${snapshot.minutes ?? "--"}:${String(snapshot.seconds ?? "--").padStart(2, "0")}`;
+  const tags = Array.isArray(snapshot.tags) && snapshot.tags.length ? `Tags: ${snapshot.tags.join(", ")}` : "Tags: none";
+  return `${header}\n${tags}\n\n${snapshot.text || ""}`.trim();
+}
+
 export default function Notes() {
   const { gameId } = useParams();
+  const { user, isAdmin } = useAuth();
+  const queryClient = useQueryClient();
   const [params] = useSearchParams();
   const dateParam = params.get("d");
   const fromParam = params.get("from");
   const backPath = fromParam === "atc" ? `/g/${gameId}/atc` : `/g/${gameId}`;
   const backUrl = dateParam ? `${backPath}?d=${dateParam}` : backPath;
-  const [notes, setNotes] = useState(() => loadNotesForGame(gameId));
   const [periodFilter, setPeriodFilter] = useState("All");
   const [tagFilter, setTagFilter] = useState("All");
   const [editNote, setEditNote] = useState(null);
   const [editDraft, setEditDraft] = useState({ text: "", tags: [] });
+  const [editError, setEditError] = useState("");
+  const [shareNote, setShareNote] = useState(null);
+  const [historyNote, setHistoryNote] = useState(null);
 
-  useEffect(() => {
-    setNotes(loadNotesForGame(gameId));
-  }, [gameId]);
+  const { data: notes = [], isLoading, error } = useQuery({
+    queryKey: ["notes", gameId],
+    queryFn: () => listNotesForGame(gameId),
+    enabled: Boolean(gameId && user?.id),
+  });
+
+  const { data: shareRecipients = [] } = useQuery({
+    queryKey: ["note-shares", shareNote?.id],
+    queryFn: () => listNoteShares(shareNote.id),
+    enabled: Boolean(shareNote?.id),
+  });
+
+  const { data: noteVersions = [] } = useQuery({
+    queryKey: ["note-versions", historyNote?.id],
+    queryFn: () => listNoteVersions(historyNote.id),
+    enabled: Boolean(historyNote?.id),
+  });
 
   const filteredNotes = useMemo(() => {
     return notes.filter((note) => {
-      const periodValue = note.periodLabel || "--";
+      const periodValue = note.period_label || "--";
       const matchesPeriod = periodFilter === "All" || periodFilter === periodValue;
       const tags = Array.isArray(note.tags) ? note.tags : [];
       const matchesTag = tagFilter === "All" || tags.includes(tagFilter);
@@ -71,14 +107,23 @@ export default function Notes() {
       if (periodDiff) return periodDiff;
       const remainingDiff = getRemainingSeconds(b) - getRemainingSeconds(a);
       if (remainingDiff) return remainingDiff;
-      return (a.createdAt || 0) - (b.createdAt || 0);
+      return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
     });
   }, [filteredNotes]);
 
-  const handleDelete = (id) => {
+  const invalidateNotes = () => {
+    return Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["notes", gameId] }),
+      queryClient.invalidateQueries({ queryKey: ["note-versions"] }),
+      queryClient.invalidateQueries({ queryKey: ["note-shares"] }),
+    ]);
+  };
+
+  const handleDelete = async (id) => {
     const confirmed = window.confirm("Delete this note?");
     if (!confirmed) return;
-    setNotes(deleteNote(id).filter((note) => note.gameId === gameId));
+    await deleteNoteRecord(id, user?.id);
+    await invalidateNotes();
   };
 
   const openEdit = (note) => {
@@ -87,30 +132,55 @@ export default function Notes() {
       text: note.text || "",
       tags: Array.isArray(note.tags) ? note.tags : [],
     });
+    setEditError("");
   };
 
   const closeEdit = () => {
     setEditNote(null);
     setEditDraft({ text: "", tags: [] });
+    setEditError("");
   };
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (!editNote) return;
-    const updated = updateNote(editNote.id, {
-      text: String(editDraft.text || "").trim(),
-      tags: Array.isArray(editDraft.tags) ? editDraft.tags : [],
-    });
-    setNotes(updated.filter((note) => note.gameId === gameId));
-    closeEdit();
+    try {
+      await updateNoteRecord(editNote.id, {
+        text: String(editDraft.text || "").trim(),
+        tags: Array.isArray(editDraft.tags) ? editDraft.tags : [],
+      }, user?.id);
+      await invalidateNotes();
+      closeEdit();
+    } catch (saveError) {
+      setEditError(saveError?.message || "Unable to save note.");
+    }
   };
+
+  const restoreVersion = async (version) => {
+    if (!historyNote) return;
+    const snapshot = version.snapshot || {};
+    await updateNoteRecord(historyNote.id, {
+      text: snapshot.text || "",
+      tags: snapshot.tags || [],
+      periodLabel: snapshot.period_label || null,
+      minutes: snapshot.minutes ?? null,
+      seconds: snapshot.seconds ?? null,
+    }, user?.id);
+    await invalidateNotes();
+    setHistoryNote(null);
+  };
+
+  if (isLoading) {
+    return <div className={styles.container}>Loading notes...</div>;
+  }
+
+  if (error) {
+    return <div className={styles.container}>Failed to load notes.</div>;
+  }
 
   return (
     <div className={styles.container}>
       <div className={styles.backRow}>
-        <Link
-          className={styles.backButton}
-          to={backUrl}
-        >
+        <Link className={styles.backButton} to={backUrl}>
           Back
         </Link>
       </div>
@@ -145,29 +215,57 @@ export default function Notes() {
       ) : (
         <div className={styles.list}>
           {sortedNotes.map((note) => (
-            <div key={note.id} className={styles.noteRow}>
-              <button
-                type="button"
-                className={styles.noteDelete}
-                onClick={() => handleDelete(note.id)}
-                aria-label="Delete note"
-              >
-                ×
-              </button>
-              <div className={styles.noteMeta}>
-                <span className={styles.notePeriod}>{note.periodLabel || "--"}</span>
-                <span className={styles.noteClock}>{formatClock(note)}</span>
-              </div>
-              <div className={styles.noteBody}>{note.text || "—"}</div>
-              <button
-                type="button"
-                className={styles.noteEdit}
-                onClick={() => openEdit(note)}
-                aria-label="Edit note"
-              >
-                Edit
-              </button>
-            </div>
+            (() => {
+              const canManage = note.owner_id === user?.id || isAdmin;
+              return (
+                <div key={note.id} className={styles.noteRow}>
+                  {canManage ? (
+                    <button
+                      type="button"
+                      className={styles.noteDelete}
+                      onClick={() => handleDelete(note.id)}
+                      aria-label="Delete note"
+                    >
+                      ×
+                    </button>
+                  ) : (
+                    <div className={styles.noteDeleteSpacer} />
+                  )}
+                  <div className={styles.noteMeta}>
+                    <span className={styles.notePeriod}>{note.period_label || "--"}</span>
+                    <span className={styles.noteClock}>{formatClock(note)}</span>
+                    {note.sharing_scope === "shared" ? (
+                      <span className={styles.sharedBadge}>Shared</span>
+                    ) : (
+                      <span className={styles.privateBadge}>Private</span>
+                    )}
+                  </div>
+                  <div>
+                    <div className={styles.noteBody}>{note.text || "—"}</div>
+                    {Array.isArray(note.tags) && note.tags.length ? (
+                      <div className={styles.tagRow}>
+                        {note.tags.map((tag) => (
+                          <span key={tag} className={styles.tagChip}>{tag}</span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className={styles.noteButtons}>
+                    <button type="button" className={styles.noteEdit} onClick={() => openEdit(note)}>
+                      Edit
+                    </button>
+                    {canManage ? (
+                      <button type="button" className={styles.noteSecondary} onClick={() => setShareNote(note)}>
+                        Share
+                      </button>
+                    ) : null}
+                    <button type="button" className={styles.noteSecondary} onClick={() => setHistoryNote(note)}>
+                      History
+                    </button>
+                  </div>
+                </div>
+              );
+            })()
           ))}
         </div>
       )}
@@ -210,6 +308,7 @@ export default function Notes() {
               value={editDraft.text}
               onChange={(event) => setEditDraft((prev) => ({ ...prev, text: event.target.value }))}
             />
+            {editError ? <div className={styles.modalError}>{editError}</div> : null}
             <div className={styles.noteActions}>
               <button type="button" className={styles.noteCancel} onClick={closeEdit}>
                 Cancel
@@ -221,6 +320,27 @@ export default function Notes() {
           </div>
         </div>
       )}
+
+      <ShareDialog
+        open={Boolean(shareNote)}
+        title={shareNote ? `Share Note: ${shareNote.text || "Untitled note"}` : "Share Note"}
+        initialSelectedIds={shareRecipients}
+        onClose={() => setShareNote(null)}
+        onSave={async (userIds) => {
+          await updateNoteShares(shareNote.id, userIds, user?.id);
+          await invalidateNotes();
+          setShareNote(null);
+        }}
+      />
+
+      <VersionHistoryDialog
+        open={Boolean(historyNote)}
+        title={historyNote ? `Note History: ${historyNote.text || "Untitled note"}` : "Note History"}
+        versions={noteVersions}
+        onClose={() => setHistoryNote(null)}
+        onRestore={restoreVersion}
+        describeVersion={describeVersion}
+      />
     </div>
   );
 }

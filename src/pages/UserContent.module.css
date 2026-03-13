@@ -1,0 +1,237 @@
+.page {
+  display: grid;
+  gap: 18px;
+}
+
+.hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(220, 38, 38, 0.12), transparent 34%),
+    linear-gradient(145deg, var(--panel), var(--bg));
+}
+
+.kicker {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.title {
+  margin: 8px 0 6px;
+  font-size: 1.9rem;
+}
+
+.subtitle {
+  color: var(--muted);
+  max-width: 620px;
+}
+
+.heroStats {
+  display: flex;
+  gap: 12px;
+}
+
+.statCard {
+  min-width: 120px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.statLabel {
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.statValue {
+  margin-top: 8px;
+  font-size: 1.8rem;
+  font-weight: 800;
+}
+
+.tabRow {
+  display: flex;
+  gap: 10px;
+}
+
+.filterPanel {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--panel);
+  padding: 16px;
+}
+
+.filterGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 12px;
+  flex: 1;
+}
+
+.filterField {
+  display: grid;
+  gap: 6px;
+}
+
+.filterField span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.filterField input,
+.filterField select {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  padding: 10px 12px;
+  font-size: 0.92rem;
+}
+
+.clearFiltersButton {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  padding: 10px 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tabButton {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 9px 14px;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+
+.tabButtonActive {
+  background: var(--text);
+  color: var(--bg);
+  border-color: var(--text);
+}
+
+.section {
+  display: grid;
+}
+
+.list {
+  display: grid;
+  gap: 12px;
+}
+
+.card,
+.emptyState {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--panel);
+  padding: 16px;
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.cardTitle {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.cardMeta,
+.cardFooter {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.cardLink {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  background: var(--bg);
+  white-space: nowrap;
+}
+
+.cardBody {
+  margin-top: 12px;
+  white-space: pre-wrap;
+  line-height: 1.4;
+}
+
+.tagRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.tagChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--panel-strong);
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.cardFooter {
+  margin-top: 12px;
+}
+
+.emptyState {
+  color: var(--muted);
+}
+
+@media (max-width: 768px) {
+  .hero {
+    flex-direction: column;
+  }
+
+  .heroStats {
+    width: 100%;
+  }
+
+  .statCard {
+    flex: 1;
+  }
+
+  .cardHeader {
+    flex-direction: column;
+  }
+
+  .cardLink {
+    align-self: flex-start;
+  }
+
+  .filterPanel {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filterGrid {
+    grid-template-columns: 1fr;
+  }
+}

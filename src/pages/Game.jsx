@@ -1,9 +1,10 @@
 import { Link, useSearchParams, useParams } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { createNote } from "../accountData.js";
 import { fetchGame, fetchMinutes, playerHeadshotUrl, teamLogoUrl } from "../api.js";
+import { useAuth } from "../auth/useAuth.js";
 import { gameStatusLabel, normalizeClock } from "../utils.js";
-import { saveNote as saveDashboardNote } from "../notesStorage.js";
 import BoxScoreTable from "../components/BoxScoreTable.jsx";
 import StatBars from "../components/StatBars.jsx";
 import Officials from "../components/Officials.jsx";
@@ -344,6 +345,7 @@ const parseTeamFoulMarker = (description) => {
 
 export default function Game({ variant = "full" }) {
   const { gameId } = useParams();
+  const { user } = useAuth();
   const [params, setParams] = useSearchParams();
   const dateParam = params.get("d");
   const courtBackUrl = dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`;
@@ -886,22 +888,24 @@ export default function Game({ variant = "full" }) {
     closeAddNote();
   };
 
-  const saveNewNote = () => {
+  const saveNewNote = async () => {
     if (!gameId) return;
     const minutesValue = noteForm.minutes === "--" ? null : Number(noteForm.minutes);
     const secondsValue = noteForm.seconds === "--" ? null : Number(noteForm.seconds);
     const payload = {
-      id: `${gameId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       gameId,
       periodLabel: noteForm.period === "--" ? null : noteForm.period,
       minutes: Number.isNaN(minutesValue) ? null : minutesValue,
       seconds: Number.isNaN(secondsValue) ? null : secondsValue,
       text: String(noteForm.text || "").trim(),
       tags: Array.isArray(noteForm.tags) ? noteForm.tags : [],
-      createdAt: Date.now(),
     };
-    saveDashboardNote(payload);
-    closeAddNote();
+    try {
+      await createNote(payload, user?.id);
+      closeAddNote();
+    } catch (error) {
+      window.alert(error?.message || "Unable to save note.");
+    }
   };
 
   const handleHoldStart = (actionNumber) => (event) => {
@@ -1823,7 +1827,7 @@ export default function Game({ variant = "full" }) {
             <button type="button" className={styles.navButton} onClick={handleScrollToBoxScore}>
               Box Score
             </button>
-            <Link to={`/draw?back=${encodeURIComponent(courtBackUrl)}`}>
+            <Link to={`/draw?back=${encodeURIComponent(courtBackUrl)}&gameId=${encodeURIComponent(gameId || "")}`}>
               Court
             </Link>
             <button type="button" className={styles.navButton} onClick={openAddNote}>

@@ -1,5 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  createDrawing,
+  deleteDrawingRecord,
+  listDrawingShares,
+  listDrawingVersions,
+  listDrawings,
+  updateDrawingRecord,
+  updateDrawingShares,
+} from "../accountData.js";
+import ShareDialog from "../components/ShareDialog.jsx";
+import VersionHistoryDialog from "../components/VersionHistoryDialog.jsx";
+import { useAuth } from "../auth/useAuth.js";
 import styles from "./Drawing.module.css";
 
 const TOOL_PEN = "pen";
@@ -7,7 +20,22 @@ const TOOL_ERASER = "eraser";
 
 const defaultColors = ["#111111", "#1f6feb", "#dc2626", "#16a34a", "#f59e0b", "#7c3aed"];
 
+function describeDrawingVersion(version) {
+  const snapshot = version.snapshot || {};
+  const strokeCount = Array.isArray(snapshot.strokes) ? snapshot.strokes.length : 0;
+  return `${snapshot.title || "Untitled board"}\n${snapshot.court_mode || "half"} court · ${strokeCount} strokes`;
+}
+
+function formatDrawingTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString();
+}
+
 export default function Drawing() {
+  const { user, isAdmin } = useAuth();
+  const queryClient = useQueryClient();
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const drawingRef = useRef(false);
@@ -22,9 +50,49 @@ export default function Drawing() {
   const [size, setSize] = useState(4);
   const [courtMode, setCourtMode] = useState("half");
   const [undoCount, setUndoCount] = useState(0);
+  const [selectedDrawingId, setSelectedDrawingId] = useState(null);
+  const [boardTitle, setBoardTitle] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
+  const [shareDrawing, setShareDrawing] = useState(null);
+  const [historyDrawing, setHistoryDrawing] = useState(null);
 
   const backParam = params.get("back");
+  const gameIdParam = params.get("gameId");
+  const boardIdParam = params.get("boardId");
   const backUrl = backParam && backParam.startsWith("/") ? backParam : "/";
+
+  const { data: drawings = [], isLoading } = useQuery({
+    queryKey: ["drawings", gameIdParam || "all"],
+    queryFn: () => listDrawings(gameIdParam || null),
+    enabled: Boolean(user?.id),
+  });
+
+  const { data: shareRecipients = [] } = useQuery({
+    queryKey: ["drawing-shares", shareDrawing?.id],
+    queryFn: () => listDrawingShares(shareDrawing.id),
+    enabled: Boolean(shareDrawing?.id),
+  });
+
+  const { data: drawingVersions = [] } = useQuery({
+    queryKey: ["drawing-versions", historyDrawing?.id],
+    queryFn: () => listDrawingVersions(historyDrawing.id),
+    enabled: Boolean(historyDrawing?.id),
+  });
+
+  const selectedDrawing = useMemo(
+    () => drawings.find((drawing) => drawing.id === selectedDrawingId) || null,
+    [drawings, selectedDrawingId]
+  );
+  const canManageSelectedDrawing = Boolean(selectedDrawing && (selectedDrawing.owner_id === user?.id || isAdmin));
+
+  useEffect(() => {
+    if (!boardIdParam || !drawings.length) return;
+    if (selectedDrawingId === boardIdParam) return;
+    const matchingDrawing = drawings.find((drawing) => drawing.id === boardIdParam);
+    if (matchingDrawing) {
+      loadDrawing(matchingDrawing);
+    }
+  }, [boardIdParam, drawings, selectedDrawingId]);
 
   const applyCanvasSize = (canvas, width, height) => {
     const ratio = window.devicePixelRatio || 1;
@@ -183,6 +251,15 @@ export default function Drawing() {
     }
   };
 
+  const loadDrawing = (drawing) => {
+    setSelectedDrawingId(drawing?.id || null);
+    setBoardTitle(drawing?.title || "");
+    setCourtMode(drawing?.court_mode === "full" ? "full" : "half");
+    strokesRef.current = Array.isArray(drawing?.strokes) ? drawing.strokes : [];
+    setUndoCount(strokesRef.current.length);
+    requestAnimationFrame(redrawAll);
+  };
+
   const clearCanvas = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -192,11 +269,69 @@ export default function Drawing() {
     setUndoCount(0);
   };
 
+  const startNewBoard = () => {
+    setSelectedDrawingId(null);
+    setBoardTitle("");
+    setStatusMessage("");
+    clearCanvas();
+  };
+
   const undoLast = () => {
     if (strokesRef.current.length === 0) return;
     strokesRef.current.pop();
     setUndoCount(strokesRef.current.length);
     redrawAll();
+  };
+
+  const invalidateDrawings = () => {
+    return Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["drawings"] }),
+      queryClient.invalidateQueries({ queryKey: ["drawing-shares"] }),
+      queryClient.invalidateQueries({ queryKey: ["drawing-versions"] }),
+    ]);
+  };
+
+  const saveBoard = async () => {
+    const payload = {
+      gameId: gameIdParam || null,
+      title: boardTitle,
+      courtMode,
+      strokes: strokesRef.current,
+    };
+    try {
+      const saved = selectedDrawing
+        ? await updateDrawingRecord(selectedDrawing.id, payload, user?.id)
+        : await createDrawing(payload, user?.id);
+      await invalidateDrawings();
+      loadDrawing(saved);
+      setStatusMessage("Board saved.");
+    } catch (error) {
+      setStatusMessage(error?.message || "Unable to save board.");
+    }
+  };
+
+  const deleteBoard = async () => {
+    if (!selectedDrawing) return;
+    const confirmed = window.confirm(`Delete "${selectedDrawing.title}"?`);
+    if (!confirmed) return;
+    await deleteDrawingRecord(selectedDrawing.id, user?.id);
+    await invalidateDrawings();
+    startNewBoard();
+    setStatusMessage("Board deleted.");
+  };
+
+  const restoreVersion = async (version) => {
+    if (!historyDrawing) return;
+    const snapshot = version.snapshot || {};
+    const restored = await updateDrawingRecord(historyDrawing.id, {
+      title: snapshot.title || "Untitled board",
+      courtMode: snapshot.court_mode || "half",
+      strokes: Array.isArray(snapshot.strokes) ? snapshot.strokes : [],
+    }, user?.id);
+    await invalidateDrawings();
+    loadDrawing(restored);
+    setHistoryDrawing(null);
+    setStatusMessage("Version restored.");
   };
 
   const toolLabel = useMemo(() => (tool === TOOL_PEN ? "Pen" : "Eraser"), [tool]);
@@ -209,111 +344,209 @@ export default function Drawing() {
         <Link className={styles.backButton} to={backUrl}>
           Back
         </Link>
+        <button type="button" className={styles.secondaryButton} onClick={startNewBoard}>
+          New Board
+        </button>
+        <button type="button" className={styles.primaryButton} onClick={saveBoard}>
+          {selectedDrawing ? "Update Board" : "Save Board"}
+        </button>
+        {selectedDrawing ? (
+          <>
+            {canManageSelectedDrawing ? (
+              <button type="button" className={styles.secondaryButton} onClick={() => setShareDrawing(selectedDrawing)}>
+                Share
+              </button>
+            ) : null}
+            <button type="button" className={styles.secondaryButton} onClick={() => setHistoryDrawing(selectedDrawing)}>
+              History
+            </button>
+            {canManageSelectedDrawing ? (
+              <button type="button" className={styles.deleteButton} onClick={deleteBoard}>
+                Delete
+              </button>
+            ) : null}
+          </>
+        ) : null}
       </div>
 
-      <div className={styles.controls}>
-        <div className={styles.toolGroup}>
-          <span className={styles.toolLabel}>Tool</span>
-          <button
-            type="button"
-            className={`${styles.toolButton} ${tool === TOOL_PEN ? styles.toolActive : ""}`}
-            onClick={() => setTool(TOOL_PEN)}
-          >
-            Pen
-          </button>
-          <button
-            type="button"
-            className={`${styles.toolButton} ${tool === TOOL_ERASER ? styles.toolActive : ""}`}
-            onClick={() => setTool(TOOL_ERASER)}
-          >
-            Eraser
-          </button>
-          <span className={styles.toolChip}>{toolLabel}</span>
-        </div>
-
-        <div className={styles.toolGroup}>
-          <span className={styles.toolLabel}>Thickness</span>
-          <input
-            type="range"
-            min="2"
-            max="18"
-            value={size}
-            onChange={(event) => setSize(Number(event.target.value))}
-          />
-          <span className={styles.toolChip}>{size}px</span>
-        </div>
-
-        <div className={styles.toolGroup}>
-          <span className={styles.toolLabel}>Color</span>
-          <div className={styles.colorSwatches}>
-            {defaultColors.map((swatch) => (
-              <button
-                key={swatch}
-                type="button"
-                className={`${styles.colorButton} ${color === swatch ? styles.colorActive : ""}`}
-                style={{ backgroundColor: swatch }}
-                onClick={() => setColor(swatch)}
-                aria-label={`Use color ${swatch}`}
+      <div className={styles.workspace}>
+        <aside className={styles.sidebar}>
+          <div className={styles.sidebarCard}>
+            <div className={styles.panelTitle}>Board Details</div>
+            <label className={styles.field}>
+              <span>Title</span>
+              <input
+                type="text"
+                value={boardTitle}
+                onChange={(event) => setBoardTitle(event.target.value)}
+                placeholder="Example: Late Game ATO"
               />
-            ))}
-            <input
-              className={styles.colorPicker}
-              type="color"
-              value={color}
-              onChange={(event) => setColor(event.target.value)}
-              disabled={tool === TOOL_ERASER}
-              aria-label="Pick custom color"
+            </label>
+            <div className={styles.metaText}>
+              {gameIdParam ? `Attached to game ${gameIdParam}` : "Not tied to a specific game"}
+            </div>
+            {selectedDrawing ? (
+              <div className={styles.metaText}>
+                Last saved {formatDrawingTime(selectedDrawing.updated_at)}
+              </div>
+            ) : null}
+            {statusMessage ? <div className={styles.statusMessage}>{statusMessage}</div> : null}
+          </div>
+
+          <div className={styles.sidebarCard}>
+            <div className={styles.panelTitle}>Saved Boards</div>
+            <div className={styles.savedList}>
+              {isLoading ? (
+                <div className={styles.metaText}>Loading boards...</div>
+              ) : drawings.length === 0 ? (
+                <div className={styles.metaText}>No boards saved yet.</div>
+              ) : (
+                drawings.map((drawing) => (
+                  <button
+                    key={drawing.id}
+                    type="button"
+                    className={`${styles.savedBoard} ${selectedDrawingId === drawing.id ? styles.savedBoardActive : ""}`}
+                    onClick={() => loadDrawing(drawing)}
+                  >
+                    <span className={styles.savedBoardTitle}>{drawing.title}</span>
+                    <span className={styles.savedBoardMeta}>
+                      {drawing.sharing_scope === "shared" ? "Shared" : "Private"} · {formatDrawingTime(drawing.updated_at)}
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </aside>
+
+        <section className={styles.canvasArea}>
+          <div className={styles.controls}>
+            <div className={styles.toolGroup}>
+              <span className={styles.toolLabel}>Tool</span>
+              <button
+                type="button"
+                className={`${styles.toolButton} ${tool === TOOL_PEN ? styles.toolActive : ""}`}
+                onClick={() => setTool(TOOL_PEN)}
+              >
+                Pen
+              </button>
+              <button
+                type="button"
+                className={`${styles.toolButton} ${tool === TOOL_ERASER ? styles.toolActive : ""}`}
+                onClick={() => setTool(TOOL_ERASER)}
+              >
+                Eraser
+              </button>
+              <span className={styles.toolChip}>{toolLabel}</span>
+            </div>
+
+            <div className={styles.toolGroup}>
+              <span className={styles.toolLabel}>Thickness</span>
+              <input
+                type="range"
+                min="2"
+                max="18"
+                value={size}
+                onChange={(event) => setSize(Number(event.target.value))}
+              />
+              <span className={styles.toolChip}>{size}px</span>
+            </div>
+
+            <div className={styles.toolGroup}>
+              <span className={styles.toolLabel}>Color</span>
+              <div className={styles.colorSwatches}>
+                {defaultColors.map((swatch) => (
+                  <button
+                    key={swatch}
+                    type="button"
+                    className={`${styles.colorButton} ${color === swatch ? styles.colorActive : ""}`}
+                    style={{ backgroundColor: swatch }}
+                    onClick={() => setColor(swatch)}
+                    aria-label={`Use color ${swatch}`}
+                  />
+                ))}
+                <input
+                  className={styles.colorPicker}
+                  type="color"
+                  value={color}
+                  onChange={(event) => setColor(event.target.value)}
+                  disabled={tool === TOOL_ERASER}
+                  aria-label="Pick custom color"
+                />
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className={styles.iconButton}
+              onClick={undoLast}
+              disabled={undoCount === 0}
+              aria-label="Undo"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" className={styles.icon}>
+                <path
+                  d="M12.5 6.5c-2.8 0-5.1 1.4-6.5 3.5V7H3v8h8v-3H7.7c1-1.6 2.7-2.7 4.8-2.7 3 0 5.5 2.5 5.5 5.5 0 1.9-.9 3.6-2.4 4.6l1.8 2.3C19.6 20.2 21 18 21 15.5c0-5-4.1-9-9.1-9z"
+                  fill="currentColor"
+                />
+              </svg>
+            </button>
+            <button type="button" className={styles.clearButton} onClick={clearCanvas}>
+              Clear
+            </button>
+          </div>
+
+          <div className={`${styles.courtWrap} ${courtClass}`} ref={containerRef}>
+            <canvas
+              ref={canvasRef}
+              className={styles.canvas}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerLeave={handlePointerUp}
+              onPointerCancel={handlePointerUp}
             />
           </div>
-        </div>
 
-        <button
-          type="button"
-          className={styles.iconButton}
-          onClick={undoLast}
-          disabled={undoCount === 0}
-          aria-label="Undo"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true" className={styles.icon}>
-            <path
-              d="M12.5 6.5c-2.8 0-5.1 1.4-6.5 3.5V7H3v8h8v-3H7.7c1-1.6 2.7-2.7 4.8-2.7 3 0 5.5 2.5 5.5 5.5 0 1.9-.9 3.6-2.4 4.6l1.8 2.3C19.6 20.2 21 18 21 15.5c0-5-4.1-9-9.1-9z"
-              fill="currentColor"
-            />
-          </svg>
-        </button>
-        <button type="button" className={styles.clearButton} onClick={clearCanvas}>
-          Clear
-        </button>
+          <div className={styles.courtToggle}>
+            <button
+              type="button"
+              className={`${styles.toggleButton} ${courtMode === "half" ? styles.toggleActive : ""}`}
+              onClick={() => setCourtMode("half")}
+            >
+              Half Court
+            </button>
+            <button
+              type="button"
+              className={`${styles.toggleButton} ${courtMode === "full" ? styles.toggleActive : ""}`}
+              onClick={() => setCourtMode("full")}
+            >
+              Full Court
+            </button>
+          </div>
+        </section>
       </div>
 
-      <div className={`${styles.courtWrap} ${courtClass}`} ref={containerRef}>
-        <canvas
-          ref={canvasRef}
-          className={styles.canvas}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerLeave={handlePointerUp}
-          onPointerCancel={handlePointerUp}
-        />
-      </div>
+      <ShareDialog
+        open={Boolean(shareDrawing)}
+        title={shareDrawing ? `Share Board: ${shareDrawing.title}` : "Share Board"}
+        initialSelectedIds={shareRecipients}
+        onClose={() => setShareDrawing(null)}
+        onSave={async (userIds) => {
+          await updateDrawingShares(shareDrawing.id, userIds, user?.id);
+          await invalidateDrawings();
+          setShareDrawing(null);
+          setStatusMessage("Sharing updated.");
+        }}
+      />
 
-      <div className={styles.courtToggle}>
-        <button
-          type="button"
-          className={`${styles.toggleButton} ${courtMode === "half" ? styles.toggleActive : ""}`}
-          onClick={() => setCourtMode("half")}
-        >
-          Half Court
-        </button>
-        <button
-          type="button"
-          className={`${styles.toggleButton} ${courtMode === "full" ? styles.toggleActive : ""}`}
-          onClick={() => setCourtMode("full")}
-        >
-          Full Court
-        </button>
-      </div>
+      <VersionHistoryDialog
+        open={Boolean(historyDrawing)}
+        title={historyDrawing ? `Board History: ${historyDrawing.title}` : "Board History"}
+        versions={drawingVersions}
+        onClose={() => setHistoryDrawing(null)}
+        onRestore={restoreVersion}
+        describeVersion={describeDrawingVersion}
+      />
     </div>
   );
 }

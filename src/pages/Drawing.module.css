@@ -11,6 +11,7 @@
 .headerRow {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 12px;
 }
@@ -30,6 +31,129 @@
 
 .backButton:hover {
   border-color: var(--muted);
+}
+
+.primaryButton,
+.secondaryButton,
+.deleteButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+}
+
+.primaryButton {
+  background: var(--highlight-text);
+  color: var(--bg);
+  border-color: transparent;
+}
+
+.secondaryButton {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.deleteButton {
+  background: #fee2e2;
+  color: #7a0c0c;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.sidebar {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.sidebarCard {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 14px;
+}
+
+.panelTitle {
+  margin-bottom: 12px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.field input {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.metaText {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.statusMessage {
+  margin-top: 12px;
+  border-radius: 10px;
+  background: #e0f2fe;
+  color: #0c4a6e;
+  padding: 10px 12px;
+  font-size: 12px;
+}
+
+.savedList {
+  display: grid;
+  gap: 8px;
+}
+
+.savedBoard {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--text);
+  padding: 12px;
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+}
+
+.savedBoardActive {
+  border-color: var(--highlight-text);
+  box-shadow: inset 0 0 0 1px var(--highlight-text);
+}
+
+.savedBoardTitle {
+  font-weight: 700;
+}
+
+.savedBoardMeta {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.canvasArea {
+  min-width: 0;
 }
 
 .controls {
@@ -205,6 +329,10 @@
 }
 
 @media (max-width: 768px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
   .controls {
     gap: 8px;
   }

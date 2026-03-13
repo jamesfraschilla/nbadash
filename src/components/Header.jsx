@@ -6,7 +6,7 @@ import { formatDateInput, formatDateLabel, parseDateInput } from "../utils.js";
 import GameCard from "./GameCard.jsx";
 import styles from "./Header.module.css";
 
-export default function Header({ theme, onToggleTheme, onLock }) {
+export default function Header({ theme, onToggleTheme, onSignOut, profile, isAdmin }) {
   const [params, setParams] = useSearchParams();
   const inputRef = useRef(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -56,9 +56,20 @@ export default function Header({ theme, onToggleTheme, onLock }) {
           <button className={styles.themeToggle} onClick={onToggleTheme} type="button" aria-label="Toggle theme">
             {theme === "dark" ? "☾" : "☀"}
           </button>
-          <button className={styles.lockButton} onClick={onLock} type="button">
-            Lock
+          {isAdmin ? (
+            <Link className={styles.adminButton} to="/admin">
+              Admin
+            </Link>
+          ) : null}
+          <button className={styles.lockButton} onClick={onSignOut} type="button">
+            Sign Out
           </button>
+          {profile ? (
+            <Link to="/me" className={styles.userChip}>
+              <span className={styles.userName}>{profile.display_name || profile.email}</span>
+              <span className={styles.userRole}>{profile.role}</span>
+            </Link>
+          ) : null}
         </div>
 
         <Link to="/" className={styles.logoLink}>

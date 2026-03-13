@@ -1,0 +1,334 @@
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createManagedUser, createUserInvite, fetchPendingInvites, fetchVisibleProfiles, updateProfile } from "../accountData.js";
+import { ACCOUNT_ROLES, ACCOUNT_TEAM_SCOPES } from "../authConfig.js";
+import { useAuth } from "../auth/useAuth.js";
+import styles from "./Admin.module.css";
+
+function formatTimestamp(value) {
+  if (!value) return "Never";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Never";
+  return date.toLocaleString();
+}
+
+function ProfileCard({ profile, actorId, onSave }) {
+  const [draftRole, setDraftRole] = useState(profile.role || "coach");
+  const [draftStatus, setDraftStatus] = useState(profile.status || "active");
+  const [draftScopes, setDraftScopes] = useState(profile.team_scopes || []);
+  const [saving, setSaving] = useState(false);
+
+  const toggleScope = (scope) => {
+    setDraftScopes((prev) => (
+      prev.includes(scope)
+        ? prev.filter((value) => value !== scope)
+        : [...prev, scope]
+    ));
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    await onSave(profile.id, {
+      role: draftRole,
+      status: draftStatus,
+      team_scopes: draftScopes,
+    }, actorId);
+    setSaving(false);
+  };
+
+  return (
+    <div className={styles.profileCard}>
+      <div className={styles.profileHeader}>
+        <div>
+          <div className={styles.profileName}>{profile.display_name || profile.email}</div>
+          <div className={styles.profileEmail}>{profile.email}</div>
+        </div>
+        <div className={styles.profileMeta}>
+          <span>Last login: {formatTimestamp(profile.last_login_at)}</span>
+          <span>Created: {formatTimestamp(profile.created_at)}</span>
+        </div>
+      </div>
+
+      <div className={styles.profileGrid}>
+        <label className={styles.field}>
+          <span>Role</span>
+          <select value={draftRole} onChange={(event) => setDraftRole(event.target.value)}>
+            {ACCOUNT_ROLES.map((role) => (
+              <option key={role} value={role}>{role}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className={styles.field}>
+          <span>Status</span>
+          <select value={draftStatus} onChange={(event) => setDraftStatus(event.target.value)}>
+            <option value="active">active</option>
+            <option value="inactive">inactive</option>
+            <option value="archived">archived</option>
+          </select>
+        </label>
+      </div>
+
+      <div className={styles.scopeGroup}>
+        <div className={styles.scopeLabel}>Team scopes</div>
+        <div className={styles.scopeOptions}>
+          {ACCOUNT_TEAM_SCOPES.map((scope) => (
+            <label key={scope} className={styles.scopeOption}>
+              <input
+                type="checkbox"
+                checked={draftScopes.includes(scope)}
+                onChange={() => toggleScope(scope)}
+              />
+              <span>{scope}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className={styles.profileActions}>
+        <button type="button" className={styles.saveButton} disabled={saving} onClick={handleSave}>
+          {saving ? "Saving..." : "Save User"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default function Admin() {
+  const { user, session, profile } = useAuth();
+  const queryClient = useQueryClient();
+  const [inviteForm, setInviteForm] = useState({
+    email: "",
+    displayName: "",
+    password: "",
+    role: "coach",
+    teamScopes: [...ACCOUNT_TEAM_SCOPES],
+  });
+  const [inviteMessage, setInviteMessage] = useState("");
+
+  const { data: profiles = [], isLoading: loadingProfiles } = useQuery({
+    queryKey: ["visible-profiles"],
+    queryFn: fetchVisibleProfiles,
+    enabled: Boolean(user?.id),
+  });
+
+  const { data: invites = [], isLoading: loadingInvites } = useQuery({
+    queryKey: ["account-invites"],
+    queryFn: fetchPendingInvites,
+    enabled: Boolean(user?.id),
+  });
+
+  const saveProfileMutation = useMutation({
+    mutationFn: ({ profileId, updates }) => updateProfile(profileId, updates, user?.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["visible-profiles"] });
+    },
+  });
+
+  const sortedInvites = useMemo(() => invites, [invites]);
+
+  if (profile?.role !== "admin") {
+    return (
+      <div className={styles.page}>
+        <div className={styles.noticeCard}>Admin access is required to view this page.</div>
+      </div>
+    );
+  }
+
+  const toggleInviteScope = (scope) => {
+    setInviteForm((prev) => ({
+      ...prev,
+      teamScopes: prev.teamScopes.includes(scope)
+        ? prev.teamScopes.filter((value) => value !== scope)
+        : [...prev.teamScopes, scope],
+    }));
+  };
+
+  const handleInvite = async (event) => {
+    event.preventDefault();
+    setInviteMessage("");
+    try {
+      await createUserInvite({
+        accessToken: session?.access_token,
+        email: inviteForm.email,
+        displayName: inviteForm.displayName,
+        role: inviteForm.role,
+        teamScopes: inviteForm.teamScopes,
+      });
+      setInviteMessage("Invite sent.");
+      setInviteForm({
+        email: "",
+        displayName: "",
+        password: "",
+        role: "coach",
+        teamScopes: [...ACCOUNT_TEAM_SCOPES],
+      });
+      queryClient.invalidateQueries({ queryKey: ["account-invites"] });
+    } catch (error) {
+      setInviteMessage(error?.message || "Unable to send invite.");
+    }
+  };
+
+  const handleCreateUser = async () => {
+    setInviteMessage("");
+    try {
+      await createManagedUser({
+        accessToken: session?.access_token,
+        email: inviteForm.email,
+        password: inviteForm.password,
+        displayName: inviteForm.displayName,
+        role: inviteForm.role,
+        teamScopes: inviteForm.teamScopes,
+      });
+      setInviteMessage("User account created.");
+      setInviteForm({
+        email: "",
+        displayName: "",
+        password: "",
+        role: "coach",
+        teamScopes: [...ACCOUNT_TEAM_SCOPES],
+      });
+      queryClient.invalidateQueries({ queryKey: ["visible-profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["account-invites"] });
+    } catch (error) {
+      setInviteMessage(error?.message || "Unable to create user.");
+    }
+  };
+
+  return (
+    <div className={styles.page}>
+      <section className={styles.section}>
+        <div className={styles.sectionHeader}>
+          <div>
+            <div className={styles.kicker}>Accounts</div>
+            <h2 className={styles.title}>User administration</h2>
+          </div>
+        </div>
+
+        <form className={styles.inviteCard} onSubmit={handleInvite}>
+          <div className={styles.formGrid}>
+            <label className={styles.field}>
+              <span>Email</span>
+              <input
+                type="email"
+                value={inviteForm.email}
+                onChange={(event) => setInviteForm((prev) => ({ ...prev, email: event.target.value }))}
+                placeholder="name@monumentalsports.com"
+              />
+            </label>
+            <label className={styles.field}>
+              <span>Display name</span>
+              <input
+                type="text"
+                value={inviteForm.displayName}
+                onChange={(event) => setInviteForm((prev) => ({ ...prev, displayName: event.target.value }))}
+                placeholder="Optional"
+              />
+            </label>
+            <label className={styles.field}>
+              <span>Password</span>
+              <input
+                type="password"
+                value={inviteForm.password}
+                onChange={(event) => setInviteForm((prev) => ({ ...prev, password: event.target.value }))}
+                placeholder="Required for direct account creation"
+              />
+            </label>
+            <label className={styles.field}>
+              <span>Role</span>
+              <select
+                value={inviteForm.role}
+                onChange={(event) => setInviteForm((prev) => ({ ...prev, role: event.target.value }))}
+              >
+                {ACCOUNT_ROLES.map((role) => (
+                  <option key={role} value={role}>{role}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className={styles.scopeGroup}>
+            <div className={styles.scopeLabel}>Team scopes</div>
+            <div className={styles.scopeOptions}>
+              {ACCOUNT_TEAM_SCOPES.map((scope) => (
+                <label key={scope} className={styles.scopeOption}>
+                  <input
+                    type="checkbox"
+                    checked={inviteForm.teamScopes.includes(scope)}
+                    onChange={() => toggleInviteScope(scope)}
+                  />
+                  <span>{scope}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {inviteMessage ? <div className={styles.message}>{inviteMessage}</div> : null}
+
+          <div className={styles.inviteActions}>
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              onClick={handleCreateUser}
+              disabled={!inviteForm.email.trim() || inviteForm.password.length < 8}
+            >
+              Create User
+            </button>
+            <button type="submit" className={styles.primaryButton}>
+              Send Invite
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section className={styles.section}>
+        <div className={styles.sectionHeader}>
+          <h3 className={styles.subTitle}>Pending invites</h3>
+        </div>
+        <div className={styles.list}>
+          {loadingInvites ? (
+            <div className={styles.noticeCard}>Loading invites...</div>
+          ) : sortedInvites.length === 0 ? (
+            <div className={styles.noticeCard}>No pending invites.</div>
+          ) : (
+            sortedInvites.map((invite) => (
+              <div key={invite.id} className={styles.inviteRow}>
+                <div>
+                  <div className={styles.inviteEmail}>{invite.email}</div>
+                  <div className={styles.inviteMeta}>
+                    {invite.role} · {invite.team_scopes?.join(", ") || "No team scopes"}
+                  </div>
+                </div>
+                <div className={styles.inviteStatus}>
+                  {invite.status} · {formatTimestamp(invite.created_at)}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+
+      <section className={styles.section}>
+        <div className={styles.sectionHeader}>
+          <h3 className={styles.subTitle}>Users</h3>
+        </div>
+        <div className={styles.list}>
+          {loadingProfiles ? (
+            <div className={styles.noticeCard}>Loading users...</div>
+          ) : (
+            profiles.map((item) => (
+              <ProfileCard
+                key={item.id}
+                profile={item}
+                actorId={user?.id}
+                onSave={async (profileId, updates) => {
+                  await saveProfileMutation.mutateAsync({ profileId, updates });
+                }}
+              />
+            ))
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}

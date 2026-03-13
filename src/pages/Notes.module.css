@@ -84,6 +84,11 @@
   color: var(--negative);
 }
 
+.noteDeleteSpacer {
+  width: 24px;
+  height: 24px;
+}
+
 .noteEdit {
   border: none;
   background: var(--panel-strong);
@@ -100,6 +105,17 @@
 
 .noteEdit:hover {
   border: 1px solid var(--border);
+}
+
+.noteSecondary {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.2;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 6px;
 }
 
 .noteMeta {
@@ -120,10 +136,53 @@
   font-variant-numeric: tabular-nums;
 }
 
+.sharedBadge,
+.privateBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.sharedBadge {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.privateBadge {
+  background: var(--panel-strong);
+  color: var(--muted);
+}
+
 .noteBody {
   font-size: 14px;
   color: var(--text);
   white-space: pre-wrap;
+}
+
+.tagRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.tagChip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 11px;
+  background: var(--panel-strong);
+  color: var(--muted);
+}
+
+.noteButtons {
+  display: grid;
+  gap: 8px;
 }
 
 .noteOverlay {
@@ -189,6 +248,15 @@
   color: var(--bg);
 }
 
+.modalError {
+  margin-top: 10px;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fee2e2;
+  color: #991b1b;
+  font-size: 13px;
+}
+
 .noteTags {
   margin: 10px 0 12px;
   border: 1px solid var(--border);
@@ -216,4 +284,16 @@
   gap: 6px;
   font-size: 13px;
   color: var(--text);
+}
+
+@media (max-width: 768px) {
+  .noteRow {
+    grid-template-columns: 24px 1fr;
+  }
+
+  .noteButtons {
+    grid-column: 2;
+    display: flex;
+    flex-wrap: wrap;
+  }
 }
