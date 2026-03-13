@@ -336,7 +336,7 @@ export default function UserContent() {
                       </Link>
                     </div>
                     <div className={styles.cardBody}>
-                      {(drawing.strokes || []).length} saved stroke{(drawing.strokes || []).length === 1 ? "" : "s"}
+                      Saved board
                     </div>
                     <div className={styles.cardFooter}>Updated {formatTimestamp(drawing.updated_at)}</div>
                   </article>

@@ -40,6 +40,12 @@ async function createVersionRow(table, payload) {
   if (error) throw error;
 }
 
+async function clearDrawingVersions(drawingId) {
+  requireSupabase();
+  const { error } = await supabase.from("user_drawing_versions").delete().eq("drawing_id", drawingId);
+  if (error) throw error;
+}
+
 export async function fetchProfile(userId) {
   requireSupabase();
   const { data, error } = await supabase
@@ -415,12 +421,7 @@ export async function createDrawing(drawing, actorId) {
   };
   const { error } = await supabase.from("user_drawings").insert(payload);
   if (error) throw error;
-  await createVersionRow("user_drawing_versions", {
-    drawing_id: drawingId,
-    version_number: 1,
-    snapshot: payload,
-    created_by: actorId,
-  });
+  await clearDrawingVersions(drawingId);
   await insertAuditLog(actorId, "drawing", drawingId, "created", { gameId: payload.game_id });
   return payload;
 }
@@ -433,16 +434,6 @@ export async function updateDrawingRecord(drawingId, updates, actorId) {
     .eq("id", drawingId)
     .single();
   if (fetchError) throw fetchError;
-  const { count } = await supabase
-    .from("user_drawing_versions")
-    .select("id", { count: "exact", head: true })
-    .eq("drawing_id", drawingId);
-  await createVersionRow("user_drawing_versions", {
-    drawing_id: drawingId,
-    version_number: Number(count || 0) + 1,
-    snapshot: existing,
-    created_by: actorId,
-  });
 
   const payload = {
     title: updates.title != null ? String(updates.title || "").trim() || "Untitled board" : existing.title,
@@ -456,6 +447,7 @@ export async function updateDrawingRecord(drawingId, updates, actorId) {
     .update(payload)
     .eq("id", drawingId);
   if (error) throw error;
+  await clearDrawingVersions(drawingId);
   await insertAuditLog(actorId, "drawing", drawingId, "updated", { title: payload.title });
   return { ...existing, ...payload, id: drawingId };
 }
@@ -468,16 +460,6 @@ export async function deleteDrawingRecord(drawingId, actorId) {
     .eq("id", drawingId)
     .single();
   if (fetchError) throw fetchError;
-  const { count } = await supabase
-    .from("user_drawing_versions")
-    .select("id", { count: "exact", head: true })
-    .eq("drawing_id", drawingId);
-  await createVersionRow("user_drawing_versions", {
-    drawing_id: drawingId,
-    version_number: Number(count || 0) + 1,
-    snapshot: existing,
-    created_by: actorId,
-  });
   const { error } = await supabase.from("user_drawings").delete().eq("id", drawingId);
   if (error) throw error;
   await insertAuditLog(actorId, "drawing", drawingId, "deleted", { title: existing.title });

@@ -5,13 +5,11 @@ import {
   createDrawing,
   deleteDrawingRecord,
   listDrawingShares,
-  listDrawingVersions,
   listDrawings,
   updateDrawingRecord,
   updateDrawingShares,
 } from "../accountData.js";
 import ShareDialog from "../components/ShareDialog.jsx";
-import VersionHistoryDialog from "../components/VersionHistoryDialog.jsx";
 import { useAuth } from "../auth/useAuth.js";
 import styles from "./Drawing.module.css";
 
@@ -19,12 +17,6 @@ const TOOL_PEN = "pen";
 const TOOL_ERASER = "eraser";
 
 const defaultColors = ["#111111", "#1f6feb", "#dc2626", "#16a34a", "#f59e0b", "#7c3aed"];
-
-function describeDrawingVersion(version) {
-  const snapshot = version.snapshot || {};
-  const strokeCount = Array.isArray(snapshot.strokes) ? snapshot.strokes.length : 0;
-  return `${snapshot.title || "Untitled board"}\n${snapshot.court_mode || "half"} court · ${strokeCount} strokes`;
-}
 
 function formatDrawingTime(value) {
   if (!value) return "";
@@ -55,7 +47,6 @@ export default function Drawing() {
   const [statusMessage, setStatusMessage] = useState("");
   const [savingBoard, setSavingBoard] = useState(false);
   const [shareDrawing, setShareDrawing] = useState(null);
-  const [historyDrawing, setHistoryDrawing] = useState(null);
 
   const backParam = params.get("back");
   const gameIdParam = params.get("gameId");
@@ -72,12 +63,6 @@ export default function Drawing() {
     queryKey: ["drawing-shares", shareDrawing?.id],
     queryFn: () => listDrawingShares(shareDrawing.id),
     enabled: Boolean(shareDrawing?.id),
-  });
-
-  const { data: drawingVersions = [] } = useQuery({
-    queryKey: ["drawing-versions", historyDrawing?.id],
-    queryFn: () => listDrawingVersions(historyDrawing.id),
-    enabled: Boolean(historyDrawing?.id),
   });
 
   const selectedDrawing = useMemo(
@@ -288,7 +273,6 @@ export default function Drawing() {
     return Promise.all([
       queryClient.invalidateQueries({ queryKey: ["drawings"] }),
       queryClient.invalidateQueries({ queryKey: ["drawing-shares"] }),
-      queryClient.invalidateQueries({ queryKey: ["drawing-versions"] }),
     ]);
   };
 
@@ -326,20 +310,6 @@ export default function Drawing() {
     setStatusMessage("Board deleted.");
   };
 
-  const restoreVersion = async (version) => {
-    if (!historyDrawing) return;
-    const snapshot = version.snapshot || {};
-    const restored = await updateDrawingRecord(historyDrawing.id, {
-      title: snapshot.title || "Untitled board",
-      courtMode: snapshot.court_mode || "half",
-      strokes: Array.isArray(snapshot.strokes) ? snapshot.strokes : [],
-    }, user?.id);
-    await invalidateDrawings();
-    loadDrawing(restored);
-    setHistoryDrawing(null);
-    setStatusMessage("Version restored.");
-  };
-
   const toolLabel = useMemo(() => (tool === TOOL_PEN ? "Pen" : "Eraser"), [tool]);
 
   const courtClass = courtMode === "full" ? styles.courtFull : styles.courtHalf;
@@ -363,9 +333,6 @@ export default function Drawing() {
                 Share
               </button>
             ) : null}
-            <button type="button" className={styles.secondaryButton} onClick={() => setHistoryDrawing(selectedDrawing)}>
-              History
-            </button>
             {canManageSelectedDrawing ? (
               <button type="button" className={styles.deleteButton} onClick={deleteBoard}>
                 Delete
@@ -543,15 +510,6 @@ export default function Drawing() {
           setShareDrawing(null);
           setStatusMessage("Sharing updated.");
         }}
-      />
-
-      <VersionHistoryDialog
-        open={Boolean(historyDrawing)}
-        title={historyDrawing ? `Board History: ${historyDrawing.title}` : "Board History"}
-        versions={drawingVersions}
-        onClose={() => setHistoryDrawing(null)}
-        onRestore={restoreVersion}
-        describeVersion={describeDrawingVersion}
       />
     </div>
   );
