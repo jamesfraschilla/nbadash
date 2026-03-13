@@ -119,14 +119,12 @@ export async function createUserInvite({ accessToken, email, displayName, role, 
   const { data, error } = await supabase.functions.invoke("admin-users", {
     body: {
       action: "invite",
+      accessToken: currentAccessToken,
       email,
       displayName,
       role,
       teamScopes,
     },
-    headers: currentAccessToken ? {
-      Authorization: `Bearer ${currentAccessToken}`,
-    } : undefined,
   });
   if (error) {
     throw new Error(error.message || "Unable to create invite.");
@@ -143,15 +141,13 @@ export async function createManagedUser({ accessToken, email, password, displayN
   const { data, error } = await supabase.functions.invoke("admin-users", {
     body: {
       action: "create_user",
+      accessToken: currentAccessToken,
       email,
       password,
       displayName,
       role,
       teamScopes,
     },
-    headers: currentAccessToken ? {
-      Authorization: `Bearer ${currentAccessToken}`,
-    } : undefined,
   });
   if (error) {
     throw new Error(error.message || "Unable to create user.");
