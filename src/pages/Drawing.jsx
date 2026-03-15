@@ -53,7 +53,7 @@ export default function Drawing() {
   const boardIdParam = params.get("boardId");
   const backUrl = backParam && backParam.startsWith("/") ? backParam : "/";
 
-  const { data: drawings = [], isLoading } = useQuery({
+  const { data: drawings = [] } = useQuery({
     queryKey: ["drawings", gameIdParam || "all"],
     queryFn: () => listDrawings(gameIdParam || null),
     enabled: Boolean(user?.id),
@@ -302,7 +302,7 @@ export default function Drawing() {
 
   const deleteBoard = async () => {
     if (!selectedDrawing) return;
-    const confirmed = window.confirm(`Delete "${selectedDrawing.title}"?`);
+    const confirmed = window.confirm(`Delete "${selectedDrawing.title || "Untitled"}"?`);
     if (!confirmed) return;
     await deleteDrawingRecord(selectedDrawing.id, user?.id);
     await invalidateDrawings();
@@ -343,8 +343,8 @@ export default function Drawing() {
       </div>
 
       <div className={styles.workspace}>
-        <aside className={styles.sidebar}>
-          <div className={styles.sidebarCard}>
+        <section className={styles.canvasArea}>
+          <div className={`${styles.sidebarCard} ${styles.detailsCard}`}>
             <div className={styles.panelTitle}>Board Details</div>
             <label className={styles.field}>
               <span>Title</span>
@@ -352,12 +352,9 @@ export default function Drawing() {
                 type="text"
                 value={boardTitle}
                 onChange={(event) => setBoardTitle(event.target.value)}
-                placeholder="Example: Late Game ATO"
+                placeholder="Untitled"
               />
             </label>
-            <div className={styles.metaText}>
-              {gameIdParam ? `Attached to game ${gameIdParam}` : "Not tied to a specific game"}
-            </div>
             {selectedDrawing ? (
               <div className={styles.metaText}>
                 Last saved {formatDrawingTime(selectedDrawing.updated_at)}
@@ -365,34 +362,6 @@ export default function Drawing() {
             ) : null}
             {statusMessage ? <div className={styles.statusMessage}>{statusMessage}</div> : null}
           </div>
-
-          <div className={styles.sidebarCard}>
-            <div className={styles.panelTitle}>Saved Boards</div>
-            <div className={styles.savedList}>
-              {isLoading ? (
-                <div className={styles.metaText}>Loading boards...</div>
-              ) : drawings.length === 0 ? (
-                <div className={styles.metaText}>No boards saved yet.</div>
-              ) : (
-                drawings.map((drawing) => (
-                  <button
-                    key={drawing.id}
-                    type="button"
-                    className={`${styles.savedBoard} ${selectedDrawingId === drawing.id ? styles.savedBoardActive : ""}`}
-                    onClick={() => loadDrawing(drawing)}
-                  >
-                    <span className={styles.savedBoardTitle}>{drawing.title}</span>
-                    <span className={styles.savedBoardMeta}>
-                      {drawing.sharing_scope === "shared" ? "Shared" : "Private"} · {formatDrawingTime(drawing.updated_at)}
-                    </span>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-        </aside>
-
-        <section className={styles.canvasArea}>
           <div className={styles.controls}>
             <div className={styles.toolGroup}>
               <span className={styles.toolLabel}>Tool</span>
@@ -501,7 +470,7 @@ export default function Drawing() {
 
       <ShareDialog
         open={Boolean(shareDrawing)}
-        title={shareDrawing ? `Share Board: ${shareDrawing.title}` : "Share Board"}
+        title={shareDrawing ? `Share Board: ${shareDrawing.title || "Untitled"}` : "Share Board"}
         initialSelectedIds={shareRecipients}
         onClose={() => setShareDrawing(null)}
         onSave={async (userIds) => {

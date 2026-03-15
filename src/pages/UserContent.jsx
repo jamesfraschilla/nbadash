@@ -199,7 +199,7 @@ export default function UserContent() {
 
   const handleDeleteDrawing = async (drawing) => {
     if (!user?.id) return;
-    const confirmed = window.confirm(`Delete "${drawing.title || "Untitled board"}"?`);
+    const confirmed = window.confirm(`Delete "${drawing.title || "Untitled"}"?`);
     if (!confirmed) return;
     const key = `drawing:${drawing.id}`;
     try {
@@ -359,7 +359,7 @@ export default function UserContent() {
                   <article key={drawing.id} className={styles.card}>
                     <div className={styles.cardHeader}>
                       <div className={styles.cardTitleGroup}>
-                        <div className={styles.cardTitle}>{drawing.title || "Untitled board"}</div>
+                        <div className={styles.cardTitle}>{drawing.title || "Untitled"}</div>
                         <div className={styles.cardMeta}>
                           {drawing.game_id
                             ? `${meta?.opponentLabel || `Game ${drawing.game_id}`} · ${meta?.gameDate || "Unknown date"}`

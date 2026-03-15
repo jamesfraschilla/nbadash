@@ -435,7 +435,7 @@ export async function createDrawing(drawing, actorId) {
     id: drawingId,
     owner_id: actorId,
     game_id: drawing.gameId || null,
-    title: String(drawing.title || "").trim() || "Untitled board",
+    title: String(drawing.title || "").trim() || "Untitled",
     court_mode: drawing.courtMode === "full" ? "full" : "half",
     strokes: Array.isArray(drawing.strokes) ? drawing.strokes : [],
     sharing_scope: drawing.sharingScope === "shared" ? "shared" : "private",
@@ -459,7 +459,7 @@ export async function updateDrawingRecord(drawingId, updates, actorId) {
   if (fetchError) throw fetchError;
 
   const payload = {
-    title: updates.title != null ? String(updates.title || "").trim() || "Untitled board" : existing.title,
+    title: updates.title != null ? String(updates.title || "").trim() || "Untitled" : existing.title,
     court_mode: updates.courtMode === "full" ? "full" : (updates.courtMode || existing.court_mode),
     strokes: Array.isArray(updates.strokes) ? updates.strokes : existing.strokes,
     sharing_scope: updates.sharingScope || existing.sharing_scope,
