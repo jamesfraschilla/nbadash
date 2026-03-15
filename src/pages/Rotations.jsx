@@ -601,13 +601,16 @@ function renderExportDepthChart(depthChart) {
     <section class="export-section">
       <div class="export-section-title">Depth Chart</div>
       <table class="export-table">
+        <colgroup>
+          ${POSITION_COLUMNS.map(() => "<col />").join("")}
+        </colgroup>
         <thead>
           <tr>${POSITION_COLUMNS.map((position) => `<th>${position}</th>`).join("")}</tr>
         </thead>
         <tbody>
           ${DEPTH_ROW_INDICES.map((rowIndex) => `
             <tr>
-              ${POSITION_COLUMNS.map((_, columnIndex) => `<td>${escapeHtml(depthChart?.[rowIndex]?.[columnIndex] || "")}</td>`).join("")}
+              ${POSITION_COLUMNS.map((_, columnIndex) => `<td class="export-player-cell">${escapeHtml(depthChart?.[rowIndex]?.[columnIndex] || "")}</td>`).join("")}
             </tr>
           `).join("")}
         </tbody>
@@ -704,6 +707,10 @@ function renderExportQuarterTable(quarter, lineups, hideNamesOnDuplicateRows = f
     <section class="export-section">
       <div class="export-section-title">${quarterLabel(quarter)} Quarter</div>
       <table class="export-table">
+        <colgroup>
+          <col class="export-quarter-time-col" />
+          ${POSITION_COLUMNS.map(() => '<col class="export-quarter-player-col" />').join("")}
+        </colgroup>
         <thead>
           <tr>
             <th></th>
@@ -715,7 +722,7 @@ function renderExportQuarterTable(quarter, lineups, hideNamesOnDuplicateRows = f
             <tr>
               <td>${minute}</td>
               ${POSITION_COLUMNS.map((_, columnIndex) => `
-                <td class="${getExportQuarterCellClass(lineups, quarter, minuteIndex, columnIndex, hideNamesOnDuplicateRows)}">
+                <td class="export-player-cell ${getExportQuarterCellClass(lineups, quarter, minuteIndex, columnIndex, hideNamesOnDuplicateRows)}">
                   ${escapeHtml(
     shouldHideRowNames(
       hideNamesOnDuplicateRows,
@@ -760,6 +767,44 @@ const PDF_COLORS = {
   subInFill: hexToRgbColor("#d9ead3"),
   subOutFill: hexToRgbColor("#f4cccc"),
 };
+
+const PDF_QUARTER_TIME_COL_WIDTH = 24;
+const PDF_BASE_DEPTH_NAME_FONT_SIZE = 8.5;
+const PDF_BASE_QUARTER_NAME_FONT_SIZE = 8.2;
+const PDF_MIN_PLAYER_NAME_FONT_SIZE = 5.6;
+const PDF_PLAYER_TEXT_HORIZONTAL_PADDING = 4;
+
+function getExportPlayerNames(depthChart, lineups) {
+  const depthNames = Array.isArray(depthChart)
+    ? depthChart.flat().filter((value) => normalizeName(value))
+    : [];
+  const lineupNames = Object.values(lineups || {}).flatMap((quarterRows) => (
+    Array.isArray(quarterRows)
+      ? quarterRows.flat().filter((value) => normalizeName(value))
+      : []
+  ));
+  return [...depthNames, ...lineupNames];
+}
+
+function getFittedPdfPlayerNameFontSize(font, playerNames, cellWidth) {
+  const names = playerNames.filter(Boolean);
+  if (!names.length) {
+    return Math.min(PDF_BASE_DEPTH_NAME_FONT_SIZE, PDF_BASE_QUARTER_NAME_FONT_SIZE);
+  }
+
+  const availableWidth = Math.max(1, cellWidth - PDF_PLAYER_TEXT_HORIZONTAL_PADDING);
+  const longestNameWidthAtUnitSize = names.reduce((maxWidth, name) => (
+    Math.max(maxWidth, font.widthOfTextAtSize(String(name), 1))
+  ), 0);
+
+  if (!longestNameWidthAtUnitSize) {
+    return Math.min(PDF_BASE_DEPTH_NAME_FONT_SIZE, PDF_BASE_QUARTER_NAME_FONT_SIZE);
+  }
+
+  const maxAllowedFontSize = availableWidth / longestNameWidthAtUnitSize;
+  const baseFontSize = Math.min(PDF_BASE_DEPTH_NAME_FONT_SIZE, PDF_BASE_QUARTER_NAME_FONT_SIZE);
+  return Math.max(PDF_MIN_PLAYER_NAME_FONT_SIZE, Math.min(baseFontSize, maxAllowedFontSize));
+}
 
 function drawCenteredPdfText(page, text, font, size, x, y, width, color = PDF_COLORS.bodyText) {
   const safeText = String(text || "");
@@ -845,7 +890,7 @@ function getExportCellDisplay(lineups, quarter, minuteIndex, positionIndex, hide
   return { text: cellState.value, fillColor: PDF_COLORS.white };
 }
 
-function drawPdfDepthChart(page, font, x, topY, width, depthChart) {
+function drawPdfDepthChart(page, font, x, topY, width, depthChart, playerFontSize) {
   const titleHeight = 20;
   const headerHeight = 18;
   const rowHeight = 18;
@@ -893,7 +938,7 @@ function drawPdfDepthChart(page, font, x, topY, width, depthChart) {
         height: rowHeight,
         text: depthChart?.[rowIndex]?.[index] || "",
         font,
-        fontSize: 8.5,
+        fontSize: playerFontSize,
       });
     });
   });
@@ -901,11 +946,11 @@ function drawPdfDepthChart(page, font, x, topY, width, depthChart) {
   return titleHeight + headerHeight + (rowHeight * DEPTH_ROW_INDICES.length);
 }
 
-function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideNamesOnDuplicateRows) {
+function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideNamesOnDuplicateRows, playerFontSize) {
   const titleHeight = 20;
   const headerHeight = 18;
   const rowHeight = 18;
-  const timeColWidth = 30;
+  const timeColWidth = PDF_QUARTER_TIME_COL_WIDTH;
   const playerColWidth = (width - timeColWidth) / POSITION_COLUMNS.length;
 
   page.drawRectangle({
@@ -970,7 +1015,7 @@ function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideN
         height: rowHeight,
         text: display.text,
         font,
-        fontSize: 8.2,
+        fontSize: playerFontSize,
         fillColor: display.fillColor,
       });
     });
@@ -988,15 +1033,41 @@ function drawRotationsPdfPage(page, { headerLine, depthChart, lineups, logoImage
   const contentTop = pageHeight - (0.92 * 72);
   const logoSize = 0.62 * 72;
   const logoBottom = 0.52 * 72;
+  const quarterPlayerColWidth = (columnWidth - PDF_QUARTER_TIME_COL_WIDTH) / POSITION_COLUMNS.length;
+  const playerFontSize = getFittedPdfPlayerNameFontSize(
+    font,
+    getExportPlayerNames(depthChart, lineups),
+    quarterPlayerColWidth
+  );
 
   drawCenteredPdfText(page, headerLine, font, 18, columnX, headerTop, columnWidth, PDF_COLORS.bodyText);
 
   let currentTop = contentTop;
-  currentTop -= drawPdfDepthChart(page, font, columnX, currentTop, columnWidth, depthChart);
+  currentTop -= drawPdfDepthChart(page, font, columnX, currentTop, columnWidth, depthChart, playerFontSize);
   currentTop -= 8;
-  currentTop -= drawPdfQuarterTable(page, font, columnX, currentTop, columnWidth, side === "left" ? 1 : 3, lineups, hideNamesOnDuplicateRows);
+  currentTop -= drawPdfQuarterTable(
+    page,
+    font,
+    columnX,
+    currentTop,
+    columnWidth,
+    side === "left" ? 1 : 3,
+    lineups,
+    hideNamesOnDuplicateRows,
+    playerFontSize
+  );
   currentTop -= 8;
-  currentTop -= drawPdfQuarterTable(page, font, columnX, currentTop, columnWidth, side === "left" ? 2 : 4, lineups, hideNamesOnDuplicateRows);
+  currentTop -= drawPdfQuarterTable(
+    page,
+    font,
+    columnX,
+    currentTop,
+    columnWidth,
+    side === "left" ? 2 : 4,
+    lineups,
+    hideNamesOnDuplicateRows,
+    playerFontSize
+  );
 
   if (logoImage) {
     page.drawImage(logoImage, {
@@ -1008,7 +1079,16 @@ function drawRotationsPdfPage(page, { headerLine, depthChart, lineups, logoImage
   }
 }
 
-function buildRotationsPdfHtml({ headerLine, depthChart, lineups, logoUrl, fontUrl, hideNamesOnDuplicateRows = false }) {
+function buildRotationsPdfHtml({
+  headerLine,
+  depthChart,
+  lineups,
+  logoUrl,
+  fontUrl,
+  hideNamesOnDuplicateRows = false,
+  playerFontSize = PDF_BASE_QUARTER_NAME_FONT_SIZE,
+}) {
+  const quarterPlayerColWidthPercent = ((100 - ((PDF_QUARTER_TIME_COL_WIDTH / (4.05 * 72)) * 100)) / POSITION_COLUMNS.length);
   const pageMarkup = (quarters, side) => `
     <section class="pdf-page ${side}">
       <div class="pdf-header">${escapeHtml(headerLine)}</div>
@@ -1125,6 +1205,14 @@ function buildRotationsPdfHtml({ headerLine, depthChart, lineups, logoUrl, fontU
             table-layout: fixed;
           }
 
+          .export-quarter-time-col {
+            width: ${(PDF_QUARTER_TIME_COL_WIDTH / (4.05 * 72)) * 100}%;
+          }
+
+          .export-quarter-player-col {
+            width: ${quarterPlayerColWidthPercent}%;
+          }
+
           .export-table th,
           .export-table td {
             border: 1px solid #8c8c8c;
@@ -1139,6 +1227,10 @@ function buildRotationsPdfHtml({ headerLine, depthChart, lineups, logoUrl, fontU
             background: #efefef;
             color: #111111;
             font-weight: 700;
+          }
+
+          .export-player-cell {
+            font-size: ${playerFontSize}px;
           }
 
           .export-duplicate {
