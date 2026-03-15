@@ -3,14 +3,9 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   deleteNoteRecord,
-  listNoteShares,
-  listNoteVersions,
   listNotesForGame,
   updateNoteRecord,
-  updateNoteShares,
 } from "../accountData.js";
-import ShareDialog from "../components/ShareDialog.jsx";
-import VersionHistoryDialog from "../components/VersionHistoryDialog.jsx";
 import { useAuth } from "../auth/useAuth.js";
 import styles from "./Notes.module.css";
 
@@ -49,16 +44,9 @@ const formatClock = (note) => {
   return `${note.minutes}:${String(note.seconds).padStart(2, "0")}`;
 };
 
-function describeVersion(version) {
-  const snapshot = version.snapshot || {};
-  const header = `${snapshot.period_label || "--"} ${snapshot.minutes ?? "--"}:${String(snapshot.seconds ?? "--").padStart(2, "0")}`;
-  const tags = Array.isArray(snapshot.tags) && snapshot.tags.length ? `Tags: ${snapshot.tags.join(", ")}` : "Tags: none";
-  return `${header}\n${tags}\n\n${snapshot.text || ""}`.trim();
-}
-
 export default function Notes() {
   const { gameId } = useParams();
-  const { user, isAdmin } = useAuth();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [params] = useSearchParams();
   const dateParam = params.get("d");
@@ -71,25 +59,11 @@ export default function Notes() {
   const [editDraft, setEditDraft] = useState({ text: "", tags: [] });
   const [editError, setEditError] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
-  const [shareNote, setShareNote] = useState(null);
-  const [historyNote, setHistoryNote] = useState(null);
 
   const { data: notes = [], isLoading, error } = useQuery({
     queryKey: ["notes", gameId],
-    queryFn: () => listNotesForGame(gameId),
+    queryFn: () => listNotesForGame(gameId, user?.id),
     enabled: Boolean(gameId && user?.id),
-  });
-
-  const { data: shareRecipients = [] } = useQuery({
-    queryKey: ["note-shares", shareNote?.id],
-    queryFn: () => listNoteShares(shareNote.id),
-    enabled: Boolean(shareNote?.id),
-  });
-
-  const { data: noteVersions = [] } = useQuery({
-    queryKey: ["note-versions", historyNote?.id],
-    queryFn: () => listNoteVersions(historyNote.id),
-    enabled: Boolean(historyNote?.id),
   });
 
   const filteredNotes = useMemo(() => {
@@ -115,8 +89,6 @@ export default function Notes() {
   const invalidateNotes = () => {
     return Promise.all([
       queryClient.invalidateQueries({ queryKey: ["notes", gameId] }),
-      queryClient.invalidateQueries({ queryKey: ["note-versions"] }),
-      queryClient.invalidateQueries({ queryKey: ["note-shares"] }),
     ]);
   };
 
@@ -158,20 +130,6 @@ export default function Notes() {
       setEditError(saveError?.message || "Unable to save note.");
       setSavingEdit(false);
     }
-  };
-
-  const restoreVersion = async (version) => {
-    if (!historyNote) return;
-    const snapshot = version.snapshot || {};
-    await updateNoteRecord(historyNote.id, {
-      text: snapshot.text || "",
-      tags: snapshot.tags || [],
-      periodLabel: snapshot.period_label || null,
-      minutes: snapshot.minutes ?? null,
-      seconds: snapshot.seconds ?? null,
-    }, user?.id);
-    await invalidateNotes();
-    setHistoryNote(null);
   };
 
   if (isLoading) {
@@ -221,7 +179,7 @@ export default function Notes() {
         <div className={styles.list}>
           {sortedNotes.map((note) => (
             (() => {
-              const canManage = note.owner_id === user?.id || isAdmin;
+              const canManage = note.owner_id === user?.id;
               return (
                 <div key={note.id} className={styles.noteRow}>
                   {canManage ? (
@@ -256,17 +214,11 @@ export default function Notes() {
                     ) : null}
                   </div>
                   <div className={styles.noteButtons}>
-                    <button type="button" className={styles.noteEdit} onClick={() => openEdit(note)}>
-                      Edit
-                    </button>
                     {canManage ? (
-                      <button type="button" className={styles.noteSecondary} onClick={() => setShareNote(note)}>
-                        Share
+                      <button type="button" className={styles.noteEdit} onClick={() => openEdit(note)}>
+                        Edit
                       </button>
                     ) : null}
-                    <button type="button" className={styles.noteSecondary} onClick={() => setHistoryNote(note)}>
-                      History
-                    </button>
                   </div>
                 </div>
               );
@@ -327,26 +279,6 @@ export default function Notes() {
         </div>
       )}
 
-      <ShareDialog
-        open={Boolean(shareNote)}
-        title={shareNote ? `Share Note: ${shareNote.text || "Untitled note"}` : "Share Note"}
-        initialSelectedIds={shareRecipients}
-        onClose={() => setShareNote(null)}
-        onSave={async (userIds) => {
-          await updateNoteShares(shareNote.id, userIds, user?.id);
-          await invalidateNotes();
-          setShareNote(null);
-        }}
-      />
-
-      <VersionHistoryDialog
-        open={Boolean(historyNote)}
-        title={historyNote ? `Note History: ${historyNote.text || "Untitled note"}` : "Note History"}
-        versions={noteVersions}
-        onClose={() => setHistoryNote(null)}
-        onRestore={restoreVersion}
-        describeVersion={describeVersion}
-      />
     </div>
   );
 }

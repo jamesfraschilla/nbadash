@@ -81,7 +81,7 @@
 }
 
 .detailsCard {
-  width: min(100%, 360px);
+  width: 100%;
   margin-bottom: 12px;
 }
 
@@ -91,6 +91,10 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--muted);
+}
+
+.detailsCard .panelTitle {
+  text-align: center;
 }
 
 .field {
@@ -122,6 +126,47 @@
   color: #0c4a6e;
   padding: 10px 12px;
   font-size: 12px;
+}
+
+.detailsRow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.detailsField {
+  flex: 1 1 480px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.detailsLabel {
+  flex: 0 0 auto;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.detailsField input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.detailsSaveButton {
+  flex: 0 0 auto;
+  min-width: 168px;
+  min-height: 44px;
 }
 
 .canvasArea {
@@ -305,6 +350,18 @@
 @media (max-width: 768px) {
   .controls {
     gap: 8px;
+  }
+
+  .detailsRow {
+    align-items: stretch;
+  }
+
+  .detailsField {
+    flex-basis: 100%;
+  }
+
+  .detailsSaveButton {
+    width: 100%;
   }
 
   .clearButton {

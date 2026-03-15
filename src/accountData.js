@@ -164,15 +164,33 @@ export async function createManagedUser({ accessToken, email, password, displayN
   return data;
 }
 
-export async function listNotesForGame(gameId) {
+export async function listNotesForGame(gameId, actorId) {
   requireSupabase();
+  if (!actorId) return [];
   const { data, error } = await supabase
     .from("user_notes")
     .select("*")
     .eq("game_id", gameId)
     .order("created_at", { ascending: true });
   if (error) throw error;
-  return data || [];
+  const notes = data || [];
+  const sharedCandidateIds = notes
+    .filter((note) => note.owner_id !== actorId)
+    .map((note) => note.id);
+
+  if (!sharedCandidateIds.length) {
+    return notes.filter((note) => note.owner_id === actorId);
+  }
+
+  const { data: sharedRows, error: sharedError } = await supabase
+    .from("user_note_shares")
+    .select("note_id")
+    .eq("user_id", actorId)
+    .in("note_id", sharedCandidateIds);
+  if (sharedError) throw sharedError;
+
+  const sharedNoteIds = new Set((sharedRows || []).map((row) => row.note_id));
+  return notes.filter((note) => note.owner_id === actorId || sharedNoteIds.has(note.id));
 }
 
 export async function listOwnedNotes(actorId) {

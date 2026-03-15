@@ -323,9 +323,6 @@ export default function Drawing() {
         <button type="button" className={styles.secondaryButton} onClick={startNewBoard}>
           New Board
         </button>
-        <button type="button" className={styles.primaryButton} onClick={saveBoard} disabled={savingBoard}>
-          {savingBoard ? "Saving..." : selectedDrawing ? "Update Board" : "Save Board"}
-        </button>
         {selectedDrawing ? (
           <>
             {canManageSelectedDrawing ? (
@@ -346,15 +343,25 @@ export default function Drawing() {
         <section className={styles.canvasArea}>
           <div className={`${styles.sidebarCard} ${styles.detailsCard}`}>
             <div className={styles.panelTitle}>Board Details</div>
-            <label className={styles.field}>
-              <span>Title</span>
-              <input
-                type="text"
-                value={boardTitle}
-                onChange={(event) => setBoardTitle(event.target.value)}
-                placeholder="Untitled"
-              />
-            </label>
+            <div className={styles.detailsRow}>
+              <label className={styles.detailsField}>
+                <span className={styles.detailsLabel}>Name</span>
+                <input
+                  type="text"
+                  value={boardTitle}
+                  onChange={(event) => setBoardTitle(event.target.value)}
+                  placeholder="Untitled"
+                />
+              </label>
+              <button
+                type="button"
+                className={`${styles.primaryButton} ${styles.detailsSaveButton}`}
+                onClick={saveBoard}
+                disabled={savingBoard}
+              >
+                {savingBoard ? "Saving..." : selectedDrawing ? "Update Board" : "Save Board"}
+              </button>
+            </div>
             {selectedDrawing ? (
               <div className={styles.metaText}>
                 Last saved {formatDrawingTime(selectedDrawing.updated_at)}
