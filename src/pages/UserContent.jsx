@@ -6,6 +6,18 @@ import { useAuth } from "../auth/useAuth.js";
 import { fetchGame } from "../api.js";
 import styles from "./UserContent.module.css";
 
+const DEFAULT_NOTE_TAG_OPTIONS = [
+  "Reminder",
+  "Playcall",
+  "Injury",
+  "Good",
+  "Bad",
+  "Offense",
+  "Defense",
+  "Concept",
+  "Misc",
+];
+
 function formatTimestamp(value) {
   if (!value) return "Unknown";
   const date = new Date(value);
@@ -93,6 +105,7 @@ export default function UserContent() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [opponentFilter, setOpponentFilter] = useState("all");
+  const [tagFilters, setTagFilters] = useState([]);
   const [deletingKey, setDeletingKey] = useState("");
 
   const { data: notes = [], isLoading: loadingNotes } = useQuery({
@@ -155,7 +168,24 @@ export default function UserContent() {
     };
   }, [gameMetaById]);
 
-  const itemMatchesFilters = (item) => {
+  const availableTagOptions = useMemo(() => {
+    const extras = new Set();
+    notes.forEach((note) => {
+      const tags = Array.isArray(note?.tags) ? note.tags : [];
+      tags.forEach((tag) => {
+        const normalized = String(tag || "").trim();
+        if (normalized) {
+          extras.add(normalized);
+        }
+      });
+    });
+    return [
+      ...DEFAULT_NOTE_TAG_OPTIONS.filter((tag) => extras.delete(tag) || true),
+      ...[...extras].sort((a, b) => a.localeCompare(b)),
+    ];
+  }, [notes]);
+
+  const itemMatchesBaseFilters = (item) => {
     if (!fromDate && !toDate && opponentFilter === "all") return true;
     const meta = gameMetaById.get(String(item?.game_id || "").trim());
     if (!meta) return false;
@@ -165,16 +195,29 @@ export default function UserContent() {
     return true;
   };
 
-  const filteredNotes = useMemo(() => notes.filter(itemMatchesFilters), [notes, fromDate, toDate, opponentFilter, gameMetaById]);
+  const filteredNotes = useMemo(() => (
+    notes.filter((note) => {
+      if (!itemMatchesBaseFilters(note)) return false;
+      if (!tagFilters.length) return true;
+      const noteTags = Array.isArray(note?.tags) ? note.tags : [];
+      return tagFilters.some((tag) => noteTags.includes(tag));
+    })
+  ), [notes, fromDate, toDate, opponentFilter, gameMetaById, tagFilters]);
   const filteredDrawings = useMemo(
     () => drawings.filter((drawing) => {
       if (!drawing.game_id && (fromDate || toDate || opponentFilter !== "all")) {
         return false;
       }
-      return itemMatchesFilters(drawing);
+      return itemMatchesBaseFilters(drawing);
     }),
     [drawings, fromDate, toDate, opponentFilter, gameMetaById]
   );
+
+  const tagSummaryLabel = useMemo(() => {
+    if (!tagFilters.length) return "All Tags";
+    if (tagFilters.length === 1) return tagFilters[0];
+    return `${tagFilters.length} Tags`;
+  }, [tagFilters]);
 
   const setTab = (nextTab) => {
     const nextParams = new URLSearchParams(params);
@@ -210,6 +253,14 @@ export default function UserContent() {
     } finally {
       setDeletingKey("");
     }
+  };
+
+  const toggleTagFilter = (tag) => {
+    setTagFilters((current) => (
+      current.includes(tag)
+        ? current.filter((value) => value !== tag)
+        : [...current, tag]
+    ));
   };
 
   return (
@@ -281,6 +332,26 @@ export default function UserContent() {
               ) : null}
             </select>
           </label>
+          {tab === "notes" && availableTagOptions.length ? (
+            <div className={styles.filterField}>
+              <span>Tag</span>
+              <details className={styles.tagFilterMenu}>
+                <summary>{tagSummaryLabel}</summary>
+                <div className={styles.tagFilterOptions}>
+                  {availableTagOptions.map((tag) => (
+                    <label key={tag} className={styles.tagFilterOption}>
+                      <input
+                        type="checkbox"
+                        checked={tagFilters.includes(tag)}
+                        onChange={() => toggleTagFilter(tag)}
+                      />
+                      <span>{tag}</span>
+                    </label>
+                  ))}
+                </div>
+              </details>
+            </div>
+          ) : null}
         </div>
         <button
           type="button"
@@ -289,6 +360,7 @@ export default function UserContent() {
             setFromDate("");
             setToDate("");
             setOpponentFilter("all");
+            setTagFilters([]);
           }}
         >
           Clear Filters
