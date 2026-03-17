@@ -1731,7 +1731,7 @@ export default function Game({ variant = "full" }) {
         <>
           <div className={`${styles.navRow} ${styles.navRowTight}`} ref={statsNavRef}>
             <SegmentSelector value={segment} onChange={handleSegmentChange} />
-            {snapshotLabel ? <div className={styles.snapshotLabel}>{snapshotLabel}</div> : null}
+            {!isLive && snapshotLabel ? <div className={styles.snapshotLabel}>{snapshotLabel}</div> : null}
             <Link to={dateParam ? `/m/${gameId}?d=${dateParam}` : `/m/${gameId}`}>Minutes</Link>
             <Link to={dateParam ? `/g/${gameId}/events?d=${dateParam}` : `/g/${gameId}/events`}>
               Play-by-Play

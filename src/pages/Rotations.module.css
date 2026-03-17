@@ -361,6 +361,10 @@
   color: var(--cell-text);
 }
 
+.outDepthCell {
+  background: #fde8e8 !important;
+}
+
 .depthTable thead th,
 .rotationTable thead th,
 .totalsTable thead th {
@@ -418,6 +422,12 @@
 .depthTable .playerSelect {
   text-align: center;
   text-align-last: center;
+}
+
+.outPlayerSelect {
+  color: #c62828 !important;
+  font-weight: 700;
+  text-decoration: line-through;
 }
 
 .rotationTable .playerSelect {
@@ -527,6 +537,16 @@
   font-size: 22px;
   color: var(--cell-text);
   text-align: center;
+}
+
+.outConfirmWord {
+  color: #c62828;
+  font-weight: 800;
+}
+
+.activeConfirmWord {
+  color: #1b7f3a;
+  font-weight: 800;
 }
 
 .modalPrimary,

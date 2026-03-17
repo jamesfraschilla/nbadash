@@ -23,9 +23,11 @@ const POSITION_COLUMNS = [1, 2, 3, 4, 5];
 const TOTAL_PER_QUARTER = MINUTES.length * POSITION_COLUMNS.length;
 const MAX_LINEUP_HISTORY = 100;
 const LONG_PRESS_DURATION_MS = 700;
+const DEPTH_OUT_PRESS_DURATION_MS = 1000;
 const DEFAULT_VERSION_OPTIONS = {
   hideNamesOnDuplicateRows: false,
 };
+const DEPTH_OUT_PREFIX = "__OUT__:";
 
 const TEAM_ROTATIONS_CONFIG = {
   washington: {
@@ -168,6 +170,49 @@ function normalizeName(value) {
   return String(value || "").trim().replace(/\s+/g, " ").toUpperCase();
 }
 
+function parseDepthChartCell(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return { raw: "", name: "", isOut: false };
+  if (raw.startsWith(DEPTH_OUT_PREFIX)) {
+    const name = normalizeName(raw.slice(DEPTH_OUT_PREFIX.length));
+    return {
+      raw: name ? `${DEPTH_OUT_PREFIX}${name}` : "",
+      name,
+      isOut: Boolean(name),
+    };
+  }
+  const name = normalizeName(raw);
+  return { raw: name, name, isOut: false };
+}
+
+function normalizeDepthChartCell(value) {
+  const parsed = parseDepthChartCell(value);
+  return parsed.raw;
+}
+
+function markDepthChartCellOut(value) {
+  const parsed = parseDepthChartCell(value);
+  if (!parsed.name) return "";
+  return `${DEPTH_OUT_PREFIX}${parsed.name}`;
+}
+
+function markDepthChartCellActive(value) {
+  return parseDepthChartCell(value).name;
+}
+
+function getDepthChartCellDisplay(value) {
+  return parseDepthChartCell(value).name;
+}
+
+function isDepthChartCellOut(value) {
+  return parseDepthChartCell(value).isOut;
+}
+
+function getDepthChartLineupValue(value) {
+  const parsed = parseDepthChartCell(value);
+  return parsed.isOut ? "" : parsed.name;
+}
+
 function normalizePlayerNameInput(value) {
   return String(value || "").toUpperCase();
 }
@@ -197,7 +242,7 @@ function normalizeDepthChart(rawDepth, teamScope = "washington") {
   if (!Array.isArray(rawDepth)) return fallback;
   return DEPTH_ROW_INDICES.map((rowIndex) => {
     const row = Array.isArray(rawDepth[rowIndex]) ? rawDepth[rowIndex] : [];
-    return POSITION_COLUMNS.map((_, columnIndex) => normalizeName(row[columnIndex] || ""));
+    return POSITION_COLUMNS.map((_, columnIndex) => normalizeDepthChartCell(row[columnIndex] || ""));
   });
 }
 
@@ -610,7 +655,10 @@ function renderExportDepthChart(depthChart) {
         <tbody>
           ${DEPTH_ROW_INDICES.map((rowIndex) => `
             <tr>
-              ${POSITION_COLUMNS.map((_, columnIndex) => `<td class="export-player-cell">${escapeHtml(depthChart?.[rowIndex]?.[columnIndex] || "")}</td>`).join("")}
+              ${POSITION_COLUMNS.map((_, columnIndex) => {
+                const cell = parseDepthChartCell(depthChart?.[rowIndex]?.[columnIndex] || "");
+                return `<td class="export-player-cell ${cell.isOut ? "export-player-out" : ""}">${escapeHtml(cell.name)}</td>`;
+              }).join("")}
             </tr>
           `).join("")}
         </tbody>
@@ -776,7 +824,7 @@ const PDF_PLAYER_TEXT_HORIZONTAL_PADDING = 4;
 
 function getExportPlayerNames(depthChart, lineups) {
   const depthNames = Array.isArray(depthChart)
-    ? depthChart.flat().filter((value) => normalizeName(value))
+    ? depthChart.flat().map((value) => getDepthChartCellDisplay(value)).filter((value) => normalizeName(value))
     : [];
   const lineupNames = Object.values(lineups || {}).flatMap((quarterRows) => (
     Array.isArray(quarterRows)
@@ -829,6 +877,7 @@ function drawPdfCell(page, {
   fillColor = PDF_COLORS.white,
   textColor = PDF_COLORS.bodyText,
   borderColor = PDF_COLORS.border,
+  strikeThrough = false,
 }) {
   page.drawRectangle({
     x,
@@ -851,6 +900,15 @@ function drawPdfCell(page, {
       font,
       color: textColor,
     });
+
+    if (strikeThrough) {
+      page.drawLine({
+        start: { x: textX, y: textY + (fontSize * 0.45) },
+        end: { x: textX + textWidth, y: textY + (fontSize * 0.45) },
+        thickness: 1,
+        color: textColor,
+      });
+    }
   }
 }
 
@@ -931,14 +989,17 @@ function drawPdfDepthChart(page, font, x, topY, width, depthChart, playerFontSiz
   DEPTH_ROW_INDICES.forEach((rowIndex) => {
     const rowY = headerY - ((rowIndex + 1) * rowHeight);
     POSITION_COLUMNS.forEach((_, index) => {
+      const cell = parseDepthChartCell(depthChart?.[rowIndex]?.[index] || "");
       drawPdfCell(page, {
         x: x + (index * colWidth),
         y: rowY,
         width: colWidth,
         height: rowHeight,
-        text: depthChart?.[rowIndex]?.[index] || "",
+        text: cell.name,
         font,
         fontSize: playerFontSize,
+        textColor: cell.isOut ? PDF_COLORS.red : PDF_COLORS.bodyText,
+        strikeThrough: cell.isOut,
       });
     });
   });
@@ -1248,6 +1309,12 @@ function buildRotationsPdfHtml({
             color: #111111;
           }
 
+          .export-player-out {
+            color: #c8102e;
+            font-weight: 700;
+            text-decoration: line-through;
+          }
+
           .pdf-logo-wrap {
             position: absolute;
             left: 0;
@@ -1298,6 +1365,7 @@ export default function Rotations() {
   const [createSavedLineupTarget, setCreateSavedLineupTarget] = useState(null);
   const [savedLineupName, setSavedLineupName] = useState("");
   const [deleteSavedLineupTarget, setDeleteSavedLineupTarget] = useState(null);
+  const [depthCellConfirmTarget, setDepthCellConfirmTarget] = useState(null);
   const [isTouchFillActive, setIsTouchFillActive] = useState(false);
   const [undoDepth, setUndoDepth] = useState(0);
   const [collapsed, setCollapsed] = useState({
@@ -1333,6 +1401,14 @@ export default function Rotations() {
     startX: 0,
     startY: 0,
     target: null,
+  });
+  const depthCellPressRef = useRef({
+    timerId: null,
+    startX: 0,
+    startY: 0,
+    rowIndex: -1,
+    columnIndex: -1,
+    value: "",
   });
   const dragFillRef = useRef({
     active: false,
@@ -1452,6 +1528,7 @@ export default function Rotations() {
     setCreateSavedLineupTarget(null);
     setSavedLineupName("");
     setDeleteSavedLineupTarget(null);
+    setDepthCellConfirmTarget(null);
     setCreateVersionOpen(false);
     setDeleteVersionTarget(null);
   }, [gameId, monitoredTeamScope]);
@@ -1928,10 +2005,61 @@ export default function Rotations() {
     setSavedLineupMenu(null);
   };
 
+  const clearDepthCellPress = () => {
+    if (depthCellPressRef.current.timerId) {
+      window.clearTimeout(depthCellPressRef.current.timerId);
+      depthCellPressRef.current.timerId = null;
+    }
+    depthCellPressRef.current.startX = 0;
+    depthCellPressRef.current.startY = 0;
+    depthCellPressRef.current.rowIndex = -1;
+    depthCellPressRef.current.columnIndex = -1;
+    depthCellPressRef.current.value = "";
+  };
+
+  const startDepthCellPress = (event, rowIndex, columnIndex, value) => {
+    const cell = parseDepthChartCell(value);
+    if (!cell.name) return;
+    clearDepthCellPress();
+    depthCellPressRef.current.startX = event.clientX;
+    depthCellPressRef.current.startY = event.clientY;
+    depthCellPressRef.current.rowIndex = rowIndex;
+    depthCellPressRef.current.columnIndex = columnIndex;
+    depthCellPressRef.current.value = value;
+    depthCellPressRef.current.timerId = window.setTimeout(() => {
+      setDepthCellConfirmTarget({
+        rowIndex,
+        columnIndex,
+        value: cell.raw,
+        name: cell.name,
+        mode: cell.isOut ? "active" : "out",
+      });
+      clearDepthCellPress();
+    }, DEPTH_OUT_PRESS_DURATION_MS);
+  };
+
+  const moveDepthCellPress = (event) => {
+    if (!depthCellPressRef.current.timerId) return;
+    const dx = Math.abs(event.clientX - depthCellPressRef.current.startX);
+    const dy = Math.abs(event.clientY - depthCellPressRef.current.startY);
+    if (dx > 8 || dy > 8) {
+      clearDepthCellPress();
+    }
+  };
+
+  const confirmDepthCellStateChange = () => {
+    if (!depthCellConfirmTarget) return;
+    const nextValue = depthCellConfirmTarget.mode === "active"
+      ? markDepthChartCellActive(depthCellConfirmTarget.value)
+      : markDepthChartCellOut(depthCellConfirmTarget.value);
+    updateDepthCell(depthCellConfirmTarget.rowIndex, depthCellConfirmTarget.columnIndex, nextValue);
+    setDepthCellConfirmTarget(null);
+  };
+
   const updateDepthCell = (rowIndex, columnIndex, value) => {
     updateActiveVersion((currentVersion) => {
       const next = currentVersion.depthChart.map((row, rIndex) => (
-        rIndex !== rowIndex ? row : row.map((cell, cIndex) => (cIndex === columnIndex ? normalizeName(value) : cell))
+        rIndex !== rowIndex ? row : row.map((cell, cIndex) => (cIndex === columnIndex ? normalizeDepthChartCell(value) : cell))
       ));
       if (activeVersionId === FINAL_VERSION_ID) {
         depthTemplateSourceGameIdRef.current = String(gameId || "");
@@ -2037,7 +2165,7 @@ export default function Rotations() {
       lineupHistoryRef.current = [...lineupHistoryRef.current, currentVersion.lineups].slice(-MAX_LINEUP_HISTORY);
       setUndoDepth(lineupHistoryRef.current.length);
       const next = createDefaultQuarterLineups();
-      next[1][0] = POSITION_COLUMNS.map((_, columnIndex) => normalizeName(depthChart?.[0]?.[columnIndex] || ""));
+      next[1][0] = POSITION_COLUMNS.map((_, columnIndex) => getDepthChartLineupValue(depthChart?.[0]?.[columnIndex] || ""));
       return {
         ...currentVersion,
         lineups: next,
@@ -2714,6 +2842,49 @@ export default function Rotations() {
         </div>
       )}
 
+      {depthCellConfirmTarget && (
+        <div
+          className={styles.modalOverlay}
+          onClick={() => {
+            clearDepthCellPress();
+            setDepthCellConfirmTarget(null);
+          }}
+        >
+          <div className={styles.modalCard} onClick={(event) => event.stopPropagation()}>
+            <h3 className={styles.modalTitle}>
+              Mark{" "}
+              <span
+                className={
+                  depthCellConfirmTarget.mode === "active"
+                    ? styles.activeConfirmWord
+                    : styles.outConfirmWord
+                }
+              >
+                {depthCellConfirmTarget.mode === "active" ? "ACTIVE" : "OUT"}
+              </span>
+              ?
+            </h3>
+            <button
+              type="button"
+              className={styles.modalPrimary}
+              onClick={confirmDepthCellStateChange}
+            >
+              {depthCellConfirmTarget.mode === "active" ? "Mark ACTIVE?" : "OK"}
+            </button>
+            <button
+              type="button"
+              className={styles.modalSecondary}
+              onClick={() => {
+                clearDepthCellPress();
+                setDepthCellConfirmTarget(null);
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {savedLineupMenu && (
         <div
           ref={savedLineupMenuRef}
@@ -2885,13 +3056,26 @@ export default function Rotations() {
                   {POSITION_COLUMNS.map((position) => {
                     const columnIndex = position - 1;
                     const value = depthChart[rowIndex]?.[columnIndex] || "";
+                    const depthCell = parseDepthChartCell(value);
                     return (
-                      <td key={`depth-cell-${rowIndex}-${position}`}>
+                      <td
+                        key={`depth-cell-${rowIndex}-${position}`}
+                        className={depthCell.isOut ? styles.outDepthCell : ""}
+                        onPointerDown={(event) => startDepthCellPress(event, rowIndex, columnIndex, value)}
+                        onPointerUp={clearDepthCellPress}
+                        onPointerLeave={clearDepthCellPress}
+                        onPointerCancel={clearDepthCellPress}
+                        onPointerMove={moveDepthCellPress}
+                        onContextMenu={(event) => event.preventDefault()}
+                      >
                         <select
-                          className={styles.playerSelect}
+                          className={`${styles.playerSelect} ${depthCell.isOut ? styles.outPlayerSelect : ""}`}
                           value={value}
                           onChange={(event) => updateDepthCell(rowIndex, columnIndex, event.target.value)}
                         >
+                          {depthCell.isOut ? (
+                            <option value={depthCell.raw}>{depthCell.name}</option>
+                          ) : null}
                           <option value=""> </option>
                           {playerOptions.map((option) => (
                             <option key={`depth-${rowIndex}-${position}-${option}`} value={option}>
