@@ -24,6 +24,7 @@ const TOTAL_PER_QUARTER = MINUTES.length * POSITION_COLUMNS.length;
 const MAX_LINEUP_HISTORY = 100;
 const LONG_PRESS_DURATION_MS = 700;
 const DEPTH_OUT_PRESS_DURATION_MS = 1000;
+const DEPTH_PRESS_RELEASE_LOCK_MS = 120;
 const DEFAULT_VERSION_OPTIONS = {
   hideNamesOnDuplicateRows: false,
 };
@@ -1405,6 +1406,7 @@ export default function Rotations() {
   });
   const depthCellPressRef = useRef({
     timerId: null,
+    releaseTimerId: null,
     startX: 0,
     startY: 0,
     rowIndex: -1,
@@ -2011,6 +2013,10 @@ export default function Rotations() {
       window.clearTimeout(depthCellPressRef.current.timerId);
       depthCellPressRef.current.timerId = null;
     }
+    if (depthCellPressRef.current.releaseTimerId) {
+      window.clearTimeout(depthCellPressRef.current.releaseTimerId);
+      depthCellPressRef.current.releaseTimerId = null;
+    }
     setIsDepthCellPressActive(false);
     depthCellPressRef.current.startX = 0;
     depthCellPressRef.current.startY = 0;
@@ -2041,8 +2047,21 @@ export default function Rotations() {
     }, DEPTH_OUT_PRESS_DURATION_MS);
   };
 
+  const releaseDepthCellPress = (event) => {
+    event.preventDefault();
+    if (depthCellPressRef.current.releaseTimerId) {
+      window.clearTimeout(depthCellPressRef.current.releaseTimerId);
+    }
+    depthCellPressRef.current.releaseTimerId = window.setTimeout(() => {
+      clearDepthCellPress();
+    }, DEPTH_PRESS_RELEASE_LOCK_MS);
+  };
+
   const moveDepthCellPress = (event) => {
     if (!depthCellPressRef.current.timerId) return;
+    if (event.pointerType === "touch") {
+      event.preventDefault();
+    }
     const dx = Math.abs(event.clientX - depthCellPressRef.current.startX);
     const dy = Math.abs(event.clientY - depthCellPressRef.current.startY);
     if (dx > 8 || dy > 8) {
@@ -3065,9 +3084,9 @@ export default function Rotations() {
                         key={`depth-cell-${rowIndex}-${position}`}
                         className={depthCell.isOut ? styles.outDepthCell : ""}
                         onPointerDown={(event) => startDepthCellPress(event, rowIndex, columnIndex, value)}
-                        onPointerUp={clearDepthCellPress}
-                        onPointerLeave={clearDepthCellPress}
-                        onPointerCancel={clearDepthCellPress}
+                        onPointerUp={releaseDepthCellPress}
+                        onPointerLeave={releaseDepthCellPress}
+                        onPointerCancel={releaseDepthCellPress}
                         onPointerMove={moveDepthCellPress}
                         onContextMenu={(event) => event.preventDefault()}
                       >
