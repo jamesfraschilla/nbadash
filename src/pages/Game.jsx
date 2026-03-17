@@ -8,9 +8,7 @@ import {
   buildDefaultNoteForm,
   buildNoteFormFromAction,
   buildPlayByPlaySourceMeta,
-  buildPlayByPlaySummary,
   buildVideoEventIdByActionNumber,
-  composePlayByPlayNoteText,
   describePlayByPlayAction,
   NOTE_MINUTE_OPTIONS,
   NOTE_PERIOD_OPTIONS,
@@ -802,9 +800,7 @@ export default function Game({ variant = "full" }) {
       periodLabel: noteForm.period === "--" ? null : noteForm.period,
       minutes: Number.isNaN(minutesValue) ? null : minutesValue,
       seconds: Number.isNaN(secondsValue) ? null : secondsValue,
-      text: noteSourceAction
-        ? composePlayByPlayNoteText(noteSourceAction, noteForm.text)
-        : String(noteForm.text || "").trim(),
+      text: String(noteForm.text || "").trim(),
       tags: Array.isArray(noteForm.tags) ? noteForm.tags : [],
       sourceMeta: noteSourceAction
         ? buildPlayByPlaySourceMeta({
@@ -1894,9 +1890,6 @@ export default function Game({ variant = "full" }) {
             aria-modal="true"
           >
             <h3>{noteSourceAction ? "Add Note From Play" : "Add Note"}</h3>
-            {noteSourceAction ? (
-              <div className={styles.noteSourceSummary}>{buildPlayByPlaySummary(noteSourceAction)}</div>
-            ) : null}
             <div className={styles.noteTimeRow}>
               <div className={styles.noteTimeLabel}>Time left</div>
               <div className={styles.noteTimeControls}>

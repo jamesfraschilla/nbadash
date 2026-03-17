@@ -7,9 +7,7 @@ import { useAuth } from "../auth/useAuth.js";
 import {
   buildNoteFormFromAction,
   buildPlayByPlaySourceMeta,
-  buildPlayByPlaySummary,
   buildVideoEventIdByActionNumber,
-  composePlayByPlayNoteText,
   describePlayByPlayAction,
   NOTE_MINUTE_OPTIONS,
   NOTE_PERIOD_OPTIONS,
@@ -124,7 +122,7 @@ export default function PlayByPlay() {
       periodLabel: noteForm.period === "--" ? null : noteForm.period,
       minutes: Number.isNaN(minutesValue) ? null : minutesValue,
       seconds: Number.isNaN(secondsValue) ? null : secondsValue,
-      text: composePlayByPlayNoteText(noteSourceAction, noteForm.text),
+      text: String(noteForm.text || "").trim(),
       tags: Array.isArray(noteForm.tags) ? noteForm.tags : [],
       sourceMeta: buildPlayByPlaySourceMeta({
         gameId,
@@ -326,9 +324,6 @@ export default function PlayByPlay() {
             aria-modal="true"
           >
             <h3>Add Note From Play</h3>
-            {noteSourceAction ? (
-              <div className={styles.noteSourceSummary}>{buildPlayByPlaySummary(noteSourceAction)}</div>
-            ) : null}
             <div className={styles.noteTimeRow}>
               <div className={styles.noteTimeLabel}>Time left</div>
               <div className={styles.noteTimeControls}>

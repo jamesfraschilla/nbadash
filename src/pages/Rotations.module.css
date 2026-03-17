@@ -25,6 +25,13 @@
   padding: 16px 20px 56px;
 }
 
+.pageSelectionLock,
+.pageSelectionLock * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
 :global(html[data-theme="dark"]) .page {
   --section-bg: #000000;
   --section-border: #6f6f6f;

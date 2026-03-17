@@ -74,7 +74,7 @@ export function buildNoteFormFromAction(action) {
     period: periodLabel,
     minutes: minRaw ? String(Number(minRaw)) : "--",
     seconds: secRaw ? String(secRaw).padStart(2, "0") : "--",
-    text: "",
+    text: describePlayByPlayAction(action),
     tags: [],
   };
 }
@@ -103,22 +103,6 @@ export function buildVideoEventIdByActionNumber(actions) {
     eventMap.set(actionNumber, videoEventId);
   }
   return eventMap;
-}
-
-export function buildPlayByPlaySummary(action) {
-  const description = describePlayByPlayAction(action) || "Play";
-  const periodLabel = getNotePeriodLabel(action?.period);
-  const clockText = normalizeClock(action?.clock);
-  const meta = [periodLabel !== "--" ? periodLabel : "", clockText || ""].filter(Boolean).join(" | ");
-  return meta ? `${description}\n${meta}` : description;
-}
-
-export function composePlayByPlayNoteText(action, userText) {
-  const summary = buildPlayByPlaySummary(action);
-  const trimmedText = String(userText || "").trim();
-  if (!summary) return trimmedText;
-  if (!trimmedText) return summary;
-  return `${summary}\n\n${trimmedText}`;
 }
 
 export function buildPlayByPlaySourceMeta({ gameId, seasonYear, action, videoEventId }) {

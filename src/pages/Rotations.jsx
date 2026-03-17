@@ -1366,6 +1366,7 @@ export default function Rotations() {
   const [savedLineupName, setSavedLineupName] = useState("");
   const [deleteSavedLineupTarget, setDeleteSavedLineupTarget] = useState(null);
   const [depthCellConfirmTarget, setDepthCellConfirmTarget] = useState(null);
+  const [isDepthCellPressActive, setIsDepthCellPressActive] = useState(false);
   const [isTouchFillActive, setIsTouchFillActive] = useState(false);
   const [undoDepth, setUndoDepth] = useState(0);
   const [collapsed, setCollapsed] = useState({
@@ -2010,6 +2011,7 @@ export default function Rotations() {
       window.clearTimeout(depthCellPressRef.current.timerId);
       depthCellPressRef.current.timerId = null;
     }
+    setIsDepthCellPressActive(false);
     depthCellPressRef.current.startX = 0;
     depthCellPressRef.current.startY = 0;
     depthCellPressRef.current.rowIndex = -1;
@@ -2021,6 +2023,7 @@ export default function Rotations() {
     const cell = parseDepthChartCell(value);
     if (!cell.name) return;
     clearDepthCellPress();
+    setIsDepthCellPressActive(true);
     depthCellPressRef.current.startX = event.clientX;
     depthCellPressRef.current.startY = event.clientY;
     depthCellPressRef.current.rowIndex = rowIndex;
@@ -2618,7 +2621,7 @@ export default function Rotations() {
 
   if (!rotationsAvailable) {
     return (
-      <div className={styles.page}>
+      <div className={`${styles.page} ${isDepthCellPressActive ? styles.pageSelectionLock : ""}`}>
         <div className={styles.topRow}>
           <Link className={styles.backButton} to={backUrl}>Back</Link>
         </div>
