@@ -55,8 +55,15 @@ function playerLine(player) {
   };
 }
 
-function playerPageUrl(player) {
+function inferLeagueFromTeamId(teamId) {
+  return Number(teamId) >= 1612700000 && Number(teamId) < 1612710000 ? "gleague" : "nba";
+}
+
+function playerPageUrl(player, teamId) {
   if (!player?.personId) return null;
+  if (inferLeagueFromTeamId(teamId) === "gleague") {
+    return `https://stats.gleague.nba.com/player/${player.personId}/`;
+  }
   return `https://www.nba.com/stats/player/${player.personId}`;
 }
 
@@ -85,6 +92,7 @@ export default function BoxScoreTable({
   teamLabel,
   teamLogo,
   teamName,
+  teamId,
   boxScore,
   currentPeriod,
   ratings = {},
@@ -147,7 +155,7 @@ export default function BoxScoreTable({
       <tbody>
         {boxScore.players.map((player) => {
           const stats = playerLine(player);
-          const pageUrl = playerPageUrl(player);
+          const pageUrl = playerPageUrl(player, teamId);
           return (
               <tr key={player.personId}>
                 <td className={styles.playerNumberCol}>

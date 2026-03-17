@@ -2047,6 +2047,19 @@ export default function Rotations() {
     }, DEPTH_OUT_PRESS_DURATION_MS);
   };
 
+  const openDepthCellConfirm = (rowIndex, columnIndex, value) => {
+    const cell = parseDepthChartCell(value);
+    if (!cell.name) return;
+    clearDepthCellPress();
+    setDepthCellConfirmTarget({
+      rowIndex,
+      columnIndex,
+      value: cell.raw,
+      name: cell.name,
+      mode: cell.isOut ? "active" : "out",
+    });
+  };
+
   const releaseDepthCellPress = (event) => {
     event.preventDefault();
     if (depthCellPressRef.current.releaseTimerId) {
@@ -3088,7 +3101,10 @@ export default function Rotations() {
                         onPointerLeave={releaseDepthCellPress}
                         onPointerCancel={releaseDepthCellPress}
                         onPointerMove={moveDepthCellPress}
-                        onContextMenu={(event) => event.preventDefault()}
+                        onContextMenu={(event) => {
+                          event.preventDefault();
+                          openDepthCellConfirm(rowIndex, columnIndex, value);
+                        }}
                       >
                         <select
                           className={`${styles.playerSelect} ${depthCell.isOut ? styles.outPlayerSelect : ""}`}
