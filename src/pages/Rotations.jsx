@@ -3118,6 +3118,7 @@ export default function Rotations() {
                           onContextMenu={(event) => {
                             event.preventDefault();
                             event.stopPropagation();
+                            openDepthCellConfirm(rowIndex, columnIndex, value);
                           }}
                         >
                           {depthCell.isOut ? (
