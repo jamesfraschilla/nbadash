@@ -4,6 +4,19 @@ import { useQuery } from "@tanstack/react-query";
 import { createNote } from "../accountData.js";
 import { fetchGame, fetchMinutes, playerHeadshotUrl, teamLogoUrl } from "../api.js";
 import { useAuth } from "../auth/useAuth.js";
+import {
+  buildDefaultNoteForm,
+  buildNoteFormFromAction,
+  buildPlayByPlaySourceMeta,
+  buildPlayByPlaySummary,
+  buildVideoEventIdByActionNumber,
+  composePlayByPlayNoteText,
+  describePlayByPlayAction,
+  NOTE_MINUTE_OPTIONS,
+  NOTE_PERIOD_OPTIONS,
+  NOTE_SECOND_OPTIONS,
+  NOTE_TAG_OPTIONS,
+} from "../noteHelpers.js";
 import { gameStatusLabel, normalizeClock } from "../utils.js";
 import BoxScoreTable from "../components/BoxScoreTable.jsx";
 import StatBars from "../components/StatBars.jsx";
@@ -45,21 +58,7 @@ const CORE_STAT_FIELDS = [
   "midFieldGoalsAttempted",
 ];
 
-const NOTE_PERIOD_OPTIONS = ["--", "Q1", "Q2", "Q3", "Q4", "OT"];
-const NOTE_MINUTE_OPTIONS = ["--", ...Array.from({ length: 12 }, (_, idx) => String(idx))];
-const NOTE_SECOND_OPTIONS = ["--", ...Array.from({ length: 60 }, (_, idx) => String(idx).padStart(2, "0"))];
 const HOLD_MOVE_TOLERANCE_PX = 10;
-const NOTE_TAG_OPTIONS = [
-  "Reminder",
-  "Playcall",
-  "Injury",
-  "Good",
-  "Bad",
-  "Offense",
-  "Defense",
-  "Concept",
-  "Misc",
-];
 const SEGMENT_STAT_DEFAULTS = {
   minutes: 0,
   plusMinusPoints: 0,
@@ -374,10 +373,9 @@ export default function Game({ variant = "full" }) {
   const holdTargetRef = useRef(null);
   const holdPointerStartRef = useRef(null);
   const [isLocked, setIsLocked] = useState(false);
-  const [noteEditor, setNoteEditor] = useState({ open: false, actionNumber: null });
-  const [noteDraft, setNoteDraft] = useState("");
   const [noteModalOpen, setNoteModalOpen] = useState(false);
   const [savingNewNote, setSavingNewNote] = useState(false);
+  const [noteSourceAction, setNoteSourceAction] = useState(null);
   const [noteForm, setNoteForm] = useState({
     period: "--",
     minutes: "--",
@@ -576,24 +574,6 @@ export default function Game({ variant = "full" }) {
   const clock = isLive ? normalizeClock(game?.gameClock) : null;
   const useSnapshots = isLive;
 
-  const { data: highlightRows } = useQuery({
-    queryKey: ["pbp-highlights", gameId],
-    queryFn: async () => {
-      if (!supabase || !gameId) return [];
-      const { data, error: fetchError } = await supabase
-        .from("pbp_highlights")
-        .select("action_number,note")
-        .eq("game_id", gameId);
-      if (fetchError) throw fetchError;
-      return data || [];
-    },
-    enabled: Boolean(gameId),
-    staleTime: 15_000,
-    refetchInterval: 15_000,
-  });
-
-  const [highlightedMap, setHighlightedMap] = useState(new Map());
-
   useEffect(() => {
     let cancelled = false;
 
@@ -614,15 +594,6 @@ export default function Game({ variant = "full" }) {
       cancelled = true;
     };
   }, [officials]);
-
-  useEffect(() => {
-    if (!highlightRows) return;
-    const next = new Map();
-    highlightRows.forEach((row) => {
-      if (row.action_number != null) next.set(row.action_number, row.note || "");
-    });
-    setHighlightedMap(next);
-  }, [highlightRows]);
 
   const basePlayers = [
     ...(boxScore?.away?.players || []),
@@ -749,6 +720,11 @@ export default function Game({ variant = "full" }) {
     return sorted.slice(-16);
   }, [game?.playByPlayActions]);
 
+  const videoEventIdByActionNumber = useMemo(
+    () => buildVideoEventIdByActionNumber(game?.playByPlayActions || []),
+    [game?.playByPlayActions]
+  );
+
   const openingJumpTeamId = useMemo(() => {
     const actions = game?.playByPlayActions || [];
     const ordered = actions.slice().sort((a, b) => (a.actionNumber || 0) - (b.actionNumber || 0));
@@ -794,96 +770,23 @@ export default function Game({ variant = "full" }) {
     holdPointerStartRef.current = null;
   };
 
-  const openNoteEditor = (actionNumber) => {
-    if (!actionNumber) return;
-    const existingNote = highlightedMap.get(actionNumber) || "";
-    setNoteDraft(existingNote);
-    setNoteEditor({ open: true, actionNumber });
-  };
-
-  const closeNoteEditor = () => {
-    setNoteEditor({ open: false, actionNumber: null });
-    setNoteDraft("");
-  };
-
-  const saveNote = async () => {
-    const actionNumber = noteEditor.actionNumber;
-    if (!actionNumber || !supabase || !gameId) return;
-    const trimmedNote = String(noteDraft || "").trim();
-    const { error: updateError } = await supabase
-      .from("pbp_highlights")
-      .upsert(
-        { game_id: gameId, action_number: actionNumber, note: trimmedNote },
-        { onConflict: "game_id,action_number" }
-      );
-    if (!updateError) {
-      setHighlightedMap((prev) => {
-        const next = new Map(prev);
-        next.set(actionNumber, trimmedNote);
-        return next;
-      });
-      closeNoteEditor();
-    }
-  };
-
-  const removeHighlight = async () => {
-    const actionNumber = noteEditor.actionNumber;
-    if (!actionNumber || !supabase || !gameId) return;
-    const { error: removeError } = await supabase
-      .from("pbp_highlights")
-      .delete()
-      .eq("game_id", gameId)
-      .eq("action_number", actionNumber);
-    if (!removeError) {
-      setHighlightedMap((prev) => {
-        const next = new Map(prev);
-        next.delete(actionNumber);
-        return next;
-      });
-      closeNoteEditor();
-    }
-  };
-
-  const buildDefaultNoteForm = () => {
-    if (!isLive || !game?.period || !game?.gameClock) {
-      return {
-        period: "--",
-        minutes: "--",
-        seconds: "--",
-        text: "",
-        tags: [],
-      };
-    }
-    const periodNumber = Number(game.period) || 1;
-    const periodLabel = periodNumber > 4 ? "OT" : `Q${periodNumber}`;
-    const normalized = normalizeClock(game.gameClock);
-    const [minRaw, secRaw] = normalized.split(":");
-    if (!minRaw || !secRaw) {
-      return {
-        period: periodLabel,
-        minutes: "--",
-        seconds: "--",
-        text: "",
-        tags: [],
-      };
-    }
-    return {
-      period: periodLabel,
-      minutes: String(Number(minRaw)),
-      seconds: String(secRaw).padStart(2, "0"),
-      text: "",
-      tags: [],
-    };
-  };
-
   const openAddNote = () => {
-    setNoteForm(buildDefaultNoteForm());
+    setNoteSourceAction(null);
+    setNoteForm(buildDefaultNoteForm(game, isLive));
+    setNoteModalOpen(true);
+  };
+
+  const openAddNoteForAction = (action) => {
+    if (!action) return;
+    setNoteSourceAction(action);
+    setNoteForm(buildNoteFormFromAction(action));
     setNoteModalOpen(true);
   };
 
   const closeAddNote = () => {
     setNoteModalOpen(false);
     setSavingNewNote(false);
+    setNoteSourceAction(null);
   };
 
   const requestCancelNote = () => {
@@ -899,8 +802,18 @@ export default function Game({ variant = "full" }) {
       periodLabel: noteForm.period === "--" ? null : noteForm.period,
       minutes: Number.isNaN(minutesValue) ? null : minutesValue,
       seconds: Number.isNaN(secondsValue) ? null : secondsValue,
-      text: String(noteForm.text || "").trim(),
+      text: noteSourceAction
+        ? composePlayByPlayNoteText(noteSourceAction, noteForm.text)
+        : String(noteForm.text || "").trim(),
       tags: Array.isArray(noteForm.tags) ? noteForm.tags : [],
+      sourceMeta: noteSourceAction
+        ? buildPlayByPlaySourceMeta({
+          gameId,
+          seasonYear: game?.seasonYear,
+          action: noteSourceAction,
+          videoEventId: videoEventIdByActionNumber.get(noteSourceAction.actionNumber),
+        })
+        : null,
     };
     try {
       setSavingNewNote(true);
@@ -912,10 +825,10 @@ export default function Game({ variant = "full" }) {
     }
   };
 
-  const handleHoldStart = (actionNumber) => (event) => {
-    if (!actionNumber) return;
+  const handleHoldStart = (action) => (event) => {
+    if (!action) return;
     clearHoldTimer();
-    holdTargetRef.current = actionNumber;
+    holdTargetRef.current = action;
     if (event?.touches?.length) {
       holdPointerStartRef.current = {
         x: event.touches[0].clientX,
@@ -928,8 +841,8 @@ export default function Game({ variant = "full" }) {
       };
     }
     holdTimerRef.current = setTimeout(() => {
-      if (holdTargetRef.current === actionNumber) {
-        openNoteEditor(actionNumber);
+      if (holdTargetRef.current === action) {
+        openAddNoteForAction(action);
       }
       clearHoldTimer();
     }, 1000);
@@ -1823,11 +1736,6 @@ export default function Game({ variant = "full" }) {
             <Link to={dateParam ? `/g/${gameId}/events?d=${dateParam}` : `/g/${gameId}/events`}>
               Play-by-Play
             </Link>
-            <Link
-              to={dateParam ? `/g/${gameId}/events?d=${dateParam}&view=highlighted` : `/g/${gameId}/events?view=highlighted`}
-            >
-              Highlighted
-            </Link>
             <button type="button" className={styles.navButton} onClick={handleScrollToBoxScore}>
               Box Score
             </button>
@@ -1854,10 +1762,8 @@ export default function Game({ variant = "full" }) {
                     : "Team";
                 const clockText = action.clock ? normalizeClock(action.clock) : "";
                 const periodText = action.period ? `Q${action.period}` : "";
-                const rawDescriptor = action.description || action.descriptor || action.subType || action.actionType || "";
-                const descriptor = String(rawDescriptor).replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
+                const descriptor = describePlayByPlayAction(action) || action.actionType || "";
                 const headshotUrl = action.personId ? playerHeadshotUrl(action.personId) : null;
-                const isHighlighted = action.actionNumber && highlightedMap.has(action.actionNumber);
                 const isHome = action.teamId && action.teamId === homeTeam?.teamId;
                 const isTimeout = action.actionType === "timeout";
                 const scoreText = action.scoreHome && action.scoreAway
@@ -1866,12 +1772,12 @@ export default function Game({ variant = "full" }) {
                 return (
                   <div
                     key={action.actionNumber || `${action.period}-${action.clock}-${descriptor}`}
-                    className={`${styles.pbpCard} ${isHome ? styles.pbpCardHome : ""} ${isHighlighted ? styles.pbpCardHighlighted : ""} ${isTimeout ? styles.pbpCardTimeout : ""}`}
-                    onMouseDown={handleHoldStart(action.actionNumber)}
+                    className={`${styles.pbpCard} ${isHome ? styles.pbpCardHome : ""} ${isTimeout ? styles.pbpCardTimeout : ""}`}
+                    onMouseDown={handleHoldStart(action)}
                     onMouseUp={handleHoldEnd}
                     onMouseLeave={handleHoldEnd}
                     onMouseMove={handleHoldMove}
-                    onTouchStart={handleHoldStart(action.actionNumber)}
+                    onTouchStart={handleHoldStart(action)}
                     onTouchMove={handleHoldMove}
                     onTouchEnd={handleHoldEnd}
                     onTouchCancel={handleHoldEnd}
@@ -1913,42 +1819,6 @@ export default function Game({ variant = "full" }) {
               )}
             </div>
           </div>
-
-          {noteEditor.open && (
-            <div className={styles.noteOverlay} onClick={closeNoteEditor}>
-              <div
-                className={styles.noteModal}
-                onClick={(event) => event.stopPropagation()}
-                role="dialog"
-                aria-modal="true"
-              >
-                <h3>{highlightedMap.has(noteEditor.actionNumber) ? "Edit Highlight Note" : "Add Highlight Note"}</h3>
-                <textarea
-                  rows={3}
-                  placeholder="Optional note..."
-                  value={noteDraft}
-                  onChange={(event) => setNoteDraft(event.target.value)}
-                />
-                <div className={styles.noteActions}>
-                  {highlightedMap.has(noteEditor.actionNumber) ? (
-                    <button type="button" className={styles.noteRemove} onClick={removeHighlight}>
-                      Remove
-                    </button>
-                  ) : (
-                    <div />
-                  )}
-                  <div className={styles.noteActionsRight}>
-                    <button type="button" className={styles.noteCancel} onClick={closeNoteEditor}>
-                      Cancel
-                    </button>
-                    <button type="button" className={styles.noteSave} onClick={saveNote}>
-                      Save
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
 
           <StatBars
             title="Four Factors"
@@ -2004,11 +1874,6 @@ export default function Game({ variant = "full" }) {
             <Link to={dateParam ? `/g/${gameId}/events?d=${dateParam}` : `/g/${gameId}/events`}>
               Play-by-Play
             </Link>
-            <Link
-              to={dateParam ? `/g/${gameId}/events?d=${dateParam}&view=highlighted` : `/g/${gameId}/events?view=highlighted`}
-            >
-              Highlighted
-            </Link>
             <button
               type="button"
               className={styles.navButton}
@@ -2028,10 +1893,13 @@ export default function Game({ variant = "full" }) {
             role="dialog"
             aria-modal="true"
           >
-            <h3>Add Note</h3>
-                <div className={styles.noteTimeRow}>
-                  <div className={styles.noteTimeLabel}>Time left</div>
-                  <div className={styles.noteTimeControls}>
+            <h3>{noteSourceAction ? "Add Note From Play" : "Add Note"}</h3>
+            {noteSourceAction ? (
+              <div className={styles.noteSourceSummary}>{buildPlayByPlaySummary(noteSourceAction)}</div>
+            ) : null}
+            <div className={styles.noteTimeRow}>
+              <div className={styles.noteTimeLabel}>Time left</div>
+              <div className={styles.noteTimeControls}>
                 <select
                   className={styles.noteSelect}
                   value={noteForm.period}
@@ -2074,35 +1942,35 @@ export default function Game({ variant = "full" }) {
                     ))}
                   </select>
                 </div>
-                  </div>
-                </div>
-                <details className={styles.noteTags}>
-                  <summary>Tags</summary>
-                  <div className={styles.noteTagsGrid}>
-                    {NOTE_TAG_OPTIONS.map((tag) => {
-                      const checked = noteForm.tags.includes(tag);
-                      return (
-                        <label key={tag} className={styles.noteTagOption}>
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(event) => {
-                              const next = event.target.checked
-                                ? [...noteForm.tags, tag]
-                                : noteForm.tags.filter((value) => value !== tag);
-                              setNoteForm((prev) => ({ ...prev, tags: next }));
-                            }}
-                          />
-                          <span>{tag}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </details>
-                <textarea
-                  rows={4}
-                  placeholder="Type your note..."
-                  value={noteForm.text}
+              </div>
+            </div>
+            <details className={styles.noteTags}>
+              <summary>Tags</summary>
+              <div className={styles.noteTagsGrid}>
+                {NOTE_TAG_OPTIONS.map((tag) => {
+                  const checked = noteForm.tags.includes(tag);
+                  return (
+                    <label key={tag} className={styles.noteTagOption}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(event) => {
+                          const next = event.target.checked
+                            ? [...noteForm.tags, tag]
+                            : noteForm.tags.filter((value) => value !== tag);
+                          setNoteForm((prev) => ({ ...prev, tags: next }));
+                        }}
+                      />
+                      <span>{tag}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </details>
+            <textarea
+              rows={4}
+              placeholder={noteSourceAction ? "Add context for this play..." : "Type your note..."}
+              value={noteForm.text}
               onChange={(event) =>
                 setNoteForm((prev) => ({ ...prev, text: event.target.value }))
               }

@@ -17,6 +17,21 @@ function normalizeTextArray(values) {
   );
 }
 
+function normalizeNoteSourceMeta(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const next = {};
+  const type = String(value.type || "").trim();
+  const clipUrl = String(value.clip_url || "").trim();
+  const actionNumber = Number(value.action_number);
+  const videoEventId = Number(value.video_event_id);
+
+  if (type) next.type = type;
+  if (clipUrl) next.clip_url = clipUrl;
+  if (!Number.isNaN(actionNumber)) next.action_number = actionNumber;
+  if (!Number.isNaN(videoEventId)) next.video_event_id = videoEventId;
+  return next;
+}
+
 function assignIfDefined(target, key, value) {
   if (value !== undefined) {
     target[key] = value;
@@ -218,6 +233,7 @@ export async function createNote(note, actorId) {
     seconds: note.seconds ?? null,
     text: String(note.text || "").trim(),
     tags: normalizeTextArray(note.tags),
+    source_meta: normalizeNoteSourceMeta(note.sourceMeta),
     sharing_scope: note.sharingScope === "shared" ? "shared" : "private",
     created_at: createdAtIso,
     updated_at: createdAtIso,
@@ -299,6 +315,7 @@ export async function importLegacyLocalNotes(actorId) {
       seconds: row.seconds,
       text: row.text,
       tags: row.tags,
+      sourceMeta: row.source_meta,
       sharingScope: row.sharing_scope,
       createdAtIso: row.created_at,
     }, actorId);
@@ -343,6 +360,7 @@ export async function updateNoteRecord(noteId, updates, actorId) {
     period_label: updates.periodLabel !== undefined ? updates.periodLabel : existing.period_label,
     minutes: updates.minutes !== undefined ? updates.minutes : existing.minutes,
     seconds: updates.seconds !== undefined ? updates.seconds : existing.seconds,
+    source_meta: updates.sourceMeta !== undefined ? normalizeNoteSourceMeta(updates.sourceMeta) : (existing.source_meta || {}),
     sharing_scope: updates.sharingScope || existing.sharing_scope,
   };
 

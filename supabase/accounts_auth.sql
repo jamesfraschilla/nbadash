@@ -47,6 +47,7 @@ create table if not exists public.user_notes (
   seconds integer,
   text text not null default '',
   tags text[] not null default '{}',
+  source_meta jsonb not null default '{}'::jsonb,
   sharing_scope text not null default 'private' check (sharing_scope in ('private', 'shared')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -54,6 +55,9 @@ create table if not exists public.user_notes (
 
 alter table public.user_notes
 add column if not exists legacy_local_id text;
+
+alter table public.user_notes
+add column if not exists source_meta jsonb not null default '{}'::jsonb;
 
 create table if not exists public.user_note_shares (
   note_id uuid not null references public.user_notes(id) on delete cascade,

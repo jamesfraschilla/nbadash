@@ -270,6 +270,18 @@ html[data-theme="dark"] .pbpWheel {
   color: var(--text);
 }
 
+.noteSourceSummary {
+  white-space: pre-wrap;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .noteTags {
   margin: 10px 0 12px;
   border: 1px solid var(--border);

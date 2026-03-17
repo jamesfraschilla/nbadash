@@ -1,20 +1,23 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { createNote } from "../accountData.js";
 import { fetchGame, nbaEventVideoUrl, playerHeadshotUrl, teamLogoUrl } from "../api.js";
-import { supabase } from "../supabaseClient.js";
+import { useAuth } from "../auth/useAuth.js";
+import {
+  buildNoteFormFromAction,
+  buildPlayByPlaySourceMeta,
+  buildPlayByPlaySummary,
+  buildVideoEventIdByActionNumber,
+  composePlayByPlayNoteText,
+  describePlayByPlayAction,
+  NOTE_MINUTE_OPTIONS,
+  NOTE_PERIOD_OPTIONS,
+  NOTE_SECOND_OPTIONS,
+  NOTE_TAG_OPTIONS,
+} from "../noteHelpers.js";
 import { normalizeClock } from "../utils.js";
 import styles from "./PlayByPlay.module.css";
-
-function actionDescription(action) {
-  if (action.description) return action.description;
-  const parts = [];
-  if (action.playerNameI) parts.push(action.playerNameI);
-  if (action.descriptor) parts.push(action.descriptor);
-  if (action.subType) parts.push(action.subType);
-  if (action.shotResult) parts.push(action.shotResult.toLowerCase());
-  return parts.join(" ");
-}
 
 function shouldShowClip(action) {
   const isBasketAttempt =
@@ -39,15 +42,21 @@ function shouldShowClip(action) {
 
 export default function PlayByPlay() {
   const { gameId } = useParams();
-  const [params, setParams] = useSearchParams();
+  const { user } = useAuth();
+  const [params] = useSearchParams();
   const dateParam = params.get("d");
-  const viewParam = params.get("view");
   const [period, setPeriod] = useState(null);
-  const [viewMode, setViewMode] = useState(viewParam === "highlighted" ? "highlighted" : "all");
   const [latestFirst, setLatestFirst] = useState(true);
-  const [highlightedMap, setHighlightedMap] = useState(new Map());
-  const [noteEditor, setNoteEditor] = useState({ open: false, actionNumber: null });
-  const [noteDraft, setNoteDraft] = useState("");
+  const [noteModalOpen, setNoteModalOpen] = useState(false);
+  const [savingNewNote, setSavingNewNote] = useState(false);
+  const [noteSourceAction, setNoteSourceAction] = useState(null);
+  const [noteForm, setNoteForm] = useState({
+    period: "--",
+    minutes: "--",
+    seconds: "--",
+    text: "",
+    tags: [],
+  });
   const holdTimerRef = useRef(null);
   const holdTargetRef = useRef(null);
 
@@ -56,22 +65,6 @@ export default function PlayByPlay() {
     queryFn: () => fetchGame(gameId),
     enabled: Boolean(gameId),
     staleTime: 30_000,
-  });
-
-  const { data: highlightRows } = useQuery({
-    queryKey: ["pbp-highlights", gameId],
-    queryFn: async () => {
-      if (!supabase || !gameId) return [];
-      const { data, error: fetchError } = await supabase
-        .from("pbp_highlights")
-        .select("action_number,note")
-        .eq("game_id", gameId);
-      if (fetchError) throw fetchError;
-      return data || [];
-    },
-    enabled: Boolean(gameId),
-    staleTime: 15_000,
-    refetchInterval: 15_000,
   });
 
   const actions = game?.playByPlayActions || [];
@@ -95,61 +88,11 @@ export default function PlayByPlay() {
   }, [actions, game?.awayTeam?.teamId, game?.homeTeam?.teamId]);
 
   const filtered = useMemo(() => {
-    let list = scoreTracked;
-    if (viewMode === "highlighted") {
-      list = scoreTracked.filter((action) => action.actionNumber && highlightedMap.has(action.actionNumber));
-    } else {
-      list = period ? scoreTracked.filter((action) => action.period === period) : scoreTracked;
-    }
+    const list = period ? scoreTracked.filter((action) => action.period === period) : scoreTracked;
     return latestFirst ? [...list].reverse() : list;
-  }, [scoreTracked, period, latestFirst, viewMode, highlightedMap]);
+  }, [scoreTracked, period, latestFirst]);
 
-  const videoEventIdByActionNumber = useMemo(() => {
-    const eventMap = new Map();
-    for (let index = 0; index < actions.length; index += 1) {
-      const action = actions[index];
-      const actionNumber = action?.actionNumber;
-      if (actionNumber == null) continue;
-
-      let videoEventId = actionNumber;
-      if (action.actionType === "steal") {
-        const clock = normalizeClock(action.clock);
-        for (let scan = index - 1; scan >= 0 && index - scan <= 4; scan -= 1) {
-          const previous = actions[scan];
-          if (!previous || previous.period !== action.period) break;
-          if (normalizeClock(previous.clock) !== clock) continue;
-          if (previous.actionType === "turnover" && previous.actionNumber != null) {
-            videoEventId = previous.actionNumber;
-            break;
-          }
-        }
-      }
-
-      eventMap.set(actionNumber, videoEventId);
-    }
-    return eventMap;
-  }, [actions]);
-
-  useEffect(() => {
-    if (!highlightRows) return;
-    const next = new Map();
-    highlightRows.forEach((row) => {
-      if (row.action_number != null) next.set(row.action_number, row.note || "");
-    });
-    setHighlightedMap(next);
-  }, [highlightRows]);
-
-  useEffect(() => {
-    const nextParams = new URLSearchParams(params);
-    if (viewMode === "highlighted") {
-      nextParams.set("view", "highlighted");
-    } else {
-      nextParams.delete("view");
-    }
-    if (nextParams.toString() !== params.toString()) {
-      setParams(nextParams, { replace: true });
-    }
-  }, [viewMode, params, setParams]);
+  const videoEventIdByActionNumber = useMemo(() => buildVideoEventIdByActionNumber(actions), [actions]);
 
   const clearHoldTimer = () => {
     if (holdTimerRef.current) {
@@ -159,63 +102,55 @@ export default function PlayByPlay() {
     holdTargetRef.current = null;
   };
 
-  const openNoteEditor = (actionNumber) => {
-    if (!actionNumber) return;
-    const existingNote = highlightedMap.get(actionNumber) || "";
-    setNoteDraft(existingNote);
-    setNoteEditor({ open: true, actionNumber });
+  const openAddNoteForAction = (action) => {
+    if (!action) return;
+    setNoteSourceAction(action);
+    setNoteForm(buildNoteFormFromAction(action));
+    setNoteModalOpen(true);
   };
 
-  const closeNoteEditor = () => {
-    setNoteEditor({ open: false, actionNumber: null });
-    setNoteDraft("");
+  const closeAddNote = () => {
+    setNoteModalOpen(false);
+    setSavingNewNote(false);
+    setNoteSourceAction(null);
   };
 
-  const saveNote = async () => {
-    const actionNumber = noteEditor.actionNumber;
-    if (!actionNumber || !supabase || !gameId) return;
-    const trimmedNote = String(noteDraft || "").trim();
-    const { error: updateError } = await supabase
-      .from("pbp_highlights")
-      .upsert(
-        { game_id: gameId, action_number: actionNumber, note: trimmedNote },
-        { onConflict: "game_id,action_number" }
-      );
-    if (!updateError) {
-      setHighlightedMap((prev) => {
-        const next = new Map(prev);
-        next.set(actionNumber, trimmedNote);
-        return next;
-      });
-      closeNoteEditor();
+  const saveNewNote = async () => {
+    if (!gameId || !noteSourceAction || savingNewNote) return;
+    const minutesValue = noteForm.minutes === "--" ? null : Number(noteForm.minutes);
+    const secondsValue = noteForm.seconds === "--" ? null : Number(noteForm.seconds);
+    const payload = {
+      gameId,
+      periodLabel: noteForm.period === "--" ? null : noteForm.period,
+      minutes: Number.isNaN(minutesValue) ? null : minutesValue,
+      seconds: Number.isNaN(secondsValue) ? null : secondsValue,
+      text: composePlayByPlayNoteText(noteSourceAction, noteForm.text),
+      tags: Array.isArray(noteForm.tags) ? noteForm.tags : [],
+      sourceMeta: buildPlayByPlaySourceMeta({
+        gameId,
+        seasonYear: game?.seasonYear,
+        action: noteSourceAction,
+        videoEventId: videoEventIdByActionNumber.get(noteSourceAction.actionNumber),
+      }),
+    };
+
+    try {
+      setSavingNewNote(true);
+      await createNote(payload, user?.id);
+      closeAddNote();
+    } catch (saveError) {
+      setSavingNewNote(false);
+      window.alert(saveError?.message || "Unable to save note.");
     }
   };
 
-  const removeHighlight = async () => {
-    const actionNumber = noteEditor.actionNumber;
-    if (!actionNumber || !supabase || !gameId) return;
-    const { error: removeError } = await supabase
-      .from("pbp_highlights")
-      .delete()
-      .eq("game_id", gameId)
-      .eq("action_number", actionNumber);
-    if (!removeError) {
-      setHighlightedMap((prev) => {
-        const next = new Map(prev);
-        next.delete(actionNumber);
-        return next;
-      });
-      closeNoteEditor();
-    }
-  };
-
-  const handleHoldStart = (actionNumber) => () => {
-    if (!actionNumber) return;
+  const handleHoldStart = (action) => () => {
+    if (!action) return;
     clearHoldTimer();
-    holdTargetRef.current = actionNumber;
+    holdTargetRef.current = action;
     holdTimerRef.current = setTimeout(() => {
-      if (holdTargetRef.current === actionNumber) {
-        openNoteEditor(actionNumber);
+      if (holdTargetRef.current === action) {
+        openAddNoteForAction(action);
       }
       clearHoldTimer();
     }, 450);
@@ -270,11 +205,8 @@ export default function PlayByPlay() {
       <div className={styles.periodButtons}>
         <button
           type="button"
-          className={!period && viewMode === "all" ? styles.active : ""}
-          onClick={() => {
-            setViewMode("all");
-            setPeriod(null);
-          }}
+          className={!period ? styles.active : ""}
+          onClick={() => setPeriod(null)}
         >
           All
         </button>
@@ -282,25 +214,12 @@ export default function PlayByPlay() {
           <button
             key={p}
             type="button"
-            className={period === p && viewMode === "all" ? styles.active : ""}
-            onClick={() => {
-              setViewMode("all");
-              setPeriod(p);
-            }}
+            className={period === p ? styles.active : ""}
+            onClick={() => setPeriod(p)}
           >
             Q{p}
           </button>
         ))}
-        <button
-          type="button"
-          className={viewMode === "highlighted" ? styles.active : ""}
-          onClick={() => {
-            setViewMode("highlighted");
-            setPeriod(null);
-          }}
-        >
-          Highlighted
-        </button>
       </div>
 
       <div className={styles.eventsWrapper}>
@@ -324,25 +243,18 @@ export default function PlayByPlay() {
           const videoEventId =
             actionNumber != null ? (videoEventIdByActionNumber.get(actionNumber) ?? actionNumber) : null;
           const rowKey = actionNumber ?? `${action.period}-${index}`;
-          const highlightNote = actionNumber != null ? highlightedMap.get(actionNumber) : "";
           const clipUrl = nbaEventVideoUrl({
             gameId,
             actionNumber: videoEventId,
             seasonYear: game.seasonYear,
-            title: actionDescription(action),
+            title: describePlayByPlayAction(action),
           });
           const showClip = shouldShowClip(action);
-          const periodLabel =
-            action.period > 4
-              ? action.period === 5
-                ? "OT"
-                : `OT${action.period - 4}`
-              : `Q${action.period}`;
           return (
             <div
               key={rowKey}
-              className={`${styles.eventRow} ${actionNumber && highlightedMap.has(actionNumber) ? styles.highlighted : ""} ${isTimeout ? styles.timeout : ""}`}
-              onPointerDown={handleHoldStart(actionNumber)}
+              className={`${styles.eventRow} ${isTimeout ? styles.timeout : ""}`}
+              onPointerDown={handleHoldStart(action)}
               onPointerUp={handleHoldEnd}
               onPointerLeave={handleHoldEnd}
               onPointerCancel={handleHoldEnd}
@@ -351,7 +263,7 @@ export default function PlayByPlay() {
               <div className={styles.awayColumn}>
                 {isAway && (
                   <div className={`${styles.eventContent} ${action.scoringEvent ? styles.scoring : ""}`}>
-                    <span>{actionDescription(action)}</span>
+                    <span>{describePlayByPlayAction(action)}</span>
                     {action.personId && (
                       <img
                         src={playerHeadshotUrl(action.personId)}
@@ -365,7 +277,6 @@ export default function PlayByPlay() {
                 )}
               </div>
               <div className={styles.centerColumn}>
-                {viewMode === "highlighted" && <div className={styles.periodLabel}>{periodLabel}</div>}
                 <div className={styles.clock}>{normalizeClock(action.clock)}</div>
                 <div className={styles.score}>
                   {action.currentAwayScore} - {action.currentHomeScore}
@@ -384,9 +295,6 @@ export default function PlayByPlay() {
                     <span className={styles.playIcon} aria-hidden="true" />
                   </a>
                 ) : null}
-                {viewMode === "highlighted" && highlightNote ? (
-                  <div className={styles.note}>{highlightNote}</div>
-                ) : null}
               </div>
               <div className={styles.homeColumn}>
                 {isHome && (
@@ -400,7 +308,7 @@ export default function PlayByPlay() {
                         }}
                       />
                     )}
-                    <span>{actionDescription(action)}</span>
+                    <span>{describePlayByPlayAction(action)}</span>
                   </div>
                 )}
               </div>
@@ -408,30 +316,102 @@ export default function PlayByPlay() {
           );
         })}
       </div>
-      {noteEditor.open && (
-        <div className={styles.noteOverlay} onClick={closeNoteEditor}>
-          <div className={styles.noteModal} onClick={(event) => event.stopPropagation()}>
-            <h3>Highlight Note</h3>
+
+      {noteModalOpen && (
+        <div className={styles.noteOverlay} onClick={closeAddNote}>
+          <div
+            className={styles.noteModal}
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <h3>Add Note From Play</h3>
+            {noteSourceAction ? (
+              <div className={styles.noteSourceSummary}>{buildPlayByPlaySummary(noteSourceAction)}</div>
+            ) : null}
+            <div className={styles.noteTimeRow}>
+              <div className={styles.noteTimeLabel}>Time left</div>
+              <div className={styles.noteTimeControls}>
+                <select
+                  className={styles.noteSelect}
+                  value={noteForm.period}
+                  onChange={(event) =>
+                    setNoteForm((prev) => ({ ...prev, period: event.target.value }))
+                  }
+                >
+                  {NOTE_PERIOD_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+                <div className={styles.noteClockSelects}>
+                  <select
+                    className={styles.noteSelect}
+                    value={noteForm.minutes}
+                    onChange={(event) =>
+                      setNoteForm((prev) => ({ ...prev, minutes: event.target.value }))
+                    }
+                  >
+                    {NOTE_MINUTE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                  <span className={styles.noteClockSeparator}>:</span>
+                  <select
+                    className={styles.noteSelect}
+                    value={noteForm.seconds}
+                    onChange={(event) =>
+                      setNoteForm((prev) => ({ ...prev, seconds: event.target.value }))
+                    }
+                  >
+                    {NOTE_SECOND_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+            <details className={styles.noteTags}>
+              <summary>Tags</summary>
+              <div className={styles.noteTagsGrid}>
+                {NOTE_TAG_OPTIONS.map((tag) => {
+                  const checked = noteForm.tags.includes(tag);
+                  return (
+                    <label key={tag} className={styles.noteTagOption}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(event) => {
+                          const next = event.target.checked
+                            ? [...noteForm.tags, tag]
+                            : noteForm.tags.filter((value) => value !== tag);
+                          setNoteForm((prev) => ({ ...prev, tags: next }));
+                        }}
+                      />
+                      <span>{tag}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </details>
             <textarea
-              value={noteDraft}
-              onChange={(event) => setNoteDraft(event.target.value)}
-              placeholder="Add a note (optional)"
+              value={noteForm.text}
+              onChange={(event) => setNoteForm((prev) => ({ ...prev, text: event.target.value }))}
+              placeholder="Add context for this play..."
               rows={4}
             />
             <div className={styles.noteActions}>
-              {highlightedMap.has(noteEditor.actionNumber) && (
-                <button type="button" className={styles.noteRemove} onClick={removeHighlight}>
-                  Remove
-                </button>
-              )}
-              <div className={styles.noteActionsRight}>
-                <button type="button" className={styles.noteCancel} onClick={closeNoteEditor}>
-                  Cancel
-                </button>
-                <button type="button" className={styles.noteSave} onClick={saveNote}>
-                  OK
-                </button>
-              </div>
+              <button type="button" className={styles.noteCancel} onClick={closeAddNote} disabled={savingNewNote}>
+                Cancel
+              </button>
+              <button type="button" className={styles.noteSave} onClick={saveNewNote} disabled={savingNewNote}>
+                {savingNewNote ? "Saving..." : "OK"}
+              </button>
             </div>
           </div>
         </div>

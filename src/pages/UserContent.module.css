@@ -219,6 +219,31 @@
   white-space: nowrap;
 }
 
+.clipLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  text-decoration: none;
+}
+
+.clipLink:hover {
+  border-color: var(--highlight-text);
+}
+
+.playIcon {
+  width: 0;
+  height: 0;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-left: 9px solid #facc15;
+  margin-left: 2px;
+}
+
 .deleteButton {
   border: 1px solid #fecaca;
   border-radius: 10px;

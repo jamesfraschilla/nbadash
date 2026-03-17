@@ -30,6 +30,11 @@ function formatClock(note) {
   return `${note.minutes}:${String(note.seconds).padStart(2, "0")}`;
 }
 
+function getClipUrl(note) {
+  const clipUrl = note?.source_meta?.clip_url;
+  return clipUrl ? String(clipUrl) : "";
+}
+
 function isWashingtonTeam(team) {
   const tricode = String(team?.teamTricode || "").toUpperCase();
   const name = `${team?.teamCity || ""} ${team?.teamName || ""}`.toLowerCase();
@@ -378,6 +383,7 @@ export default function UserContent() {
               {filteredNotes.map((note) => {
                 const meta = gameMetaById.get(String(note.game_id || "").trim());
                 const isDeleting = deletingKey === `note:${note.id}`;
+                const clipUrl = getClipUrl(note);
                 return (
                   <article key={note.id} className={styles.card}>
                     <div className={styles.cardHeader}>
@@ -388,6 +394,18 @@ export default function UserContent() {
                         </div>
                       </div>
                       <div className={styles.cardActions}>
+                        {clipUrl ? (
+                          <a
+                            className={styles.clipLink}
+                            href={clipUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-label="Open play clip"
+                            title="Open play clip"
+                          >
+                            <span className={styles.playIcon} aria-hidden="true" />
+                          </a>
+                        ) : null}
                         <Link className={styles.cardLink} to={`/g/${note.game_id}/notes`}>
                           Open Notes
                         </Link>

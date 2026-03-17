@@ -44,6 +44,11 @@ const formatClock = (note) => {
   return `${note.minutes}:${String(note.seconds).padStart(2, "0")}`;
 };
 
+const getClipUrl = (note) => {
+  const clipUrl = note?.source_meta?.clip_url;
+  return clipUrl ? String(clipUrl) : "";
+};
+
 export default function Notes() {
   const { gameId } = useParams();
   const { user } = useAuth();
@@ -180,6 +185,7 @@ export default function Notes() {
           {sortedNotes.map((note) => (
             (() => {
               const canManage = note.owner_id === user?.id;
+              const clipUrl = getClipUrl(note);
               return (
                 <div key={note.id} className={styles.noteRow}>
                   {canManage ? (
@@ -214,6 +220,18 @@ export default function Notes() {
                     ) : null}
                   </div>
                   <div className={styles.noteButtons}>
+                    {clipUrl ? (
+                      <a
+                        href={clipUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={styles.noteClipLink}
+                        aria-label="Open play clip"
+                        title="Open play clip"
+                      >
+                        <span className={styles.playIcon} aria-hidden="true" />
+                      </a>
+                    ) : null}
                     {canManage ? (
                       <button type="button" className={styles.noteEdit} onClick={() => openEdit(note)}>
                         Edit
