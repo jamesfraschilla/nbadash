@@ -3110,6 +3110,15 @@ export default function Rotations() {
                           className={`${styles.playerSelect} ${depthCell.isOut ? styles.outPlayerSelect : ""}`}
                           value={value}
                           onChange={(event) => updateDepthCell(rowIndex, columnIndex, event.target.value)}
+                          onMouseDown={(event) => {
+                            if (event.button === 2) {
+                              event.preventDefault();
+                            }
+                          }}
+                          onContextMenu={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                          }}
                         >
                           {depthCell.isOut ? (
                             <option value={depthCell.raw}>{depthCell.name}</option>
