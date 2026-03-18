@@ -26,6 +26,13 @@ export function describePlayByPlayAction(action) {
   return parts.join(" ").trim();
 }
 
+function stripParentheticalText(value) {
+  return String(value || "")
+    .replace(/\s*\([^)]*\)/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 export function getNotePeriodLabel(periodNumber) {
   const numericPeriod = Number(periodNumber);
   if (!numericPeriod) return "--";
@@ -74,7 +81,7 @@ export function buildNoteFormFromAction(action) {
     period: periodLabel,
     minutes: minRaw ? String(Number(minRaw)) : "--",
     seconds: secRaw ? String(secRaw).padStart(2, "0") : "--",
-    text: describePlayByPlayAction(action),
+    text: stripParentheticalText(describePlayByPlayAction(action)),
     tags: [],
   };
 }

@@ -272,21 +272,8 @@ export default function UserContent() {
     <div className={styles.page}>
       <section className={styles.hero}>
         <div>
-          <div className={styles.kicker}>My Account</div>
+          <div className={styles.kicker}>My Vault</div>
           <h1 className={styles.title}>{profile?.display_name || profile?.email || "My Saved Content"}</h1>
-          <div className={styles.subtitle}>
-            Review your saved notes and court drawings in one place.
-          </div>
-        </div>
-        <div className={styles.heroStats}>
-          <div className={styles.statCard}>
-            <div className={styles.statLabel}>Notes</div>
-            <div className={styles.statValue}>{notes.length}</div>
-          </div>
-          <div className={styles.statCard}>
-            <div className={styles.statLabel}>Drawings</div>
-            <div className={styles.statValue}>{drawings.length}</div>
-          </div>
         </div>
       </section>
 
