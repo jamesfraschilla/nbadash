@@ -1,5 +1,5 @@
 import { Link, useSearchParams, useParams } from "react-router-dom";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createNote } from "../accountData.js";
 import { fetchGame, fetchMinutes, playerHeadshotUrl, teamLogoUrl } from "../api.js";
@@ -364,6 +364,7 @@ export default function Game({ variant = "full" }) {
   const statsNavRef = useRef(null);
   const boxScoreNavRef = useRef(null);
   const pbpWheelRef = useRef(null);
+  const pbpWheelInnerRef = useRef(null);
   const lockButtonRef = useRef(null);
   const lockTimeoutRef = useRef(null);
   const lockStyleRef = useRef(null);
@@ -866,6 +867,42 @@ export default function Game({ variant = "full" }) {
     clearHoldTimer();
   };
 
+  useLayoutEffect(() => {
+    if (!showExtras) return;
+    const wheel = pbpWheelRef.current;
+    const wheelInner = pbpWheelInnerRef.current;
+    if (!wheel || !wheelInner) return;
+    const scrollToRight = () => {
+      wheel.scrollLeft = Math.max(0, wheel.scrollWidth - wheel.clientWidth);
+    };
+    let raf1 = 0;
+    let raf2 = 0;
+    const queueScroll = () => {
+      if (raf1) cancelAnimationFrame(raf1);
+      if (raf2) cancelAnimationFrame(raf2);
+      raf1 = requestAnimationFrame(() => {
+        scrollToRight();
+        raf2 = requestAnimationFrame(scrollToRight);
+      });
+    };
+    queueScroll();
+    const resizeObserver = typeof ResizeObserver !== "undefined"
+      ? new ResizeObserver(() => {
+        queueScroll();
+      })
+      : null;
+    resizeObserver?.observe(wheelInner);
+    const timeout = setTimeout(scrollToRight, 80);
+    const timeoutLate = setTimeout(scrollToRight, 220);
+    return () => {
+      if (raf1) cancelAnimationFrame(raf1);
+      if (raf2) cancelAnimationFrame(raf2);
+      resizeObserver?.disconnect();
+      clearTimeout(timeout);
+      clearTimeout(timeoutLate);
+    };
+  }, [pbpWheelItems, showExtras]);
+
   useEffect(() => {
     if (!showExtras) return;
     const wheel = pbpWheelRef.current;
@@ -882,7 +919,7 @@ export default function Game({ variant = "full" }) {
       cancelAnimationFrame(raf1);
       clearTimeout(timeout);
     };
-  }, [pbpWheelItems, showExtras]);
+  }, [showExtras]);
 
   const finalSnapshotTotals = useMemo(() => {
     if (!periodSnapshotMap || !homeTeam?.teamId || !awayTeam?.teamId) return null;
@@ -1747,7 +1784,7 @@ export default function Game({ variant = "full" }) {
           </div>
 
           <div className={styles.pbpWheel} ref={pbpWheelRef} onScroll={clearHoldTimer}>
-            <div className={styles.pbpWheelInner}>
+            <div className={styles.pbpWheelInner} ref={pbpWheelInnerRef}>
               {pbpWheelItems.length ? pbpWheelItems.map((action) => {
                 const teamTricode = action.teamTricode || "";
                 const teamLogo = action.teamId ? teamLogoUrl(action.teamId) : null;
