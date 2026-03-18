@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Route, Routes } from "react-router-dom";
 import Header from "./components/Header.jsx";
-import AccessGate from "./components/AccessGate.jsx";
 import AuthGate from "./components/AuthGate.jsx";
 import LegacyNotesImportPrompt from "./components/LegacyNotesImportPrompt.jsx";
 import PasswordResetGate from "./components/PasswordResetGate.jsx";
@@ -17,9 +16,6 @@ import Rotations from "./pages/Rotations.jsx";
 import Admin from "./pages/Admin.jsx";
 import UserContent from "./pages/UserContent.jsx";
 
-const ACCESS_SESSION_STORAGE_KEY = "site-access-session:v1";
-const ACCESS_SESSION_DURATION_MS = 14 * 24 * 60 * 60 * 1000;
-const SITE_ACCESS_CODE = import.meta.env.VITE_SITE_ACCESS_CODE || "Dominate";
 const UPDATE_CHECK_INTERVAL_MS = 2 * 60 * 1000;
 
 function getCurrentBundleFingerprint() {
@@ -39,29 +35,8 @@ function getBundleFingerprintFromHtml(html) {
   return new URL(src, window.location.origin).href;
 }
 
-function loadAccessSession() {
-  if (typeof window === "undefined") return false;
-  const raw = window.localStorage.getItem(ACCESS_SESSION_STORAGE_KEY);
-  if (!raw) return false;
-
-  try {
-    const parsed = JSON.parse(raw);
-    const expiresAt = Number(parsed?.expiresAt || 0);
-    const accessCode = String(parsed?.accessCode || "");
-    if (!expiresAt || expiresAt <= Date.now() || accessCode !== SITE_ACCESS_CODE) {
-      window.localStorage.removeItem(ACCESS_SESSION_STORAGE_KEY);
-      return false;
-    }
-    return true;
-  } catch {
-    window.localStorage.removeItem(ACCESS_SESSION_STORAGE_KEY);
-    return false;
-  }
-}
-
 export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem("theme") || "light");
-  const [isUnlocked, setIsUnlocked] = useState(loadAccessSession);
   const [updateFingerprint, setUpdateFingerprint] = useState("");
   const currentFingerprintRef = useRef("");
   const dismissedFingerprintRef = useRef("");
@@ -125,22 +100,6 @@ export default function App() {
     };
   }, []);
 
-  const unlockSite = (submittedCode) => {
-    if (String(submittedCode) !== SITE_ACCESS_CODE) return false;
-    const expiresAt = Date.now() + ACCESS_SESSION_DURATION_MS;
-    window.localStorage.setItem(ACCESS_SESSION_STORAGE_KEY, JSON.stringify({
-      accessCode: SITE_ACCESS_CODE,
-      expiresAt,
-    }));
-    setIsUnlocked(true);
-    return true;
-  };
-
-  const lockSite = () => {
-    window.localStorage.removeItem(ACCESS_SESSION_STORAGE_KEY);
-    setIsUnlocked(false);
-  };
-
   if (accountsEnabled) {
     if (loading) {
       return <div style={{ padding: "40px 16px", textAlign: "center" }}>Loading account...</div>;
@@ -172,8 +131,6 @@ export default function App() {
         </div>
       );
     }
-  } else if (!isUnlocked) {
-    return <AccessGate onUnlock={unlockSite} />;
   }
 
   return (
@@ -243,7 +200,7 @@ export default function App() {
       <Header
         theme={theme}
         onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
-        onSignOut={accountsEnabled ? signOut : lockSite}
+        onSignOut={signOut}
         profile={profile}
         isAdmin={isAdmin}
       />

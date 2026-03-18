@@ -147,7 +147,7 @@ export function AuthProvider({ children }) {
     },
     async signOut() {
       if (!supabase) return;
-      const { error: signOutError } = await supabase.auth.signOut();
+      const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
       if (signOutError) throw signOutError;
       setProfile(null);
       setSession(null);
