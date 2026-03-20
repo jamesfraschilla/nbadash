@@ -106,6 +106,7 @@
 
 .pbpWheelInner {
   display: flex;
+  justify-content: flex-end;
   gap: 12px;
   padding: 2px;
   width: max-content;
