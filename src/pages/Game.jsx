@@ -340,6 +340,29 @@ const parseTeamFoulMarker = (description) => {
   };
 };
 
+const getClockSortValue = (clock) => {
+  const normalized = normalizeClock(clock);
+  const [minutesRaw, secondsRaw] = normalized.split(":");
+  const minutes = Number(minutesRaw);
+  const seconds = Number(secondsRaw);
+  if (Number.isNaN(minutes) || Number.isNaN(seconds)) return -1;
+  return (minutes * 60) + seconds;
+};
+
+const compareActionsByChronology = (a, b) => {
+  const aPeriod = Number(a?.period) || 0;
+  const bPeriod = Number(b?.period) || 0;
+  if (aPeriod !== bPeriod) return aPeriod - bPeriod;
+
+  const aClock = getClockSortValue(a?.clock);
+  const bClock = getClockSortValue(b?.clock);
+  if (aClock !== bClock) return bClock - aClock;
+
+  const aOrder = Number(a?.orderNumber ?? a?.actionNumber ?? 0);
+  const bOrder = Number(b?.orderNumber ?? b?.actionNumber ?? 0);
+  return aOrder - bOrder;
+};
+
 export default function Game({ variant = "full" }) {
   const { gameId } = useParams();
   const { user } = useAuth();
@@ -715,7 +738,7 @@ export default function Game({ variant = "full" }) {
       action.actionType === "foul" ||
       action.actionType === "timeout"
     ));
-    const sorted = filtered.slice().sort((a, b) => (a.actionNumber || 0) - (b.actionNumber || 0));
+    const sorted = filtered.slice().sort(compareActionsByChronology);
     return sorted.slice(-16);
   }, [game?.playByPlayActions]);
 
@@ -726,7 +749,7 @@ export default function Game({ variant = "full" }) {
 
   const openingJumpTeamId = useMemo(() => {
     const actions = game?.playByPlayActions || [];
-    const ordered = actions.slice().sort((a, b) => (a.actionNumber || 0) - (b.actionNumber || 0));
+    const ordered = actions.slice().sort(compareActionsByChronology);
     const openingJump = ordered.find((action) => {
       const type = String(action.actionType || "").toLowerCase();
       const desc = String(action.description || action.descriptor || action.subType || "").toLowerCase();
