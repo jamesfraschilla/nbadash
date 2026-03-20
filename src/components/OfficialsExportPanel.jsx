@@ -176,18 +176,33 @@ function ensureExportFonts() {
   }
   if (exportFontsPromise) return exportFontsPromise;
 
+  const waitForFont = async (family) => {
+    if (!document.fonts?.load || !document.fonts?.check) return;
+    await document.fonts.load(`16px "${family}"`);
+    if (document.fonts.ready) {
+      await document.fonts.ready;
+    }
+    if (!document.fonts.check(`16px "${family}"`)) {
+      throw new Error(`${family} font did not finish loading.`);
+    }
+  };
+
   const loadFont = async (family, url) => {
-    const alreadyLoaded = Array.from(document.fonts || []).some((fontFace) => fontFace.family === family);
-    if (alreadyLoaded) return;
-    const fontFace = new FontFace(family, `url(${url})`);
-    await fontFace.load();
-    document.fonts.add(fontFace);
+    const alreadyLoaded = Array.from(document.fonts || []).some(
+      (fontFace) => fontFace.family === family && fontFace.status === "loaded"
+    );
+    if (!alreadyLoaded) {
+      const fontFace = new FontFace(family, `url(${url})`);
+      await fontFace.load();
+      document.fonts.add(fontFace);
+    }
+    await waitForFont(family);
   };
 
   exportFontsPromise = Promise.all([
     loadFont("DIN", dinFontUrl),
     loadFont("DINalt", dinAltFontUrl),
-  ]).then(() => undefined).catch(() => undefined);
+  ]).then(() => undefined);
 
   return exportFontsPromise;
 }
