@@ -8,6 +8,8 @@ import {
   fetchRemotePregamePlayers,
   loadPregamePlayersPayload,
   normalizePregamePlayers,
+  persistPregamePlayers,
+  saveRemotePregamePlayers,
 } from "../pregamePlayers.js";
 import { supabase } from "../supabaseClient.js";
 import wizardsLogoUrl from "../assets/WWizards_Primary_Icon.png";
@@ -497,6 +499,16 @@ function mergePlayersWithPregameRoster(currentPlayers, rosterPlayers, teamScope 
   });
 
   return normalizePlayers(merged, teamScope);
+}
+
+function buildPregameRosterFromRotationsPlayers(players) {
+  return (Array.isArray(players) ? players : [])
+    .map((player) => ({
+      id: String(player?.id || ""),
+      name: String(player?.name || "").trim(),
+      display: String(player?.display || player?.name || "").trim(),
+    }))
+    .filter((player) => player.id && player.name && player.display);
 }
 
 function depthChartStateKey(depthChart) {
@@ -1388,6 +1400,10 @@ export default function Rotations() {
   const [savedLineups, setSavedLineups] = useState([]);
   const [depthTemplate, setDepthTemplate] = useState(createDefaultDepthChart());
   const [gameState, setGameState] = useState(createDefaultGameState());
+  const [playersOpen, setPlayersOpen] = useState(false);
+  const [editingPlayerId, setEditingPlayerId] = useState(null);
+  const [playerDrafts, setPlayerDrafts] = useState({});
+  const [newPlayerDraft, setNewPlayerDraft] = useState({ name: "", display: "" });
   const [playersHydrated, setPlayersHydrated] = useState(false);
   const [savedLineupsHydrated, setSavedLineupsHydrated] = useState(false);
   const [depthTemplateHydrated, setDepthTemplateHydrated] = useState(false);
@@ -1577,6 +1593,10 @@ export default function Rotations() {
     setSavedLineupName("");
     setDeleteSavedLineupTarget(null);
     setDepthCellConfirmTarget(null);
+    setPlayersOpen(false);
+    setEditingPlayerId(null);
+    setPlayerDrafts({});
+    setNewPlayerDraft({ name: "", display: "" });
     setCreateVersionOpen(false);
     setDeleteVersionTarget(null);
   }, [gameId, monitoredTeamScope]);
@@ -1969,6 +1989,15 @@ export default function Rotations() {
     [monitoredTeam, opponentLine]
   );
   const versionOptions = useMemo(() => gameState.versions, [gameState.versions]);
+  const sortedPlayers = useMemo(() => players.filter((player) => player.name || player.display), [players]);
+
+  const syncSharedPregameRoster = (nextPlayers) => {
+    if (!monitoredTeamScope) return;
+    const updatedAt = Date.now();
+    const roster = buildPregameRosterFromRotationsPlayers(nextPlayers);
+    persistPregamePlayers(monitoredTeamScope, roster, updatedAt);
+    saveRemotePregamePlayers(monitoredTeamScope, roster, updatedAt);
+  };
 
   const updateActiveVersion = (updater) => {
     setGameState((current) => ({
@@ -2008,6 +2037,50 @@ export default function Rotations() {
       }
       return { ...player, [field]: normalizePlayerNameInput(value) };
     }));
+  };
+
+  const handleSavePlayer = (playerId, draft) => {
+    const name = normalizePlayerNameInput(draft?.name);
+    const display = normalizePlayerNameInput(draft?.display || draft?.name);
+    if (!name || !display) return;
+    setPlayers((current) => {
+      const next = current.map((player) => (
+        player.id === playerId ? { ...player, name, display } : player
+      ));
+      syncSharedPregameRoster(next);
+      return next;
+    });
+    setEditingPlayerId(null);
+  };
+
+  const handleDeletePlayer = (playerId) => {
+    setPlayers((current) => {
+      const next = current.filter((player) => player.id !== playerId);
+      syncSharedPregameRoster(next);
+      return next;
+    });
+    setNewPlayerDraft({ name: "", display: "" });
+    setEditingPlayerId(null);
+    setPlayerDrafts((current) => {
+      const next = { ...current };
+      delete next[playerId];
+      return next;
+    });
+  };
+
+  const handleAddPlayer = () => {
+    const name = normalizePlayerNameInput(newPlayerDraft.name);
+    const display = normalizePlayerNameInput(newPlayerDraft.display || newPlayerDraft.name);
+    if (!name || !display) return;
+    setPlayers((current) => {
+      const next = normalizePlayers([
+        ...current,
+        { id: crypto.randomUUID(), name, display, cap: 48 },
+      ], monitoredTeamScope || "washington");
+      syncSharedPregameRoster(next);
+      return next;
+    });
+    setNewPlayerDraft({ name: "", display: "" });
   };
 
   const updatePlayerNameDraft = (playerId, value) => {
@@ -3042,9 +3115,18 @@ export default function Rotations() {
       </header>
 
       <section className={styles.sheetSection}>
-        <button type="button" className={styles.sectionHeaderButton} onClick={() => toggleSection("restrictions")}>
-          Restrictions / Totals
-        </button>
+        <div className={styles.sectionHeaderRow}>
+          <button type="button" className={styles.sectionHeaderButton} onClick={() => toggleSection("restrictions")}>
+            Restrictions / Totals
+          </button>
+          <button
+            type="button"
+            className={styles.sectionHeaderAction}
+            onClick={() => setPlayersOpen(true)}
+          >
+            Edit Players
+          </button>
+        </div>
         {!collapsed.restrictions && (
           <table className={styles.totalsTable}>
             <thead>
@@ -3107,6 +3189,136 @@ export default function Rotations() {
           </table>
         )}
       </section>
+
+      {playersOpen && (
+        <div className={styles.modalOverlay} onClick={() => setPlayersOpen(false)}>
+          <div className={`${styles.modalCard} ${styles.playersModalCard}`} onClick={(event) => event.stopPropagation()}>
+            <div className={styles.playersModalHeader}>
+              <h3 className={styles.playersModalTitle}>Edit Players</h3>
+              <button type="button" className={styles.playersModalClose} onClick={() => setPlayersOpen(false)}>
+                Close
+              </button>
+            </div>
+            <div className={styles.playersGridHeader}>
+              <span>Name</span>
+              <span>Display</span>
+              <span>Actions</span>
+            </div>
+            <div className={styles.playersRows}>
+              {sortedPlayers.map((player) => {
+                const isEditing = editingPlayerId === player.id;
+                const draft = playerDrafts[player.id] || { name: player.name, display: player.display || player.name };
+                return (
+                  <div key={player.id} className={styles.playersRow}>
+                    {isEditing ? (
+                      <>
+                        <input
+                          className={styles.playersTextInput}
+                          value={draft.name}
+                          onChange={(event) => setPlayerDrafts((current) => ({
+                            ...current,
+                            [player.id]: { ...draft, name: event.target.value },
+                          }))}
+                        />
+                        <input
+                          className={styles.playersTextInput}
+                          value={draft.display}
+                          onChange={(event) => setPlayerDrafts((current) => ({
+                            ...current,
+                            [player.id]: { ...draft, display: event.target.value },
+                          }))}
+                        />
+                        <div className={styles.playersRowActions}>
+                          <button
+                            type="button"
+                            className={`${styles.playersIconButton} ${styles.playersIconSave}`}
+                            onClick={() => handleSavePlayer(player.id, draft)}
+                            aria-label="Save player"
+                          >
+                            ✓
+                          </button>
+                          <button
+                            type="button"
+                            className={`${styles.playersIconButton} ${styles.playersIconDelete}`}
+                            onClick={() => handleDeletePlayer(player.id)}
+                            aria-label="Delete player"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className={styles.playersReadCell}>{player.name}</div>
+                        <div className={styles.playersReadCell}>{player.display || player.name}</div>
+                        <div className={styles.playersRowActions}>
+                          <button
+                            type="button"
+                            className={styles.playersIconButton}
+                            onClick={() => {
+                              setEditingPlayerId(player.id);
+                              setPlayerDrafts((current) => ({
+                                ...current,
+                                [player.id]: { name: player.name, display: player.display || player.name },
+                              }));
+                            }}
+                            aria-label="Edit player"
+                          >
+                            ✎
+                          </button>
+                          <button
+                            type="button"
+                            className={`${styles.playersIconButton} ${styles.playersIconDelete}`}
+                            onClick={() => handleDeletePlayer(player.id)}
+                            aria-label="Delete player"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+              <div className={styles.playersRow}>
+                <input
+                  className={styles.playersTextInput}
+                  value={newPlayerDraft.name}
+                  onChange={(event) => setNewPlayerDraft((current) => ({ ...current, name: event.target.value }))}
+                  placeholder="Player name"
+                />
+                <input
+                  className={styles.playersTextInput}
+                  value={newPlayerDraft.display}
+                  onChange={(event) => setNewPlayerDraft((current) => ({ ...current, display: event.target.value }))}
+                  placeholder="Nickname / initials"
+                />
+                <div className={styles.playersRowActions}>
+                  <button
+                    type="button"
+                    className={`${styles.playersIconButton} ${styles.playersIconSave}`}
+                    onClick={handleAddPlayer}
+                    aria-label="Add player"
+                  >
+                    ✓
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.playersIconButton} ${styles.playersIconDelete}`}
+                    onClick={() => setNewPlayerDraft({ name: "", display: "" })}
+                    aria-label="Clear new player"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            </div>
+            <button type="button" className={styles.modalSecondary} onClick={() => setPlayersOpen(false)}>
+              Done
+            </button>
+          </div>
+        </div>
+      )}
 
       <section className={styles.sheetSection}>
         <div className={styles.sectionHeaderRow}>

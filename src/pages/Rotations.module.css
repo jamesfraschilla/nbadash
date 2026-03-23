@@ -582,6 +582,109 @@
   gap: 8px;
 }
 
+.playersModalCard {
+  width: min(720px, 100%);
+  max-height: 90vh;
+  overflow: auto;
+}
+
+.playersModalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.playersModalTitle {
+  margin: 0;
+  font-size: 22px;
+  color: var(--cell-text);
+}
+
+.playersModalClose {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  min-height: 36px;
+  padding: 0 10px;
+  background: transparent;
+  color: var(--cell-text);
+  font-family: "DINalt", sans-serif;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.playersGridHeader {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 104px;
+  gap: 10px;
+  font-size: 16px;
+  color: var(--cell-text);
+}
+
+.playersRows {
+  display: grid;
+  gap: 8px;
+}
+
+.playersRow {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 104px;
+  gap: 10px;
+}
+
+.playersTextInput {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0 10px;
+  background: var(--input-bg);
+  color: var(--input-text);
+  font-family: "DINalt", sans-serif;
+  font-size: 15px;
+}
+
+.playersReadCell {
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  background: var(--cell-bg);
+  color: var(--cell-text);
+  font-family: "DINalt", sans-serif;
+  font-size: 15px;
+}
+
+.playersRowActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.playersIconButton {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--cell-text);
+  font-family: "DINalt", sans-serif;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.playersIconSave {
+  background: #e8f5e9;
+  color: #1b5e20;
+}
+
+.playersIconDelete {
+  background: #ffebee;
+  color: #b71c1c;
+}
+
 .versionNameInput {
   width: 100%;
   min-height: 40px;
