@@ -596,7 +596,6 @@ export default function PreGame() {
   const [playersOpen, setPlayersOpen] = useState(false);
   const [slotsOpen, setSlotsOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
-  const [editingPlayerId, setEditingPlayerId] = useState(null);
   const [playerDrafts, setPlayerDrafts] = useState({});
   const [newPlayerDraft, setNewPlayerDraft] = useState({ name: "", display: "" });
   const [slotDrafts, setSlotDrafts] = useState([]);
@@ -797,18 +796,34 @@ export default function PreGame() {
     setSlotsOpen(true);
   };
 
+  const openPlayersEditor = () => {
+    setPlayerDrafts(Object.fromEntries(sortedPlayers.map((player) => [
+      player.id,
+      { name: player.name, display: player.display },
+    ])));
+    setPlayersOpen(true);
+  };
+
+  const closePlayersEditor = () => {
+    setPlayersOpen(false);
+    setPlayerDrafts({});
+    setNewPlayerDraft({ name: "", display: "" });
+  };
+
   const updateSlotById = (slotId, updater) => {
     setSlots((current) => current.map((slot) => (slot.id === slotId ? updater(slot) : slot)));
   };
 
-  const handleSavePlayer = (playerId, draft) => {
-    const name = normalizePregamePlayerName(draft?.name);
-    const display = normalizePregamePlayerName(draft?.display);
-    if (!name || !display) return;
-    setPlayers((current) => sortPlayersByLastName(current.map((player) => (
-      player.id === playerId ? { ...player, name, display } : player
-    ))));
-    setEditingPlayerId(null);
+  const saveAllPlayerEdits = () => {
+    setPlayers((current) => sortPlayersByLastName(current.map((player) => {
+      const draft = playerDrafts[player.id];
+      if (!draft) return player;
+      const name = normalizePregamePlayerName(draft.name);
+      const display = normalizePregamePlayerName(draft.display);
+      if (!name || !display) return player;
+      return { ...player, name, display };
+    })));
+    closePlayersEditor();
   };
 
   const handleDeletePlayer = (playerId) => {
@@ -817,7 +832,11 @@ export default function PreGame() {
       ...slot,
       playerIds: slot.playerIds.map((id) => (id === playerId ? "" : id)),
     })));
-    setEditingPlayerId(null);
+    setPlayerDrafts((current) => {
+      const next = { ...current };
+      delete next[playerId];
+      return next;
+    });
   };
 
   const handleAddPlayer = () => {
@@ -1072,17 +1091,20 @@ export default function PreGame() {
       <div className={styles.bottomRow}>
         <div className={styles.actions}>
           <button type="button" className={styles.actionButton} onClick={openSlotsEditor}>Edit Slots</button>
-          <button type="button" className={styles.actionButton} onClick={() => setPlayersOpen(true)}>Edit Players</button>
+          <button type="button" className={styles.actionButton} onClick={openPlayersEditor}>Edit Players</button>
           <button type="button" className={styles.actionButton} onClick={() => setExportOpen(true)}>Export</button>
         </div>
       </div>
 
       {playersOpen && (
-        <div className={styles.modalOverlay} onClick={() => setPlayersOpen(false)}>
+        <div className={styles.modalOverlay} onClick={closePlayersEditor}>
           <div className={styles.modal} onClick={(event) => event.stopPropagation()}>
             <div className={styles.modalHeader}>
               <h2 className={styles.modalTitle}>Edit Players</h2>
-              <button type="button" className={styles.modalClose} onClick={() => setPlayersOpen(false)}>Close</button>
+              <div className={styles.modalHeaderActions}>
+                <button type="button" className={styles.modalCancel} onClick={closePlayersEditor}>Cancel</button>
+                <button type="button" className={styles.modalDone} onClick={saveAllPlayerEdits}>Done</button>
+              </div>
             </div>
             <div className={styles.gridHeader}>
               <span>Name</span>
@@ -1091,77 +1113,35 @@ export default function PreGame() {
             </div>
             <div className={styles.playerRows}>
               {sortedPlayers.map((player) => {
-                const isEditing = editingPlayerId === player.id;
                 const draft = playerDrafts[player.id] || { name: player.name, display: player.display };
                 return (
                   <div key={player.id} className={styles.playerRow}>
-                    {isEditing ? (
-                      <>
-                        <input
-                          className={styles.textInput}
-                          value={draft.name}
-                          onChange={(event) => setPlayerDrafts((current) => ({
-                            ...current,
-                            [player.id]: { ...draft, name: event.target.value },
-                          }))}
-                        />
-                        <input
-                          className={styles.textInput}
-                          value={draft.display}
-                          onChange={(event) => setPlayerDrafts((current) => ({
-                            ...current,
-                            [player.id]: { ...draft, display: event.target.value },
-                          }))}
-                        />
-                        <div className={styles.rowActions}>
-                          <button
-                            type="button"
-                            className={`${styles.iconButton} ${styles.iconSave}`}
-                            onClick={() => handleSavePlayer(player.id, draft)}
-                            aria-label="Save player"
-                          >
-                            ✓
-                          </button>
-                          <button
-                            type="button"
-                            className={`${styles.iconButton} ${styles.iconDelete}`}
-                            onClick={() => handleDeletePlayer(player.id)}
-                            aria-label="Delete player"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className={styles.readCell}>{player.name}</div>
-                        <div className={styles.readCell}>{player.display}</div>
-                        <div className={styles.rowActions}>
-                          <button
-                            type="button"
-                            className={styles.iconButton}
-                            onClick={() => {
-                              setEditingPlayerId(player.id);
-                              setPlayerDrafts((current) => ({
-                                ...current,
-                                [player.id]: { name: player.name, display: player.display },
-                              }));
-                            }}
-                            aria-label="Edit player"
-                          >
-                            ✎
-                          </button>
-                          <button
-                            type="button"
-                            className={`${styles.iconButton} ${styles.iconDelete}`}
-                            onClick={() => handleDeletePlayer(player.id)}
-                            aria-label="Delete player"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      </>
-                    )}
+                    <input
+                      className={styles.textInput}
+                      value={draft.name}
+                      onChange={(event) => setPlayerDrafts((current) => ({
+                        ...current,
+                        [player.id]: { ...draft, name: event.target.value },
+                      }))}
+                    />
+                    <input
+                      className={styles.textInput}
+                      value={draft.display}
+                      onChange={(event) => setPlayerDrafts((current) => ({
+                        ...current,
+                        [player.id]: { ...draft, display: event.target.value },
+                      }))}
+                    />
+                    <div className={styles.rowActions}>
+                      <button
+                        type="button"
+                        className={`${styles.iconButton} ${styles.iconDelete}`}
+                        onClick={() => handleDeletePlayer(player.id)}
+                        aria-label="Delete player"
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -1198,9 +1178,6 @@ export default function PreGame() {
                   </button>
                 </div>
               </div>
-            </div>
-            <div className={styles.modalFooter}>
-              <button type="button" className={styles.doneButton} onClick={() => setPlayersOpen(false)}>Done</button>
             </div>
           </div>
         </div>

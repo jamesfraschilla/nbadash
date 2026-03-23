@@ -2039,18 +2039,35 @@ export default function Rotations() {
     }));
   };
 
-  const handleSavePlayer = (playerId, draft) => {
-    const name = normalizePlayerNameInput(draft?.name);
-    const display = normalizePlayerNameInput(draft?.display || draft?.name);
-    if (!name || !display) return;
+  const openPlayersEditor = () => {
+    setPlayerDrafts(Object.fromEntries(sortedPlayers.map((player) => [
+      player.id,
+      { name: player.name, display: player.display || player.name },
+    ])));
+    setPlayersOpen(true);
+  };
+
+  const closePlayersEditor = () => {
+    setPlayersOpen(false);
+    setEditingPlayerId(null);
+    setPlayerDrafts({});
+    setNewPlayerDraft({ name: "", display: "" });
+  };
+
+  const saveAllPlayerEdits = () => {
     setPlayers((current) => {
-      const next = current.map((player) => (
-        player.id === playerId ? { ...player, name, display } : player
-      ));
+      const next = current.map((player) => {
+        const draft = playerDrafts[player.id];
+        if (!draft) return player;
+        const name = normalizePlayerNameInput(draft.name);
+        const display = normalizePlayerNameInput(draft.display || draft.name);
+        if (!name || !display) return player;
+        return { ...player, name, display };
+      });
       syncSharedPregameRoster(next);
       return next;
     });
-    setEditingPlayerId(null);
+    closePlayersEditor();
   };
 
   const handleDeletePlayer = (playerId) => {
@@ -3122,7 +3139,7 @@ export default function Rotations() {
           <button
             type="button"
             className={styles.sectionHeaderAction}
-            onClick={() => setPlayersOpen(true)}
+            onClick={openPlayersEditor}
           >
             Edit Players
           </button>
@@ -3191,13 +3208,14 @@ export default function Rotations() {
       </section>
 
       {playersOpen && (
-        <div className={styles.modalOverlay} onClick={() => setPlayersOpen(false)}>
+        <div className={styles.modalOverlay} onClick={closePlayersEditor}>
           <div className={`${styles.modalCard} ${styles.playersModalCard}`} onClick={(event) => event.stopPropagation()}>
             <div className={styles.playersModalHeader}>
               <h3 className={styles.playersModalTitle}>Edit Players</h3>
-              <button type="button" className={styles.playersModalClose} onClick={() => setPlayersOpen(false)}>
-                Close
-              </button>
+              <div className={styles.playersModalHeaderActions}>
+                <button type="button" className={styles.playersModalCancel} onClick={closePlayersEditor}>Cancel</button>
+                <button type="button" className={styles.playersModalDone} onClick={saveAllPlayerEdits}>Done</button>
+              </div>
             </div>
             <div className={styles.playersGridHeader}>
               <span>Name</span>
@@ -3206,77 +3224,35 @@ export default function Rotations() {
             </div>
             <div className={styles.playersRows}>
               {sortedPlayers.map((player) => {
-                const isEditing = editingPlayerId === player.id;
                 const draft = playerDrafts[player.id] || { name: player.name, display: player.display || player.name };
                 return (
                   <div key={player.id} className={styles.playersRow}>
-                    {isEditing ? (
-                      <>
-                        <input
-                          className={styles.playersTextInput}
-                          value={draft.name}
-                          onChange={(event) => setPlayerDrafts((current) => ({
-                            ...current,
-                            [player.id]: { ...draft, name: event.target.value },
-                          }))}
-                        />
-                        <input
-                          className={styles.playersTextInput}
-                          value={draft.display}
-                          onChange={(event) => setPlayerDrafts((current) => ({
-                            ...current,
-                            [player.id]: { ...draft, display: event.target.value },
-                          }))}
-                        />
-                        <div className={styles.playersRowActions}>
-                          <button
-                            type="button"
-                            className={`${styles.playersIconButton} ${styles.playersIconSave}`}
-                            onClick={() => handleSavePlayer(player.id, draft)}
-                            aria-label="Save player"
-                          >
-                            ✓
-                          </button>
-                          <button
-                            type="button"
-                            className={`${styles.playersIconButton} ${styles.playersIconDelete}`}
-                            onClick={() => handleDeletePlayer(player.id)}
-                            aria-label="Delete player"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className={styles.playersReadCell}>{player.name}</div>
-                        <div className={styles.playersReadCell}>{player.display || player.name}</div>
-                        <div className={styles.playersRowActions}>
-                          <button
-                            type="button"
-                            className={styles.playersIconButton}
-                            onClick={() => {
-                              setEditingPlayerId(player.id);
-                              setPlayerDrafts((current) => ({
-                                ...current,
-                                [player.id]: { name: player.name, display: player.display || player.name },
-                              }));
-                            }}
-                            aria-label="Edit player"
-                          >
-                            ✎
-                          </button>
-                          <button
-                            type="button"
-                            className={`${styles.playersIconButton} ${styles.playersIconDelete}`}
-                            onClick={() => handleDeletePlayer(player.id)}
-                            aria-label="Delete player"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      </>
-                    )}
+                    <input
+                      className={styles.playersTextInput}
+                      value={draft.name}
+                      onChange={(event) => setPlayerDrafts((current) => ({
+                        ...current,
+                        [player.id]: { ...draft, name: event.target.value },
+                      }))}
+                    />
+                    <input
+                      className={styles.playersTextInput}
+                      value={draft.display}
+                      onChange={(event) => setPlayerDrafts((current) => ({
+                        ...current,
+                        [player.id]: { ...draft, display: event.target.value },
+                      }))}
+                    />
+                    <div className={styles.playersRowActions}>
+                      <button
+                        type="button"
+                        className={`${styles.playersIconButton} ${styles.playersIconDelete}`}
+                        onClick={() => handleDeletePlayer(player.id)}
+                        aria-label="Delete player"
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -3313,9 +3289,6 @@ export default function Rotations() {
                 </div>
               </div>
             </div>
-            <button type="button" className={styles.modalSecondary} onClick={() => setPlayersOpen(false)}>
-              Done
-            </button>
           </div>
         </div>
       )}

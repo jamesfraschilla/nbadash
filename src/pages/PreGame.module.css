@@ -212,14 +212,30 @@
   margin-bottom: 10px;
 }
 
-.modalClose {
+.modalHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modalClose,
+.modalCancel,
+.modalDone {
   border: 1px solid var(--border);
   background: transparent;
-  color: var(--text);
   font-family: "DIN", sans-serif;
   font-size: 14px;
   padding: 4px 8px;
   cursor: pointer;
+}
+
+.modalClose,
+.modalDone {
+  color: var(--text);
+}
+
+.modalCancel {
+  color: #c62828;
 }
 
 .gridHeader {
@@ -263,15 +279,6 @@
   font-family: "DIN", sans-serif;
   font-size: 16px;
   padding: 2px 8px;
-}
-
-.readCell {
-  border: 1px solid var(--border);
-  padding: 6px 8px;
-  font-size: 14px;
-  min-height: 32px;
-  display: flex;
-  align-items: center;
 }
 
 .rowActions {
