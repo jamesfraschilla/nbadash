@@ -582,6 +582,8 @@ export default function Game({ variant = "full" }) {
   });
 
   const { homeTeam, awayTeam, teamStats, boxScore, officials, callsAgainst } = game || {};
+  const homeTeamId = homeTeam?.teamId ?? null;
+  const awayTeamId = awayTeam?.teamId ?? null;
   const isWashingtonGame = isWashingtonTeam(homeTeam) || isWashingtonTeam(awayTeam);
   const isRotationsGame = isRotationsTeam(homeTeam) || isRotationsTeam(awayTeam);
   const [publishedOfficialOrder, setPublishedOfficialOrder] = useState(null);
@@ -723,10 +725,10 @@ export default function Game({ variant = "full" }) {
     const buildTotals = (teamId) =>
       diffStats(startTotals?.get(teamId), endTotals.get(teamId));
     return {
-      [awayTeam.teamId]: buildTotals(String(awayTeam.teamId)),
-      [homeTeam.teamId]: buildTotals(String(homeTeam.teamId)),
+      [awayTeamId]: buildTotals(String(awayTeamId)),
+      [homeTeamId]: buildTotals(String(homeTeamId)),
     };
-  }, [periodSnapshotMap, segment, awayTeam?.teamId, homeTeam?.teamId]);
+  }, [periodSnapshotMap, segment, awayTeamId, homeTeamId]);
 
   const pbpWheelItems = useMemo(() => {
     const actions = game?.playByPlayActions || [];
@@ -767,11 +769,11 @@ export default function Game({ variant = "full" }) {
   }, [game?.playByPlayActions]);
 
   const possessionTeams = useMemo(() => {
-    if (!openingJumpTeamId || !awayTeam?.teamId || !homeTeam?.teamId) {
+    if (!openingJumpTeamId || !awayTeamId || !homeTeamId) {
       return [null, null, null, null];
     }
-    const awayId = String(awayTeam.teamId);
-    const homeId = String(homeTeam.teamId);
+    const awayId = String(awayTeamId);
+    const homeId = String(homeTeamId);
     if (openingJumpTeamId !== awayId && openingJumpTeamId !== homeId) {
       return [null, null, null, null];
     }
@@ -945,17 +947,17 @@ export default function Game({ variant = "full" }) {
   }, [showExtras]);
 
   const finalSnapshotTotals = useMemo(() => {
-    if (!periodSnapshotMap || !homeTeam?.teamId || !awayTeam?.teamId) return null;
+    if (!periodSnapshotMap || !homeTeamId || !awayTeamId) return null;
     const periods = Array.from(periodSnapshotMap.keys());
     if (!periods.length) return null;
     const maxPeriod = Math.max(...periods.map((value) => Number(value) || 0));
     const endTotals = periodSnapshotMap.get(maxPeriod);
     if (!endTotals) return null;
     return {
-      [awayTeam.teamId]: endTotals.get(String(awayTeam.teamId)) || endTotals.get(awayTeam.teamId) || {},
-      [homeTeam.teamId]: endTotals.get(String(homeTeam.teamId)) || endTotals.get(homeTeam.teamId) || {},
+      [awayTeamId]: endTotals.get(String(awayTeamId)) || endTotals.get(awayTeamId) || {},
+      [homeTeamId]: endTotals.get(String(homeTeamId)) || endTotals.get(homeTeamId) || {},
     };
-  }, [periodSnapshotMap, awayTeam?.teamId, homeTeam?.teamId]);
+  }, [periodSnapshotMap, awayTeamId, homeTeamId]);
 
   const snapshotBounds = useMemo(() => {
     if (!useSnapshots) return null;
@@ -1088,31 +1090,31 @@ export default function Game({ variant = "full" }) {
   };
   const mergeSegmentTotals = (computed, snapshot) =>
     snapshot ? { ...computed, ...snapshot } : computed;
-  const computedAwayTotals = segmentStats.teamTotals[awayTeam?.teamId] || {};
-  const computedHomeTotals = segmentStats.teamTotals[homeTeam?.teamId] || {};
-  const baseAwayTotals = awayTeam?.teamId
+  const computedAwayTotals = segmentStats.teamTotals[awayTeamId] || {};
+  const computedHomeTotals = segmentStats.teamTotals[homeTeamId] || {};
+  const baseAwayTotals = awayTeamId
     ? segment === "all"
       ? mergeAllSegmentTotals(
-        boxScore?.away?.totals || segmentStats.teamTotals[awayTeam.teamId] || {},
+        boxScore?.away?.totals || segmentStats.teamTotals[awayTeamId] || {},
         computedAwayTotals,
-        finalSnapshotTotals?.[awayTeam.teamId]
+        finalSnapshotTotals?.[awayTeamId]
       )
-      : mergeSegmentTotals(computedAwayTotals, segmentSnapshotTotals?.[awayTeam.teamId])
+      : mergeSegmentTotals(computedAwayTotals, segmentSnapshotTotals?.[awayTeamId])
     : {};
-  const baseHomeTotals = homeTeam?.teamId
+  const baseHomeTotals = homeTeamId
     ? segment === "all"
       ? mergeAllSegmentTotals(
-        boxScore?.home?.totals || segmentStats.teamTotals[homeTeam.teamId] || {},
+        boxScore?.home?.totals || segmentStats.teamTotals[homeTeamId] || {},
         computedHomeTotals,
-        finalSnapshotTotals?.[homeTeam.teamId]
+        finalSnapshotTotals?.[homeTeamId]
       )
-      : mergeSegmentTotals(computedHomeTotals, segmentSnapshotTotals?.[homeTeam.teamId])
+      : mergeSegmentTotals(computedHomeTotals, segmentSnapshotTotals?.[homeTeamId])
     : {};
   const useSnapshotTotals = snapshotBounds?.endIsLive;
   const awaySnapshotTotals =
-    useSnapshotTotals && awayTeam?.teamId ? snapshotStats?.teamTotals?.[awayTeam.teamId] : null;
+    useSnapshotTotals && awayTeamId ? snapshotStats?.teamTotals?.[awayTeamId] : null;
   const homeSnapshotTotals =
-    useSnapshotTotals && homeTeam?.teamId ? snapshotStats?.teamTotals?.[homeTeam.teamId] : null;
+    useSnapshotTotals && homeTeamId ? snapshotStats?.teamTotals?.[homeTeamId] : null;
   const isLiveSegment = segment !== "all" && snapshotBounds?.endIsLive;
   const mergeTeamTotals = (base, snapshot) => {
     if (!snapshot) return base;
@@ -1143,14 +1145,14 @@ export default function Game({ variant = "full" }) {
   };
 
   const possessionCounts = useMemo(() => {
-    if (!homeTeam?.teamId || !awayTeam?.teamId) return null;
+    if (!homeTeamId || !awayTeamId) return null;
     return countPossessionsByTeam(
       game?.playByPlayActions || [],
       segment,
-      homeTeam.teamId,
-      awayTeam.teamId
+      homeTeamId,
+      awayTeamId
     );
-  }, [game?.playByPlayActions, segment, homeTeam?.teamId, awayTeam?.teamId]);
+  }, [game?.playByPlayActions, segment, homeTeamId, awayTeamId]);
 
   const hasPossessionCounts =
     possessionCounts
@@ -1163,6 +1165,10 @@ export default function Game({ variant = "full" }) {
 
   if (error || !game) {
     return <div className={styles.stateMessage}>Failed to load game details.</div>;
+  }
+
+  if (!homeTeamId || !awayTeamId || !homeTeam || !awayTeam) {
+    return <div className={styles.stateMessage}>Loading game details...</div>;
   }
 
   const useOfficialRatings = teamStats?.away?.offensiveRating && teamStats?.home?.offensiveRating;
