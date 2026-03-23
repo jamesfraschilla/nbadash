@@ -797,14 +797,17 @@ export default function PreGame() {
   };
 
   const openPlayersEditor = () => {
-    setPlayerDrafts(Object.fromEntries(sortedPlayers.map((player) => [
-      player.id,
-      { name: player.name, display: player.display },
-    ])));
+    const hasDrafts = Object.keys(playerDrafts).length > 0 || newPlayerDraft.name || newPlayerDraft.display;
+    if (!hasDrafts) {
+      setPlayerDrafts(Object.fromEntries(sortedPlayers.map((player) => [
+        player.id,
+        { name: player.name, display: player.display },
+      ])));
+    }
     setPlayersOpen(true);
   };
 
-  const closePlayersEditor = () => {
+  const cancelPlayersEditor = () => {
     setPlayersOpen(false);
     setPlayerDrafts({});
     setNewPlayerDraft({ name: "", display: "" });
@@ -823,7 +826,7 @@ export default function PreGame() {
       if (!name || !display) return player;
       return { ...player, name, display };
     })));
-    closePlayersEditor();
+    cancelPlayersEditor();
   };
 
   const handleDeletePlayer = (playerId) => {
@@ -1097,12 +1100,12 @@ export default function PreGame() {
       </div>
 
       {playersOpen && (
-        <div className={styles.modalOverlay} onClick={closePlayersEditor}>
+        <div className={styles.modalOverlay}>
           <div className={styles.modal} onClick={(event) => event.stopPropagation()}>
             <div className={styles.modalHeader}>
               <h2 className={styles.modalTitle}>Edit Players</h2>
               <div className={styles.modalHeaderActions}>
-                <button type="button" className={styles.modalCancel} onClick={closePlayersEditor}>Cancel</button>
+                <button type="button" className={styles.modalCancel} onClick={cancelPlayersEditor}>Cancel</button>
                 <button type="button" className={styles.modalDone} onClick={saveAllPlayerEdits}>Done</button>
               </div>
             </div>

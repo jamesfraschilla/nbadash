@@ -2040,14 +2040,17 @@ export default function Rotations() {
   };
 
   const openPlayersEditor = () => {
-    setPlayerDrafts(Object.fromEntries(sortedPlayers.map((player) => [
-      player.id,
-      { name: player.name, display: player.display || player.name },
-    ])));
+    const hasDrafts = Object.keys(playerDrafts).length > 0 || newPlayerDraft.name || newPlayerDraft.display;
+    if (!hasDrafts) {
+      setPlayerDrafts(Object.fromEntries(sortedPlayers.map((player) => [
+        player.id,
+        { name: player.name, display: player.display || player.name },
+      ])));
+    }
     setPlayersOpen(true);
   };
 
-  const closePlayersEditor = () => {
+  const cancelPlayersEditor = () => {
     setPlayersOpen(false);
     setEditingPlayerId(null);
     setPlayerDrafts({});
@@ -2067,7 +2070,7 @@ export default function Rotations() {
       syncSharedPregameRoster(next);
       return next;
     });
-    closePlayersEditor();
+    cancelPlayersEditor();
   };
 
   const handleDeletePlayer = (playerId) => {
@@ -3208,12 +3211,12 @@ export default function Rotations() {
       </section>
 
       {playersOpen && (
-        <div className={styles.modalOverlay} onClick={closePlayersEditor}>
+        <div className={styles.modalOverlay}>
           <div className={`${styles.modalCard} ${styles.playersModalCard}`} onClick={(event) => event.stopPropagation()}>
             <div className={styles.playersModalHeader}>
               <h3 className={styles.playersModalTitle}>Edit Players</h3>
               <div className={styles.playersModalHeaderActions}>
-                <button type="button" className={styles.playersModalCancel} onClick={closePlayersEditor}>Cancel</button>
+                <button type="button" className={styles.playersModalCancel} onClick={cancelPlayersEditor}>Cancel</button>
                 <button type="button" className={styles.playersModalDone} onClick={saveAllPlayerEdits}>Done</button>
               </div>
             </div>
