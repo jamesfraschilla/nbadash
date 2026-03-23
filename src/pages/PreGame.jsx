@@ -3,15 +3,23 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { fetchGame } from "../api.js";
+import {
+  fetchRemotePregamePlayers,
+  getPregameTeamScope,
+  isCapitalCityTeam,
+  isWashingtonTeam,
+  loadPregamePlayersPayload,
+  normalizePregamePlayerName,
+  persistPregamePlayers,
+  saveRemotePregamePlayers,
+} from "../pregamePlayers.js";
 import { supabase } from "../supabaseClient.js";
 import wizardsLogoUrl from "../assets/WWizards_Primary_Icon.png";
 import dinFontUrl from "../assets/fonts/DIN.ttf";
 import styles from "./PreGame.module.css";
 
-const PLAYERS_STORAGE_KEY = "pregame:players:v1";
 const SLOT_STORAGE_PREFIX = "pregame:slots:v1:";
 const SLOT_TEMPLATE_KEY = "pregame:slot-template:v1";
-const PREGAME_GLOBAL_PLAYERS_GAME_ID = "9999999901";
 const PREGAME_GLOBAL_TEMPLATE_GAME_ID = "9999999902";
 const PREGAME_ACTION_PAYLOAD = 900000001;
 const TEAM_TIME_ZONES = {
@@ -73,12 +81,8 @@ function getExportColors(themeMode) {
   };
 }
 
-function normalizePlayerName(value) {
-  return String(value || "").trim().replace(/\s+/g, " ");
-}
-
 function getLastName(name) {
-  const parts = normalizePlayerName(name).split(" ").filter(Boolean);
+  const parts = normalizePregamePlayerName(name).split(" ").filter(Boolean);
   return parts.length ? parts[parts.length - 1].toLowerCase() : "";
 }
 
@@ -87,7 +91,7 @@ function sortPlayersByLastName(players) {
     const aLast = getLastName(a.name);
     const bLast = getLastName(b.name);
     if (aLast !== bLast) return aLast.localeCompare(bLast);
-    return normalizePlayerName(a.name).localeCompare(normalizePlayerName(b.name));
+    return normalizePregamePlayerName(a.name).localeCompare(normalizePregamePlayerName(b.name));
   });
 }
 
@@ -98,18 +102,6 @@ function safeParseJson(raw, fallback) {
   } catch {
     return fallback;
   }
-}
-
-function normalizePlayers(rawPlayers) {
-  return sortPlayersByLastName(
-    (Array.isArray(rawPlayers) ? rawPlayers : [])
-      .map((player) => ({
-        id: String(player?.id || crypto.randomUUID()),
-        name: normalizePlayerName(player?.name || ""),
-        display: normalizePlayerName(player?.display || ""),
-      }))
-      .filter((player) => player.name && player.display)
-  );
 }
 
 function normalizeSlots(rawSlots) {
@@ -147,37 +139,6 @@ function parseRemotePayload(note, key) {
   if (parsed[key] != null) return { updatedAt, value: parsed[key] };
   if (parsed.value != null) return { updatedAt, value: parsed.value };
   return { updatedAt, value: parsed };
-}
-
-function loadPlayers() {
-  if (typeof window === "undefined") return [];
-  const raw = window.localStorage.getItem(PLAYERS_STORAGE_KEY);
-  if (!raw) return [];
-  const parsed = safeParseJson(raw, []);
-  return normalizePlayers(Array.isArray(parsed) ? parsed : parsed?.players);
-}
-
-function persistPlayers(players, updatedAt = Date.now()) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(PLAYERS_STORAGE_KEY, JSON.stringify({
-    updatedAt,
-    players: sortPlayersByLastName(players),
-  }));
-}
-
-function loadPlayersPayload() {
-  if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(PLAYERS_STORAGE_KEY);
-  if (!raw) return null;
-  const parsed = safeParseJson(raw, null);
-  if (Array.isArray(parsed)) {
-    return { updatedAt: 0, players: normalizePlayers(parsed) };
-  }
-  if (!parsed || typeof parsed !== "object") return null;
-  return {
-    updatedAt: Number(parsed.updatedAt || 0),
-    players: normalizePlayers(parsed.players),
-  };
 }
 
 function slotStorageKey(gameId) {
@@ -261,22 +222,6 @@ function loadTemplatePayload() {
   return null;
 }
 
-async function fetchRemotePlayers() {
-  if (!supabase) return null;
-  const { data, error } = await supabase
-    .from("pbp_highlights")
-    .select("note")
-    .eq("game_id", PREGAME_GLOBAL_PLAYERS_GAME_ID)
-    .eq("action_number", PREGAME_ACTION_PAYLOAD)
-    .maybeSingle();
-  if (error) return null;
-  const payload = parseRemotePayload(data?.note, "players");
-  return {
-    updatedAt: payload.updatedAt,
-    players: normalizePlayers(payload.value),
-  };
-}
-
 async function fetchRemoteSchedule(gameId) {
   if (!supabase || !gameId) return null;
   const { data, error } = await supabase
@@ -307,21 +252,6 @@ async function fetchRemoteTemplate() {
     updatedAt: payload.updatedAt,
     template: normalizeTemplate(payload.value),
   };
-}
-
-async function saveRemotePlayers(players, updatedAt = Date.now()) {
-  if (!supabase) return;
-  await supabase.from("pbp_highlights").upsert(
-    {
-      game_id: PREGAME_GLOBAL_PLAYERS_GAME_ID,
-      action_number: PREGAME_ACTION_PAYLOAD,
-      note: JSON.stringify({
-        updatedAt,
-        players: sortPlayersByLastName(players),
-      }),
-    },
-    { onConflict: "game_id,action_number" }
-  );
 }
 
 async function saveRemoteSchedule(gameId, slots, updatedAt = Date.now()) {
@@ -633,17 +563,11 @@ function downloadCanvas(canvas, filename) {
   link.click();
 }
 
-function isWashingtonTeam(team) {
-  const tricode = String(team?.teamTricode || "").toUpperCase();
-  const name = `${team?.teamCity || ""} ${team?.teamName || ""}`.toLowerCase();
-  return tricode === "WAS" || name.includes("washington") || name.includes("wizards");
-}
-
 function buildHeaderLine(game) {
   const home = game?.homeTeam;
   const away = game?.awayTeam;
-  const washingtonIsAway = isWashingtonTeam(away);
-  const opponent = washingtonIsAway ? home : away;
+  const trackedIsAway = isWashingtonTeam(away) || isCapitalCityTeam(away);
+  const opponent = trackedIsAway ? home : away;
   const rawCity = String(opponent?.teamCity || "").trim();
   const rawName = String(opponent?.teamName || "").trim();
   const lowerName = rawName.toLowerCase();
@@ -652,7 +576,7 @@ function buildHeaderLine(game) {
     if (lowerName.includes("clipper")) opponentLabel = "LA CLIPPERS";
     if (lowerName.includes("laker")) opponentLabel = "LA LAKERS";
   }
-  return washingtonIsAway ? `@ ${opponentLabel}` : `vs ${opponentLabel}`;
+  return trackedIsAway ? `@ ${opponentLabel}` : `vs ${opponentLabel}`;
 }
 
 export default function PreGame() {
@@ -667,7 +591,7 @@ export default function PreGame() {
     enabled: Boolean(gameId),
   });
 
-  const [players, setPlayers] = useState(() => loadPlayers());
+  const [players, setPlayers] = useState([]);
   const [slots, setSlots] = useState([]);
   const [playersOpen, setPlayersOpen] = useState(false);
   const [slotsOpen, setSlotsOpen] = useState(false);
@@ -685,10 +609,12 @@ export default function PreGame() {
   const slotsUpdatedAtRef = useRef(0);
   const templateUpdatedAtRef = useRef(0);
 
+  const trackedTeamScope = useMemo(() => getPregameTeamScope(game), [game]);
+
   const { data: remotePlayers, isFetched: remotePlayersFetched } = useQuery({
-    queryKey: ["pregame-players-remote"],
-    queryFn: fetchRemotePlayers,
-    enabled: Boolean(supabase),
+    queryKey: ["pregame-players-remote", trackedTeamScope],
+    queryFn: () => fetchRemotePregamePlayers(trackedTeamScope),
+    enabled: Boolean(supabase && trackedTeamScope),
     staleTime: 10_000,
     refetchInterval: 10_000,
   });
@@ -712,16 +638,18 @@ export default function PreGame() {
   const washingtonGame = useMemo(() => (
     isWashingtonTeam(game?.homeTeam) || isWashingtonTeam(game?.awayTeam)
   ), [game]);
+  const supportedTeamGame = Boolean(trackedTeamScope);
 
   useEffect(() => {
     setPlayersHydrated(false);
     setSlotsHydrated(false);
-  }, [gameId]);
+  }, [gameId, trackedTeamScope]);
 
   useEffect(() => {
     if (playersHydrated) return;
+    if (!trackedTeamScope) return;
     if (supabase && !remotePlayersFetched) return;
-    const localPayload = loadPlayersPayload();
+    const localPayload = loadPregamePlayersPayload(trackedTeamScope);
     const localUpdatedAt = Number(localPayload?.updatedAt || 0);
     const remoteUpdatedAt = Number(remotePlayers?.updatedAt || 0);
 
@@ -734,9 +662,12 @@ export default function PreGame() {
     } else if (remotePlayers?.players?.length) {
       setPlayers(remotePlayers.players);
       playersUpdatedAtRef.current = remoteUpdatedAt;
+    } else {
+      setPlayers([]);
+      playersUpdatedAtRef.current = Date.now();
     }
     setPlayersHydrated(true);
-  }, [playersHydrated, remotePlayers, remotePlayersFetched]);
+  }, [playersHydrated, remotePlayers, remotePlayersFetched, trackedTeamScope]);
 
   useEffect(() => {
     if (slotsHydrated) return;
@@ -813,12 +744,12 @@ export default function PreGame() {
   ]);
 
   useEffect(() => {
-    if (!playersHydrated) return;
+    if (!playersHydrated || !trackedTeamScope) return;
     const updatedAt = Date.now();
     playersUpdatedAtRef.current = updatedAt;
-    persistPlayers(players, updatedAt);
-    saveRemotePlayers(players, updatedAt);
-  }, [players, playersHydrated]);
+    persistPregamePlayers(trackedTeamScope, players, updatedAt);
+    saveRemotePregamePlayers(trackedTeamScope, players, updatedAt);
+  }, [players, playersHydrated, trackedTeamScope]);
 
   useEffect(() => {
     if (!slotsHydrated || !gameId || !slots.length) return;
@@ -832,13 +763,13 @@ export default function PreGame() {
   }, [gameId, slots, slotsHydrated]);
 
   useEffect(() => {
-    if (!playersHydrated) return;
+    if (!playersHydrated || !trackedTeamScope) return;
     const remoteUpdatedAt = Number(remotePlayers?.updatedAt || 0);
     if (!remoteUpdatedAt || remoteUpdatedAt <= playersUpdatedAtRef.current) return;
     setPlayers(remotePlayers.players || []);
     playersUpdatedAtRef.current = remoteUpdatedAt;
-    persistPlayers(remotePlayers.players || [], remoteUpdatedAt);
-  }, [playersHydrated, remotePlayers]);
+    persistPregamePlayers(trackedTeamScope, remotePlayers.players || [], remoteUpdatedAt);
+  }, [playersHydrated, remotePlayers, trackedTeamScope]);
 
   useEffect(() => {
     if (!slotsHydrated || !gameId || !remoteSchedule?.slots?.length) return;
@@ -871,8 +802,8 @@ export default function PreGame() {
   };
 
   const handleSavePlayer = (playerId, draft) => {
-    const name = normalizePlayerName(draft?.name);
-    const display = normalizePlayerName(draft?.display);
+    const name = normalizePregamePlayerName(draft?.name);
+    const display = normalizePregamePlayerName(draft?.display);
     if (!name || !display) return;
     setPlayers((current) => sortPlayersByLastName(current.map((player) => (
       player.id === playerId ? { ...player, name, display } : player
@@ -890,8 +821,8 @@ export default function PreGame() {
   };
 
   const handleAddPlayer = () => {
-    const name = normalizePlayerName(newPlayerDraft.name);
-    const display = normalizePlayerName(newPlayerDraft.display);
+    const name = normalizePregamePlayerName(newPlayerDraft.name);
+    const display = normalizePregamePlayerName(newPlayerDraft.display);
     if (!name || !display) return;
     setPlayers((current) => sortPlayersByLastName([
       ...current,
@@ -951,13 +882,13 @@ export default function PreGame() {
     return <div className={styles.stateMessage}>Unable to load pre-game schedule.</div>;
   }
 
-  if (!washingtonGame) {
+  if (!supportedTeamGame) {
     return (
       <div className={styles.page}>
         <div className={styles.topRow}>
           <Link className={styles.backButton} to={backUrl}>Back</Link>
         </div>
-        <div className={styles.stateMessage}>Pre-Game is available only for Washington games.</div>
+        <div className={styles.stateMessage}>Pre-Game is available only for Washington and Capital City games.</div>
       </div>
     );
   }

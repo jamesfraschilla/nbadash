@@ -4,6 +4,11 @@ import { useQuery } from "@tanstack/react-query";
 import fontkit from "@pdf-lib/fontkit";
 import { PDFDocument, rgb } from "pdf-lib";
 import { fetchGame } from "../api.js";
+import {
+  fetchRemotePregamePlayers,
+  loadPregamePlayersPayload,
+  normalizePregamePlayers,
+} from "../pregamePlayers.js";
 import { supabase } from "../supabaseClient.js";
 import wizardsLogoUrl from "../assets/WWizards_Primary_Icon.png";
 import dinAltFontUrl from "../assets/fonts/DINalt.ttf";
@@ -222,10 +227,11 @@ function normalizePlayers(rawPlayers, teamScope = "washington") {
   const normalized = (Array.isArray(rawPlayers) ? rawPlayers : []).slice(0, 17).map((player, index) => ({
     id: String(player?.id || `p${index + 1}`),
     name: normalizePlayerNameInput(player?.name),
+    display: normalizePlayerNameInput(player?.display || player?.name),
     cap: player?.cap === "" ? "" : (Number.isFinite(Number(player?.cap)) ? Number(player.cap) : 48),
   }));
   while (normalized.length < 17) {
-    normalized.push({ id: `p${normalized.length + 1}`, name: "", cap: 48 });
+    normalized.push({ id: `p${normalized.length + 1}`, name: "", display: "", cap: 48 });
   }
   const defaults = createDefaultPlayers(teamScope);
   return normalized.map((player, index) => ({
@@ -457,9 +463,40 @@ function playersStateKey(players) {
     (players || []).map((player) => ({
       id: String(player?.id || ""),
       name: String(player?.name || ""),
+      display: String(player?.display || ""),
       cap: player?.cap === "" ? "" : Number(player?.cap || 0),
     }))
   );
+}
+
+function mergePlayersWithPregameRoster(currentPlayers, rosterPlayers, teamScope = "washington") {
+  const normalizedCurrent = normalizePlayers(currentPlayers, teamScope);
+  const normalizedRoster = normalizePregamePlayers(rosterPlayers).map((player) => ({
+    id: String(player.id || ""),
+    name: normalizePlayerNameInput(player.display || player.name),
+    display: normalizePlayerNameInput(player.display || player.name),
+  }));
+
+  if (!normalizedRoster.length) return normalizedCurrent;
+
+  const currentById = new Map(normalizedCurrent.map((player) => [String(player.id || ""), player]));
+  const currentByDisplay = new Map(
+    normalizedCurrent
+      .map((player) => [normalizePlayerNameInput(player.display || player.name), player])
+      .filter(([display]) => display)
+  );
+
+  const merged = normalizedRoster.slice(0, 17).map((player, index) => {
+    const existing = currentById.get(player.id) || currentByDisplay.get(player.display) || normalizedCurrent[index];
+    return {
+      id: player.id || existing?.id || `p${index + 1}`,
+      name: player.name,
+      display: player.display,
+      cap: existing?.cap === "" ? "" : (Number.isFinite(Number(existing?.cap)) ? Number(existing.cap) : 48),
+    };
+  });
+
+  return normalizePlayers(merged, teamScope);
 }
 
 function depthChartStateKey(depthChart) {
@@ -1454,6 +1491,14 @@ export default function Rotations() {
     refetchInterval: 10_000,
   });
 
+  const { data: remotePregamePlayers, isFetched: remotePregamePlayersFetched } = useQuery({
+    queryKey: ["pregame-players-remote", monitoredTeamScope],
+    queryFn: () => fetchRemotePregamePlayers(monitoredTeamScope),
+    enabled: Boolean(supabase && monitoredTeamScope),
+    staleTime: 10_000,
+    refetchInterval: 10_000,
+  });
+
   const { data: remoteSavedLineups, isFetched: remoteSavedLineupsFetched } = useQuery({
     queryKey: ["rotations-saved-lineups-remote", monitoredTeamScope],
     queryFn: () => fetchRemoteSavedLineups(monitoredTeamScope),
@@ -1605,6 +1650,27 @@ export default function Rotations() {
 
     setPlayersHydrated(true);
   }, [playersHydrated, remotePlayers, remotePlayersFetched, monitoredTeamScope]);
+
+  useEffect(() => {
+    if (!playersHydrated || !monitoredTeamScope) return;
+    if (supabase && !remotePregamePlayersFetched) return;
+
+    const localPregamePayload = loadPregamePlayersPayload(monitoredTeamScope);
+    const localUpdatedAt = Number(localPregamePayload?.updatedAt || 0);
+    const remoteUpdatedAt = Number(remotePregamePlayers?.updatedAt || 0);
+    const rosterSource = remoteUpdatedAt >= localUpdatedAt
+      ? (remotePregamePlayers?.players || [])
+      : (localPregamePayload?.players || []);
+    if (!rosterSource.length) return;
+
+    setPlayers((current) => {
+      const next = mergePlayersWithPregameRoster(current, rosterSource, monitoredTeamScope);
+      const nextKey = playersStateKey(next);
+      if (nextKey === playersStateKeyRef.current) return current;
+      playersStateKeyRef.current = nextKey;
+      return next;
+    });
+  }, [playersHydrated, monitoredTeamScope, remotePregamePlayers, remotePregamePlayersFetched]);
 
   useEffect(() => {
     if (savedLineupsHydrated) return;
@@ -1849,7 +1915,7 @@ export default function Rotations() {
   const playerOptions = useMemo(() => {
     const unique = new Set();
     players.forEach((player) => {
-      const name = normalizeName(player.name);
+      const name = normalizeName(player.display || player.name);
       if (!name) return;
       unique.add(name);
     });
@@ -2994,7 +3060,7 @@ export default function Rotations() {
             </thead>
             <tbody>
               {players.map((player) => {
-                const name = normalizeName(player.name);
+                const name = normalizeName(player.display || player.name);
                 const cap = Number(player.cap) || 0;
                 const q1 = name ? (quarterCounts[1]?.[name] || 0) : 0;
                 const q2 = name ? (quarterCounts[2]?.[name] || 0) : 0;
@@ -3007,23 +3073,7 @@ export default function Rotations() {
 
                 return (
                   <tr key={`totals-row-${player.id}`}>
-                    <td className={styles.playerNameCell}>
-                      <input
-                        className={styles.playerNameInput}
-                        value={playerNameDrafts[player.id] ?? player.name}
-                        onChange={(event) => updatePlayerNameDraft(player.id, event.target.value)}
-                        onFocus={() => {
-                          editingPlayerNameIdRef.current = player.id;
-                        }}
-                        onBlur={() => {
-                          commitPlayerNameDraft(player.id);
-                          if (editingPlayerNameIdRef.current === player.id) {
-                            editingPlayerNameIdRef.current = null;
-                          }
-                        }}
-                        aria-label={`Player ${player.id}`}
-                      />
-                    </td>
+                    <td className={styles.playerNameCell}>{player.display || player.name}</td>
                     <td>
                       <input
                         className={styles.capInput}
