@@ -358,7 +358,7 @@ function getVersionById(gameState, versionId, teamScope = "washington") {
     || createDefaultGameState(teamScope).versions[0];
 }
 
-function loadPlayersPayload(teamScope) {
+function loadLegacyPlayersPayload(teamScope) {
   if (typeof window === "undefined" || !teamScope) return null;
   const raw = window.localStorage.getItem(playersStorageKey(teamScope));
   if (!raw) return null;
@@ -371,14 +371,6 @@ function loadPlayersPayload(teamScope) {
     updatedAt: Number(parsed.updatedAt || 0),
     players: normalizePlayers(parsed.players, teamScope),
   };
-}
-
-function persistPlayers(teamScope, players, updatedAt = Date.now()) {
-  if (typeof window === "undefined" || !teamScope) return;
-  window.localStorage.setItem(playersStorageKey(teamScope), JSON.stringify({
-    updatedAt,
-    players: normalizePlayers(players, teamScope),
-  }));
 }
 
 function loadDepthTemplatePayload(teamScope) {
@@ -479,9 +471,10 @@ function mergePlayersWithPregameRoster(currentPlayers, rosterPlayers, teamScope 
   const normalizedCurrent = normalizePlayers(currentPlayers, teamScope);
   const normalizedRoster = normalizePregamePlayers(rosterPlayers).map((player) => ({
     id: String(player.id || ""),
-    name: normalizePlayerNameInput(player.display || player.name),
+    name: normalizePlayerNameInput(player.name),
     display: normalizePlayerNameInput(player.display || player.name),
     personId: String(player.personId || "").trim(),
+    cap: player?.cap === "" ? "" : (Number.isFinite(Number(player?.cap)) ? Number(player.cap) : 48),
   }));
 
   if (!normalizedRoster.length) return normalizedCurrent;
@@ -500,22 +493,13 @@ function mergePlayersWithPregameRoster(currentPlayers, rosterPlayers, teamScope 
       name: player.name,
       display: player.display,
       personId: String(player.personId || existing?.personId || "").trim(),
-      cap: existing?.cap === "" ? "" : (Number.isFinite(Number(existing?.cap)) ? Number(existing.cap) : 48),
+      cap: player.cap === "" ? "" : (Number.isFinite(Number(player.cap)) ? Number(player.cap) : (
+        existing?.cap === "" ? "" : (Number.isFinite(Number(existing?.cap)) ? Number(existing.cap) : 48)
+      )),
     };
   });
 
   return normalizePlayers(merged, teamScope);
-}
-
-function buildPregameRosterFromRotationsPlayers(players) {
-  return (Array.isArray(players) ? players : [])
-    .map((player) => ({
-      id: String(player?.id || ""),
-      name: String(player?.name || "").trim(),
-      display: String(player?.display || player?.name || "").trim(),
-      personId: String(player?.personId || "").trim(),
-    }))
-    .filter((player) => player.id && player.name && player.display);
 }
 
 function depthChartStateKey(depthChart) {
@@ -530,7 +514,7 @@ function gameStateKey(state) {
   return JSON.stringify(state || {});
 }
 
-async function fetchRemotePlayers(teamScope) {
+async function fetchLegacyRemotePlayers(teamScope) {
   if (!supabase || !teamScope) return null;
   const { data, error } = await supabase
     .from(ROTATIONS_TABLE)
@@ -545,24 +529,6 @@ async function fetchRemotePlayers(teamScope) {
     updatedAt: parsed.updatedAt,
     players: normalizePlayers(parsed.payload?.players, teamScope),
   };
-}
-
-async function saveRemotePlayers(teamScope, players, updatedAt = Date.now()) {
-  if (!supabase || !teamScope) return;
-  const { error } = await supabase.from(ROTATIONS_TABLE).upsert(
-    {
-      scope_type: ROTATIONS_SCOPE_PLAYERS,
-      scope_key: globalScopeKey(teamScope),
-      payload: {
-        players: normalizePlayers(players, teamScope),
-      },
-    },
-    { onConflict: "scope_type,scope_key" }
-  );
-  if (error) {
-    // eslint-disable-next-line no-console
-    console.error("Failed to save rotations players", error);
-  }
 }
 
 async function fetchRemoteSavedLineups(teamScope) {
@@ -1510,9 +1476,9 @@ export default function Rotations() {
     [game, monitoredTeamScope]
   );
 
-  const { data: remotePlayers, isFetched: remotePlayersFetched } = useQuery({
-    queryKey: ["rotations-players-remote", monitoredTeamScope],
-    queryFn: () => fetchRemotePlayers(monitoredTeamScope),
+  const { data: legacyRemotePlayers, isFetched: legacyRemotePlayersFetched } = useQuery({
+    queryKey: ["rotations-players-legacy-remote", monitoredTeamScope],
+    queryFn: () => fetchLegacyRemotePlayers(monitoredTeamScope),
     enabled: Boolean(supabase && monitoredTeamScope),
     staleTime: 10_000,
     refetchInterval: 10_000,
@@ -1655,32 +1621,48 @@ export default function Rotations() {
 
   useEffect(() => {
     if (playersHydrated) return;
-    if (supabase && !remotePlayersFetched) return;
-
     if (!monitoredTeamScope) return;
-    const localPayload = loadPlayersPayload(monitoredTeamScope);
-    const localUpdatedAt = Number(localPayload?.updatedAt || 0);
-    const remoteUpdatedAt = Number(remotePlayers?.updatedAt || 0);
-    if (remotePlayers?.players?.length && remoteUpdatedAt >= localUpdatedAt) {
-      setPlayers(remotePlayers.players);
-      playersUpdatedAtRef.current = remoteUpdatedAt;
-      playersStateKeyRef.current = playersStateKey(remotePlayers.players);
-      skipPlayersSaveRef.current = true;
-    } else if (localPayload?.players?.length) {
-      setPlayers(localPayload.players);
-      playersUpdatedAtRef.current = localUpdatedAt;
-      playersStateKeyRef.current = playersStateKey(localPayload.players);
-      skipPlayersSaveRef.current = true;
-    } else {
-      const defaultPlayers = createDefaultPlayers(monitoredTeamScope);
-      setPlayers(defaultPlayers);
-      playersUpdatedAtRef.current = Date.now();
-      playersStateKeyRef.current = playersStateKey(defaultPlayers);
-      skipPlayersSaveRef.current = true;
-    }
+    if (supabase && (!remotePregamePlayersFetched || !legacyRemotePlayersFetched)) return;
+
+    const localSharedPayload = loadPregamePlayersPayload(monitoredTeamScope);
+    const localSharedUpdatedAt = Number(localSharedPayload?.updatedAt || 0);
+    const remoteSharedUpdatedAt = Number(remotePregamePlayers?.updatedAt || 0);
+    const sharedRoster = remoteSharedUpdatedAt >= localSharedUpdatedAt
+      ? (remotePregamePlayers?.players || [])
+      : (localSharedPayload?.players || []);
+
+    const localLegacyPayload = loadLegacyPlayersPayload(monitoredTeamScope);
+    const localLegacyUpdatedAt = Number(localLegacyPayload?.updatedAt || 0);
+    const remoteLegacyUpdatedAt = Number(legacyRemotePlayers?.updatedAt || 0);
+    const legacyPlayers = remoteLegacyUpdatedAt >= localLegacyUpdatedAt
+      ? (legacyRemotePlayers?.players || [])
+      : (localLegacyPayload?.players || []);
+
+    const fallbackPlayers = legacyPlayers.length ? legacyPlayers : createDefaultPlayers(monitoredTeamScope);
+    const nextPlayers = sharedRoster.length
+      ? mergePlayersWithPregameRoster(fallbackPlayers, sharedRoster, monitoredTeamScope)
+      : normalizePlayers(fallbackPlayers, monitoredTeamScope);
+    const nextUpdatedAt = Math.max(
+      remoteSharedUpdatedAt,
+      localSharedUpdatedAt,
+      remoteLegacyUpdatedAt,
+      localLegacyUpdatedAt,
+      Date.now()
+    );
+    setPlayers(nextPlayers);
+    playersUpdatedAtRef.current = nextUpdatedAt;
+    playersStateKeyRef.current = playersStateKey(nextPlayers);
+    skipPlayersSaveRef.current = true;
 
     setPlayersHydrated(true);
-  }, [playersHydrated, remotePlayers, remotePlayersFetched, monitoredTeamScope]);
+  }, [
+    playersHydrated,
+    monitoredTeamScope,
+    remotePregamePlayers,
+    remotePregamePlayersFetched,
+    legacyRemotePlayers,
+    legacyRemotePlayersFetched,
+  ]);
 
   useEffect(() => {
     if (!playersHydrated || !monitoredTeamScope) return;
@@ -1820,15 +1802,14 @@ export default function Rotations() {
 
     if (skipPlayersSaveRef.current) {
       skipPlayersSaveRef.current = false;
-      persistPlayers(monitoredTeamScope, players, playersUpdatedAtRef.current || Date.now());
       return;
     }
 
     const timeoutId = window.setTimeout(() => {
       const updatedAt = Date.now();
       playersUpdatedAtRef.current = updatedAt;
-      persistPlayers(monitoredTeamScope, players, updatedAt);
-      saveRemotePlayers(monitoredTeamScope, players, updatedAt);
+      persistPregamePlayers(monitoredTeamScope, players, updatedAt);
+      saveRemotePregamePlayers(monitoredTeamScope, players, updatedAt);
     }, 250);
 
     return () => window.clearTimeout(timeoutId);
@@ -1935,11 +1916,6 @@ export default function Rotations() {
   }, [gameState]);
 
   useEffect(() => {
-    if (!playersHydrated) return;
-    applyRemotePlayers(remotePlayers);
-  }, [playersHydrated, remotePlayers]);
-
-  useEffect(() => {
     if (!savedLineupsHydrated) return;
     applyRemoteSavedLineups(remoteSavedLineups);
   }, [savedLineupsHydrated, remoteSavedLineups]);
@@ -2013,14 +1989,6 @@ export default function Rotations() {
   const versionOptions = useMemo(() => gameState.versions, [gameState.versions]);
   const sortedPlayers = useMemo(() => players.filter((player) => player.name || player.display), [players]);
 
-  const syncSharedPregameRoster = (nextPlayers) => {
-    if (!monitoredTeamScope) return;
-    const updatedAt = Date.now();
-    const roster = buildPregameRosterFromRotationsPlayers(nextPlayers);
-    persistPregamePlayers(monitoredTeamScope, roster, updatedAt);
-    saveRemotePregamePlayers(monitoredTeamScope, roster, updatedAt);
-  };
-
   const updateActiveVersion = (updater) => {
     setGameState((current) => ({
       ...current,
@@ -2090,7 +2058,6 @@ export default function Rotations() {
         if (!name || !display) return player;
         return { ...player, name, display, personId };
       });
-      syncSharedPregameRoster(next);
       return next;
     });
     cancelPlayersEditor();
@@ -2098,9 +2065,7 @@ export default function Rotations() {
 
   const handleDeletePlayer = (playerId) => {
     setPlayers((current) => {
-      const next = current.filter((player) => player.id !== playerId);
-      syncSharedPregameRoster(next);
-      return next;
+      return current.filter((player) => player.id !== playerId);
     });
     setNewPlayerDraft({ name: "", display: "", personId: "" });
     setEditingPlayerId(null);
@@ -2121,7 +2086,6 @@ export default function Rotations() {
         ...current,
         { id: crypto.randomUUID(), name, display, personId, cap: 48 },
       ], monitoredTeamScope || "washington");
-      syncSharedPregameRoster(next);
       return next;
     });
     setNewPlayerDraft({ name: "", display: "", personId: "" });
@@ -2627,22 +2591,6 @@ export default function Rotations() {
     );
   };
 
-  const applyRemotePlayers = (payload) => {
-    const remoteUpdatedAt = Number(payload?.updatedAt || 0);
-    if (!remoteUpdatedAt || remoteUpdatedAt <= playersUpdatedAtRef.current) return;
-    const incomingPlayers = normalizePlayers(payload?.players || [], monitoredTeamScope || "washington");
-    const incomingKey = playersStateKey(incomingPlayers);
-    if (incomingKey === playersStateKeyRef.current) {
-      playersUpdatedAtRef.current = remoteUpdatedAt;
-      return;
-    }
-    setPlayers(incomingPlayers);
-    playersUpdatedAtRef.current = remoteUpdatedAt;
-    playersStateKeyRef.current = incomingKey;
-    skipPlayersSaveRef.current = true;
-    persistPlayers(monitoredTeamScope, incomingPlayers, remoteUpdatedAt);
-  };
-
   const applyRemoteSavedLineups = (payload) => {
     const remoteUpdatedAt = Number(payload?.updatedAt || 0);
     if (!remoteUpdatedAt || remoteUpdatedAt <= savedLineupsUpdatedAtRef.current) return;
@@ -2732,24 +2680,6 @@ export default function Rotations() {
     if (!supabase || !gameId || !monitoredTeamScope) return undefined;
     const channel = supabase
       .channel(`rotations-${monitoredTeamScope}-${gameId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: ROTATIONS_TABLE,
-          filter: `scope_type=eq.${ROTATIONS_SCOPE_PLAYERS}`,
-        },
-        (payload) => {
-          const row = payload.new || payload.old;
-          if (!row || row.scope_key !== globalScopeKey(monitoredTeamScope)) return;
-          const parsed = parseSharedStateRow(row);
-          applyRemotePlayers({
-            updatedAt: parsed.updatedAt,
-            players: normalizePlayers(parsed.payload?.players, monitoredTeamScope),
-          });
-        }
-      )
       .on(
         "postgres_changes",
         {

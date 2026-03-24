@@ -1,8 +1,15 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createManagedUser, createUserInvite, fetchPendingInvites, fetchVisibleProfiles, updateProfile } from "../accountData.js";
 import { ACCOUNT_ROLES, ACCOUNT_TEAM_SCOPES } from "../authConfig.js";
 import { useAuth } from "../auth/useAuth.js";
+import {
+  fetchRemotePregamePlayers,
+  loadPregamePlayersPayload,
+  normalizePregamePlayers,
+  persistPregamePlayers,
+  saveRemotePregamePlayers,
+} from "../pregamePlayers.js";
 import styles from "./Admin.module.css";
 
 function formatTimestamp(value) {
@@ -90,6 +97,108 @@ function ProfileCard({ profile, actorId, onSave }) {
           {saving ? "Saving..." : "Save User"}
         </button>
       </div>
+    </div>
+  );
+}
+
+function TeamRosterCard({ teamScope, title }) {
+  const queryClient = useQueryClient();
+  const [draftPlayers, setDraftPlayers] = useState([]);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const { data: remoteRoster, isLoading } = useQuery({
+    queryKey: ["admin-team-roster", teamScope],
+    queryFn: () => fetchRemotePregamePlayers(teamScope),
+  });
+
+  const localRoster = useMemo(() => loadPregamePlayersPayload(teamScope), [teamScope]);
+  const roster = useMemo(() => {
+    const localUpdatedAt = Number(localRoster?.updatedAt || 0);
+    const remoteUpdatedAt = Number(remoteRoster?.updatedAt || 0);
+    if (remoteUpdatedAt >= localUpdatedAt) return normalizePregamePlayers(remoteRoster?.players || []);
+    return normalizePregamePlayers(localRoster?.players || []);
+  }, [localRoster, remoteRoster]);
+
+  useEffect(() => {
+    setDraftPlayers(roster.map((player) => ({
+      id: player.id,
+      name: player.name,
+      display: player.display,
+      personId: player.personId || "",
+      cap: player.cap === "" ? "" : Number(player.cap || 48),
+    })));
+  }, [roster]);
+
+  const updatePlayer = (playerId, field, value) => {
+    setDraftPlayers((current) => current.map((player) => {
+      if (player.id !== playerId) return player;
+      if (field === "cap") {
+        if (value === "") return { ...player, cap: "" };
+        const parsed = Number.parseInt(value, 10);
+        return { ...player, cap: Number.isFinite(parsed) ? parsed : player.cap };
+      }
+      return { ...player, [field]: value };
+    }));
+  };
+
+  const handleAdd = () => {
+    setDraftPlayers((current) => [
+      ...current,
+      { id: crypto.randomUUID(), name: "", display: "", personId: "", cap: 48 },
+    ]);
+  };
+
+  const handleDelete = (playerId) => {
+    setDraftPlayers((current) => current.filter((player) => player.id !== playerId));
+  };
+
+  const handleSave = async () => {
+    const normalized = normalizePregamePlayers(
+      draftPlayers.filter((player) => String(player.name || "").trim() && String(player.display || "").trim())
+    );
+    const updatedAt = Date.now();
+    setIsSaving(true);
+    persistPregamePlayers(teamScope, normalized, updatedAt);
+    await saveRemotePregamePlayers(teamScope, normalized, updatedAt);
+    await queryClient.invalidateQueries({ queryKey: ["admin-team-roster", teamScope] });
+    setIsSaving(false);
+  };
+
+  return (
+    <div className={styles.rosterCard}>
+      <div className={styles.rosterHeader}>
+        <h3 className={styles.subTitle}>{title}</h3>
+        <button type="button" className={styles.secondaryButton} onClick={handleAdd}>Add Player</button>
+      </div>
+      {isLoading ? (
+        <div className={styles.noticeCard}>Loading roster...</div>
+      ) : (
+        <>
+          <div className={styles.rosterGridHeader}>
+            <span>Name</span>
+            <span>Display</span>
+            <span>Player ID</span>
+            <span>Cap</span>
+            <span>Actions</span>
+          </div>
+          <div className={styles.rosterRows}>
+            {draftPlayers.map((player) => (
+              <div key={player.id} className={styles.rosterRow}>
+                <input value={player.name} onChange={(event) => updatePlayer(player.id, "name", event.target.value)} />
+                <input value={player.display} onChange={(event) => updatePlayer(player.id, "display", event.target.value)} />
+                <input value={player.personId || ""} onChange={(event) => updatePlayer(player.id, "personId", event.target.value)} />
+                <input value={player.cap === "" ? "" : String(player.cap)} onChange={(event) => updatePlayer(player.id, "cap", event.target.value)} />
+                <button type="button" className={styles.dangerButton} onClick={() => handleDelete(player.id)}>Delete</button>
+              </div>
+            ))}
+          </div>
+          <div className={styles.profileActions}>
+            <button type="button" className={styles.saveButton} disabled={isSaving} onClick={handleSave}>
+              {isSaving ? "Saving..." : "Save Roster"}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -327,6 +436,16 @@ export default function Admin() {
               />
             ))
           )}
+        </div>
+      </section>
+
+      <section className={styles.section}>
+        <div className={styles.sectionHeader}>
+          <h3 className={styles.subTitle}>Shared Team Rosters</h3>
+        </div>
+        <div className={styles.list}>
+          <TeamRosterCard teamScope="washington" title="Washington" />
+          <TeamRosterCard teamScope="capital_city" title="Capital City" />
         </div>
       </section>
     </div>

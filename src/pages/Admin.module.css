@@ -31,7 +31,8 @@
 .inviteCard,
 .noticeCard,
 .inviteRow,
-.profileCard {
+.profileCard,
+.rosterCard {
   border: 1px solid var(--border);
   background: var(--panel);
   border-radius: 14px;
@@ -120,6 +121,16 @@
   border: 1px solid var(--border);
 }
 
+.dangerButton {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-weight: 700;
+  cursor: pointer;
+  background: #ffebee;
+  color: #b71c1c;
+}
+
 .message {
   margin-top: 12px;
   border-radius: 10px;
@@ -158,6 +169,47 @@
   gap: 14px;
 }
 
+.rosterCard {
+  display: grid;
+  gap: 12px;
+}
+
+.rosterHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rosterGridHeader,
+.rosterRow {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr 100px 110px;
+  gap: 10px;
+  align-items: center;
+}
+
+.rosterGridHeader {
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.rosterRows {
+  display: grid;
+  gap: 10px;
+}
+
+.rosterRow input {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 0.95rem;
+}
+
 .profileHeader {
   display: flex;
   justify-content: space-between;
@@ -173,12 +225,18 @@
 
 @media (max-width: 768px) {
   .inviteRow,
-  .profileHeader {
+  .profileHeader,
+  .rosterHeader {
     flex-direction: column;
     align-items: flex-start;
   }
 
   .profileMeta {
     text-align: left;
+  }
+
+  .rosterGridHeader,
+  .rosterRow {
+    grid-template-columns: 1fr;
   }
 }

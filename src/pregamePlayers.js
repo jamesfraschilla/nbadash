@@ -76,6 +76,7 @@ export function normalizePregamePlayers(rawPlayers) {
         name: normalizePregamePlayerName(player?.name || ""),
         display: normalizePregamePlayerName(player?.display || ""),
         personId: normalizePersonId(player?.personId),
+        cap: player?.cap === "" ? "" : (Number.isFinite(Number(player?.cap)) ? Number(player.cap) : 48),
       }))
       .filter((player) => player.name && player.display)
   );
