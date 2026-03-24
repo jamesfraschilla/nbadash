@@ -6,6 +6,8 @@ import { PDFDocument, rgb } from "pdf-lib";
 import { fetchGame } from "../api.js";
 import {
   fetchRemotePregamePlayers,
+  getTeamBoxScorePlayers,
+  linkPregamePlayersToApiPlayers,
   loadPregamePlayersPayload,
   normalizePregamePlayers,
   persistPregamePlayers,
@@ -230,10 +232,11 @@ function normalizePlayers(rawPlayers, teamScope = "washington") {
     id: String(player?.id || `p${index + 1}`),
     name: normalizePlayerNameInput(player?.name),
     display: normalizePlayerNameInput(player?.display || player?.name),
+    personId: String(player?.personId || "").trim(),
     cap: player?.cap === "" ? "" : (Number.isFinite(Number(player?.cap)) ? Number(player.cap) : 48),
   }));
   while (normalized.length < 17) {
-    normalized.push({ id: `p${normalized.length + 1}`, name: "", display: "", cap: 48 });
+    normalized.push({ id: `p${normalized.length + 1}`, name: "", display: "", personId: "", cap: 48 });
   }
   const defaults = createDefaultPlayers(teamScope);
   return normalized.map((player, index) => ({
@@ -466,6 +469,7 @@ function playersStateKey(players) {
       id: String(player?.id || ""),
       name: String(player?.name || ""),
       display: String(player?.display || ""),
+      personId: String(player?.personId || ""),
       cap: player?.cap === "" ? "" : Number(player?.cap || 0),
     }))
   );
@@ -477,6 +481,7 @@ function mergePlayersWithPregameRoster(currentPlayers, rosterPlayers, teamScope 
     id: String(player.id || ""),
     name: normalizePlayerNameInput(player.display || player.name),
     display: normalizePlayerNameInput(player.display || player.name),
+    personId: String(player.personId || "").trim(),
   }));
 
   if (!normalizedRoster.length) return normalizedCurrent;
@@ -494,6 +499,7 @@ function mergePlayersWithPregameRoster(currentPlayers, rosterPlayers, teamScope 
       id: player.id || existing?.id || `p${index + 1}`,
       name: player.name,
       display: player.display,
+      personId: String(player.personId || existing?.personId || "").trim(),
       cap: existing?.cap === "" ? "" : (Number.isFinite(Number(existing?.cap)) ? Number(existing.cap) : 48),
     };
   });
@@ -507,6 +513,7 @@ function buildPregameRosterFromRotationsPlayers(players) {
       id: String(player?.id || ""),
       name: String(player?.name || "").trim(),
       display: String(player?.display || player?.name || "").trim(),
+      personId: String(player?.personId || "").trim(),
     }))
     .filter((player) => player.id && player.name && player.display);
 }
@@ -1403,7 +1410,7 @@ export default function Rotations() {
   const [playersOpen, setPlayersOpen] = useState(false);
   const [editingPlayerId, setEditingPlayerId] = useState(null);
   const [playerDrafts, setPlayerDrafts] = useState({});
-  const [newPlayerDraft, setNewPlayerDraft] = useState({ name: "", display: "" });
+  const [newPlayerDraft, setNewPlayerDraft] = useState({ name: "", display: "", personId: "" });
   const [playersHydrated, setPlayersHydrated] = useState(false);
   const [savedLineupsHydrated, setSavedLineupsHydrated] = useState(false);
   const [depthTemplateHydrated, setDepthTemplateHydrated] = useState(false);
@@ -1498,6 +1505,10 @@ export default function Rotations() {
   const monitoredTeam = useMemo(() => getRotationsScopeForGame(game), [game]);
   const monitoredTeamScope = monitoredTeam?.key || null;
   const rotationsAvailable = Boolean(monitoredTeamScope);
+  const trackedApiPlayers = useMemo(
+    () => getTeamBoxScorePlayers(game, monitoredTeamScope),
+    [game, monitoredTeamScope]
+  );
 
   const { data: remotePlayers, isFetched: remotePlayersFetched } = useQuery({
     queryKey: ["rotations-players-remote", monitoredTeamScope],
@@ -1596,7 +1607,7 @@ export default function Rotations() {
     setPlayersOpen(false);
     setEditingPlayerId(null);
     setPlayerDrafts({});
-    setNewPlayerDraft({ name: "", display: "" });
+    setNewPlayerDraft({ name: "", display: "", personId: "" });
     setCreateVersionOpen(false);
     setDeleteVersionTarget(null);
   }, [gameId, monitoredTeamScope]);
@@ -1691,6 +1702,17 @@ export default function Rotations() {
       return next;
     });
   }, [playersHydrated, monitoredTeamScope, remotePregamePlayers, remotePregamePlayersFetched]);
+
+  useEffect(() => {
+    if (!playersHydrated || !monitoredTeamScope || !trackedApiPlayers.length) return;
+    setPlayers((current) => {
+      const next = linkPregamePlayersToApiPlayers(current, trackedApiPlayers);
+      const nextKey = playersStateKey(next);
+      if (nextKey === playersStateKeyRef.current) return current;
+      playersStateKeyRef.current = nextKey;
+      return next;
+    });
+  }, [playersHydrated, monitoredTeamScope, trackedApiPlayers]);
 
   useEffect(() => {
     if (savedLineupsHydrated) return;
@@ -2040,11 +2062,11 @@ export default function Rotations() {
   };
 
   const openPlayersEditor = () => {
-    const hasDrafts = Object.keys(playerDrafts).length > 0 || newPlayerDraft.name || newPlayerDraft.display;
+    const hasDrafts = Object.keys(playerDrafts).length > 0 || newPlayerDraft.name || newPlayerDraft.display || newPlayerDraft.personId;
     if (!hasDrafts) {
       setPlayerDrafts(Object.fromEntries(sortedPlayers.map((player) => [
         player.id,
-        { name: player.name, display: player.display || player.name },
+        { name: player.name, display: player.display || player.name, personId: player.personId || "" },
       ])));
     }
     setPlayersOpen(true);
@@ -2054,7 +2076,7 @@ export default function Rotations() {
     setPlayersOpen(false);
     setEditingPlayerId(null);
     setPlayerDrafts({});
-    setNewPlayerDraft({ name: "", display: "" });
+    setNewPlayerDraft({ name: "", display: "", personId: "" });
   };
 
   const saveAllPlayerEdits = () => {
@@ -2064,8 +2086,9 @@ export default function Rotations() {
         if (!draft) return player;
         const name = normalizePlayerNameInput(draft.name);
         const display = normalizePlayerNameInput(draft.display || draft.name);
+        const personId = String(draft.personId || "").trim();
         if (!name || !display) return player;
-        return { ...player, name, display };
+        return { ...player, name, display, personId };
       });
       syncSharedPregameRoster(next);
       return next;
@@ -2079,7 +2102,7 @@ export default function Rotations() {
       syncSharedPregameRoster(next);
       return next;
     });
-    setNewPlayerDraft({ name: "", display: "" });
+    setNewPlayerDraft({ name: "", display: "", personId: "" });
     setEditingPlayerId(null);
     setPlayerDrafts((current) => {
       const next = { ...current };
@@ -2091,16 +2114,17 @@ export default function Rotations() {
   const handleAddPlayer = () => {
     const name = normalizePlayerNameInput(newPlayerDraft.name);
     const display = normalizePlayerNameInput(newPlayerDraft.display || newPlayerDraft.name);
+    const personId = String(newPlayerDraft.personId || "").trim();
     if (!name || !display) return;
     setPlayers((current) => {
       const next = normalizePlayers([
         ...current,
-        { id: crypto.randomUUID(), name, display, cap: 48 },
+        { id: crypto.randomUUID(), name, display, personId, cap: 48 },
       ], monitoredTeamScope || "washington");
       syncSharedPregameRoster(next);
       return next;
     });
-    setNewPlayerDraft({ name: "", display: "" });
+    setNewPlayerDraft({ name: "", display: "", personId: "" });
   };
 
   const updatePlayerNameDraft = (playerId, value) => {
@@ -3223,11 +3247,12 @@ export default function Rotations() {
             <div className={styles.playersGridHeader}>
               <span>Name</span>
               <span>Display</span>
+              <span>Player ID</span>
               <span>Actions</span>
             </div>
             <div className={styles.playersRows}>
               {sortedPlayers.map((player) => {
-                const draft = playerDrafts[player.id] || { name: player.name, display: player.display || player.name };
+                const draft = playerDrafts[player.id] || { name: player.name, display: player.display || player.name, personId: player.personId || "" };
                 return (
                   <div key={player.id} className={styles.playersRow}>
                     <input
@@ -3245,6 +3270,15 @@ export default function Rotations() {
                         ...current,
                         [player.id]: { ...draft, display: event.target.value },
                       }))}
+                    />
+                    <input
+                      className={styles.playersTextInput}
+                      value={draft.personId || ""}
+                      onChange={(event) => setPlayerDrafts((current) => ({
+                        ...current,
+                        [player.id]: { ...draft, personId: event.target.value },
+                      }))}
+                      placeholder="e.g. 203078"
                     />
                     <div className={styles.playersRowActions}>
                       <button
@@ -3272,6 +3306,12 @@ export default function Rotations() {
                   onChange={(event) => setNewPlayerDraft((current) => ({ ...current, display: event.target.value }))}
                   placeholder="Nickname / initials"
                 />
+                <input
+                  className={styles.playersTextInput}
+                  value={newPlayerDraft.personId || ""}
+                  onChange={(event) => setNewPlayerDraft((current) => ({ ...current, personId: event.target.value }))}
+                  placeholder="Player ID"
+                />
                 <div className={styles.playersRowActions}>
                   <button
                     type="button"
@@ -3284,7 +3324,7 @@ export default function Rotations() {
                   <button
                     type="button"
                     className={`${styles.playersIconButton} ${styles.playersIconDelete}`}
-                    onClick={() => setNewPlayerDraft({ name: "", display: "" })}
+                    onClick={() => setNewPlayerDraft({ name: "", display: "", personId: "" })}
                     aria-label="Clear new player"
                   >
                     ✕

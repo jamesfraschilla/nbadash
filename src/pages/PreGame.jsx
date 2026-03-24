@@ -5,9 +5,11 @@ import { format } from "date-fns";
 import { fetchGame } from "../api.js";
 import {
   fetchRemotePregamePlayers,
+  getTeamBoxScorePlayers,
   getPregameTeamScope,
   isCapitalCityTeam,
   isWashingtonTeam,
+  linkPregamePlayersToApiPlayers,
   loadPregamePlayersPayload,
   normalizePregamePlayerName,
   persistPregamePlayers,
@@ -597,7 +599,7 @@ export default function PreGame() {
   const [slotsOpen, setSlotsOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [playerDrafts, setPlayerDrafts] = useState({});
-  const [newPlayerDraft, setNewPlayerDraft] = useState({ name: "", display: "" });
+  const [newPlayerDraft, setNewPlayerDraft] = useState({ name: "", display: "", personId: "" });
   const [slotDrafts, setSlotDrafts] = useState([]);
   const [inlineTimeSlotId, setInlineTimeSlotId] = useState(null);
   const [inlineTimeDraft, setInlineTimeDraft] = useState("");
@@ -638,6 +640,10 @@ export default function PreGame() {
     isWashingtonTeam(game?.homeTeam) || isWashingtonTeam(game?.awayTeam)
   ), [game]);
   const supportedTeamGame = Boolean(trackedTeamScope);
+  const trackedApiPlayers = useMemo(
+    () => getTeamBoxScorePlayers(game, trackedTeamScope),
+    [game, trackedTeamScope]
+  );
 
   useEffect(() => {
     setPlayersHydrated(false);
@@ -771,6 +777,11 @@ export default function PreGame() {
   }, [playersHydrated, remotePlayers, trackedTeamScope]);
 
   useEffect(() => {
+    if (!playersHydrated || !trackedTeamScope || !trackedApiPlayers.length) return;
+    setPlayers((current) => linkPregamePlayersToApiPlayers(current, trackedApiPlayers));
+  }, [playersHydrated, trackedTeamScope, trackedApiPlayers]);
+
+  useEffect(() => {
     if (!slotsHydrated || !gameId || !remoteSchedule?.slots?.length) return;
     const remoteUpdatedAt = Number(remoteSchedule?.updatedAt || 0);
     if (!remoteUpdatedAt || remoteUpdatedAt <= slotsUpdatedAtRef.current) return;
@@ -797,11 +808,11 @@ export default function PreGame() {
   };
 
   const openPlayersEditor = () => {
-    const hasDrafts = Object.keys(playerDrafts).length > 0 || newPlayerDraft.name || newPlayerDraft.display;
+    const hasDrafts = Object.keys(playerDrafts).length > 0 || newPlayerDraft.name || newPlayerDraft.display || newPlayerDraft.personId;
     if (!hasDrafts) {
       setPlayerDrafts(Object.fromEntries(sortedPlayers.map((player) => [
         player.id,
-        { name: player.name, display: player.display },
+        { name: player.name, display: player.display, personId: player.personId || "" },
       ])));
     }
     setPlayersOpen(true);
@@ -810,7 +821,7 @@ export default function PreGame() {
   const cancelPlayersEditor = () => {
     setPlayersOpen(false);
     setPlayerDrafts({});
-    setNewPlayerDraft({ name: "", display: "" });
+    setNewPlayerDraft({ name: "", display: "", personId: "" });
   };
 
   const updateSlotById = (slotId, updater) => {
@@ -823,8 +834,9 @@ export default function PreGame() {
       if (!draft) return player;
       const name = normalizePregamePlayerName(draft.name);
       const display = normalizePregamePlayerName(draft.display);
+      const personId = String(draft.personId || "").trim();
       if (!name || !display) return player;
-      return { ...player, name, display };
+      return { ...player, name, display, personId };
     })));
     cancelPlayersEditor();
   };
@@ -845,12 +857,13 @@ export default function PreGame() {
   const handleAddPlayer = () => {
     const name = normalizePregamePlayerName(newPlayerDraft.name);
     const display = normalizePregamePlayerName(newPlayerDraft.display);
+    const personId = String(newPlayerDraft.personId || "").trim();
     if (!name || !display) return;
     setPlayers((current) => sortPlayersByLastName([
       ...current,
-      { id: crypto.randomUUID(), name, display },
+      { id: crypto.randomUUID(), name, display, personId },
     ]));
-    setNewPlayerDraft({ name: "", display: "" });
+    setNewPlayerDraft({ name: "", display: "", personId: "" });
   };
 
   const handleExport = async (formatKey) => {
@@ -1112,11 +1125,12 @@ export default function PreGame() {
             <div className={styles.gridHeader}>
               <span>Name</span>
               <span>Display</span>
+              <span>Player ID</span>
               <span>Actions</span>
             </div>
             <div className={styles.playerRows}>
               {sortedPlayers.map((player) => {
-                const draft = playerDrafts[player.id] || { name: player.name, display: player.display };
+                const draft = playerDrafts[player.id] || { name: player.name, display: player.display, personId: player.personId || "" };
                 return (
                   <div key={player.id} className={styles.playerRow}>
                     <input
@@ -1134,6 +1148,15 @@ export default function PreGame() {
                         ...current,
                         [player.id]: { ...draft, display: event.target.value },
                       }))}
+                    />
+                    <input
+                      className={styles.textInput}
+                      value={draft.personId || ""}
+                      onChange={(event) => setPlayerDrafts((current) => ({
+                        ...current,
+                        [player.id]: { ...draft, personId: event.target.value },
+                      }))}
+                      placeholder="e.g. 203078"
                     />
                     <div className={styles.rowActions}>
                       <button
@@ -1162,6 +1185,12 @@ export default function PreGame() {
                   onChange={(event) => setNewPlayerDraft((current) => ({ ...current, display: event.target.value }))}
                   placeholder="Nickname / initials"
                 />
+                <input
+                  className={styles.textInput}
+                  value={newPlayerDraft.personId || ""}
+                  onChange={(event) => setNewPlayerDraft((current) => ({ ...current, personId: event.target.value }))}
+                  placeholder="Player ID"
+                />
                 <div className={styles.rowActions}>
                   <button
                     type="button"
@@ -1173,8 +1202,8 @@ export default function PreGame() {
                   </button>
                   <button
                     type="button"
-                    className={`${styles.iconButton} ${styles.iconDelete}`}
-                    onClick={() => setNewPlayerDraft({ name: "", display: "" })}
+                      className={`${styles.iconButton} ${styles.iconDelete}`}
+                    onClick={() => setNewPlayerDraft({ name: "", display: "", personId: "" })}
                     aria-label="Clear new player"
                   >
                     ✕

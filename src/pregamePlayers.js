@@ -30,6 +30,21 @@ export function normalizePregamePlayerName(value) {
   return String(value || "").trim().replace(/\s+/g, " ");
 }
 
+function normalizePersonId(value) {
+  const normalized = String(value || "").trim();
+  return normalized || "";
+}
+
+function normalizeMatchName(value) {
+  const normalized = normalizePregamePlayerName(value)
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s]/g, " ")
+    .replace(/\b(JR|SR|II|III|IV|V)\b$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return normalized;
+}
+
 function getLastName(name) {
   const parts = normalizePregamePlayerName(name).split(" ").filter(Boolean);
   return parts.length ? parts[parts.length - 1].toLowerCase() : "";
@@ -60,9 +75,79 @@ export function normalizePregamePlayers(rawPlayers) {
         id: String(player?.id || crypto.randomUUID()),
         name: normalizePregamePlayerName(player?.name || ""),
         display: normalizePregamePlayerName(player?.display || ""),
+        personId: normalizePersonId(player?.personId),
       }))
       .filter((player) => player.name && player.display)
   );
+}
+
+export function getTeamBoxScorePlayers(game, teamScope) {
+  if (!game || !teamScope) return [];
+  const homeMatches = teamScope === "washington"
+    ? isWashingtonTeam(game.homeTeam)
+    : isCapitalCityTeam(game.homeTeam);
+  const awayMatches = teamScope === "washington"
+    ? isWashingtonTeam(game.awayTeam)
+    : isCapitalCityTeam(game.awayTeam);
+  if (homeMatches) return Array.isArray(game?.boxScore?.home?.players) ? game.boxScore.home.players : [];
+  if (awayMatches) return Array.isArray(game?.boxScore?.away?.players) ? game.boxScore.away.players : [];
+  return [];
+}
+
+function buildApiPlayerNameCandidates(player) {
+  const candidates = [
+    player?.fullName,
+    player?.name,
+    [player?.firstName, player?.familyName].filter(Boolean).join(" "),
+  ];
+  return candidates
+    .map(normalizeMatchName)
+    .filter(Boolean);
+}
+
+export function linkPregamePlayersToApiPlayers(players, apiPlayers) {
+  if (!Array.isArray(players) || !players.length || !Array.isArray(apiPlayers) || !apiPlayers.length) {
+    return players;
+  }
+
+  const apiByName = new Map();
+  apiPlayers.forEach((player) => {
+    const personId = normalizePersonId(player?.personId);
+    if (!personId) return;
+    buildApiPlayerNameCandidates(player).forEach((candidate) => {
+      if (!candidate) return;
+      const existing = apiByName.get(candidate);
+      if (!existing) {
+        apiByName.set(candidate, { personId, ambiguous: false });
+        return;
+      }
+      if (existing.personId !== personId) {
+        apiByName.set(candidate, { personId: "", ambiguous: true });
+      }
+    });
+  });
+
+  let changed = false;
+  const nextPlayers = players.map((player) => {
+    const currentPersonId = normalizePersonId(player?.personId);
+    if (currentPersonId) return player;
+
+    const playerCandidates = [
+      normalizeMatchName(player?.name),
+      normalizeMatchName(player?.display),
+    ].filter(Boolean);
+
+    for (const candidate of playerCandidates) {
+      const match = apiByName.get(candidate);
+      if (!match || match.ambiguous || !match.personId) continue;
+      changed = true;
+      return { ...player, personId: match.personId };
+    }
+
+    return player;
+  });
+
+  return changed ? nextPlayers : players;
 }
 
 function parseRemotePayload(note, key) {

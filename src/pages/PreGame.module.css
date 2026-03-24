@@ -240,7 +240,7 @@
 
 .gridHeader {
   display: grid;
-  grid-template-columns: 1.2fr 1fr 104px;
+  grid-template-columns: 1.2fr 1fr 1fr 104px;
   gap: 10px;
   font-size: 16px;
   margin-bottom: 8px;
@@ -253,7 +253,7 @@
 
 .playerRow {
   display: grid;
-  grid-template-columns: 1.2fr 1fr 104px;
+  grid-template-columns: 1.2fr 1fr 1fr 104px;
   gap: 10px;
 }
 
