@@ -88,6 +88,31 @@ function pfClass(fouls, period) {
   return styles.pfRed;
 }
 
+function parseMinutesToSeconds(value) {
+  const normalized = String(value || "").trim();
+  const match = /^(\d+):(\d{2})$/.exec(normalized);
+  if (!match) return null;
+  const minutes = Number(match[1]);
+  const seconds = Number(match[2]);
+  if (!Number.isFinite(minutes) || !Number.isFinite(seconds)) return null;
+  return minutes * 60 + seconds;
+}
+
+function minuteCapClass(player, minuteCapsByPersonId) {
+  const personId = String(player?.personId || "").trim();
+  if (!personId || !(minuteCapsByPersonId instanceof Map)) return "";
+  const capMinutes = minuteCapsByPersonId.get(personId);
+  if (capMinutes === "" || capMinutes == null) return "";
+  const safeCap = Number(capMinutes);
+  if (!Number.isFinite(safeCap) || safeCap <= 0) return "";
+  const liveSeconds = parseMinutesToSeconds(formatMinutes(player?.minutes));
+  if (!Number.isFinite(liveSeconds)) return "";
+  const capSeconds = safeCap * 60;
+  if (liveSeconds >= capSeconds) return styles.minutesRed;
+  if (liveSeconds >= capSeconds * 0.85) return styles.minutesYellow;
+  return "";
+}
+
 export default function BoxScoreTable({
   teamLabel,
   teamLogo,
@@ -97,6 +122,7 @@ export default function BoxScoreTable({
   currentPeriod,
   ratings = {},
   variant = "full",
+  minuteCapsByPersonId = new Map(),
 }) {
   if (!boxScore) return null;
 
@@ -156,6 +182,7 @@ export default function BoxScoreTable({
         {boxScore.players.map((player) => {
           const stats = playerLine(player);
           const pageUrl = playerPageUrl(player, teamId);
+          const minutesClassName = minuteCapClass(player, minuteCapsByPersonId);
           return (
               <tr key={player.personId}>
                 <td className={styles.playerNumberCol}>
@@ -185,7 +212,11 @@ export default function BoxScoreTable({
                     key={col}
                     className={`${shadedColumns.has(col) ? styles.shadedColumn : ""} ${variant === "atc" && col === "PF" ? styles.atcSeparator : ""}`}
                   >
-                    {col === "PF" ? <span className={pfClass(stats[col], currentPeriod)}>{stats[col]}</span> : stats[col]}
+                    {col === "PF"
+                      ? <span className={pfClass(stats[col], currentPeriod)}>{stats[col]}</span>
+                      : col === "MIN" && minutesClassName
+                        ? <span className={minutesClassName}>{stats[col]}</span>
+                        : stats[col]}
                   </td>
                 ))}
               </tr>

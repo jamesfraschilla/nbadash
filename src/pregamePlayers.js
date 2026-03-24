@@ -26,6 +26,12 @@ export function getPregameTeamScope(game) {
   return null;
 }
 
+export function getPregameTeamScopeForTeam(team) {
+  if (isWashingtonTeam(team)) return "washington";
+  if (isCapitalCityTeam(team)) return "capital_city";
+  return null;
+}
+
 export function normalizePregamePlayerName(value) {
   return String(value || "").trim().replace(/\s+/g, " ");
 }

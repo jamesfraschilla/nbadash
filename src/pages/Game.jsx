@@ -26,6 +26,11 @@ import CreatingDisruption from "../components/CreatingDisruption.jsx";
 import SegmentSelector from "../components/SegmentSelector.jsx";
 import { fetchPublishedOrderForOfficials } from "../officialAssignments.js";
 import {
+  fetchRemotePregamePlayers,
+  getPregameTeamScopeForTeam,
+  loadPregamePlayersPayload,
+} from "../pregamePlayers.js";
+import {
   aggregateSegmentStats,
   computeKills,
   countPossessionsByTeam,
@@ -564,6 +569,27 @@ export default function Game({ variant = "full" }) {
     refetchIntervalInBackground: true,
   });
 
+  const awayTeamScope = getPregameTeamScopeForTeam(game?.awayTeam);
+  const homeTeamScope = getPregameTeamScopeForTeam(game?.homeTeam);
+
+  const { data: awayRemoteRoster } = useQuery({
+    queryKey: ["game-roster-caps", awayTeamScope],
+    queryFn: () => fetchRemotePregamePlayers(awayTeamScope),
+    enabled: Boolean(awayTeamScope),
+    staleTime: 10_000,
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: true,
+  });
+
+  const { data: homeRemoteRoster } = useQuery({
+    queryKey: ["game-roster-caps", homeTeamScope],
+    queryFn: () => fetchRemotePregamePlayers(homeTeamScope),
+    enabled: Boolean(homeTeamScope),
+    staleTime: 10_000,
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: true,
+  });
+
   const { data: periodSnapshots = [] } = useQuery({
     queryKey: ["period-snapshots", gameId],
     queryFn: async () => {
@@ -623,6 +649,28 @@ export default function Game({ variant = "full" }) {
     ...(boxScore?.away?.players || []),
     ...(boxScore?.home?.players || []),
   ];
+
+  const getRosterForScope = (teamScope, remoteRoster) => {
+    if (!teamScope) return [];
+    const localRoster = loadPregamePlayersPayload(teamScope);
+    const localUpdatedAt = Number(localRoster?.updatedAt || 0);
+    const remoteUpdatedAt = Number(remoteRoster?.updatedAt || 0);
+    return remoteUpdatedAt >= localUpdatedAt
+      ? (remoteRoster?.players || [])
+      : (localRoster?.players || []);
+  };
+
+  const awayMinuteCapsByPersonId = useMemo(() => new Map(
+    getRosterForScope(awayTeamScope, awayRemoteRoster)
+      .map((player) => [String(player?.personId || "").trim(), player?.cap])
+      .filter(([personId, cap]) => personId && cap !== "" && cap != null)
+  ), [awayTeamScope, awayRemoteRoster]);
+
+  const homeMinuteCapsByPersonId = useMemo(() => new Map(
+    getRosterForScope(homeTeamScope, homeRemoteRoster)
+      .map((player) => [String(player?.personId || "").trim(), player?.cap])
+      .filter(([personId, cap]) => personId && cap !== "" && cap != null)
+  ), [homeTeamScope, homeRemoteRoster]);
 
   const currentSnapshot = useMemo(() => buildSnapshot(boxScore), [boxScore]);
 
@@ -2056,6 +2104,7 @@ export default function Game({ variant = "full" }) {
           ratings={{ ortg: ortgAway, drtg: drtgAway }}
           currentPeriod={game.period}
           variant={variant}
+          minuteCapsByPersonId={awayMinuteCapsByPersonId}
         />
         <BoxScoreTable
           teamLabel={homeTeam.teamTricode}
@@ -2066,6 +2115,7 @@ export default function Game({ variant = "full" }) {
           ratings={{ ortg: ortgHome, drtg: drtgHome }}
           currentPeriod={game.period}
           variant={variant}
+          minuteCapsByPersonId={homeMinuteCapsByPersonId}
         />
       </section>
       <OfficialsExportPanel

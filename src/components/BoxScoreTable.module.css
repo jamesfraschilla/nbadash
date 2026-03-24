@@ -139,6 +139,16 @@
   font-weight: 700;
 }
 
+.minutesYellow {
+  color: var(--pf-yellow);
+  font-weight: 700;
+}
+
+.minutesRed {
+  color: var(--pf-red);
+  font-weight: 700;
+}
+
 @media (max-width: 768px) {
   .table {
     min-width: 100%;
