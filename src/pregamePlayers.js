@@ -189,9 +189,11 @@ export function loadPregamePlayersPayload(teamScope) {
 }
 
 export function resolveSharedPregamePlayersPayload(localPayload, remotePayload) {
+  const localUpdatedAt = Number(localPayload?.updatedAt || 0);
+  const localPlayers = normalizePregamePlayers(localPayload?.players || []);
   const remoteUpdatedAt = Number(remotePayload?.updatedAt || 0);
   const remotePlayers = normalizePregamePlayers(remotePayload?.players || []);
-  if (remoteUpdatedAt > 0 || remotePlayers.length) {
+  if (remoteUpdatedAt > localUpdatedAt) {
     return {
       updatedAt: remoteUpdatedAt,
       players: remotePlayers,
@@ -200,8 +202,8 @@ export function resolveSharedPregamePlayersPayload(localPayload, remotePayload) 
   }
 
   return {
-    updatedAt: Number(localPayload?.updatedAt || 0),
-    players: normalizePregamePlayers(localPayload?.players || []),
+    updatedAt: localUpdatedAt,
+    players: localPlayers,
     source: "local",
   };
 }
@@ -236,7 +238,7 @@ export async function saveRemotePregamePlayers(teamScope, players, updatedAt = D
   if (!supabase || !teamScope) return;
   const gameId = PREGAME_GLOBAL_PLAYERS_GAME_IDS[teamScope];
   if (!gameId) return;
-  await supabase.from("pbp_highlights").upsert(
+  const { error } = await supabase.from("pbp_highlights").upsert(
     {
       game_id: gameId,
       action_number: PREGAME_ACTION_PAYLOAD,
@@ -247,4 +249,5 @@ export async function saveRemotePregamePlayers(teamScope, players, updatedAt = D
     },
     { onConflict: "game_id,action_number" }
   );
+  if (error) throw error;
 }

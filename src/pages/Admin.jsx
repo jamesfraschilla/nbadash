@@ -106,13 +106,15 @@ function TeamRosterCard({ teamScope, title }) {
   const queryClient = useQueryClient();
   const [draftPlayers, setDraftPlayers] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("");
+  const [localRosterVersion, setLocalRosterVersion] = useState(0);
 
   const { data: remoteRoster, isLoading } = useQuery({
     queryKey: ["admin-team-roster", teamScope],
     queryFn: () => fetchRemotePregamePlayers(teamScope),
   });
 
-  const localRoster = useMemo(() => loadPregamePlayersPayload(teamScope), [teamScope]);
+  const localRoster = useMemo(() => loadPregamePlayersPayload(teamScope), [teamScope, localRosterVersion]);
   const roster = useMemo(
     () => resolveSharedPregamePlayersPayload(localRoster, remoteRoster).players,
     [localRoster, remoteRoster]
@@ -156,11 +158,19 @@ function TeamRosterCard({ teamScope, title }) {
       draftPlayers.filter((player) => String(player.name || "").trim() && String(player.display || "").trim())
     );
     const updatedAt = Date.now();
+    setSaveMessage("");
     setIsSaving(true);
-    persistPregamePlayers(teamScope, normalized, updatedAt);
-    await saveRemotePregamePlayers(teamScope, normalized, updatedAt);
-    await queryClient.invalidateQueries({ queryKey: ["admin-team-roster", teamScope] });
-    setIsSaving(false);
+    try {
+      persistPregamePlayers(teamScope, normalized, updatedAt);
+      setLocalRosterVersion(updatedAt);
+      await saveRemotePregamePlayers(teamScope, normalized, updatedAt);
+      await queryClient.invalidateQueries({ queryKey: ["admin-team-roster", teamScope] });
+      setSaveMessage("Roster saved.");
+    } catch (error) {
+      setSaveMessage(error?.message || "Unable to save roster.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -196,6 +206,7 @@ function TeamRosterCard({ teamScope, title }) {
               {isSaving ? "Saving..." : "Save Roster"}
             </button>
           </div>
+          {saveMessage ? <div className={styles.message}>{saveMessage}</div> : null}
         </>
       )}
     </div>
