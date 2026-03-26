@@ -193,7 +193,7 @@ export function resolveSharedPregamePlayersPayload(localPayload, remotePayload) 
   const localPlayers = normalizePregamePlayers(localPayload?.players || []);
   const remoteUpdatedAt = Number(remotePayload?.updatedAt || 0);
   const remotePlayers = normalizePregamePlayers(remotePayload?.players || []);
-  if (remoteUpdatedAt > localUpdatedAt) {
+  if (remoteUpdatedAt > 0 || remotePlayers.length) {
     return {
       updatedAt: remoteUpdatedAt,
       players: remotePlayers,
