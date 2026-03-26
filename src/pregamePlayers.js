@@ -2,11 +2,8 @@ import { supabase } from "./supabaseClient.js";
 
 const LEGACY_PLAYERS_STORAGE_KEY = "pregame:players:v1";
 const PLAYERS_STORAGE_KEY_PREFIX = "pregame:players:v2:";
-const PREGAME_ACTION_PAYLOAD = 900000001;
-const PREGAME_GLOBAL_PLAYERS_GAME_IDS = {
-  washington: "9999999901",
-  capital_city: "9999999903",
-};
+const SHARED_ROSTER_TABLE = "rotations_shared_state";
+const SHARED_ROSTER_SCOPE_TYPE = "shared_roster";
 
 export function isWashingtonTeam(team) {
   const tricode = String(team?.teamTricode || "").toUpperCase();
@@ -218,36 +215,35 @@ export function persistPregamePlayers(teamScope, players, updatedAt = Date.now()
 
 export async function fetchRemotePregamePlayers(teamScope) {
   if (!supabase || !teamScope) return null;
-  const gameId = PREGAME_GLOBAL_PLAYERS_GAME_IDS[teamScope];
-  if (!gameId) return null;
   const { data, error } = await supabase
-    .from("pbp_highlights")
-    .select("note")
-    .eq("game_id", gameId)
-    .eq("action_number", PREGAME_ACTION_PAYLOAD)
+    .from(SHARED_ROSTER_TABLE)
+    .select("payload,updated_at")
+    .eq("scope_type", SHARED_ROSTER_SCOPE_TYPE)
+    .eq("scope_key", teamScope)
     .maybeSingle();
   if (error) return null;
-  const payload = parseRemotePayload(data?.note, "players");
+  const payload = {
+    updatedAt: data?.updated_at ? new Date(data.updated_at).getTime() : 0,
+    players: normalizePregamePlayers(data?.payload?.players || []),
+  };
   return {
     updatedAt: payload.updatedAt,
-    players: normalizePregamePlayers(payload.value),
+    players: payload.players,
   };
 }
 
 export async function saveRemotePregamePlayers(teamScope, players, updatedAt = Date.now()) {
   if (!supabase || !teamScope) return;
-  const gameId = PREGAME_GLOBAL_PLAYERS_GAME_IDS[teamScope];
-  if (!gameId) return;
-  const { error } = await supabase.from("pbp_highlights").upsert(
+  const { error } = await supabase.from(SHARED_ROSTER_TABLE).upsert(
     {
-      game_id: gameId,
-      action_number: PREGAME_ACTION_PAYLOAD,
-      note: JSON.stringify({
+      scope_type: SHARED_ROSTER_SCOPE_TYPE,
+      scope_key: teamScope,
+      payload: {
         updatedAt,
         players: sortPregamePlayersByLastName(players),
-      }),
+      },
     },
-    { onConflict: "game_id,action_number" }
+    { onConflict: "scope_type,scope_key" }
   );
   if (error) throw error;
 }
