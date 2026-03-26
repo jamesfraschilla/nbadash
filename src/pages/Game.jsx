@@ -29,6 +29,7 @@ import {
   fetchRemotePregamePlayers,
   getPregameTeamScopeForTeam,
   loadPregamePlayersPayload,
+  resolveSharedPregamePlayersPayload,
 } from "../pregamePlayers.js";
 import {
   aggregateSegmentStats,
@@ -653,11 +654,7 @@ export default function Game({ variant = "full" }) {
   const getRosterForScope = (teamScope, remoteRoster) => {
     if (!teamScope) return [];
     const localRoster = loadPregamePlayersPayload(teamScope);
-    const localUpdatedAt = Number(localRoster?.updatedAt || 0);
-    const remoteUpdatedAt = Number(remoteRoster?.updatedAt || 0);
-    return remoteUpdatedAt >= localUpdatedAt
-      ? (remoteRoster?.players || [])
-      : (localRoster?.players || []);
+    return resolveSharedPregamePlayersPayload(localRoster, remoteRoster).players;
   };
 
   const awayMinuteCapsByPersonId = useMemo(() => new Map(

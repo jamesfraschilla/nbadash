@@ -13,6 +13,7 @@ import {
   loadPregamePlayersPayload,
   normalizePregamePlayerName,
   persistPregamePlayers,
+  resolveSharedPregamePlayersPayload,
   saveRemotePregamePlayers,
 } from "../pregamePlayers.js";
 import { supabase } from "../supabaseClient.js";
@@ -655,18 +656,11 @@ export default function PreGame() {
     if (!trackedTeamScope) return;
     if (supabase && !remotePlayersFetched) return;
     const localPayload = loadPregamePlayersPayload(trackedTeamScope);
-    const localUpdatedAt = Number(localPayload?.updatedAt || 0);
-    const remoteUpdatedAt = Number(remotePlayers?.updatedAt || 0);
+    const sharedPayload = resolveSharedPregamePlayersPayload(localPayload, remotePlayers);
 
-    if (remotePlayers?.players?.length && remoteUpdatedAt >= localUpdatedAt) {
-      setPlayers(remotePlayers.players);
-      playersUpdatedAtRef.current = remoteUpdatedAt;
-    } else if (localPayload?.players?.length) {
-      setPlayers(localPayload.players);
-      playersUpdatedAtRef.current = localUpdatedAt;
-    } else if (remotePlayers?.players?.length) {
-      setPlayers(remotePlayers.players);
-      playersUpdatedAtRef.current = remoteUpdatedAt;
+    if (sharedPayload.players.length) {
+      setPlayers(sharedPayload.players);
+      playersUpdatedAtRef.current = sharedPayload.updatedAt;
     } else {
       setPlayers([]);
       playersUpdatedAtRef.current = Date.now();

@@ -11,6 +11,7 @@ import {
   loadPregamePlayersPayload,
   normalizePregamePlayers,
   persistPregamePlayers,
+  resolveSharedPregamePlayersPayload,
   saveRemotePregamePlayers,
 } from "../pregamePlayers.js";
 import { supabase } from "../supabaseClient.js";
@@ -1625,11 +1626,10 @@ export default function Rotations() {
     if (supabase && (!remotePregamePlayersFetched || !legacyRemotePlayersFetched)) return;
 
     const localSharedPayload = loadPregamePlayersPayload(monitoredTeamScope);
-    const localSharedUpdatedAt = Number(localSharedPayload?.updatedAt || 0);
+    const sharedPayload = resolveSharedPregamePlayersPayload(localSharedPayload, remotePregamePlayers);
     const remoteSharedUpdatedAt = Number(remotePregamePlayers?.updatedAt || 0);
-    const sharedRoster = remoteSharedUpdatedAt >= localSharedUpdatedAt
-      ? (remotePregamePlayers?.players || [])
-      : (localSharedPayload?.players || []);
+    const localSharedUpdatedAt = Number(localSharedPayload?.updatedAt || 0);
+    const sharedRoster = sharedPayload.players;
 
     const localLegacyPayload = loadLegacyPlayersPayload(monitoredTeamScope);
     const localLegacyUpdatedAt = Number(localLegacyPayload?.updatedAt || 0);
@@ -1669,11 +1669,7 @@ export default function Rotations() {
     if (supabase && !remotePregamePlayersFetched) return;
 
     const localPregamePayload = loadPregamePlayersPayload(monitoredTeamScope);
-    const localUpdatedAt = Number(localPregamePayload?.updatedAt || 0);
-    const remoteUpdatedAt = Number(remotePregamePlayers?.updatedAt || 0);
-    const rosterSource = remoteUpdatedAt >= localUpdatedAt
-      ? (remotePregamePlayers?.players || [])
-      : (localPregamePayload?.players || []);
+    const rosterSource = resolveSharedPregamePlayersPayload(localPregamePayload, remotePregamePlayers).players;
     if (!rosterSource.length) return;
 
     setPlayers((current) => {

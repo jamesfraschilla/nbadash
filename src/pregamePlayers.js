@@ -188,6 +188,24 @@ export function loadPregamePlayersPayload(teamScope) {
   };
 }
 
+export function resolveSharedPregamePlayersPayload(localPayload, remotePayload) {
+  const remoteUpdatedAt = Number(remotePayload?.updatedAt || 0);
+  const remotePlayers = normalizePregamePlayers(remotePayload?.players || []);
+  if (remoteUpdatedAt > 0 || remotePlayers.length) {
+    return {
+      updatedAt: remoteUpdatedAt,
+      players: remotePlayers,
+      source: "remote",
+    };
+  }
+
+  return {
+    updatedAt: Number(localPayload?.updatedAt || 0),
+    players: normalizePregamePlayers(localPayload?.players || []),
+    source: "local",
+  };
+}
+
 export function persistPregamePlayers(teamScope, players, updatedAt = Date.now()) {
   if (typeof window === "undefined" || !teamScope) return;
   window.localStorage.setItem(playersStorageKey(teamScope), JSON.stringify({

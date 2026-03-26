@@ -8,6 +8,7 @@ import {
   loadPregamePlayersPayload,
   normalizePregamePlayers,
   persistPregamePlayers,
+  resolveSharedPregamePlayersPayload,
   saveRemotePregamePlayers,
 } from "../pregamePlayers.js";
 import styles from "./Admin.module.css";
@@ -112,12 +113,10 @@ function TeamRosterCard({ teamScope, title }) {
   });
 
   const localRoster = useMemo(() => loadPregamePlayersPayload(teamScope), [teamScope]);
-  const roster = useMemo(() => {
-    const localUpdatedAt = Number(localRoster?.updatedAt || 0);
-    const remoteUpdatedAt = Number(remoteRoster?.updatedAt || 0);
-    if (remoteUpdatedAt >= localUpdatedAt) return normalizePregamePlayers(remoteRoster?.players || []);
-    return normalizePregamePlayers(localRoster?.players || []);
-  }, [localRoster, remoteRoster]);
+  const roster = useMemo(
+    () => resolveSharedPregamePlayersPayload(localRoster, remoteRoster).players,
+    [localRoster, remoteRoster]
+  );
 
   useEffect(() => {
     setDraftPlayers(roster.map((player) => ({
