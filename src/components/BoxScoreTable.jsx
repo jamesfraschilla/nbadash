@@ -62,7 +62,7 @@ function inferLeagueFromTeamId(teamId) {
 function playerPageUrl(player, teamId) {
   if (!player?.personId) return null;
   if (inferLeagueFromTeamId(teamId) === "gleague") {
-    return `https://stats.gleague.nba.com/player/${player.personId}/`;
+    return `https://gleague.nba.com/player/${player.personId}/`;
   }
   return `https://www.nba.com/stats/player/${player.personId}`;
 }
