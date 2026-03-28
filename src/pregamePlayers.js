@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient.js";
+import { readLocalStorage, writeLocalStorage } from "./storage.js";
 
 const LEGACY_PLAYERS_STORAGE_KEY = "pregame:players:v1";
 const PLAYERS_STORAGE_KEY_PREFIX = "pregame:players:v2:";
@@ -171,8 +172,8 @@ function playersStorageKey(teamScope) {
 
 export function loadPregamePlayersPayload(teamScope) {
   if (typeof window === "undefined" || !teamScope) return null;
-  const scopedRaw = window.localStorage.getItem(playersStorageKey(teamScope));
-  const raw = scopedRaw || (teamScope === "washington" ? window.localStorage.getItem(LEGACY_PLAYERS_STORAGE_KEY) : null);
+  const scopedRaw = readLocalStorage(playersStorageKey(teamScope));
+  const raw = scopedRaw || (teamScope === "washington" ? readLocalStorage(LEGACY_PLAYERS_STORAGE_KEY) : null);
   if (!raw) return null;
   const parsed = safeParseJson(raw, null);
   if (Array.isArray(parsed)) {
@@ -207,7 +208,7 @@ export function resolveSharedPregamePlayersPayload(localPayload, remotePayload) 
 
 export function persistPregamePlayers(teamScope, players, updatedAt = Date.now()) {
   if (typeof window === "undefined" || !teamScope) return;
-  window.localStorage.setItem(playersStorageKey(teamScope), JSON.stringify({
+  writeLocalStorage(playersStorageKey(teamScope), JSON.stringify({
     updatedAt,
     players: sortPregamePlayersByLastName(players),
   }));

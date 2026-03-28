@@ -1,8 +1,6 @@
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import fontkit from "@pdf-lib/fontkit";
-import { PDFDocument, rgb } from "pdf-lib";
 import { fetchGame } from "../api.js";
 import {
   fetchRemotePregamePlayers,
@@ -14,9 +12,8 @@ import {
   resolveSharedPregamePlayersPayload,
   saveRemotePregamePlayers,
 } from "../pregamePlayers.js";
+import { readLocalStorage, writeLocalStorage } from "../storage.js";
 import { supabase } from "../supabaseClient.js";
-import wizardsLogoUrl from "../assets/WWizards_Primary_Icon.png";
-import dinAltFontUrl from "../assets/fonts/DINalt.ttf";
 import styles from "./Rotations.module.css";
 
 const GAME_STORAGE_PREFIX = "rotations:game:v1:";
@@ -361,7 +358,7 @@ function getVersionById(gameState, versionId, teamScope = "washington") {
 
 function loadLegacyPlayersPayload(teamScope) {
   if (typeof window === "undefined" || !teamScope) return null;
-  const raw = window.localStorage.getItem(playersStorageKey(teamScope));
+  const raw = readLocalStorage(playersStorageKey(teamScope));
   if (!raw) return null;
   const parsed = safeParseJson(raw, null);
   if (Array.isArray(parsed)) {
@@ -376,7 +373,7 @@ function loadLegacyPlayersPayload(teamScope) {
 
 function loadDepthTemplatePayload(teamScope) {
   if (typeof window === "undefined" || !teamScope) return null;
-  const raw = window.localStorage.getItem(depthTemplateStorageKey(teamScope));
+  const raw = readLocalStorage(depthTemplateStorageKey(teamScope));
   if (!raw) return null;
   const parsed = safeParseJson(raw, null);
   if (!parsed || typeof parsed !== "object") return null;
@@ -392,7 +389,7 @@ function loadDepthTemplatePayload(teamScope) {
 
 function persistDepthTemplate(teamScope, depthChart, updatedAt = Date.now(), sourceGameId = "") {
   if (typeof window === "undefined" || !teamScope) return;
-  window.localStorage.setItem(depthTemplateStorageKey(teamScope), JSON.stringify({
+  writeLocalStorage(depthTemplateStorageKey(teamScope), JSON.stringify({
     updatedAt,
     depthChart: normalizeDepthChart(depthChart, teamScope),
     sourceGameId: String(sourceGameId || ""),
@@ -401,7 +398,7 @@ function persistDepthTemplate(teamScope, depthChart, updatedAt = Date.now(), sou
 
 function loadSavedLineupsPayload(teamScope) {
   if (typeof window === "undefined" || !teamScope) return null;
-  const raw = window.localStorage.getItem(savedLineupsStorageKey(teamScope));
+  const raw = readLocalStorage(savedLineupsStorageKey(teamScope));
   if (!raw) return null;
   const parsed = safeParseJson(raw, null);
   if (Array.isArray(parsed)) {
@@ -416,7 +413,7 @@ function loadSavedLineupsPayload(teamScope) {
 
 function persistSavedLineups(teamScope, lineups, updatedAt = Date.now()) {
   if (typeof window === "undefined" || !teamScope) return;
-  window.localStorage.setItem(savedLineupsStorageKey(teamScope), JSON.stringify({
+  writeLocalStorage(savedLineupsStorageKey(teamScope), JSON.stringify({
     updatedAt,
     lineups: normalizeSavedLineups(lineups),
   }));
@@ -432,7 +429,7 @@ function sectionStateStorageKey(gameId) {
 
 function loadGamePayload(gameId) {
   if (typeof window === "undefined" || !gameId) return null;
-  const raw = window.localStorage.getItem(gameStorageKey(gameId));
+  const raw = readLocalStorage(gameStorageKey(gameId));
   if (!raw) return null;
   const parsed = safeParseJson(raw, null);
   if (!parsed || typeof parsed !== "object") return null;
@@ -444,7 +441,7 @@ function loadGamePayload(gameId) {
 
 function persistGameState(gameId, state, updatedAt = Date.now()) {
   if (typeof window === "undefined" || !gameId) return;
-  window.localStorage.setItem(gameStorageKey(gameId), JSON.stringify({
+  writeLocalStorage(gameStorageKey(gameId), JSON.stringify({
     updatedAt,
     state,
   }));
@@ -561,10 +558,7 @@ async function saveRemoteSavedLineups(teamScope, lineups, updatedAt = Date.now()
     },
     { onConflict: "scope_type,scope_key" }
   );
-  if (error) {
-    // eslint-disable-next-line no-console
-    console.error("Failed to save rotations saved lineups", error);
-  }
+  if (error) throw error;
 }
 
 async function fetchRemoteGameState(gameId, teamScope) {
@@ -597,10 +591,7 @@ async function saveRemoteGameState(gameId, state, updatedAt = Date.now()) {
     },
     { onConflict: "scope_type,scope_key" }
   );
-  if (error) {
-    // eslint-disable-next-line no-console
-    console.error("Failed to save rotations game state", error);
-  }
+  if (error) throw error;
 }
 
 async function fetchRemoteDepthTemplate(teamScope) {
@@ -634,10 +625,7 @@ async function saveRemoteDepthTemplate(teamScope, depthChart, updatedAt = Date.n
     },
     { onConflict: "scope_type,scope_key" }
   );
-  if (error) {
-    // eslint-disable-next-line no-console
-    console.error("Failed to save rotations depth template", error);
-  }
+  if (error) throw error;
 }
 
 function buildOpponentLine(game, monitoredTeam) {
@@ -815,7 +803,7 @@ function renderExportQuarterTable(quarter, lineups, hideNamesOnDuplicateRows = f
   `;
 }
 
-function hexToRgbColor(hex) {
+function hexToRgbColor(rgbBuilder, hex) {
   const normalized = String(hex || "").replace("#", "");
   const expanded = normalized.length === 3
     ? normalized.split("").map((char) => `${char}${char}`).join("")
@@ -825,20 +813,22 @@ function hexToRgbColor(hex) {
   const red = ((value >> 16) & 255) / 255;
   const green = ((value >> 8) & 255) / 255;
   const blue = (value & 255) / 255;
-  return rgb(red, green, blue);
+  return rgbBuilder(red, green, blue);
 }
 
-const PDF_COLORS = {
-  black: hexToRgbColor("#000000"),
-  red: hexToRgbColor("#c8102e"),
-  white: hexToRgbColor("#ffffff"),
-  border: hexToRgbColor("#8c8c8c"),
-  headerFill: hexToRgbColor("#efefef"),
-  bodyText: hexToRgbColor("#111111"),
-  duplicateFill: hexToRgbColor("#fff2cc"),
-  subInFill: hexToRgbColor("#d9ead3"),
-  subOutFill: hexToRgbColor("#f4cccc"),
-};
+function buildPdfColors(rgbBuilder) {
+  return {
+    black: hexToRgbColor(rgbBuilder, "#000000"),
+    red: hexToRgbColor(rgbBuilder, "#c8102e"),
+    white: hexToRgbColor(rgbBuilder, "#ffffff"),
+    border: hexToRgbColor(rgbBuilder, "#8c8c8c"),
+    headerFill: hexToRgbColor(rgbBuilder, "#efefef"),
+    bodyText: hexToRgbColor(rgbBuilder, "#111111"),
+    duplicateFill: hexToRgbColor(rgbBuilder, "#fff2cc"),
+    subInFill: hexToRgbColor(rgbBuilder, "#d9ead3"),
+    subOutFill: hexToRgbColor(rgbBuilder, "#f4cccc"),
+  };
+}
 
 const PDF_QUARTER_TIME_COL_WIDTH = 24;
 const PDF_BASE_DEPTH_NAME_FONT_SIZE = 8.5;
@@ -878,7 +868,7 @@ function getFittedPdfPlayerNameFontSize(font, playerNames, cellWidth) {
   return Math.max(PDF_MIN_PLAYER_NAME_FONT_SIZE, Math.min(baseFontSize, maxAllowedFontSize));
 }
 
-function drawCenteredPdfText(page, text, font, size, x, y, width, color = PDF_COLORS.bodyText) {
+function drawCenteredPdfText(page, text, font, size, x, y, width, color) {
   const safeText = String(text || "");
   const textWidth = font.widthOfTextAtSize(safeText, size);
   page.drawText(safeText, {
@@ -898,9 +888,9 @@ function drawPdfCell(page, {
   text = "",
   font,
   fontSize = 10,
-  fillColor = PDF_COLORS.white,
-  textColor = PDF_COLORS.bodyText,
-  borderColor = PDF_COLORS.border,
+  fillColor,
+  textColor,
+  borderColor,
   strikeThrough = false,
 }) {
   page.drawRectangle({
@@ -936,7 +926,7 @@ function drawPdfCell(page, {
   }
 }
 
-function getExportCellDisplay(lineups, quarter, minuteIndex, positionIndex, hideNamesOnDuplicateRows) {
+function getExportCellDisplay(lineups, quarter, minuteIndex, positionIndex, hideNamesOnDuplicateRows, pdfColors) {
   const rowValues = getExportRowValues(lineups, quarter, minuteIndex);
   const previousRowValues = getExportPreviousRowValues(lineups, quarter, minuteIndex);
   const nextRowValues = getExportNextRowValues(lineups, quarter, minuteIndex);
@@ -950,29 +940,29 @@ function getExportCellDisplay(lineups, quarter, minuteIndex, positionIndex, hide
   });
 
   if (!cellState.normalizedValue) {
-    return { text: "", fillColor: PDF_COLORS.white };
+    return { text: "", fillColor: pdfColors.white };
   }
 
   if (cellState.hideRowNames) {
     return {
       text: "",
-      fillColor: cellState.isSubIn ? PDF_COLORS.subInFill : PDF_COLORS.white,
+      fillColor: cellState.isSubIn ? pdfColors.subInFill : pdfColors.white,
     };
   }
 
   if (cellState.isSubOut) {
-    return { text: cellState.value, fillColor: PDF_COLORS.subOutFill };
+    return { text: cellState.value, fillColor: pdfColors.subOutFill };
   }
   if (cellState.isSubIn) {
-    return { text: cellState.value, fillColor: PDF_COLORS.subInFill };
+    return { text: cellState.value, fillColor: pdfColors.subInFill };
   }
   if (cellState.hasDuplicate) {
-    return { text: cellState.value, fillColor: PDF_COLORS.duplicateFill };
+    return { text: cellState.value, fillColor: pdfColors.duplicateFill };
   }
-  return { text: cellState.value, fillColor: PDF_COLORS.white };
+  return { text: cellState.value, fillColor: pdfColors.white };
 }
 
-function drawPdfDepthChart(page, font, x, topY, width, depthChart, playerFontSize) {
+function drawPdfDepthChart(page, font, x, topY, width, depthChart, playerFontSize, pdfColors) {
   const titleHeight = 20;
   const headerHeight = 18;
   const rowHeight = 18;
@@ -984,8 +974,8 @@ function drawPdfDepthChart(page, font, x, topY, width, depthChart, playerFontSiz
     y: topY - titleHeight,
     width: tableWidth,
     height: titleHeight,
-    color: PDF_COLORS.red,
-    borderColor: PDF_COLORS.border,
+    color: pdfColors.red,
+    borderColor: pdfColors.border,
     borderWidth: 1,
   });
   page.drawText("Depth Chart", {
@@ -993,7 +983,7 @@ function drawPdfDepthChart(page, font, x, topY, width, depthChart, playerFontSiz
     y: topY - titleHeight + 5,
     size: 10,
     font,
-    color: PDF_COLORS.white,
+    color: pdfColors.white,
   });
 
   const headerY = topY - titleHeight - headerHeight;
@@ -1006,7 +996,9 @@ function drawPdfDepthChart(page, font, x, topY, width, depthChart, playerFontSiz
       text: String(position),
       font,
       fontSize: 9,
-      fillColor: PDF_COLORS.headerFill,
+      fillColor: pdfColors.headerFill,
+      textColor: pdfColors.bodyText,
+      borderColor: pdfColors.border,
     });
   });
 
@@ -1022,7 +1014,9 @@ function drawPdfDepthChart(page, font, x, topY, width, depthChart, playerFontSiz
         text: cell.name,
         font,
         fontSize: playerFontSize,
-        textColor: cell.isOut ? PDF_COLORS.red : PDF_COLORS.bodyText,
+        fillColor: pdfColors.white,
+        textColor: cell.isOut ? pdfColors.red : pdfColors.bodyText,
+        borderColor: pdfColors.border,
         strikeThrough: cell.isOut,
       });
     });
@@ -1031,7 +1025,7 @@ function drawPdfDepthChart(page, font, x, topY, width, depthChart, playerFontSiz
   return titleHeight + headerHeight + (rowHeight * DEPTH_ROW_INDICES.length);
 }
 
-function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideNamesOnDuplicateRows, playerFontSize) {
+function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideNamesOnDuplicateRows, playerFontSize, pdfColors) {
   const titleHeight = 20;
   const headerHeight = 18;
   const rowHeight = 18;
@@ -1043,8 +1037,8 @@ function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideN
     y: topY - titleHeight,
     width,
     height: titleHeight,
-    color: PDF_COLORS.red,
-    borderColor: PDF_COLORS.border,
+    color: pdfColors.red,
+    borderColor: pdfColors.border,
     borderWidth: 1,
   });
   page.drawText(`${quarterLabel(quarter)} Quarter`, {
@@ -1052,7 +1046,7 @@ function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideN
     y: topY - titleHeight + 5,
     size: 10,
     font,
-    color: PDF_COLORS.white,
+    color: pdfColors.white,
   });
 
   const headerY = topY - titleHeight - headerHeight;
@@ -1064,7 +1058,9 @@ function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideN
     text: "",
     font,
     fontSize: 9,
-    fillColor: PDF_COLORS.headerFill,
+    fillColor: pdfColors.headerFill,
+    textColor: pdfColors.bodyText,
+    borderColor: pdfColors.border,
   });
   POSITION_COLUMNS.forEach((position, index) => {
     drawPdfCell(page, {
@@ -1075,7 +1071,9 @@ function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideN
       text: String(position),
       font,
       fontSize: 9,
-      fillColor: PDF_COLORS.headerFill,
+      fillColor: pdfColors.headerFill,
+      textColor: pdfColors.bodyText,
+      borderColor: pdfColors.border,
     });
   });
 
@@ -1089,10 +1087,13 @@ function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideN
       text: String(minute),
       font,
       fontSize: 8.5,
+      fillColor: pdfColors.white,
+      textColor: pdfColors.bodyText,
+      borderColor: pdfColors.border,
     });
 
     POSITION_COLUMNS.forEach((_, index) => {
-      const display = getExportCellDisplay(lineups, quarter, minuteIndex, index, hideNamesOnDuplicateRows);
+      const display = getExportCellDisplay(lineups, quarter, minuteIndex, index, hideNamesOnDuplicateRows, pdfColors);
       drawPdfCell(page, {
         x: x + timeColWidth + (index * playerColWidth),
         y: rowY,
@@ -1102,6 +1103,8 @@ function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideN
         font,
         fontSize: playerFontSize,
         fillColor: display.fillColor,
+        textColor: pdfColors.bodyText,
+        borderColor: pdfColors.border,
       });
     });
   });
@@ -1109,7 +1112,7 @@ function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideN
   return titleHeight + headerHeight + (rowHeight * MINUTES.length);
 }
 
-function drawRotationsPdfPage(page, { headerLine, depthChart, lineups, logoImage, font, side, hideNamesOnDuplicateRows }) {
+function drawRotationsPdfPage(page, { headerLine, depthChart, lineups, logoImage, font, side, hideNamesOnDuplicateRows, pdfColors }) {
   const pageWidth = page.getWidth();
   const pageHeight = page.getHeight();
   const columnWidth = 4.05 * 72;
@@ -1125,10 +1128,10 @@ function drawRotationsPdfPage(page, { headerLine, depthChart, lineups, logoImage
     quarterPlayerColWidth
   );
 
-  drawCenteredPdfText(page, headerLine, font, 18, columnX, headerTop, columnWidth, PDF_COLORS.bodyText);
+  drawCenteredPdfText(page, headerLine, font, 18, columnX, headerTop, columnWidth, pdfColors.bodyText);
 
   let currentTop = contentTop;
-  currentTop -= drawPdfDepthChart(page, font, columnX, currentTop, columnWidth, depthChart, playerFontSize);
+  currentTop -= drawPdfDepthChart(page, font, columnX, currentTop, columnWidth, depthChart, playerFontSize, pdfColors);
   currentTop -= 8;
   currentTop -= drawPdfQuarterTable(
     page,
@@ -1139,7 +1142,8 @@ function drawRotationsPdfPage(page, { headerLine, depthChart, lineups, logoImage
     side === "left" ? 1 : 3,
     lineups,
     hideNamesOnDuplicateRows,
-    playerFontSize
+    playerFontSize,
+    pdfColors
   );
   currentTop -= 8;
   currentTop -= drawPdfQuarterTable(
@@ -1151,7 +1155,8 @@ function drawRotationsPdfPage(page, { headerLine, depthChart, lineups, logoImage
     side === "left" ? 2 : 4,
     lineups,
     hideNamesOnDuplicateRows,
-    playerFontSize
+    playerFontSize,
+    pdfColors
   );
 
   if (logoImage) {
@@ -1397,6 +1402,7 @@ export default function Rotations() {
   const [isDepthCellPressActive, setIsDepthCellPressActive] = useState(false);
   const [isTouchFillActive, setIsTouchFillActive] = useState(false);
   const [undoDepth, setUndoDepth] = useState(0);
+  const [syncError, setSyncError] = useState("");
   const [collapsed, setCollapsed] = useState({
     restrictions: false,
     depth: false,
@@ -1601,7 +1607,7 @@ export default function Rotations() {
 
   useEffect(() => {
     if (!gameId || typeof window === "undefined") return;
-    const raw = window.localStorage.getItem(sectionStateStorageKey(gameId));
+    const raw = readLocalStorage(sectionStateStorageKey(gameId));
     const parsed = safeParseJson(raw, null);
     if (!parsed || typeof parsed !== "object") return;
     setCollapsed((current) => ({
@@ -1617,7 +1623,7 @@ export default function Rotations() {
 
   useEffect(() => {
     if (!gameId || typeof window === "undefined") return;
-    window.localStorage.setItem(sectionStateStorageKey(gameId), JSON.stringify(collapsed));
+    writeLocalStorage(sectionStateStorageKey(gameId), JSON.stringify(collapsed));
   }, [collapsed, gameId]);
 
   useEffect(() => {
@@ -1805,7 +1811,12 @@ export default function Rotations() {
       const updatedAt = Date.now();
       playersUpdatedAtRef.current = updatedAt;
       persistPregamePlayers(monitoredTeamScope, players, updatedAt);
-      saveRemotePregamePlayers(monitoredTeamScope, players, updatedAt);
+      saveRemotePregamePlayers(monitoredTeamScope, players, updatedAt)
+        .then(() => setSyncError(""))
+        .catch((saveError) => {
+          console.error("Failed to save rotations players", saveError);
+          setSyncError(saveError?.message || "Unable to sync roster changes.");
+        });
     }, 250);
 
     return () => window.clearTimeout(timeoutId);
@@ -1828,7 +1839,12 @@ export default function Rotations() {
     const updatedAt = Date.now();
     savedLineupsUpdatedAtRef.current = updatedAt;
     persistSavedLineups(monitoredTeamScope, savedLineups, updatedAt);
-    saveRemoteSavedLineups(monitoredTeamScope, savedLineups, updatedAt);
+    saveRemoteSavedLineups(monitoredTeamScope, savedLineups, updatedAt)
+      .then(() => setSyncError(""))
+      .catch((saveError) => {
+        console.error("Failed to save rotations lineups", saveError);
+        setSyncError(saveError?.message || "Unable to sync saved lineups.");
+      });
   }, [savedLineups, savedLineupsHydrated, monitoredTeamScope]);
 
   useEffect(() => {
@@ -1883,7 +1899,12 @@ export default function Rotations() {
     const updatedAt = Date.now();
     depthTemplateUpdatedAtRef.current = updatedAt;
     persistDepthTemplate(monitoredTeamScope, depthTemplate, updatedAt, depthTemplateSourceGameIdRef.current);
-    saveRemoteDepthTemplate(monitoredTeamScope, depthTemplate, updatedAt, depthTemplateSourceGameIdRef.current);
+    saveRemoteDepthTemplate(monitoredTeamScope, depthTemplate, updatedAt, depthTemplateSourceGameIdRef.current)
+      .then(() => setSyncError(""))
+      .catch((saveError) => {
+        console.error("Failed to save rotations depth template", saveError);
+        setSyncError(saveError?.message || "Unable to sync depth chart template.");
+      });
   }, [depthTemplate, depthTemplateHydrated, monitoredTeamScope]);
 
   useEffect(() => {
@@ -1904,7 +1925,12 @@ export default function Rotations() {
     const updatedAt = Date.now();
     gameUpdatedAtRef.current = updatedAt;
     persistGameState(gameId, state, updatedAt);
-    saveRemoteGameState(gameId, state, updatedAt);
+    saveRemoteGameState(gameId, state, updatedAt)
+      .then(() => setSyncError(""))
+      .catch((saveError) => {
+        console.error("Failed to save rotations game state", saveError);
+        setSyncError(saveError?.message || "Unable to sync rotations state.");
+      });
   }, [gameState, gameHydrated, gameId, monitoredTeamScope]);
 
   useEffect(() => {
@@ -2276,7 +2302,12 @@ export default function Rotations() {
     depthTemplateStateKeyRef.current = depthChartStateKey(nextDepthChart);
     skipDepthTemplateSaveRef.current = true;
     persistDepthTemplate(monitoredTeamScope, nextDepthChart, updatedAt, sourceGameId);
-    saveRemoteDepthTemplate(monitoredTeamScope, nextDepthChart, updatedAt, sourceGameId);
+    saveRemoteDepthTemplate(monitoredTeamScope, nextDepthChart, updatedAt, sourceGameId)
+      .then(() => setSyncError(""))
+      .catch((saveError) => {
+        console.error("Failed to back up depth chart", saveError);
+        setSyncError(saveError?.message || "Unable to sync depth chart backup.");
+      });
     setDepthTemplate(nextDepthChart);
   };
 
@@ -2444,8 +2475,13 @@ export default function Rotations() {
       pdfWindow.document.title = "Generating Rotations PDF...";
       pdfWindow.document.body.innerHTML = "<p style=\"font-family: sans-serif; padding: 16px;\">Generating PDF...</p>";
     }
-    const fontUrl = new URL(dinAltFontUrl, window.location.href).href;
-    const logoUrl = new URL(wizardsLogoUrl, window.location.href).href;
+    const [{ default: fontkit }, { PDFDocument, rgb }] = await Promise.all([
+      import("@pdf-lib/fontkit"),
+      import("pdf-lib"),
+    ]);
+    const pdfColors = buildPdfColors(rgb);
+    const fontUrl = new URL("../assets/fonts/DINalt.ttf", import.meta.url).href;
+    const logoUrl = new URL("../assets/WWizards_Primary_Icon.png", import.meta.url).href;
     const [fontResponse, logoResponse] = await Promise.all([
       fetch(fontUrl),
       fetch(logoUrl),
@@ -2471,6 +2507,7 @@ export default function Rotations() {
       font: pdfFont,
       side: "left",
       hideNamesOnDuplicateRows: versionDisplayOptions.hideNamesOnDuplicateRows,
+      pdfColors,
     });
     drawRotationsPdfPage(pageTwo, {
       headerLine: exportHeaderLine,
@@ -2480,6 +2517,7 @@ export default function Rotations() {
       font: pdfFont,
       side: "right",
       hideNamesOnDuplicateRows: versionDisplayOptions.hideNamesOnDuplicateRows,
+      pdfColors,
     });
 
     const pdfBytes = await pdfDoc.save();
@@ -2862,6 +2900,12 @@ export default function Rotations() {
           </div>
         </div>
       </div>
+
+      {syncError ? (
+        <div className={styles.stateMessage} style={{ marginBottom: 12 }}>
+          Sync issue: {syncError}
+        </div>
+      ) : null}
 
       {resetModalOpen && (
         <div className={styles.modalOverlay} onClick={() => setResetModalOpen(false)}>

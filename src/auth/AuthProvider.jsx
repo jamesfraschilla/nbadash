@@ -40,6 +40,7 @@ export function AuthProvider({ children }) {
         const nextProfile = await fetchProfile(user.id);
         if (cancelled) return;
         setProfile(nextProfile || null);
+        setError("");
         if (nextProfile?.status === "active") {
           touchProfileLastLogin(user.id).catch(() => {});
         }
@@ -60,6 +61,7 @@ export function AuthProvider({ children }) {
         const { data } = await supabase.auth.getSession();
         if (cancelled) return;
         setSession(data.session || null);
+        setError("");
         loadProfile(data.session?.user || null);
       } catch (sessionError) {
         if (!cancelled) {

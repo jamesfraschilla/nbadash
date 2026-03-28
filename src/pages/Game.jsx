@@ -38,6 +38,7 @@ import {
   segmentPeriods,
 } from "../segmentStats.js";
 import { supabase } from "../supabaseClient.js";
+import { readLocalStorage, writeLocalStorage } from "../storage.js";
 import styles from "./Game.module.css";
 
 const SNAPSHOT_STORAGE_PREFIX = "nba-dashboard:snapshots:";
@@ -130,7 +131,7 @@ const serializeSnapshotEntry = (entry) => {
 
 const loadSnapshots = (gameId) => {
   if (typeof window === "undefined") return [];
-  const raw = window.localStorage.getItem(`${SNAPSHOT_STORAGE_PREFIX}${gameId}`);
+  const raw = readLocalStorage(`${SNAPSHOT_STORAGE_PREFIX}${gameId}`);
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
@@ -142,7 +143,7 @@ const loadSnapshots = (gameId) => {
 
 const saveSnapshots = (gameId, snapshots) => {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(
+  writeLocalStorage(
     `${SNAPSHOT_STORAGE_PREFIX}${gameId}`,
     JSON.stringify((snapshots || []).map(serializeSnapshotEntry))
   );

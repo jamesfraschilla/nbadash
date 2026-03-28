@@ -1,22 +1,23 @@
-import { useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { Route, Routes } from "react-router-dom";
 import Header from "./components/Header.jsx";
 import AuthGate from "./components/AuthGate.jsx";
 import LegacyNotesImportPrompt from "./components/LegacyNotesImportPrompt.jsx";
 import PasswordResetGate from "./components/PasswordResetGate.jsx";
 import { useAuth } from "./auth/useAuth.js";
-import Home from "./pages/Home.jsx";
-import Game from "./pages/Game.jsx";
-import PlayByPlay from "./pages/PlayByPlay.jsx";
-import Minutes from "./pages/Minutes.jsx";
-import Notes from "./pages/Notes.jsx";
-import Drawing from "./pages/Drawing.jsx";
-import PreGame from "./pages/PreGame.jsx";
-import Rotations from "./pages/Rotations.jsx";
-import Admin from "./pages/Admin.jsx";
-import UserContent from "./pages/UserContent.jsx";
+import { readLocalStorage, writeLocalStorage } from "./storage.js";
 
 const UPDATE_CHECK_INTERVAL_MS = 2 * 60 * 1000;
+const Home = lazy(() => import("./pages/Home.jsx"));
+const Game = lazy(() => import("./pages/Game.jsx"));
+const PlayByPlay = lazy(() => import("./pages/PlayByPlay.jsx"));
+const Minutes = lazy(() => import("./pages/Minutes.jsx"));
+const Notes = lazy(() => import("./pages/Notes.jsx"));
+const Drawing = lazy(() => import("./pages/Drawing.jsx"));
+const PreGame = lazy(() => import("./pages/PreGame.jsx"));
+const Rotations = lazy(() => import("./pages/Rotations.jsx"));
+const Admin = lazy(() => import("./pages/Admin.jsx"));
+const UserContent = lazy(() => import("./pages/UserContent.jsx"));
 
 function getCurrentBundleFingerprint() {
   if (typeof document === "undefined" || typeof window === "undefined") return "";
@@ -35,8 +36,12 @@ function getBundleFingerprintFromHtml(html) {
   return new URL(src, window.location.origin).href;
 }
 
+function RouteLoadingFallback() {
+  return <div style={{ padding: "40px 16px", textAlign: "center" }}>Loading page...</div>;
+}
+
 export default function App() {
-  const [theme, setTheme] = useState(() => localStorage.getItem("theme") || "light");
+  const [theme, setTheme] = useState(() => readLocalStorage("theme") || "light");
   const [updateFingerprint, setUpdateFingerprint] = useState("");
   const currentFingerprintRef = useRef("");
   const dismissedFingerprintRef = useRef("");
@@ -45,6 +50,8 @@ export default function App() {
     loading,
     user,
     profile,
+    error: authError,
+    clearError,
     requiresPasswordReset,
     signOut,
     isAdmin,
@@ -52,7 +59,7 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem("theme", theme);
+    writeLocalStorage("theme", theme);
   }, [theme]);
 
   useEffect(() => {
@@ -111,6 +118,31 @@ export default function App() {
 
     if (requiresPasswordReset) {
       return <PasswordResetGate />;
+    }
+
+    if (authError) {
+      return (
+        <div style={{ padding: "40px 16px", textAlign: "center" }}>
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>Account Load Failed</div>
+          <div style={{ marginBottom: 12 }}>{authError}</div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => {
+                clearError();
+                window.location.reload();
+              }}
+            >
+              Retry
+            </button>
+            {user ? (
+              <button type="button" onClick={signOut}>
+                Sign Out
+              </button>
+            ) : null}
+          </div>
+        </div>
+      );
     }
 
     if (!profile) {
@@ -205,19 +237,21 @@ export default function App() {
         isAdmin={isAdmin}
       />
       <main>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/me" element={<UserContent />} />
-          <Route path="/admin" element={<Admin />} />
-          <Route path="/g/:gameId" element={<Game />} />
-          <Route path="/g/:gameId/atc" element={<Game variant="atc" />} />
-          <Route path="/g/:gameId/events" element={<PlayByPlay />} />
-          <Route path="/g/:gameId/notes" element={<Notes />} />
-          <Route path="/g/:gameId/pregame" element={<PreGame />} />
-          <Route path="/g/:gameId/rotations" element={<Rotations />} />
-          <Route path="/m/:gameId" element={<Minutes />} />
-          <Route path="/draw" element={<Drawing />} />
-        </Routes>
+        <Suspense fallback={<RouteLoadingFallback />}>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/me" element={<UserContent />} />
+            <Route path="/admin" element={<Admin />} />
+            <Route path="/g/:gameId" element={<Game />} />
+            <Route path="/g/:gameId/atc" element={<Game variant="atc" />} />
+            <Route path="/g/:gameId/events" element={<PlayByPlay />} />
+            <Route path="/g/:gameId/notes" element={<Notes />} />
+            <Route path="/g/:gameId/pregame" element={<PreGame />} />
+            <Route path="/g/:gameId/rotations" element={<Rotations />} />
+            <Route path="/m/:gameId" element={<Minutes />} />
+            <Route path="/draw" element={<Drawing />} />
+          </Routes>
+        </Suspense>
       </main>
     </div>
   );

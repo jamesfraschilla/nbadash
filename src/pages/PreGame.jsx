@@ -17,6 +17,7 @@ import {
   saveRemotePregamePlayers,
 } from "../pregamePlayers.js";
 import { supabase } from "../supabaseClient.js";
+import { readLocalStorage, writeLocalStorage } from "../storage.js";
 import wizardsLogoUrl from "../assets/WWizards_Primary_Icon.png";
 import dinFontUrl from "../assets/fonts/DIN.ttf";
 import styles from "./PreGame.module.css";
@@ -150,7 +151,7 @@ function slotStorageKey(gameId) {
 
 function loadSlots(gameId) {
   if (typeof window === "undefined" || !gameId) return null;
-  const raw = window.localStorage.getItem(slotStorageKey(gameId));
+  const raw = readLocalStorage(slotStorageKey(gameId));
   if (!raw) return null;
   const parsed = safeParseJson(raw, null);
   const slots = normalizeSlots(Array.isArray(parsed) ? parsed : parsed?.slots);
@@ -159,7 +160,7 @@ function loadSlots(gameId) {
 
 function persistSlots(gameId, slots, updatedAt = Date.now()) {
   if (typeof window === "undefined" || !gameId) return;
-  window.localStorage.setItem(slotStorageKey(gameId), JSON.stringify({
+  writeLocalStorage(slotStorageKey(gameId), JSON.stringify({
     updatedAt,
     slots,
   }));
@@ -167,7 +168,7 @@ function persistSlots(gameId, slots, updatedAt = Date.now()) {
 
 function loadSlotsPayload(gameId) {
   if (typeof window === "undefined" || !gameId) return null;
-  const raw = window.localStorage.getItem(slotStorageKey(gameId));
+  const raw = readLocalStorage(slotStorageKey(gameId));
   if (!raw) return null;
   const parsed = safeParseJson(raw, null);
   if (Array.isArray(parsed)) {
@@ -182,7 +183,7 @@ function loadSlotsPayload(gameId) {
 
 function loadSlotTemplate() {
   if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(SLOT_TEMPLATE_KEY);
+  const raw = readLocalStorage(SLOT_TEMPLATE_KEY);
   if (!raw) return null;
   const parsed = safeParseJson(raw, null);
   if (Array.isArray(parsed?.playerGroups) || Number.isFinite(parsed?.count)) {
@@ -196,7 +197,7 @@ function loadSlotTemplate() {
 
 function persistSlotTemplate(slots, updatedAt = Date.now()) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(SLOT_TEMPLATE_KEY, JSON.stringify({
+  writeLocalStorage(SLOT_TEMPLATE_KEY, JSON.stringify({
     updatedAt,
     template: {
       count: Math.max(1, slots.length),
@@ -207,7 +208,7 @@ function persistSlotTemplate(slots, updatedAt = Date.now()) {
 
 function loadTemplatePayload() {
   if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(SLOT_TEMPLATE_KEY);
+  const raw = readLocalStorage(SLOT_TEMPLATE_KEY);
   if (!raw) return null;
   const parsed = safeParseJson(raw, null);
   if (parsed && typeof parsed === "object" && parsed.template) {
@@ -259,7 +260,7 @@ async function fetchRemoteTemplate() {
 
 async function saveRemoteSchedule(gameId, slots, updatedAt = Date.now()) {
   if (!supabase || !gameId) return;
-  await supabase.from("pbp_highlights").upsert(
+  const { error } = await supabase.from("pbp_highlights").upsert(
     {
       game_id: String(gameId),
       action_number: PREGAME_ACTION_PAYLOAD,
@@ -270,11 +271,12 @@ async function saveRemoteSchedule(gameId, slots, updatedAt = Date.now()) {
     },
     { onConflict: "game_id,action_number" }
   );
+  if (error) throw error;
 }
 
 async function saveRemoteTemplate(slots, updatedAt = Date.now()) {
   if (!supabase) return;
-  await supabase.from("pbp_highlights").upsert(
+  const { error } = await supabase.from("pbp_highlights").upsert(
     {
       game_id: PREGAME_GLOBAL_TEMPLATE_GAME_ID,
       action_number: PREGAME_ACTION_PAYLOAD,
@@ -288,6 +290,7 @@ async function saveRemoteTemplate(slots, updatedAt = Date.now()) {
     },
     { onConflict: "game_id,action_number" }
   );
+  if (error) throw error;
 }
 
 function getGameTimeZone(game) {
@@ -607,6 +610,7 @@ export default function PreGame() {
   const [activePlayerCell, setActivePlayerCell] = useState(null);
   const [playersHydrated, setPlayersHydrated] = useState(false);
   const [slotsHydrated, setSlotsHydrated] = useState(false);
+  const [syncError, setSyncError] = useState("");
   const playersUpdatedAtRef = useRef(0);
   const slotsUpdatedAtRef = useRef(0);
   const templateUpdatedAtRef = useRef(0);
@@ -747,7 +751,12 @@ export default function PreGame() {
     const updatedAt = Date.now();
     playersUpdatedAtRef.current = updatedAt;
     persistPregamePlayers(trackedTeamScope, players, updatedAt);
-    saveRemotePregamePlayers(trackedTeamScope, players, updatedAt);
+    saveRemotePregamePlayers(trackedTeamScope, players, updatedAt)
+      .then(() => setSyncError(""))
+      .catch((saveError) => {
+        console.error("Failed to save pregame players", saveError);
+        setSyncError(saveError?.message || "Unable to sync player changes.");
+      });
   }, [players, playersHydrated, trackedTeamScope]);
 
   useEffect(() => {
@@ -757,8 +766,15 @@ export default function PreGame() {
     templateUpdatedAtRef.current = updatedAt;
     persistSlots(gameId, slots, updatedAt);
     persistSlotTemplate(slots, updatedAt);
-    saveRemoteSchedule(gameId, slots, updatedAt);
-    saveRemoteTemplate(slots, updatedAt);
+    Promise.all([
+      saveRemoteSchedule(gameId, slots, updatedAt),
+      saveRemoteTemplate(slots, updatedAt),
+    ])
+      .then(() => setSyncError(""))
+      .catch((saveError) => {
+        console.error("Failed to save pregame schedule/template", saveError);
+        setSyncError(saveError?.message || "Unable to sync pre-game schedule changes.");
+      });
   }, [gameId, slots, slotsHydrated]);
 
   useEffect(() => {
@@ -927,6 +943,12 @@ export default function PreGame() {
       <div className={styles.topRow}>
         <Link className={styles.backButton} to={backUrl}>Back</Link>
       </div>
+
+      {syncError ? (
+        <div className={styles.stateMessage} style={{ marginBottom: 12 }}>
+          Sync issue: {syncError}
+        </div>
+      ) : null}
 
       <header className={styles.header}>
         <h1 className={styles.title}>PRE-GAME COURT TIME</h1>
