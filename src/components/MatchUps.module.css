@@ -316,7 +316,7 @@
 .expandedLandscape {
   display: grid;
   align-content: center;
-  gap: 18px;
+  gap: 34px;
 }
 
 .expandedRow {
@@ -419,7 +419,7 @@
 
 .expandedPortraitRows {
   display: grid;
-  gap: 8px;
+  gap: 18px;
 }
 
 .expandedPortraitPair {
@@ -467,6 +467,10 @@
   .expandedPortrait {
     display: block;
     align-self: start;
+  }
+
+  .expandedPortraitHeader {
+    margin-bottom: 18px;
   }
 
   .expandedAvatarFrame {
