@@ -303,6 +303,26 @@ function MatchUpTile({ player, isDraggingSource, onPointerDown }) {
   );
 }
 
+function ExpandedTile({ player, teamLabel }) {
+  if (!player) {
+    return (
+      <div className={`${styles.expandedTile} ${styles.expandedTileEmpty}`}>
+        <div className={styles.expandedAvatarFrame} />
+        <div className={styles.expandedPlayerName}>Open</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.expandedTile} aria-label={`${teamLabel} ${player.fullName || player.lastName}`}>
+      <div className={styles.expandedAvatarFrame}>
+        <img className={styles.expandedAvatarImage} src={player.headshotUrl} alt="" draggable="false" />
+      </div>
+      <div className={styles.expandedPlayerName}>{`${player.jerseyNum} ${player.lastName}`.trim()}</div>
+    </div>
+  );
+}
+
 export default function MatchUps({
   gameId,
   awayTeam,
@@ -314,6 +334,7 @@ export default function MatchUps({
   const [dragState, setDragState] = useState(null);
   const [menuState, setMenuState] = useState(null);
   const [refreshMenuOpen, setRefreshMenuOpen] = useState(false);
+  const [expandedOpen, setExpandedOpen] = useState(false);
   const pressSessionRef = useRef(null);
   const menuTimeoutRef = useRef(null);
   const slotRefs = useRef({
@@ -328,6 +349,7 @@ export default function MatchUps({
     setPersistedState(loadMatchUpState(gameId));
     setMenuState(null);
     setRefreshMenuOpen(false);
+    setExpandedOpen(false);
     setDragState(null);
   }, [gameId]);
 
@@ -470,6 +492,19 @@ export default function MatchUps({
   }, [menuState]);
 
   useEffect(() => {
+    const handleEscape = (event) => {
+      if (event.key === "Escape") {
+        setExpandedOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!dragState) return undefined;
 
     const previousBodyUserSelect = document.body.style.userSelect;
@@ -549,6 +584,12 @@ export default function MatchUps({
     setRefreshMenuOpen((current) => !current);
   };
 
+  const openExpandedView = () => {
+    setMenuState(null);
+    setRefreshMenuOpen(false);
+    setExpandedOpen(true);
+  };
+
   const handleRefreshRow = (side) => {
     const row = side === "away" ? awayRow : homeRow;
     updateRowSlots(
@@ -573,6 +614,7 @@ export default function MatchUps({
   const updateCollapsed = () => {
     setMenuState(null);
     setRefreshMenuOpen(false);
+    setExpandedOpen(false);
     setPersistedState((current) => ({
       ...current,
       collapsed: !current.collapsed,
@@ -629,14 +671,23 @@ export default function MatchUps({
                     <div className={styles.teamName}>{row.teamName}</div>
                   </div>
                   {row.key === "away" ? (
-                    <button
-                      ref={refreshButtonRef}
-                      type="button"
-                      className={styles.refreshButton}
-                      onClick={toggleRefreshMenu}
-                    >
-                      Refresh
-                    </button>
+                    <div className={styles.headerActions}>
+                      <button
+                        type="button"
+                        className={styles.expandButton}
+                        onClick={openExpandedView}
+                      >
+                        Expand
+                      </button>
+                      <button
+                        ref={refreshButtonRef}
+                        type="button"
+                        className={styles.refreshButton}
+                        onClick={toggleRefreshMenu}
+                      >
+                        Refresh
+                      </button>
+                    </div>
                   ) : null}
                 </div>
 
@@ -671,6 +722,73 @@ export default function MatchUps({
           )}
         </div>
       )}
+
+      {expandedOpen ? (
+        <div className={styles.expandedOverlay}>
+          <div className={styles.expandedView}>
+            <button
+              type="button"
+              className={styles.closeButton}
+              onClick={() => setExpandedOpen(false)}
+            >
+              Close
+            </button>
+
+            <div className={styles.expandedLandscape}>
+              {rows.map((row) => {
+                const logoUrl = row.teamId ? teamLogoUrl(row.teamId) : "";
+                return (
+                  <div key={`expanded-${row.key}`} className={styles.expandedRow}>
+                    <div className={styles.expandedRowHeader}>
+                      {logoUrl ? <img className={styles.expandedTeamLogo} src={logoUrl} alt="" /> : null}
+                      <div>
+                        <div className={styles.expandedTeamCode}>{row.label}</div>
+                        <div className={styles.expandedTeamName}>{row.teamName}</div>
+                      </div>
+                    </div>
+                    <div className={styles.expandedSlotGrid}>
+                      {Array.from({ length: ROW_SLOT_COUNT }, (_, index) => (
+                        <ExpandedTile
+                          key={`expanded-${row.key}-${row.players[index]?.personId || `slot-${index}`}`}
+                          player={row.players[index] || null}
+                          teamLabel={row.label}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className={styles.expandedPortrait}>
+              <div className={styles.expandedPortraitHeader}>
+                <div className={styles.expandedPortraitTeam}>
+                  {rows[0]?.teamId ? <img className={styles.expandedTeamLogo} src={teamLogoUrl(rows[0].teamId)} alt="" /> : null}
+                  <span>{rows[0]?.label}</span>
+                </div>
+                <div className={styles.expandedPortraitTeam}>
+                  {rows[1]?.teamId ? <img className={styles.expandedTeamLogo} src={teamLogoUrl(rows[1].teamId)} alt="" /> : null}
+                  <span>{rows[1]?.label}</span>
+                </div>
+              </div>
+              <div className={styles.expandedPortraitRows}>
+                {Array.from({ length: ROW_SLOT_COUNT }, (_, index) => (
+                  <div key={`portrait-pair-${index}`} className={styles.expandedPortraitPair}>
+                    <ExpandedTile
+                      player={rows[0]?.players[index] || null}
+                      teamLabel={rows[0]?.label || "Away"}
+                    />
+                    <ExpandedTile
+                      player={rows[1]?.players[index] || null}
+                      teamLabel={rows[1]?.label || "Home"}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {refreshMenuOpen ? (
         <div ref={refreshMenuRef} className={styles.refreshMenu}>

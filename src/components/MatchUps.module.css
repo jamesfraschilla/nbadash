@@ -49,6 +49,7 @@
   color: var(--muted);
 }
 
+.expandButton,
 .refreshButton,
 .refreshMenuButton {
   border: 1px solid var(--border);
@@ -58,6 +59,7 @@
   cursor: pointer;
 }
 
+.expandButton,
 .refreshButton {
   padding: 6px 12px;
   font-size: 0.8rem;
@@ -106,6 +108,13 @@
   gap: 10px;
 }
 
+.headerActions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .teamLogo {
   width: 24px;
   height: 24px;
@@ -124,10 +133,6 @@
   font-size: 0.76rem;
   line-height: 1;
   color: var(--muted);
-}
-
-.rowLabel .refreshButton {
-  margin-left: auto;
 }
 
 .rowScroller {
@@ -266,6 +271,156 @@
   background: var(--highlight-bg);
 }
 
+.expandedOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(8, 10, 16, 0.9);
+  padding: 16px;
+}
+
+.expandedView {
+  width: 100%;
+  height: 100%;
+  border-radius: 18px;
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 18px;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 20px;
+}
+
+.closeButton {
+  justify-self: start;
+  border: 1px solid rgba(248, 250, 252, 0.32);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.4);
+  color: #f8fafc;
+  padding: 7px 14px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.expandedLandscape,
+.expandedPortrait {
+  min-height: 0;
+}
+
+.expandedLandscape {
+  display: grid;
+  align-content: center;
+  gap: 28px;
+}
+
+.expandedRow {
+  display: grid;
+  gap: 14px;
+}
+
+.expandedRowHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.expandedTeamLogo {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+
+.expandedTeamCode {
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.expandedTeamName {
+  margin-top: 3px;
+  font-size: 0.82rem;
+  color: rgba(248, 250, 252, 0.72);
+}
+
+.expandedSlotGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.expandedTile {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 14px 8px 10px;
+  border: 1px solid rgba(248, 250, 252, 0.14);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.expandedTileEmpty {
+  opacity: 0.45;
+}
+
+.expandedAvatarFrame {
+  width: min(17vw, 148px);
+  height: min(17vw, 148px);
+  border-radius: 18px;
+  overflow: hidden;
+  background: #d4d4d8;
+}
+
+.expandedAvatarImage {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  object-position: center top;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+}
+
+.expandedPlayerName {
+  font-size: clamp(0.95rem, 1.3vw, 1.25rem);
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+}
+
+.expandedPortrait {
+  display: none;
+}
+
+.expandedPortraitHeader {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.expandedPortraitTeam {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.expandedPortraitRows {
+  display: grid;
+  gap: 14px;
+}
+
+.expandedPortraitPair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
 .dragGhost {
   position: fixed;
   z-index: 60;
@@ -294,5 +449,21 @@
 
   .slotGrid {
     min-width: 560px;
+  }
+}
+
+@media (orientation: portrait) {
+  .expandedLandscape {
+    display: none;
+  }
+
+  .expandedPortrait {
+    display: block;
+    align-self: center;
+  }
+
+  .expandedAvatarFrame {
+    width: min(30vw, 140px);
+    height: min(30vw, 140px);
   }
 }
