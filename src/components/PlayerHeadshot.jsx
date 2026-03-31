@@ -5,6 +5,7 @@ export default function PlayerHeadshot({
   personId,
   teamId = null,
   className,
+  style,
   alt = "",
   draggable = false,
   fallback = null,
@@ -29,6 +30,7 @@ export default function PlayerHeadshot({
     <img
       className={className}
       src={source}
+      style={style}
       alt={alt}
       draggable={draggable}
       onLoad={onLoad}

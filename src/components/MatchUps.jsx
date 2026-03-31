@@ -11,9 +11,14 @@ const PRESS_MOVE_TOLERANCE_PX = 8;
 const SWAP_FLASH_MS = 180;
 const ROW_SLOT_COUNT = 5;
 
+function isGLeagueTeamId(teamId) {
+  const numericTeamId = Number(teamId);
+  return numericTeamId >= 1612700000 && numericTeamId < 1612710000;
+}
+
 function buildEmptyState() {
   return {
-    collapsed: false,
+    collapsed: true,
     slots: {
       away: [],
       home: [],
@@ -31,7 +36,7 @@ function loadMatchUpState(gameId) {
     const parsed = JSON.parse(raw);
     const savedSlots = parsed?.slots || parsed?.orders || {};
     return {
-      collapsed: Boolean(parsed?.collapsed),
+      collapsed: true,
       slots: {
         away: Array.isArray(savedSlots?.away) ? savedSlots.away.map(String) : [],
         home: Array.isArray(savedSlots?.home) ? savedSlots.home.map(String) : [],
@@ -276,6 +281,9 @@ function refreshRowPreservingSharedSlots(currentSlotIds, preferredSlotIds) {
 
 function MatchUpTile({ player, isDraggingSource, isTarget, isSwapAnimating, onPointerDown }) {
   const tileClassName = `${styles.tile} ${isTarget ? styles.tileTarget : ""} ${isSwapAnimating ? styles.tileSwap : ""}`.trim();
+  const headshotStyle = player && isGLeagueTeamId(player.teamId)
+    ? { mixBlendMode: "multiply" }
+    : undefined;
 
   if (!player) {
     return (
@@ -301,6 +309,7 @@ function MatchUpTile({ player, isDraggingSource, isTarget, isSwapAnimating, onPo
             className={styles.avatarImage}
             personId={player.personId}
             teamId={player.teamId}
+            style={headshotStyle}
             alt=""
             draggable={false}
           />
@@ -330,6 +339,7 @@ function ExpandedTile({ player, teamLabel }) {
           className={styles.expandedAvatarImage}
           personId={player.personId}
           teamId={player.teamId}
+          style={isGLeagueTeamId(player.teamId) ? { mixBlendMode: "multiply" } : undefined}
           alt=""
           draggable={false}
         />
@@ -890,6 +900,7 @@ export default function MatchUps({
                 className={styles.avatarImage}
                 personId={dragState.player.personId}
                 teamId={dragState.player.teamId}
+                style={isGLeagueTeamId(dragState.player.teamId) ? { mixBlendMode: "multiply" } : undefined}
                 alt=""
                 draggable={false}
               />

@@ -182,11 +182,11 @@
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 6px;
-  padding: 8px 6px 6px;
+  gap: 4px;
+  padding: 4px 4px 2px;
   border-radius: 14px;
-  border: 1px solid var(--border);
-  background: var(--bg);
+  border: 0;
+  background: transparent;
   transition: background-color 120ms ease, box-shadow 120ms ease, opacity 160ms ease, transform 160ms ease;
 }
 
@@ -196,7 +196,7 @@
 
 .tileTarget {
   background: var(--highlight-bg);
-  box-shadow: 0 0 0 1px var(--highlight-text), 0 10px 20px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 0 0 1px var(--highlight-text), 0 8px 18px rgba(15, 23, 42, 0.12);
 }
 
 .tileSwap {
@@ -204,11 +204,12 @@
 }
 
 .avatarFrame {
-  width: 84px;
-  height: 84px;
+  width: 108px;
+  height: 108px;
   border-radius: 14px;
   overflow: hidden;
-  background: #e8e8e8;
+  background: transparent;
+  isolation: isolate;
   flex: 0 0 auto;
 }
 
@@ -216,7 +217,7 @@
   width: 100%;
   height: 100%;
   display: block;
-  object-fit: cover;
+  object-fit: contain;
   object-position: center top;
   user-select: none;
   -webkit-user-select: none;
