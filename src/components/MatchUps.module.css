@@ -472,6 +472,8 @@
   .expandedPortrait {
     display: block;
     align-self: start;
+    width: min(100%, 640px);
+    margin-inline: auto;
   }
 
   .expandedPortraitHeader {
