@@ -187,10 +187,20 @@
   border-radius: 14px;
   border: 1px solid var(--border);
   background: var(--bg);
+  transition: background-color 120ms ease, box-shadow 120ms ease, opacity 160ms ease, transform 160ms ease;
 }
 
 .tileEmpty {
   opacity: 0.55;
+}
+
+.tileTarget {
+  background: var(--highlight-bg);
+  box-shadow: 0 0 0 1px var(--highlight-text), 0 10px 20px rgba(15, 23, 42, 0.12);
+}
+
+.tileSwap {
+  animation: tileSwapFade 180ms ease-out;
 }
 
 .avatarFrame {
@@ -443,6 +453,18 @@
 
 .dragGhost .tile {
   box-shadow: 0 14px 36px rgba(15, 23, 42, 0.28);
+}
+
+@keyframes tileSwapFade {
+  0% {
+    opacity: 0.42;
+    transform: scale(0.985);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 @media (max-width: 768px) {

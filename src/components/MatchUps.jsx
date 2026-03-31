@@ -4,9 +4,10 @@ import { readLocalStorage, writeLocalStorage } from "../storage.js";
 import styles from "./MatchUps.module.css";
 
 const MATCH_UP_STORAGE_PREFIX = "nba-dashboard:match-ups:";
-const DRAG_ARM_MS = 260;
+const DRAG_ARM_MS = 50;
 const MENU_HOLD_MS = 1500;
 const PRESS_MOVE_TOLERANCE_PX = 8;
+const SWAP_FLASH_MS = 180;
 const ROW_SLOT_COUNT = 5;
 
 function buildEmptyState() {
@@ -272,10 +273,12 @@ function refreshRowPreservingSharedSlots(currentSlotIds, preferredSlotIds) {
   return next.filter(Boolean);
 }
 
-function MatchUpTile({ player, isDraggingSource, onPointerDown }) {
+function MatchUpTile({ player, isDraggingSource, isTarget, isSwapAnimating, onPointerDown }) {
+  const tileClassName = `${styles.tile} ${isTarget ? styles.tileTarget : ""} ${isSwapAnimating ? styles.tileSwap : ""}`.trim();
+
   if (!player) {
     return (
-      <div className={`${styles.tile} ${styles.tileEmpty}`}>
+      <div className={`${tileClassName} ${styles.tileEmpty}`.trim()}>
         <div className={styles.avatarFrame} />
         <div className={styles.playerMeta}>
           <div className={styles.playerName}>Open</div>
@@ -291,7 +294,7 @@ function MatchUpTile({ player, isDraggingSource, onPointerDown }) {
       onPointerDown={onPointerDown}
       aria-label={`Adjust ${player.fullName || player.lastName || "player"}`}
     >
-      <div className={styles.tile}>
+      <div className={tileClassName}>
         <div className={styles.avatarFrame}>
           <img className={styles.avatarImage} src={player.headshotUrl} alt="" draggable="false" />
         </div>
@@ -335,8 +338,10 @@ export default function MatchUps({
   const [menuState, setMenuState] = useState(null);
   const [refreshMenuOpen, setRefreshMenuOpen] = useState(false);
   const [expandedOpen, setExpandedOpen] = useState(false);
+  const [swapFlash, setSwapFlash] = useState(null);
   const pressSessionRef = useRef(null);
   const menuTimeoutRef = useRef(null);
+  const swapFlashTimeoutRef = useRef(null);
   const slotRefs = useRef({
     away: [],
     home: [],
@@ -385,6 +390,24 @@ export default function MatchUps({
         [side]: nextSlotIds,
       },
     }));
+  };
+
+  const triggerSwapFlash = (side, fromIndex, toIndex) => {
+    if (fromIndex === toIndex) return;
+
+    if (swapFlashTimeoutRef.current) {
+      clearTimeout(swapFlashTimeoutRef.current);
+    }
+
+    setSwapFlash({
+      side,
+      indexes: [fromIndex, toIndex],
+    });
+
+    swapFlashTimeoutRef.current = setTimeout(() => {
+      setSwapFlash(null);
+      swapFlashTimeoutRef.current = null;
+    }, SWAP_FLASH_MS);
   };
 
   useEffect(() => {
@@ -447,6 +470,7 @@ export default function MatchUps({
       if (activeDrag && event.pointerId === activeDrag.pointerId) {
         const slotIds = activeDrag.side === "away" ? awayRow.slotIds : homeRow.slotIds;
         updateRowSlots(activeDrag.side, moveItem(slotIds, activeDrag.fromIndex, activeDrag.overIndex));
+        triggerSwapFlash(activeDrag.side, activeDrag.fromIndex, activeDrag.overIndex);
         setDragState(null);
       }
 
@@ -524,6 +548,9 @@ export default function MatchUps({
 
   useEffect(() => () => {
     clearPressSession();
+    if (swapFlashTimeoutRef.current) {
+      clearTimeout(swapFlashTimeoutRef.current);
+    }
   }, []);
 
   const openRosterMenu = (session) => {
@@ -697,6 +724,7 @@ export default function MatchUps({
                       const player = row.players[index] || null;
                       const isSource = dragState?.side === row.key && dragState?.fromIndex === index;
                       const isTarget = dragState?.side === row.key && dragState?.overIndex === index;
+                      const isSwapAnimating = swapFlash?.side === row.key && swapFlash.indexes.includes(index);
                       return (
                         <div
                           key={`${row.key}-${player?.personId || `slot-${index}`}`}
@@ -708,6 +736,8 @@ export default function MatchUps({
                           <MatchUpTile
                             player={player}
                             isDraggingSource={isSource}
+                            isTarget={isTarget}
+                            isSwapAnimating={isSwapAnimating}
                             onPointerDown={(event) => handlePointerDown(row.key, index, event)}
                           />
                         </div>
