@@ -113,7 +113,38 @@ function buildRosterPlayers(teamBoxPlayers, stintPlayers) {
   return roster;
 }
 
-function buildDefaultSlotIds(stintPlayers, roster) {
+function isStarterPlayer(player) {
+  const rawStarter =
+    player?.starter ??
+    player?.isStarter ??
+    player?.starterStatus ??
+    player?.starterFlag ??
+    null;
+
+  if (rawStarter === true) return true;
+  const normalized = String(rawStarter || "").trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "y" || normalized === "yes";
+}
+
+function buildStarterSlotIds(teamBoxPlayers) {
+  const starters = (teamBoxPlayers || [])
+    .map((player, index) => ({ player, index }))
+    .filter(({ player }) => isStarterPlayer(player))
+    .sort((a, b) => {
+      const aOrder = Number(a.player?.starterOrder ?? a.player?.starterPosition ?? a.index);
+      const bOrder = Number(b.player?.starterOrder ?? b.player?.starterPosition ?? b.index);
+      if (Number.isFinite(aOrder) && Number.isFinite(bOrder) && aOrder !== bOrder) {
+        return aOrder - bOrder;
+      }
+      return a.index - b.index;
+    })
+    .map(({ player }) => String(player?.personId || ""))
+    .filter(Boolean);
+
+  return starters.slice(0, ROW_SLOT_COUNT);
+}
+
+function buildPreferredSlotIds(teamBoxPlayers, stintPlayers, roster) {
   const slotIds = [];
   const used = new Set();
 
@@ -123,6 +154,14 @@ function buildDefaultSlotIds(stintPlayers, roster) {
     used.add(personId);
     slotIds.push(personId);
   });
+
+  if (!slotIds.length) {
+    buildStarterSlotIds(teamBoxPlayers).forEach((personId) => {
+      if (used.has(personId)) return;
+      used.add(personId);
+      slotIds.push(personId);
+    });
+  }
 
   roster.forEach((player) => {
     if (slotIds.length >= ROW_SLOT_COUNT || used.has(player.personId)) return;
@@ -167,11 +206,12 @@ function resolveSlotIds(savedSlotIds, defaultSlotIds, roster) {
 function buildTeamRow(teamBoxPlayers, stintPlayers, savedSlotIds) {
   const roster = buildRosterPlayers(teamBoxPlayers, stintPlayers);
   const rosterMap = new Map(roster.map((player) => [player.personId, player]));
-  const defaultSlotIds = buildDefaultSlotIds(stintPlayers, roster);
-  const slotIds = resolveSlotIds(savedSlotIds, defaultSlotIds, roster);
+  const preferredSlotIds = buildPreferredSlotIds(teamBoxPlayers, stintPlayers, roster);
+  const slotIds = resolveSlotIds(savedSlotIds, preferredSlotIds, roster);
   return {
     roster,
     rosterMap,
+    preferredSlotIds,
     slotIds,
     players: slotIds.map((personId) => rosterMap.get(personId) || null),
   };
@@ -203,6 +243,33 @@ function sortRosterOptions(players) {
     if (nameCompare !== 0) return nameCompare;
     return String(a?.firstName || "").localeCompare(String(b?.firstName || ""));
   });
+}
+
+function refreshRowPreservingSharedSlots(currentSlotIds, preferredSlotIds) {
+  const preferredSet = new Set(preferredSlotIds);
+  const next = Array(ROW_SLOT_COUNT).fill(null);
+  const used = new Set();
+
+  (currentSlotIds || []).forEach((personId, index) => {
+    if (!preferredSet.has(personId) || used.has(personId)) return;
+    next[index] = personId;
+    used.add(personId);
+  });
+
+  let preferredIndex = 0;
+  for (let index = 0; index < ROW_SLOT_COUNT; index += 1) {
+    if (next[index]) continue;
+    while (preferredIndex < preferredSlotIds.length) {
+      const candidate = preferredSlotIds[preferredIndex];
+      preferredIndex += 1;
+      if (!candidate || used.has(candidate)) continue;
+      next[index] = candidate;
+      used.add(candidate);
+      break;
+    }
+  }
+
+  return next.filter(Boolean);
 }
 
 function MatchUpTile({ player, isDraggingSource, onPointerDown }) {
@@ -246,6 +313,7 @@ export default function MatchUps({
   const [persistedState, setPersistedState] = useState(() => loadMatchUpState(gameId));
   const [dragState, setDragState] = useState(null);
   const [menuState, setMenuState] = useState(null);
+  const [refreshMenuOpen, setRefreshMenuOpen] = useState(false);
   const pressSessionRef = useRef(null);
   const menuTimeoutRef = useRef(null);
   const slotRefs = useRef({
@@ -253,10 +321,13 @@ export default function MatchUps({
     home: [],
   });
   const menuRef = useRef(null);
+  const refreshMenuRef = useRef(null);
+  const refreshButtonRef = useRef(null);
 
   useEffect(() => {
     setPersistedState(loadMatchUpState(gameId));
     setMenuState(null);
+    setRefreshMenuOpen(false);
     setDragState(null);
   }, [gameId]);
 
@@ -378,6 +449,9 @@ export default function MatchUps({
       if (!menuState || !menuRef.current?.contains(event.target)) {
         setMenuState(null);
       }
+      if (!refreshMenuRef.current?.contains(event.target) && !refreshButtonRef.current?.contains(event.target)) {
+        setRefreshMenuOpen(false);
+      }
     };
 
     const handleEscape = (event) => {
@@ -435,6 +509,7 @@ export default function MatchUps({
 
     event.preventDefault();
     setMenuState(null);
+    setRefreshMenuOpen(false);
     clearPressSession();
 
     const rect = event.currentTarget.getBoundingClientRect();
@@ -469,8 +544,35 @@ export default function MatchUps({
     setMenuState(null);
   };
 
+  const toggleRefreshMenu = () => {
+    setMenuState(null);
+    setRefreshMenuOpen((current) => !current);
+  };
+
+  const handleRefreshRow = (side) => {
+    const row = side === "away" ? awayRow : homeRow;
+    updateRowSlots(
+      side,
+      refreshRowPreservingSharedSlots(row.slotIds, row.preferredSlotIds)
+    );
+    setRefreshMenuOpen(false);
+  };
+
+  const handleRefreshAll = () => {
+    setPersistedState((current) => ({
+      ...current,
+      slots: {
+        ...current.slots,
+        away: awayRow.preferredSlotIds,
+        home: homeRow.preferredSlotIds,
+      },
+    }));
+    setRefreshMenuOpen(false);
+  };
+
   const updateCollapsed = () => {
     setMenuState(null);
+    setRefreshMenuOpen(false);
     setPersistedState((current) => ({
       ...current,
       collapsed: !current.collapsed,
@@ -484,6 +586,7 @@ export default function MatchUps({
       teamName: awayTeam?.teamName || "Visiting Team",
       teamId: awayTeam?.teamId,
       roster: awayRow.roster,
+      preferredSlotIds: awayRow.preferredSlotIds,
       players: awayRow.players,
     },
     {
@@ -492,6 +595,7 @@ export default function MatchUps({
       teamName: homeTeam?.teamName || "Home Team",
       teamId: homeTeam?.teamId,
       roster: homeRow.roster,
+      preferredSlotIds: homeRow.preferredSlotIds,
       players: homeRow.players,
     },
   ];
@@ -514,8 +618,15 @@ export default function MatchUps({
 
       {persistedState.collapsed ? null : (
         <div className={styles.body}>
-          <div className={styles.instructions}>
-            Hold and drag to reorder. Hold a headshot for 1.5 seconds without moving to swap in another player.
+          <div className={styles.actionsRow}>
+            <button
+              ref={refreshButtonRef}
+              type="button"
+              className={styles.refreshButton}
+              onClick={toggleRefreshMenu}
+            >
+              Refresh
+            </button>
           </div>
 
           {hasLineups ? rows.map((row) => {
@@ -561,6 +672,21 @@ export default function MatchUps({
           )}
         </div>
       )}
+
+      {refreshMenuOpen ? (
+        <div ref={refreshMenuRef} className={styles.refreshMenu}>
+          <div className={styles.refreshMenuTitle}>Reset Match-Ups</div>
+          <button type="button" className={styles.refreshMenuButton} onClick={() => handleRefreshRow("away")}>
+            {`Refresh ${awayTeam?.teamTricode || "Away"}`}
+          </button>
+          <button type="button" className={styles.refreshMenuButton} onClick={() => handleRefreshRow("home")}>
+            {`Refresh ${homeTeam?.teamTricode || "Home"}`}
+          </button>
+          <button type="button" className={styles.refreshMenuButton} onClick={handleRefreshAll}>
+            Refresh All
+          </button>
+        </div>
+      ) : null}
 
       {menuState ? (
         <div
