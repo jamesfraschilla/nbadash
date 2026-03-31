@@ -1,6 +1,9 @@
 import { gLeagueHeadshotOverrides } from "./gLeagueHeadshotOverrides.js";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
+const SUPABASE_FUNCTIONS_BASE = import.meta.env.VITE_SUPABASE_URL
+  ? `${String(import.meta.env.VITE_SUPABASE_URL).replace(/\/$/, "")}/functions/v1`
+  : "";
 
 async function requestJson(url) {
   const res = await fetch(url, { headers: { Accept: "application/json" } });
@@ -59,6 +62,9 @@ export function playerHeadshotUrls(personId, teamId = null) {
   const candidates = league === "gleague"
     ? [
       ...overrideUrls,
+      SUPABASE_FUNCTIONS_BASE
+        ? `${SUPABASE_FUNCTIONS_BASE}/player-headshot?personId=${encodeURIComponent(safePersonId)}`
+        : null,
       `https://cdn.nba.com/headshots/nba/latest/1040x760/${safePersonId}.png`,
       `https://cdn.nba.com/headshots/nba/latest/260x190/${safePersonId}.png`,
     ]

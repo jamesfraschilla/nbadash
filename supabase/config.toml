@@ -1,0 +1,2 @@
+[functions.player-headshot]
+verify_jwt = false
