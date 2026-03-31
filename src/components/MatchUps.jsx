@@ -4,49 +4,39 @@ import { readLocalStorage, writeLocalStorage } from "../storage.js";
 import styles from "./MatchUps.module.css";
 
 const MATCH_UP_STORAGE_PREFIX = "nba-dashboard:match-ups:";
-const DRAG_HOLD_MS = 260;
+const DRAG_ARM_MS = 260;
+const MENU_HOLD_MS = 1500;
 const PRESS_MOVE_TOLERANCE_PX = 8;
 const ROW_SLOT_COUNT = 5;
 
+function buildEmptyState() {
+  return {
+    collapsed: false,
+    slots: {
+      away: [],
+      home: [],
+    },
+  };
+}
+
 function loadMatchUpState(gameId) {
-  if (!gameId) {
-    return {
-      collapsed: false,
-      orders: {
-        away: [],
-        home: [],
-      },
-    };
-  }
+  if (!gameId) return buildEmptyState();
 
   const raw = readLocalStorage(`${MATCH_UP_STORAGE_PREFIX}${gameId}`);
-  if (!raw) {
-    return {
-      collapsed: false,
-      orders: {
-        away: [],
-        home: [],
-      },
-    };
-  }
+  if (!raw) return buildEmptyState();
 
   try {
     const parsed = JSON.parse(raw);
+    const savedSlots = parsed?.slots || parsed?.orders || {};
     return {
       collapsed: Boolean(parsed?.collapsed),
-      orders: {
-        away: Array.isArray(parsed?.orders?.away) ? parsed.orders.away.map(String) : [],
-        home: Array.isArray(parsed?.orders?.home) ? parsed.orders.home.map(String) : [],
+      slots: {
+        away: Array.isArray(savedSlots?.away) ? savedSlots.away.map(String) : [],
+        home: Array.isArray(savedSlots?.home) ? savedSlots.home.map(String) : [],
       },
     };
   } catch {
-    return {
-      collapsed: false,
-      orders: {
-        away: [],
-        home: [],
-      },
-    };
+    return buildEmptyState();
   }
 }
 
@@ -85,47 +75,106 @@ function normalizeStintPlayers(players) {
     .slice(0, ROW_SLOT_COUNT);
 }
 
-function buildPlayerLookup(boxScore) {
-  const players = [
-    ...(boxScore?.away?.players || []),
-    ...(boxScore?.home?.players || []),
-  ];
-  return new Map(players.map((player) => [String(player.personId), player]));
+function normalizeRosterPlayer(player, fallback = null) {
+  if (!player && !fallback) return null;
+  const personId = String(player?.personId || fallback?.personId || "");
+  if (!personId) return null;
+
+  const firstName = String(player?.firstName || "").trim();
+  const familyName = String(player?.familyName || "").trim() || extractLastName(fallback?.nameI);
+  return {
+    personId,
+    jerseyNum: String(player?.jerseyNum || fallback?.jerseyNum || "").trim(),
+    firstName,
+    lastName: familyName,
+    fullName: [firstName, familyName].filter(Boolean).join(" ").trim(),
+    headshotUrl: playerHeadshotUrl(personId),
+  };
 }
 
-function buildRowPlayers(players, playerLookup) {
-  return normalizeStintPlayers(players).map((player, index) => {
+function buildRosterPlayers(teamBoxPlayers, stintPlayers) {
+  const roster = [];
+  const byId = new Map();
+
+  (teamBoxPlayers || []).forEach((player) => {
+    const normalized = normalizeRosterPlayer(player);
+    if (!normalized || byId.has(normalized.personId)) return;
+    byId.set(normalized.personId, normalized);
+    roster.push(normalized);
+  });
+
+  normalizeStintPlayers(stintPlayers).forEach((player) => {
+    const normalized = normalizeRosterPlayer(null, player);
+    if (!normalized || byId.has(normalized.personId)) return;
+    byId.set(normalized.personId, normalized);
+    roster.push(normalized);
+  });
+
+  return roster;
+}
+
+function buildDefaultSlotIds(stintPlayers, roster) {
+  const slotIds = [];
+  const used = new Set();
+
+  normalizeStintPlayers(stintPlayers).forEach((player) => {
     const personId = String(player?.personId || "");
-    const fullPlayer = playerLookup.get(personId);
-    return {
-      personId,
-      jerseyNum: String(fullPlayer?.jerseyNum || player?.jerseyNum || "").trim(),
-      lastName: String(fullPlayer?.familyName || extractLastName(player?.nameI)).trim(),
-      fullName: [fullPlayer?.firstName, fullPlayer?.familyName].filter(Boolean).join(" ").trim(),
-      headshotUrl: player?.personId ? playerHeadshotUrl(player.personId) : "",
-      slotIndex: index,
-    };
+    if (!personId || used.has(personId)) return;
+    used.add(personId);
+    slotIds.push(personId);
   });
+
+  roster.forEach((player) => {
+    if (slotIds.length >= ROW_SLOT_COUNT || used.has(player.personId)) return;
+    used.add(player.personId);
+    slotIds.push(player.personId);
+  });
+
+  return slotIds.slice(0, ROW_SLOT_COUNT);
 }
 
-function applySavedOrder(players, savedOrder) {
-  if (!players.length) return players;
-  const playersById = new Map(players.map((player) => [player.personId, player]));
-  const ordered = [];
+function resolveSlotIds(savedSlotIds, defaultSlotIds, roster) {
+  const rosterIds = roster.map((player) => player.personId);
+  const rosterIdSet = new Set(rosterIds);
+  const resolved = Array(ROW_SLOT_COUNT).fill(null);
+  const used = new Set();
 
-  (savedOrder || []).forEach((personId) => {
-    if (!playersById.has(personId)) return;
-    ordered.push(playersById.get(personId));
-    playersById.delete(personId);
-  });
+  for (let index = 0; index < ROW_SLOT_COUNT; index += 1) {
+    const savedId = String(savedSlotIds?.[index] || "");
+    if (!savedId || used.has(savedId) || !rosterIdSet.has(savedId)) continue;
+    resolved[index] = savedId;
+    used.add(savedId);
+  }
 
-  players.forEach((player) => {
-    if (playersById.has(player.personId)) {
-      ordered.push(player);
+  const fillPool = [...defaultSlotIds, ...rosterIds];
+  let fillIndex = 0;
+
+  for (let index = 0; index < ROW_SLOT_COUNT; index += 1) {
+    if (resolved[index]) continue;
+    while (fillIndex < fillPool.length) {
+      const candidate = String(fillPool[fillIndex] || "");
+      fillIndex += 1;
+      if (!candidate || used.has(candidate) || !rosterIdSet.has(candidate)) continue;
+      resolved[index] = candidate;
+      used.add(candidate);
+      break;
     }
-  });
+  }
 
-  return ordered.slice(0, ROW_SLOT_COUNT);
+  return resolved.filter(Boolean).slice(0, ROW_SLOT_COUNT);
+}
+
+function buildTeamRow(teamBoxPlayers, stintPlayers, savedSlotIds) {
+  const roster = buildRosterPlayers(teamBoxPlayers, stintPlayers);
+  const rosterMap = new Map(roster.map((player) => [player.personId, player]));
+  const defaultSlotIds = buildDefaultSlotIds(stintPlayers, roster);
+  const slotIds = resolveSlotIds(savedSlotIds, defaultSlotIds, roster);
+  return {
+    roster,
+    rosterMap,
+    slotIds,
+    players: slotIds.map((personId) => rosterMap.get(personId) || null),
+  };
 }
 
 function moveItem(items, fromIndex, toIndex) {
@@ -135,6 +184,25 @@ function moveItem(items, fromIndex, toIndex) {
   if (!moved) return items;
   next.splice(toIndex, 0, moved);
   return next;
+}
+
+function swapOrReplace(items, index, personId) {
+  const next = [...items];
+  const existingIndex = next.findIndex((value) => value === personId);
+  if (existingIndex >= 0) {
+    [next[index], next[existingIndex]] = [next[existingIndex], next[index]];
+    return next;
+  }
+  next[index] = personId;
+  return next;
+}
+
+function sortRosterOptions(players) {
+  return [...players].sort((a, b) => {
+    const nameCompare = String(a?.lastName || "").localeCompare(String(b?.lastName || ""));
+    if (nameCompare !== 0) return nameCompare;
+    return String(a?.firstName || "").localeCompare(String(b?.firstName || ""));
+  });
 }
 
 function MatchUpTile({ player, isDraggingSource, onPointerDown }) {
@@ -154,7 +222,7 @@ function MatchUpTile({ player, isDraggingSource, onPointerDown }) {
       type="button"
       className={`${styles.tileButton} ${isDraggingSource ? styles.tileButtonDragging : ""}`}
       onPointerDown={onPointerDown}
-      aria-label={`Move ${player.fullName || player.lastName || "player"}`}
+      aria-label={`Adjust ${player.fullName || player.lastName || "player"}`}
     >
       <div className={styles.tile}>
         <div className={styles.avatarFrame}>
@@ -177,15 +245,19 @@ export default function MatchUps({
 }) {
   const [persistedState, setPersistedState] = useState(() => loadMatchUpState(gameId));
   const [dragState, setDragState] = useState(null);
-  const holdTimeoutRef = useRef(null);
+  const [menuState, setMenuState] = useState(null);
   const pressSessionRef = useRef(null);
+  const menuTimeoutRef = useRef(null);
   const slotRefs = useRef({
     away: [],
     home: [],
   });
+  const menuRef = useRef(null);
 
   useEffect(() => {
     setPersistedState(loadMatchUpState(gameId));
+    setMenuState(null);
+    setDragState(null);
   }, [gameId]);
 
   useEffect(() => {
@@ -193,35 +265,68 @@ export default function MatchUps({
   }, [gameId, persistedState]);
 
   const currentStint = useMemo(() => buildCurrentStint(minutesData), [minutesData]);
-  const playerLookup = useMemo(() => buildPlayerLookup(boxScore), [boxScore]);
 
-  const awayPlayers = useMemo(() => {
-    const players = buildRowPlayers(currentStint?.playersAway, playerLookup);
-    return applySavedOrder(players, persistedState.orders.away);
-  }, [currentStint?.playersAway, persistedState.orders.away, playerLookup]);
+  const awayRow = useMemo(
+    () => buildTeamRow(boxScore?.away?.players, currentStint?.playersAway, persistedState.slots.away),
+    [boxScore?.away?.players, currentStint?.playersAway, persistedState.slots.away]
+  );
 
-  const homePlayers = useMemo(() => {
-    const players = buildRowPlayers(currentStint?.playersHome, playerLookup);
-    return applySavedOrder(players, persistedState.orders.home);
-  }, [currentStint?.playersHome, persistedState.orders.home, playerLookup]);
+  const homeRow = useMemo(
+    () => buildTeamRow(boxScore?.home?.players, currentStint?.playersHome, persistedState.slots.home),
+    [boxScore?.home?.players, currentStint?.playersHome, persistedState.slots.home]
+  );
+
+  const clearPressSession = () => {
+    if (menuTimeoutRef.current) {
+      clearTimeout(menuTimeoutRef.current);
+      menuTimeoutRef.current = null;
+    }
+    pressSessionRef.current = null;
+  };
+
+  const updateRowSlots = (side, nextSlotIds) => {
+    setPersistedState((current) => ({
+      ...current,
+      slots: {
+        ...current.slots,
+        [side]: nextSlotIds,
+      },
+    }));
+  };
 
   useEffect(() => {
     const handlePointerMove = (event) => {
       const pressSession = pressSessionRef.current;
+
       if (pressSession && !dragState && event.pointerId === pressSession.pointerId) {
         const deltaX = event.clientX - pressSession.startX;
         const deltaY = event.clientY - pressSession.startY;
-        if (Math.hypot(deltaX, deltaY) > PRESS_MOVE_TOLERANCE_PX) {
-          clearTimeout(holdTimeoutRef.current);
-          holdTimeoutRef.current = null;
-          pressSessionRef.current = null;
+        if (Math.hypot(deltaX, deltaY) <= PRESS_MOVE_TOLERANCE_PX) return;
+
+        if ((Date.now() - pressSession.startedAt) < DRAG_ARM_MS) {
+          clearPressSession();
+          return;
         }
+
+        clearPressSession();
+        setDragState({
+          side: pressSession.side,
+          fromIndex: pressSession.index,
+          overIndex: pressSession.index,
+          pointerId: pressSession.pointerId,
+          pointerX: event.clientX,
+          pointerY: event.clientY,
+          offsetX: pressSession.offsetX,
+          offsetY: pressSession.offsetY,
+          width: pressSession.width,
+          player: pressSession.player,
+        });
         return;
       }
 
       if (!dragState || event.pointerId !== dragState.pointerId) return;
-      event.preventDefault();
 
+      event.preventDefault();
       const slots = slotRefs.current[dragState.side] || [];
       const nextOverIndex = slots.findIndex((slot) => {
         if (!slot) return false;
@@ -242,26 +347,13 @@ export default function MatchUps({
       } : current);
     };
 
-    const clearPressSession = () => {
-      clearTimeout(holdTimeoutRef.current);
-      holdTimeoutRef.current = null;
-      pressSessionRef.current = null;
-    };
-
     const handlePointerUp = (event) => {
       const activeDrag = dragState;
       const pressSession = pressSessionRef.current;
 
       if (activeDrag && event.pointerId === activeDrag.pointerId) {
-        const currentPlayers = activeDrag.side === "away" ? awayPlayers : homePlayers;
-        const nextPlayers = moveItem(currentPlayers, activeDrag.fromIndex, activeDrag.overIndex);
-        setPersistedState((current) => ({
-          ...current,
-          orders: {
-            ...current.orders,
-            [activeDrag.side]: nextPlayers.map((player) => player.personId),
-          },
-        }));
+        const slotIds = activeDrag.side === "away" ? awayRow.slotIds : homeRow.slotIds;
+        updateRowSlots(activeDrag.side, moveItem(slotIds, activeDrag.fromIndex, activeDrag.overIndex));
         setDragState(null);
       }
 
@@ -279,7 +371,29 @@ export default function MatchUps({
       window.removeEventListener("pointerup", handlePointerUp);
       window.removeEventListener("pointercancel", handlePointerUp);
     };
-  }, [awayPlayers, dragState, homePlayers]);
+  }, [awayRow.slotIds, dragState, homeRow.slotIds]);
+
+  useEffect(() => {
+    const handlePointerDownOutside = (event) => {
+      if (!menuState || !menuRef.current?.contains(event.target)) {
+        setMenuState(null);
+      }
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === "Escape") {
+        setMenuState(null);
+      }
+    };
+
+    window.addEventListener("pointerdown", handlePointerDownOutside);
+    window.addEventListener("keydown", handleEscape);
+
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDownOutside);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [menuState]);
 
   useEffect(() => {
     if (!dragState) return undefined;
@@ -300,53 +414,63 @@ export default function MatchUps({
   }, [dragState]);
 
   useEffect(() => () => {
-    clearTimeout(holdTimeoutRef.current);
+    clearPressSession();
   }, []);
+
+  const openRosterMenu = (session) => {
+    setMenuState({
+      side: session.side,
+      index: session.index,
+      left: session.rect.left,
+      top: session.rect.bottom + 8,
+      width: session.rect.width,
+    });
+  };
 
   const handlePointerDown = (side, index, event) => {
     if (event.button != null && event.button !== 0) return;
-    const rowPlayers = side === "away" ? awayPlayers : homePlayers;
-    const player = rowPlayers[index];
+    const row = side === "away" ? awayRow : homeRow;
+    const player = row.players[index];
     if (!player) return;
 
-    clearTimeout(holdTimeoutRef.current);
-    const tileRect = event.currentTarget.getBoundingClientRect();
+    event.preventDefault();
+    setMenuState(null);
+    clearPressSession();
+
+    const rect = event.currentTarget.getBoundingClientRect();
     const pointerId = event.pointerId;
-    pressSessionRef.current = {
+    const session = {
       side,
       index,
       player,
       pointerId,
       startX: event.clientX,
       startY: event.clientY,
-      offsetX: event.clientX - tileRect.left,
-      offsetY: event.clientY - tileRect.top,
-      width: tileRect.width,
-      height: tileRect.height,
+      startedAt: Date.now(),
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+      width: rect.width,
+      rect,
     };
 
-    holdTimeoutRef.current = setTimeout(() => {
-      const session = pressSessionRef.current;
-      if (!session || session.pointerId !== pointerId) return;
-      setDragState({
-        side,
-        fromIndex: index,
-        overIndex: index,
-        pointerId,
-        pointerX: session.startX,
-        pointerY: session.startY,
-        offsetX: session.offsetX,
-        offsetY: session.offsetY,
-        width: session.width,
-        height: session.height,
-        player,
-      });
-      pressSessionRef.current = null;
-      holdTimeoutRef.current = null;
-    }, DRAG_HOLD_MS);
+    pressSessionRef.current = session;
+    menuTimeoutRef.current = setTimeout(() => {
+      const activeSession = pressSessionRef.current;
+      if (!activeSession || activeSession.pointerId !== pointerId) return;
+      clearPressSession();
+      openRosterMenu(activeSession);
+    }, MENU_HOLD_MS);
+  };
+
+  const handleRosterSelect = (side, index, personId) => {
+    const row = side === "away" ? awayRow : homeRow;
+    if (!row.rosterMap.has(personId)) return;
+    updateRowSlots(side, swapOrReplace(row.slotIds, index, personId));
+    setMenuState(null);
   };
 
   const updateCollapsed = () => {
+    setMenuState(null);
     setPersistedState((current) => ({
       ...current,
       collapsed: !current.collapsed,
@@ -359,18 +483,22 @@ export default function MatchUps({
       label: awayTeam?.teamTricode || "Away",
       teamName: awayTeam?.teamName || "Visiting Team",
       teamId: awayTeam?.teamId,
-      players: awayPlayers,
+      roster: awayRow.roster,
+      players: awayRow.players,
     },
     {
       key: "home",
       label: homeTeam?.teamTricode || "Home",
       teamName: homeTeam?.teamName || "Home Team",
       teamId: homeTeam?.teamId,
-      players: homePlayers,
+      roster: homeRow.roster,
+      players: homeRow.players,
     },
   ];
 
-  const hasLineups = awayPlayers.length || homePlayers.length;
+  const hasLineups = awayRow.players.length || homeRow.players.length;
+  const menuRow = menuState?.side === "away" ? rows[0] : rows[1];
+  const menuOptions = menuRow ? sortRosterOptions(menuRow.roster) : [];
 
   return (
     <section className={styles.container} aria-label="Match-Ups">
@@ -386,7 +514,9 @@ export default function MatchUps({
 
       {persistedState.collapsed ? null : (
         <div className={styles.body}>
-          <div className={styles.instructions}>Press and hold a player, then drag to change the matchup column.</div>
+          <div className={styles.instructions}>
+            Hold and drag to reorder. Hold a headshot for 1.5 seconds without moving to swap in another player.
+          </div>
 
           {hasLineups ? rows.map((row) => {
             const logoUrl = row.teamId ? teamLogoUrl(row.teamId) : "";
@@ -431,6 +561,32 @@ export default function MatchUps({
           )}
         </div>
       )}
+
+      {menuState ? (
+        <div
+          ref={menuRef}
+          className={styles.menu}
+          style={{
+            left: `${Math.max(12, menuState.left)}px`,
+            top: `${menuState.top}px`,
+            width: `${Math.max(menuState.width, 180)}px`,
+          }}
+        >
+          <div className={styles.menuHeader}>Select player</div>
+          <div className={styles.menuList}>
+            {menuOptions.map((player) => (
+              <button
+                key={player.personId}
+                type="button"
+                className={styles.menuItem}
+                onClick={() => handleRosterSelect(menuState.side, menuState.index, player.personId)}
+              >
+                {`${player.jerseyNum} ${player.fullName || player.lastName}`.trim()}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {dragState?.player ? (
         <div

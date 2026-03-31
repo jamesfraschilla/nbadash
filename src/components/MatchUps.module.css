@@ -1,6 +1,9 @@
 .container {
   width: min(100%, 860px);
   margin: 0 auto 22px;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .toggleButton {
@@ -35,6 +38,8 @@
   background: var(--panel);
   display: grid;
   gap: 16px;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .instructions,
@@ -78,6 +83,7 @@
 .rowScroller {
   overflow-x: auto;
   padding-bottom: 2px;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .slotGrid {
@@ -105,6 +111,10 @@
   color: inherit;
   cursor: grab;
   touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .tileButtonDragging {
@@ -143,6 +153,10 @@
   display: block;
   object-fit: cover;
   object-position: center top;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
 }
 
 .playerMeta {
@@ -155,6 +169,51 @@
   line-height: 1;
   color: var(--text);
   white-space: nowrap;
+}
+
+.menu {
+  position: fixed;
+  z-index: 70;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.22);
+  overflow: hidden;
+}
+
+.menuHeader {
+  padding: 10px 12px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.menuList {
+  max-height: min(320px, 60vh);
+  overflow-y: auto;
+}
+
+.menuItem {
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.menuItem:last-child {
+  border-bottom: 0;
+}
+
+.menuItem:hover {
+  background: var(--highlight-bg);
 }
 
 .dragGhost {
