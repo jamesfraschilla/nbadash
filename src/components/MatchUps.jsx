@@ -618,17 +618,6 @@ export default function MatchUps({
 
       {persistedState.collapsed ? null : (
         <div className={styles.body}>
-          <div className={styles.actionsRow}>
-            <button
-              ref={refreshButtonRef}
-              type="button"
-              className={styles.refreshButton}
-              onClick={toggleRefreshMenu}
-            >
-              Refresh
-            </button>
-          </div>
-
           {hasLineups ? rows.map((row) => {
             const logoUrl = row.teamId ? teamLogoUrl(row.teamId) : "";
             return (
@@ -639,6 +628,16 @@ export default function MatchUps({
                     <div className={styles.teamCode}>{row.label}</div>
                     <div className={styles.teamName}>{row.teamName}</div>
                   </div>
+                  {row.key === "away" ? (
+                    <button
+                      ref={refreshButtonRef}
+                      type="button"
+                      className={styles.refreshButton}
+                      onClick={toggleRefreshMenu}
+                    >
+                      Refresh
+                    </button>
+                  ) : null}
                 </div>
 
                 <div className={styles.rowScroller}>

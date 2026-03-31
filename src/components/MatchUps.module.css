@@ -49,11 +49,6 @@
   color: var(--muted);
 }
 
-.actionsRow {
-  display: flex;
-  justify-content: flex-end;
-}
-
 .refreshButton,
 .refreshMenuButton {
   border: 1px solid var(--border);
@@ -129,6 +124,10 @@
   font-size: 0.76rem;
   line-height: 1;
   color: var(--muted);
+}
+
+.rowLabel .refreshButton {
+  margin-left: auto;
 }
 
 .rowScroller {
