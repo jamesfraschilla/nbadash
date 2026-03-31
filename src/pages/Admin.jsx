@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createManagedUser, createUserInvite, fetchPendingInvites, fetchVisibleProfiles, updateProfile } from "../accountData.js";
-import { ACCOUNT_ROLES, ACCOUNT_TEAM_SCOPES } from "../authConfig.js";
+import { ACCOUNT_FEATURE_FLAGS, ACCOUNT_ROLES, ACCOUNT_TEAM_SCOPES } from "../authConfig.js";
 import { useAuth } from "../auth/useAuth.js";
 import {
   fetchRemotePregamePlayers,
@@ -24,6 +24,7 @@ function ProfileCard({ profile, actorId, onSave }) {
   const [draftRole, setDraftRole] = useState(profile.role || "coach");
   const [draftStatus, setDraftStatus] = useState(profile.status || "active");
   const [draftScopes, setDraftScopes] = useState(profile.team_scopes || []);
+  const [draftFeatureFlags, setDraftFeatureFlags] = useState(profile.feature_flags || []);
   const [saving, setSaving] = useState(false);
 
   const toggleScope = (scope) => {
@@ -34,12 +35,21 @@ function ProfileCard({ profile, actorId, onSave }) {
     ));
   };
 
+  const toggleFeatureFlag = (flag) => {
+    setDraftFeatureFlags((prev) => (
+      prev.includes(flag)
+        ? prev.filter((value) => value !== flag)
+        : [...prev, flag]
+    ));
+  };
+
   const handleSave = async () => {
     setSaving(true);
     await onSave(profile.id, {
       role: draftRole,
       status: draftStatus,
       team_scopes: draftScopes,
+      feature_flags: draftFeatureFlags,
     }, actorId);
     setSaving(false);
   };
@@ -88,6 +98,22 @@ function ProfileCard({ profile, actorId, onSave }) {
                 onChange={() => toggleScope(scope)}
               />
               <span>{scope}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className={styles.scopeGroup}>
+        <div className={styles.scopeLabel}>Feature access</div>
+        <div className={styles.scopeOptions}>
+          {ACCOUNT_FEATURE_FLAGS.map((feature) => (
+            <label key={feature.key} className={styles.scopeOption}>
+              <input
+                type="checkbox"
+                checked={draftFeatureFlags.includes(feature.key)}
+                onChange={() => toggleFeatureFlag(feature.key)}
+              />
+              <span>{feature.label}</span>
             </label>
           ))}
         </div>

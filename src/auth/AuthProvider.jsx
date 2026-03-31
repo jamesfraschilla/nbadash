@@ -95,6 +95,11 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
+  const featureFlags = profile?.feature_flags || [];
+  const isAdmin = profile?.role === "admin";
+  const isCoach = profile?.role === "coach" || isAdmin;
+  const canUseMatchUps = isAdmin || featureFlags.includes("match_ups");
+
   const value = useMemo(() => ({
     accountsEnabled: ACCOUNTS_ENABLED && Boolean(supabase),
     session,
@@ -104,6 +109,7 @@ export function AuthProvider({ children }) {
     error,
     emailSentTo,
     requiresPasswordReset,
+    featureFlags,
     clearError() {
       setError("");
     },
@@ -165,9 +171,13 @@ export function AuthProvider({ children }) {
       if (updateError) throw updateError;
       setRequiresPasswordReset(false);
     },
-    isAdmin: profile?.role === "admin",
-    isCoach: profile?.role === "coach" || profile?.role === "admin",
-  }), [emailSentTo, error, loading, profile, requiresPasswordReset, session]);
+    hasFeature(flag) {
+      return isAdmin || featureFlags.includes(flag);
+    },
+    canUseMatchUps,
+    isAdmin,
+    isCoach,
+  }), [canUseMatchUps, emailSentTo, error, featureFlags, isAdmin, isCoach, loading, profile, requiresPasswordReset, session]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

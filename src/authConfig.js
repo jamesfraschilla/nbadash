@@ -5,6 +5,9 @@ export const ALLOWED_EMAIL_DOMAIN = (import.meta.env.VITE_ALLOWED_EMAIL_DOMAIN |
 
 export const ACCOUNT_ROLES = ["admin", "coach"];
 export const ACCOUNT_TEAM_SCOPES = ["Washington", "Capital City"];
+export const ACCOUNT_FEATURE_FLAGS = [
+  { key: "match_ups", label: "Match-Ups" },
+];
 
 export function normalizeAccountEmail(value) {
   return String(value || "").trim().toLowerCase();

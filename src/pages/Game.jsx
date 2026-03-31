@@ -20,6 +20,7 @@ import BoxScoreTable from "../components/BoxScoreTable.jsx";
 import StatBars from "../components/StatBars.jsx";
 import Officials from "../components/Officials.jsx";
 import OfficialsExportPanel from "../components/OfficialsExportPanel.jsx";
+import MatchUps from "../components/MatchUps.jsx";
 import TransitionStats from "../components/TransitionStats.jsx";
 import MiscStats from "../components/MiscStats.jsx";
 import CreatingDisruption from "../components/CreatingDisruption.jsx";
@@ -372,7 +373,7 @@ const compareActionsByChronology = (a, b) => {
 
 export default function Game({ variant = "full" }) {
   const { gameId } = useParams();
-  const { user } = useAuth();
+  const { user, canUseMatchUps } = useAuth();
   const [params, setParams] = useSearchParams();
   const dateParam = params.get("d");
   const courtBackUrl = dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`;
@@ -1927,6 +1928,16 @@ export default function Game({ variant = "full" }) {
               )}
             </div>
           </div>
+
+          {canUseMatchUps ? (
+            <MatchUps
+              gameId={gameId}
+              awayTeam={awayTeam}
+              homeTeam={homeTeam}
+              boxScore={boxScore}
+              minutesData={minutesData}
+            />
+          ) : null}
 
           <StatBars
             title="Four Factors"

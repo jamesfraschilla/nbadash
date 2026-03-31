@@ -1,0 +1,184 @@
+.container {
+  width: min(100%, 860px);
+  margin: 0 auto 22px;
+}
+
+.toggleButton {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.toggleLabel {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.toggleIcon {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.body {
+  margin-top: 10px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--panel);
+  display: grid;
+  gap: 16px;
+}
+
+.instructions,
+.emptyState {
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.row {
+  display: grid;
+  gap: 10px;
+}
+
+.rowLabel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.teamLogo {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+
+.teamCode {
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.teamName {
+  margin-top: 3px;
+  font-size: 0.76rem;
+  line-height: 1;
+  color: var(--muted);
+}
+
+.rowScroller {
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.slotGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(112px, 1fr));
+  gap: 10px;
+  min-width: 600px;
+}
+
+.slot {
+  border-radius: 14px;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.slotTarget {
+  background: var(--highlight-bg);
+  box-shadow: inset 0 0 0 1px var(--highlight-text);
+}
+
+.tileButton {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: grab;
+  touch-action: manipulation;
+}
+
+.tileButtonDragging {
+  opacity: 0.18;
+}
+
+.tile {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: 8px 6px 6px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.tileEmpty {
+  opacity: 0.55;
+}
+
+.avatarFrame {
+  width: 84px;
+  height: 84px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #e8e8e8;
+  flex: 0 0 auto;
+}
+
+.avatarImage {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  object-position: center top;
+}
+
+.playerMeta {
+  min-height: 14px;
+}
+
+.playerName {
+  font-size: 0.82rem;
+  font-weight: 400;
+  line-height: 1;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.dragGhost {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.96;
+  transform: rotate(-2deg);
+}
+
+.dragGhost .tile {
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.28);
+}
+
+@media (max-width: 768px) {
+  .container {
+    width: 100%;
+  }
+
+  .body {
+    padding: 14px 12px;
+  }
+
+  .slotGrid {
+    min-width: 560px;
+  }
+}
