@@ -347,17 +347,16 @@
 .expandedSlotGrid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 14px;
+  gap: 10px;
 }
 
 .expandedTile {
   display: grid;
   justify-items: center;
-  gap: 10px;
-  padding: 14px 8px 10px;
-  border: 1px solid rgba(248, 250, 252, 0.14);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.05);
+  align-content: start;
+  gap: 8px;
+  padding: 0;
+  min-width: 0;
 }
 
 .expandedTileEmpty {
@@ -365,18 +364,18 @@
 }
 
 .expandedAvatarFrame {
-  width: min(17vw, 148px);
-  height: min(17vw, 148px);
+  width: min(19vw, 176px);
+  height: min(23vw, 216px);
   border-radius: 18px;
   overflow: hidden;
-  background: #d4d4d8;
+  background: transparent;
 }
 
 .expandedAvatarImage {
   width: 100%;
   height: 100%;
   display: block;
-  object-fit: cover;
+  object-fit: contain;
   object-position: center top;
   user-select: none;
   -webkit-user-select: none;
@@ -463,7 +462,7 @@
   }
 
   .expandedAvatarFrame {
-    width: min(30vw, 140px);
-    height: min(30vw, 140px);
+    width: min(36vw, 176px);
+    height: min(46vw, 232px);
   }
 }
