@@ -339,7 +339,6 @@ function ExpandedTile({ player, teamLabel }) {
           className={styles.expandedAvatarImage}
           personId={player.personId}
           teamId={player.teamId}
-          style={isGLeagueTeamId(player.teamId) ? { mixBlendMode: "multiply" } : undefined}
           alt=""
           draggable={false}
         />
