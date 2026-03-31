@@ -2,7 +2,8 @@ import { useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { createNote } from "../accountData.js";
-import { fetchGame, nbaEventVideoUrl, playerHeadshotUrl, teamLogoUrl } from "../api.js";
+import PlayerHeadshot from "../components/PlayerHeadshot.jsx";
+import { fetchGame, nbaEventVideoUrl, teamLogoUrl } from "../api.js";
 import { useAuth } from "../auth/useAuth.js";
 import {
   buildNoteFormFromAction,
@@ -263,12 +264,11 @@ export default function PlayByPlay() {
                   <div className={`${styles.eventContent} ${action.scoringEvent ? styles.scoring : ""}`}>
                     <span>{describePlayByPlayAction(action)}</span>
                     {action.personId && (
-                      <img
-                        src={playerHeadshotUrl(action.personId)}
+                      <PlayerHeadshot
+                        personId={action.personId}
+                        teamId={action.teamId}
                         alt={action.playerNameI || "player"}
-                        onError={(event) => {
-                          event.currentTarget.style.display = "none";
-                        }}
+                        fallback={null}
                       />
                     )}
                   </div>
@@ -298,12 +298,11 @@ export default function PlayByPlay() {
                 {isHome && (
                   <div className={`${styles.eventContent} ${action.scoringEvent ? styles.scoring : ""}`}>
                     {action.personId && (
-                      <img
-                        src={playerHeadshotUrl(action.personId)}
+                      <PlayerHeadshot
+                        personId={action.personId}
+                        teamId={action.teamId}
                         alt={action.playerNameI || "player"}
-                        onError={(event) => {
-                          event.currentTarget.style.display = "none";
-                        }}
+                        fallback={null}
                       />
                     )}
                     <span>{describePlayByPlayAction(action)}</span>

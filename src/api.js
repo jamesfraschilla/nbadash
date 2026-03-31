@@ -1,3 +1,5 @@
+import { gLeagueHeadshotOverrides } from "./gLeagueHeadshotOverrides.js";
+
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 
 async function requestJson(url) {
@@ -27,7 +29,7 @@ export function fetchMinutes(gameId) {
 export function teamLogoUrl(teamId, league = null) {
   const inferredLeague =
     league ||
-    (Number(teamId) >= 1612700000 && Number(teamId) < 1612710000 ? "gleague" : "nba");
+    inferLeagueFromTeamId(teamId);
 
   if (inferredLeague === "gleague") {
     return `https://ak-static.cms.nba.com/wp-content/uploads/logos/nbagleague/${teamId}/primary/L/logo.svg`;
@@ -38,8 +40,38 @@ export function teamLogoUrl(teamId, league = null) {
   return `https://cdn.nba.com/logos/nba/${teamId}/primary/L/logo.svg`;
 }
 
-export function playerHeadshotUrl(personId) {
-  return `https://cdn.nba.com/headshots/nba/latest/260x190/${personId}.png`;
+export function inferLeagueFromTeamId(teamId) {
+  return Number(teamId) >= 1612700000 && Number(teamId) < 1612710000 ? "gleague" : "nba";
+}
+
+export function playerHeadshotUrls(personId, teamId = null) {
+  const safePersonId = String(personId || "").trim();
+  if (!safePersonId) return [];
+
+  const league = inferLeagueFromTeamId(teamId);
+  const overrideValue = league === "gleague" ? gLeagueHeadshotOverrides[safePersonId] : null;
+  const overrideUrls = Array.isArray(overrideValue)
+    ? overrideValue
+    : overrideValue
+      ? [overrideValue]
+      : [];
+
+  const candidates = league === "gleague"
+    ? [
+      ...overrideUrls,
+      `https://cdn.nba.com/headshots/nba/latest/1040x760/${safePersonId}.png`,
+      `https://cdn.nba.com/headshots/nba/latest/260x190/${safePersonId}.png`,
+    ]
+    : [
+      `https://cdn.nba.com/headshots/nba/latest/260x190/${safePersonId}.png`,
+      `https://cdn.nba.com/headshots/nba/latest/1040x760/${safePersonId}.png`,
+    ];
+
+  return [...new Set(candidates.filter(Boolean))];
+}
+
+export function playerHeadshotUrl(personId, teamId = null) {
+  return playerHeadshotUrls(personId, teamId)[0] || null;
 }
 
 export function nbaEventVideoUrl({ gameId, actionNumber, seasonYear, title }) {

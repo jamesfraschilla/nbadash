@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { playerHeadshotUrl, teamLogoUrl } from "../api.js";
+import { teamLogoUrl } from "../api.js";
+import PlayerHeadshot from "./PlayerHeadshot.jsx";
 import { readLocalStorage, writeLocalStorage } from "../storage.js";
 import styles from "./MatchUps.module.css";
 
@@ -76,7 +77,7 @@ function normalizeStintPlayers(players) {
     .slice(0, ROW_SLOT_COUNT);
 }
 
-function normalizeRosterPlayer(player, fallback = null) {
+function normalizeRosterPlayer(player, fallback = null, teamId = null) {
   if (!player && !fallback) return null;
   const personId = String(player?.personId || fallback?.personId || "");
   if (!personId) return null;
@@ -89,23 +90,23 @@ function normalizeRosterPlayer(player, fallback = null) {
     firstName,
     lastName: familyName,
     fullName: [firstName, familyName].filter(Boolean).join(" ").trim(),
-    headshotUrl: playerHeadshotUrl(personId),
+    teamId,
   };
 }
 
-function buildRosterPlayers(teamBoxPlayers, stintPlayers) {
+function buildRosterPlayers(teamBoxPlayers, stintPlayers, teamId) {
   const roster = [];
   const byId = new Map();
 
   (teamBoxPlayers || []).forEach((player) => {
-    const normalized = normalizeRosterPlayer(player);
+    const normalized = normalizeRosterPlayer(player, null, teamId);
     if (!normalized || byId.has(normalized.personId)) return;
     byId.set(normalized.personId, normalized);
     roster.push(normalized);
   });
 
   normalizeStintPlayers(stintPlayers).forEach((player) => {
-    const normalized = normalizeRosterPlayer(null, player);
+    const normalized = normalizeRosterPlayer(null, player, teamId);
     if (!normalized || byId.has(normalized.personId)) return;
     byId.set(normalized.personId, normalized);
     roster.push(normalized);
@@ -204,8 +205,8 @@ function resolveSlotIds(savedSlotIds, defaultSlotIds, roster) {
   return resolved.filter(Boolean).slice(0, ROW_SLOT_COUNT);
 }
 
-function buildTeamRow(teamBoxPlayers, stintPlayers, savedSlotIds) {
-  const roster = buildRosterPlayers(teamBoxPlayers, stintPlayers);
+function buildTeamRow(teamBoxPlayers, stintPlayers, savedSlotIds, teamId) {
+  const roster = buildRosterPlayers(teamBoxPlayers, stintPlayers, teamId);
   const rosterMap = new Map(roster.map((player) => [player.personId, player]));
   const preferredSlotIds = buildPreferredSlotIds(teamBoxPlayers, stintPlayers, roster);
   const slotIds = resolveSlotIds(savedSlotIds, preferredSlotIds, roster);
@@ -296,7 +297,13 @@ function MatchUpTile({ player, isDraggingSource, isTarget, isSwapAnimating, onPo
     >
       <div className={tileClassName}>
         <div className={styles.avatarFrame}>
-          <img className={styles.avatarImage} src={player.headshotUrl} alt="" draggable="false" />
+          <PlayerHeadshot
+            className={styles.avatarImage}
+            personId={player.personId}
+            teamId={player.teamId}
+            alt=""
+            draggable={false}
+          />
         </div>
         <div className={styles.playerMeta}>
           <div className={styles.playerName}>{`${player.jerseyNum} ${player.lastName}`.trim()}</div>
@@ -319,7 +326,13 @@ function ExpandedTile({ player, teamLabel }) {
   return (
     <div className={styles.expandedTile} aria-label={`${teamLabel} ${player.fullName || player.lastName}`}>
       <div className={styles.expandedAvatarFrame}>
-        <img className={styles.expandedAvatarImage} src={player.headshotUrl} alt="" draggable="false" />
+        <PlayerHeadshot
+          className={styles.expandedAvatarImage}
+          personId={player.personId}
+          teamId={player.teamId}
+          alt=""
+          draggable={false}
+        />
       </div>
       <div className={styles.expandedPlayerName}>{`${player.jerseyNum} ${player.lastName}`.trim()}</div>
     </div>
@@ -365,13 +378,13 @@ export default function MatchUps({
   const currentStint = useMemo(() => buildCurrentStint(minutesData), [minutesData]);
 
   const awayRow = useMemo(
-    () => buildTeamRow(boxScore?.away?.players, currentStint?.playersAway, persistedState.slots.away),
-    [boxScore?.away?.players, currentStint?.playersAway, persistedState.slots.away]
+    () => buildTeamRow(boxScore?.away?.players, currentStint?.playersAway, persistedState.slots.away, awayTeam?.teamId),
+    [awayTeam?.teamId, boxScore?.away?.players, currentStint?.playersAway, persistedState.slots.away]
   );
 
   const homeRow = useMemo(
-    () => buildTeamRow(boxScore?.home?.players, currentStint?.playersHome, persistedState.slots.home),
-    [boxScore?.home?.players, currentStint?.playersHome, persistedState.slots.home]
+    () => buildTeamRow(boxScore?.home?.players, currentStint?.playersHome, persistedState.slots.home, homeTeam?.teamId),
+    [boxScore?.home?.players, currentStint?.playersHome, homeTeam?.teamId, persistedState.slots.home]
   );
 
   const clearPressSession = () => {
@@ -873,7 +886,13 @@ export default function MatchUps({
         >
           <div className={styles.tile}>
             <div className={styles.avatarFrame}>
-              <img className={styles.avatarImage} src={dragState.player.headshotUrl} alt="" draggable="false" />
+              <PlayerHeadshot
+                className={styles.avatarImage}
+                personId={dragState.player.personId}
+                teamId={dragState.player.teamId}
+                alt=""
+                draggable={false}
+              />
             </div>
             <div className={styles.playerMeta}>
               <div className={styles.playerName}>{`${dragState.player.jerseyNum} ${dragState.player.lastName}`.trim()}</div>

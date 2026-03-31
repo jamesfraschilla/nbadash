@@ -2,7 +2,7 @@ import { Link, useSearchParams, useParams } from "react-router-dom";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createNote } from "../accountData.js";
-import { fetchGame, fetchMinutes, playerHeadshotUrl, teamLogoUrl } from "../api.js";
+import { fetchGame, fetchMinutes, teamLogoUrl } from "../api.js";
 import { useAuth } from "../auth/useAuth.js";
 import {
   buildDefaultNoteForm,
@@ -21,6 +21,7 @@ import StatBars from "../components/StatBars.jsx";
 import Officials from "../components/Officials.jsx";
 import OfficialsExportPanel from "../components/OfficialsExportPanel.jsx";
 import MatchUps from "../components/MatchUps.jsx";
+import PlayerHeadshot from "../components/PlayerHeadshot.jsx";
 import TransitionStats from "../components/TransitionStats.jsx";
 import MiscStats from "../components/MiscStats.jsx";
 import CreatingDisruption from "../components/CreatingDisruption.jsx";
@@ -1872,7 +1873,6 @@ export default function Game({ variant = "full" }) {
                 const clockText = action.clock ? normalizeClock(action.clock) : "";
                 const periodText = action.period ? `Q${action.period}` : "";
                 const descriptor = describePlayByPlayAction(action) || action.actionType || "";
-                const headshotUrl = action.personId ? playerHeadshotUrl(action.personId) : null;
                 const isHome = action.teamId && action.teamId === homeTeam?.teamId;
                 const isTimeout = action.actionType === "timeout";
                 const scoreText = action.scoreHome && action.scoreAway
@@ -1900,10 +1900,11 @@ export default function Game({ variant = "full" }) {
                       <span className={styles.pbpClock}>{clockText}</span>
                     </div>
                     <div className={styles.pbpBody}>
-                      {headshotUrl ? (
-                        <img
+                      {action.personId ? (
+                        <PlayerHeadshot
                           className={styles.pbpHeadshot}
-                          src={headshotUrl}
+                          personId={action.personId}
+                          teamId={action.teamId}
                           alt=""
                           onLoad={() => {
                             const wheel = pbpWheelRef.current;
@@ -1911,6 +1912,7 @@ export default function Game({ variant = "full" }) {
                               wheel.scrollLeft = Math.max(0, wheel.scrollWidth - wheel.clientWidth);
                             }
                           }}
+                          fallback={<div className={styles.pbpHeadshotPlaceholder} />}
                         />
                       ) : (
                         <div className={styles.pbpHeadshotPlaceholder} />
