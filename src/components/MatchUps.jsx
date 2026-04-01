@@ -58,6 +58,12 @@ function extractLastName(playerName = "") {
   return parts[parts.length - 1];
 }
 
+function extractFirstName(playerName = "") {
+  const parts = String(playerName || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return parts[0] || "";
+  return parts.slice(0, -1).join(" ");
+}
+
 function buildCurrentStint(minutesData) {
   const periods = Array.isArray(minutesData?.periods) ? minutesData.periods : [];
   for (let periodIndex = periods.length - 1; periodIndex >= 0; periodIndex -= 1) {
@@ -87,8 +93,18 @@ function normalizeRosterPlayer(player, fallback = null, teamId = null) {
   const personId = String(player?.personId || fallback?.personId || "");
   if (!personId) return null;
 
-  const firstName = String(player?.firstName || "").trim();
-  const familyName = String(player?.familyName || "").trim() || extractLastName(fallback?.nameI);
+  const fullNameSource = String(
+    player?.fullName ||
+    player?.name ||
+    player?.display ||
+    fallback?.nameI ||
+    fallback?.fullName ||
+    fallback?.name ||
+    fallback?.display ||
+    ""
+  ).trim();
+  const firstName = String(player?.firstName || player?.givenName || "").trim() || extractFirstName(fullNameSource);
+  const familyName = String(player?.familyName || player?.lastName || "").trim() || extractLastName(fullNameSource);
   return {
     personId,
     jerseyNum: String(player?.jerseyNum || fallback?.jerseyNum || "").trim(),
@@ -99,7 +115,7 @@ function normalizeRosterPlayer(player, fallback = null, teamId = null) {
   };
 }
 
-function buildRosterPlayers(teamBoxPlayers, stintPlayers, teamId) {
+function buildRosterPlayers(teamBoxPlayers, stintPlayers, extraRosterPlayers, teamId) {
   const roster = [];
   const byId = new Map();
 
@@ -112,6 +128,13 @@ function buildRosterPlayers(teamBoxPlayers, stintPlayers, teamId) {
 
   normalizeStintPlayers(stintPlayers).forEach((player) => {
     const normalized = normalizeRosterPlayer(null, player, teamId);
+    if (!normalized || byId.has(normalized.personId)) return;
+    byId.set(normalized.personId, normalized);
+    roster.push(normalized);
+  });
+
+  (extraRosterPlayers || []).forEach((player) => {
+    const normalized = normalizeRosterPlayer(player, null, teamId);
     if (!normalized || byId.has(normalized.personId)) return;
     byId.set(normalized.personId, normalized);
     roster.push(normalized);
@@ -210,8 +233,8 @@ function resolveSlotIds(savedSlotIds, defaultSlotIds, roster) {
   return resolved.filter(Boolean).slice(0, ROW_SLOT_COUNT);
 }
 
-function buildTeamRow(teamBoxPlayers, stintPlayers, savedSlotIds, teamId) {
-  const roster = buildRosterPlayers(teamBoxPlayers, stintPlayers, teamId);
+function buildTeamRow(teamBoxPlayers, stintPlayers, extraRosterPlayers, savedSlotIds, teamId) {
+  const roster = buildRosterPlayers(teamBoxPlayers, stintPlayers, extraRosterPlayers, teamId);
   const rosterMap = new Map(roster.map((player) => [player.personId, player]));
   const preferredSlotIds = buildPreferredSlotIds(teamBoxPlayers, stintPlayers, roster);
   const slotIds = resolveSlotIds(savedSlotIds, preferredSlotIds, roster);
@@ -354,6 +377,8 @@ export default function MatchUps({
   homeTeam,
   boxScore,
   minutesData,
+  awayRosterPlayers = [],
+  homeRosterPlayers = [],
 }) {
   const [persistedState, setPersistedState] = useState(() => loadMatchUpState(gameId));
   const [dragState, setDragState] = useState(null);
@@ -387,13 +412,25 @@ export default function MatchUps({
   const currentStint = useMemo(() => buildCurrentStint(minutesData), [minutesData]);
 
   const awayRow = useMemo(
-    () => buildTeamRow(boxScore?.away?.players, currentStint?.playersAway, persistedState.slots.away, awayTeam?.teamId),
-    [awayTeam?.teamId, boxScore?.away?.players, currentStint?.playersAway, persistedState.slots.away]
+    () => buildTeamRow(
+      boxScore?.away?.players,
+      currentStint?.playersAway,
+      awayRosterPlayers,
+      persistedState.slots.away,
+      awayTeam?.teamId
+    ),
+    [awayRosterPlayers, awayTeam?.teamId, boxScore?.away?.players, currentStint?.playersAway, persistedState.slots.away]
   );
 
   const homeRow = useMemo(
-    () => buildTeamRow(boxScore?.home?.players, currentStint?.playersHome, persistedState.slots.home, homeTeam?.teamId),
-    [boxScore?.home?.players, currentStint?.playersHome, homeTeam?.teamId, persistedState.slots.home]
+    () => buildTeamRow(
+      boxScore?.home?.players,
+      currentStint?.playersHome,
+      homeRosterPlayers,
+      persistedState.slots.home,
+      homeTeam?.teamId
+    ),
+    [boxScore?.home?.players, currentStint?.playersHome, homeRosterPlayers, homeTeam?.teamId, persistedState.slots.home]
   );
 
   const clearPressSession = () => {

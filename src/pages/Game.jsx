@@ -660,17 +660,27 @@ export default function Game({ variant = "full" }) {
     return resolveSharedPregamePlayersPayload(localRoster, remoteRoster).players;
   };
 
+  const awayRosterPlayers = useMemo(
+    () => getRosterForScope(awayTeamScope, awayRemoteRoster),
+    [awayTeamScope, awayRemoteRoster]
+  );
+
+  const homeRosterPlayers = useMemo(
+    () => getRosterForScope(homeTeamScope, homeRemoteRoster),
+    [homeTeamScope, homeRemoteRoster]
+  );
+
   const awayMinuteCapsByPersonId = useMemo(() => new Map(
-    getRosterForScope(awayTeamScope, awayRemoteRoster)
+    awayRosterPlayers
       .map((player) => [String(player?.personId || "").trim(), player?.cap])
       .filter(([personId, cap]) => personId && cap !== "" && cap != null)
-  ), [awayTeamScope, awayRemoteRoster]);
+  ), [awayRosterPlayers]);
 
   const homeMinuteCapsByPersonId = useMemo(() => new Map(
-    getRosterForScope(homeTeamScope, homeRemoteRoster)
+    homeRosterPlayers
       .map((player) => [String(player?.personId || "").trim(), player?.cap])
       .filter(([personId, cap]) => personId && cap !== "" && cap != null)
-  ), [homeTeamScope, homeRemoteRoster]);
+  ), [homeRosterPlayers]);
 
   const currentSnapshot = useMemo(() => buildSnapshot(boxScore), [boxScore]);
 
@@ -1938,6 +1948,8 @@ export default function Game({ variant = "full" }) {
               homeTeam={homeTeam}
               boxScore={boxScore}
               minutesData={minutesData}
+              awayRosterPlayers={awayRosterPlayers}
+              homeRosterPlayers={homeRosterPlayers}
             />
           ) : null}
 
