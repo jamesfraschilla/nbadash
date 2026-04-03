@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { teamLogoUrl } from "../api.js";
+import { useQuery } from "@tanstack/react-query";
+import { fetchCurrentNbaRosters, teamLogoUrl } from "../api.js";
 import { useAuth } from "../auth/useAuth.js";
 import { getNbaTeam, getNbaTeamRoster, NBA_TEAMS } from "../data/nbaTeams.js";
 import { deleteSavedToolRecord, getSavedToolRecord, saveToolRecord } from "../toolVault.js";
@@ -52,10 +53,11 @@ function ToolColumn({
   label,
   teamId,
   playerIds,
+  rosterMap,
   onTeamChange,
   onPlayerChange,
 }) {
-  const roster = useMemo(() => getNbaTeamRoster(teamId), [teamId]);
+  const roster = useMemo(() => rosterMap[String(teamId || "")] || [], [rosterMap, teamId]);
 
   return (
     <section className={styles.toolColumn}>
@@ -111,9 +113,37 @@ export default function Tools() {
 
   const canUseTools = hasFeature("tools");
   const draftParam = String(params.get("draft") || "").trim();
+  const { data: remoteRostersPayload } = useQuery({
+    queryKey: ["tools-current-nba-rosters"],
+    queryFn: fetchCurrentNbaRosters,
+    enabled: canUseTools,
+    staleTime: 6 * 60 * 60 * 1000,
+    retry: 1,
+  });
 
-  const leftRoster = useMemo(() => getNbaTeamRoster(draft.leftTeamId), [draft.leftTeamId]);
-  const rightRoster = useMemo(() => getNbaTeamRoster(draft.rightTeamId), [draft.rightTeamId]);
+  const rosterMap = useMemo(() => {
+    const remoteTeams = remoteRostersPayload?.teams && typeof remoteRostersPayload.teams === "object"
+      ? remoteRostersPayload.teams
+      : {};
+    const next = {};
+    NBA_TEAMS.forEach((team) => {
+      const remoteRoster = Array.isArray(remoteTeams?.[team.teamId]?.players)
+        ? remoteTeams[team.teamId].players.map((player) => ({
+          personId: String(player?.personId || "").trim(),
+          firstName: String(player?.firstName || "").trim(),
+          familyName: String(player?.familyName || "").trim(),
+          fullName: String(player?.fullName || "").trim(),
+          jerseyNum: String(player?.jerseyNum || "").trim(),
+          teamId: String(player?.teamId || team.teamId).trim() || team.teamId,
+        })).filter((player) => player.personId && player.fullName)
+        : [];
+      next[team.teamId] = remoteRoster.length ? remoteRoster : getNbaTeamRoster(team.teamId);
+    });
+    return next;
+  }, [remoteRostersPayload]);
+
+  const leftRoster = useMemo(() => rosterMap[String(draft.leftTeamId || "")] || [], [draft.leftTeamId, rosterMap]);
+  const rightRoster = useMemo(() => rosterMap[String(draft.rightTeamId || "")] || [], [draft.rightTeamId, rosterMap]);
 
   useEffect(() => {
     if (!draftParam || !user?.id) {
@@ -233,6 +263,11 @@ export default function Tools() {
         <p className={styles.subtitle}>
           Build the matchup shell now. The export renderer will come next, but team, player, logo, and saved draft state are ready.
         </p>
+        {!remoteRostersPayload?.teams ? (
+          <p className={styles.statusNote}>
+            Live NBA rosters will appear here once the `nba-rosters` Supabase function is deployed. Until then, this page falls back to the bundled roster snapshot.
+          </p>
+        ) : null}
       </section>
 
       <section className={styles.workspace}>
@@ -241,6 +276,7 @@ export default function Tools() {
             label="Left"
             teamId={draft.leftTeamId}
             playerIds={draft.leftPlayerIds}
+            rosterMap={rosterMap}
             onTeamChange={(nextTeamId) => handleTeamChange("left", nextTeamId)}
             onPlayerChange={(index, nextPlayerId) => handlePlayerChange("left", index, nextPlayerId)}
           />
@@ -249,6 +285,7 @@ export default function Tools() {
             label="Right"
             teamId={draft.rightTeamId}
             playerIds={draft.rightPlayerIds}
+            rosterMap={rosterMap}
             onTeamChange={(nextTeamId) => handleTeamChange("right", nextTeamId)}
             onPlayerChange={(index, nextPlayerId) => handlePlayerChange("right", index, nextPlayerId)}
           />

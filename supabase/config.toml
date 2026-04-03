@@ -1,2 +1,5 @@
 [functions.player-headshot]
 verify_jwt = false
+
+[functions.nba-rosters]
+verify_jwt = false

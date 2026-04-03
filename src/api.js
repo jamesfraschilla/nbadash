@@ -80,6 +80,13 @@ export function playerHeadshotUrl(personId, teamId = null) {
   return playerHeadshotUrls(personId, teamId)[0] || null;
 }
 
+export async function fetchCurrentNbaRosters() {
+  if (!SUPABASE_FUNCTIONS_BASE) {
+    throw new Error("Supabase functions are not configured.");
+  }
+  return requestJson(`${SUPABASE_FUNCTIONS_BASE}/nba-rosters`);
+}
+
 export function nbaEventVideoUrl({ gameId, actionNumber, seasonYear, title }) {
   if (!gameId || actionNumber == null) return null;
 
