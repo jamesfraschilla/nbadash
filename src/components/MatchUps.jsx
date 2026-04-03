@@ -5,11 +5,12 @@ import { readLocalStorage, writeLocalStorage } from "../storage.js";
 import styles from "./MatchUps.module.css";
 
 const MATCH_UP_STORAGE_PREFIX = "nba-dashboard:match-ups:";
-const DRAG_ARM_MS = 50;
-const MENU_HOLD_MS = 1500;
+const DRAG_ARM_MS = 20;
+const MENU_HOLD_MS = 1000;
 const PRESS_MOVE_TOLERANCE_PX = 8;
 const SWAP_FLASH_MS = 180;
 const ROW_SLOT_COUNT = 5;
+const DRAG_TARGET_PADDING_PX = 22;
 
 function isGLeagueTeamId(teamId) {
   const numericTeamId = Number(teamId);
@@ -64,6 +65,25 @@ function extractFirstName(playerName = "") {
   return parts.slice(0, -1).join(" ");
 }
 
+function formatPlayerNameCase(value = "") {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\b([a-z])/g, (match) => match.toUpperCase());
+}
+
+function playerMenuLabel(player) {
+  const jerseyPrefix = String(player?.jerseyNum || "").trim();
+  const nameValue = String(
+    player?.displayName ||
+    player?.fullName ||
+    [player?.firstName, player?.lastName].filter(Boolean).join(" ") ||
+    player?.lastName ||
+    ""
+  ).trim();
+  return [jerseyPrefix, formatPlayerNameCase(nameValue)].filter(Boolean).join(" ").trim();
+}
+
 function buildCurrentStint(minutesData) {
   const periods = Array.isArray(minutesData?.periods) ? minutesData.periods : [];
   for (let periodIndex = periods.length - 1; periodIndex >= 0; periodIndex -= 1) {
@@ -95,12 +115,12 @@ function normalizeRosterPlayer(player, fallback = null, teamId = null) {
 
   const fullNameSource = String(
     player?.fullName ||
-    player?.name ||
     player?.display ||
+    player?.name ||
     fallback?.nameI ||
     fallback?.fullName ||
-    fallback?.name ||
     fallback?.display ||
+    fallback?.name ||
     ""
   ).trim();
   const firstName = String(player?.firstName || player?.givenName || "").trim() || extractFirstName(fullNameSource);
@@ -111,6 +131,9 @@ function normalizeRosterPlayer(player, fallback = null, teamId = null) {
     firstName,
     lastName: familyName,
     fullName: [firstName, familyName].filter(Boolean).join(" ").trim(),
+    displayName: formatPlayerNameCase(
+      String(player?.display || player?.fullName || player?.name || fallback?.display || fallback?.fullName || fallback?.nameI || fallback?.name || "").trim()
+    ),
     teamId,
   };
 }
@@ -172,6 +195,20 @@ function buildStarterSlotIds(teamBoxPlayers) {
     .filter(Boolean);
 
   return starters.slice(0, ROW_SLOT_COUNT);
+}
+
+function buildCurrentStintSlotIds(stintPlayers) {
+  const slotIds = [];
+  const used = new Set();
+
+  normalizeStintPlayers(stintPlayers).forEach((player) => {
+    const personId = String(player?.personId || "");
+    if (!personId || used.has(personId)) return;
+    used.add(personId);
+    slotIds.push(personId);
+  });
+
+  return slotIds.slice(0, ROW_SLOT_COUNT);
 }
 
 function buildPreferredSlotIds(teamBoxPlayers, stintPlayers, roster) {
@@ -236,11 +273,13 @@ function resolveSlotIds(savedSlotIds, defaultSlotIds, roster) {
 function buildTeamRow(teamBoxPlayers, stintPlayers, extraRosterPlayers, savedSlotIds, teamId) {
   const roster = buildRosterPlayers(teamBoxPlayers, stintPlayers, extraRosterPlayers, teamId);
   const rosterMap = new Map(roster.map((player) => [player.personId, player]));
+  const currentStintSlotIds = buildCurrentStintSlotIds(stintPlayers).filter((personId) => rosterMap.has(personId));
   const preferredSlotIds = buildPreferredSlotIds(teamBoxPlayers, stintPlayers, roster);
   const slotIds = resolveSlotIds(savedSlotIds, preferredSlotIds, roster);
   return {
     roster,
     rosterMap,
+    currentStintSlotIds,
     preferredSlotIds,
     slotIds,
     players: slotIds.map((personId) => rosterMap.get(personId) || null),
@@ -275,23 +314,23 @@ function sortRosterOptions(players) {
   });
 }
 
-function refreshRowPreservingSharedSlots(currentSlotIds, preferredSlotIds) {
-  const preferredSet = new Set(preferredSlotIds);
+function refreshRowToCurrentLineup(currentSlotIds, currentStintSlotIds) {
+  const currentLineupSet = new Set(currentStintSlotIds);
   const next = Array(ROW_SLOT_COUNT).fill(null);
   const used = new Set();
 
   (currentSlotIds || []).forEach((personId, index) => {
-    if (!preferredSet.has(personId) || used.has(personId)) return;
+    if (!currentLineupSet.has(personId) || used.has(personId)) return;
     next[index] = personId;
     used.add(personId);
   });
 
-  let preferredIndex = 0;
+  let currentLineupIndex = 0;
   for (let index = 0; index < ROW_SLOT_COUNT; index += 1) {
     if (next[index]) continue;
-    while (preferredIndex < preferredSlotIds.length) {
-      const candidate = preferredSlotIds[preferredIndex];
-      preferredIndex += 1;
+    while (currentLineupIndex < currentStintSlotIds.length) {
+      const candidate = currentStintSlotIds[currentLineupIndex];
+      currentLineupIndex += 1;
       if (!candidate || used.has(candidate)) continue;
       next[index] = candidate;
       used.add(candidate);
@@ -300,6 +339,33 @@ function refreshRowPreservingSharedSlots(currentSlotIds, preferredSlotIds) {
   }
 
   return next.filter(Boolean);
+}
+
+function findSlotIndex(slots, clientX, clientY) {
+  let matchedIndex = -1;
+  let matchedDistance = Number.POSITIVE_INFINITY;
+
+  slots.forEach((slot, index) => {
+    if (!slot) return;
+    const rect = slot.getBoundingClientRect();
+    const withinBounds =
+      clientX >= rect.left - DRAG_TARGET_PADDING_PX &&
+      clientX <= rect.right + DRAG_TARGET_PADDING_PX &&
+      clientY >= rect.top - DRAG_TARGET_PADDING_PX &&
+      clientY <= rect.bottom + DRAG_TARGET_PADDING_PX;
+
+    if (!withinBounds) return;
+
+    const centerX = (rect.left + rect.right) / 2;
+    const centerY = (rect.top + rect.bottom) / 2;
+    const distance = Math.hypot(clientX - centerX, clientY - centerY);
+    if (distance < matchedDistance) {
+      matchedIndex = index;
+      matchedDistance = distance;
+    }
+  });
+
+  return matchedIndex;
 }
 
 function MatchUpTile({ player, isDraggingSource, isTarget, isSwapAnimating, onPointerDown }) {
@@ -324,6 +390,7 @@ function MatchUpTile({ player, isDraggingSource, isTarget, isSwapAnimating, onPo
       type="button"
       className={`${styles.tileButton} ${isDraggingSource ? styles.tileButtonDragging : ""}`}
       onPointerDown={onPointerDown}
+      onContextMenu={(event) => event.preventDefault()}
       aria-label={`Adjust ${player.fullName || player.lastName || "player"}`}
     >
       <div className={tileClassName}>
@@ -389,6 +456,11 @@ export default function MatchUps({
   const pressSessionRef = useRef(null);
   const menuTimeoutRef = useRef(null);
   const swapFlashTimeoutRef = useRef(null);
+  const dragStateRef = useRef(null);
+  const rowSlotIdsRef = useRef({
+    away: [],
+    home: [],
+  });
   const slotRefs = useRef({
     away: [],
     home: [],
@@ -434,6 +506,10 @@ export default function MatchUps({
   );
 
   const clearPressSession = () => {
+    const activeSession = pressSessionRef.current;
+    if (activeSession?.target?.hasPointerCapture?.(activeSession.pointerId)) {
+      activeSession.target.releasePointerCapture(activeSession.pointerId);
+    }
     if (menuTimeoutRef.current) {
       clearTimeout(menuTimeoutRef.current);
       menuTimeoutRef.current = null;
@@ -470,21 +546,32 @@ export default function MatchUps({
   };
 
   useEffect(() => {
+    dragStateRef.current = dragState;
+  }, [dragState]);
+
+  useEffect(() => {
+    rowSlotIdsRef.current = {
+      away: awayRow.slotIds,
+      home: homeRow.slotIds,
+    };
+  }, [awayRow.slotIds, homeRow.slotIds]);
+
+  useEffect(() => {
     const handlePointerMove = (event) => {
       const pressSession = pressSessionRef.current;
+      const activeDrag = dragStateRef.current;
 
-      if (pressSession && !dragState && event.pointerId === pressSession.pointerId) {
+      if (pressSession && !activeDrag && event.pointerId === pressSession.pointerId) {
         const deltaX = event.clientX - pressSession.startX;
         const deltaY = event.clientY - pressSession.startY;
         if (Math.hypot(deltaX, deltaY) <= PRESS_MOVE_TOLERANCE_PX) return;
 
         if ((Date.now() - pressSession.startedAt) < DRAG_ARM_MS) {
-          clearPressSession();
           return;
         }
 
         clearPressSession();
-        setDragState({
+        const nextDragState = {
           side: pressSession.side,
           fromIndex: pressSession.index,
           overIndex: pressSession.index,
@@ -495,41 +582,36 @@ export default function MatchUps({
           offsetY: pressSession.offsetY,
           width: pressSession.width,
           player: pressSession.player,
-        });
+        };
+        dragStateRef.current = nextDragState;
+        setDragState(nextDragState);
         return;
       }
 
-      if (!dragState || event.pointerId !== dragState.pointerId) return;
+      if (!activeDrag || event.pointerId !== activeDrag.pointerId) return;
 
       event.preventDefault();
-      const slots = slotRefs.current[dragState.side] || [];
-      const nextOverIndex = slots.findIndex((slot) => {
-        if (!slot) return false;
-        const rect = slot.getBoundingClientRect();
-        return (
-          event.clientX >= rect.left &&
-          event.clientX <= rect.right &&
-          event.clientY >= rect.top &&
-          event.clientY <= rect.bottom
-        );
-      });
-
-      setDragState((current) => current ? {
-        ...current,
+      const slots = slotRefs.current[activeDrag.side] || [];
+      const nextOverIndex = findSlotIndex(slots, event.clientX, event.clientY);
+      const nextDragState = {
+        ...activeDrag,
         pointerX: event.clientX,
         pointerY: event.clientY,
-        overIndex: nextOverIndex >= 0 ? nextOverIndex : current.overIndex,
-      } : current);
+        overIndex: nextOverIndex >= 0 ? nextOverIndex : activeDrag.overIndex,
+      };
+      dragStateRef.current = nextDragState;
+      setDragState(nextDragState);
     };
 
     const handlePointerUp = (event) => {
-      const activeDrag = dragState;
+      const activeDrag = dragStateRef.current;
       const pressSession = pressSessionRef.current;
 
       if (activeDrag && event.pointerId === activeDrag.pointerId) {
-        const slotIds = activeDrag.side === "away" ? awayRow.slotIds : homeRow.slotIds;
+        const slotIds = rowSlotIdsRef.current[activeDrag.side] || [];
         updateRowSlots(activeDrag.side, moveItem(slotIds, activeDrag.fromIndex, activeDrag.overIndex));
         triggerSwapFlash(activeDrag.side, activeDrag.fromIndex, activeDrag.overIndex);
+        dragStateRef.current = null;
         setDragState(null);
       }
 
@@ -547,7 +629,7 @@ export default function MatchUps({
       window.removeEventListener("pointerup", handlePointerUp);
       window.removeEventListener("pointercancel", handlePointerUp);
     };
-  }, [awayRow.slotIds, dragState, homeRow.slotIds]);
+  }, []);
 
   useEffect(() => {
     const handlePointerDownOutside = (event) => {
@@ -647,7 +729,12 @@ export default function MatchUps({
       offsetY: event.clientY - rect.top,
       width: rect.width,
       rect,
+      target: event.currentTarget,
     };
+
+    if (event.currentTarget?.setPointerCapture) {
+      event.currentTarget.setPointerCapture(pointerId);
+    }
 
     pressSessionRef.current = session;
     menuTimeoutRef.current = setTimeout(() => {
@@ -678,9 +765,13 @@ export default function MatchUps({
 
   const handleRefreshRow = (side) => {
     const row = side === "away" ? awayRow : homeRow;
+    if (!row.currentStintSlotIds.length) {
+      setRefreshMenuOpen(false);
+      return;
+    }
     updateRowSlots(
       side,
-      refreshRowPreservingSharedSlots(row.slotIds, row.preferredSlotIds)
+      refreshRowToCurrentLineup(row.slotIds, row.currentStintSlotIds)
     );
     setRefreshMenuOpen(false);
   };
@@ -690,8 +781,8 @@ export default function MatchUps({
       ...current,
       slots: {
         ...current.slots,
-        away: awayRow.preferredSlotIds,
-        home: homeRow.preferredSlotIds,
+        away: awayRow.currentStintSlotIds.length ? awayRow.currentStintSlotIds : current.slots.away,
+        home: homeRow.currentStintSlotIds.length ? homeRow.currentStintSlotIds : current.slots.home,
       },
     }));
     setRefreshMenuOpen(false);
@@ -913,7 +1004,7 @@ export default function MatchUps({
                 className={styles.menuItem}
                 onClick={() => handleRosterSelect(menuState.side, menuState.index, player.personId)}
               >
-                {`${player.jerseyNum} ${player.fullName || player.lastName}`.trim()}
+                {playerMenuLabel(player)}
               </button>
             ))}
           </div>
