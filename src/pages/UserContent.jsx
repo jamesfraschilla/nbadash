@@ -4,6 +4,8 @@ import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { deleteDrawingRecord, deleteNoteRecord, listOwnedDrawings, listOwnedNotes } from "../accountData.js";
 import { useAuth } from "../auth/useAuth.js";
 import { fetchGame } from "../api.js";
+import { getNbaTeam } from "../data/nbaTeams.js";
+import { deleteSavedToolRecord, listSavedToolRecords } from "../toolVault.js";
 import styles from "./UserContent.module.css";
 
 const DEFAULT_NOTE_TAG_OPTIONS = [
@@ -103,15 +105,18 @@ function buildGameMeta(game) {
 }
 
 export default function UserContent() {
-  const { user, profile } = useAuth();
+  const { user, profile, hasFeature } = useAuth();
   const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") === "drawings" ? "drawings" : "notes";
+  const canUseTools = hasFeature("tools");
+  const rawTab = params.get("tab");
+  const tab = rawTab === "drawings" ? "drawings" : rawTab === "tools" && canUseTools ? "tools" : "notes";
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [opponentFilter, setOpponentFilter] = useState("all");
   const [tagFilters, setTagFilters] = useState([]);
   const [deletingKey, setDeletingKey] = useState("");
+  const [toolRecordsVersion, setToolRecordsVersion] = useState(0);
 
   const { data: notes = [], isLoading: loadingNotes } = useQuery({
     queryKey: ["owned-notes", user?.id],
@@ -124,6 +129,11 @@ export default function UserContent() {
     queryFn: () => listOwnedDrawings(user.id),
     enabled: Boolean(user?.id),
   });
+
+  const savedTools = useMemo(
+    () => (user?.id && canUseTools ? listSavedToolRecords(user.id) : []),
+    [canUseTools, toolRecordsVersion, user?.id]
+  );
 
   const uniqueGameIds = useMemo(() => (
     Array.from(
@@ -260,6 +270,20 @@ export default function UserContent() {
     }
   };
 
+  const handleDeleteTool = async (toolRecord) => {
+    if (!user?.id) return;
+    const confirmed = window.confirm(`Delete "${toolRecord.title || "Untitled"}"?`);
+    if (!confirmed) return;
+    const key = `tool:${toolRecord.id}`;
+    try {
+      setDeletingKey(key);
+      deleteSavedToolRecord(user.id, toolRecord.id);
+      setToolRecordsVersion((current) => current + 1);
+    } finally {
+      setDeletingKey("");
+    }
+  };
+
   const toggleTagFilter = (tag) => {
     setTagFilters((current) => (
       current.includes(tag)
@@ -292,9 +316,19 @@ export default function UserContent() {
         >
           Court Drawings
         </button>
+        {canUseTools ? (
+          <button
+            type="button"
+            className={`${styles.tabButton} ${tab === "tools" ? styles.tabButtonActive : ""}`}
+            onClick={() => setTab("tools")}
+          >
+            Tools
+          </button>
+        ) : null}
       </div>
 
-      <section className={styles.filterPanel}>
+      {tab === "tools" ? null : (
+        <section className={styles.filterPanel}>
         <div className={styles.filterGrid}>
           <label className={styles.filterField}>
             <span>From Date</span>
@@ -357,7 +391,8 @@ export default function UserContent() {
         >
           Clear Filters
         </button>
-      </section>
+        </section>
+      )}
 
       {tab === "notes" ? (
         <section className={styles.section}>
@@ -421,7 +456,7 @@ export default function UserContent() {
             </div>
           )}
         </section>
-      ) : (
+      ) : tab === "drawings" ? (
         <section className={styles.section}>
           {loadingDrawings ? (
             <div className={styles.emptyState}>Loading drawings...</div>
@@ -470,6 +505,51 @@ export default function UserContent() {
                       Saved board
                     </div>
                     <div className={styles.cardFooter}>Updated {formatTimestamp(drawing.updated_at)}</div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      ) : (
+        <section className={styles.section}>
+          {savedTools.length === 0 ? (
+            <div className={styles.emptyState}>You have not saved any tool drafts yet.</div>
+          ) : (
+            <div className={styles.list}>
+              {savedTools.map((toolRecord) => {
+                const isDeleting = deletingKey === `tool:${toolRecord.id}`;
+                const leftTeam = getNbaTeam(toolRecord.payload?.leftTeamId);
+                const rightTeam = getNbaTeam(toolRecord.payload?.rightTeamId);
+                return (
+                  <article key={toolRecord.id} className={styles.card}>
+                    <div className={styles.cardHeader}>
+                      <div className={styles.cardTitleGroup}>
+                        <div className={styles.cardTitle}>{toolRecord.title || "Untitled"}</div>
+                        <div className={styles.cardMeta}>
+                          Match-Up Graphic Generator · Local draft
+                        </div>
+                      </div>
+                      <div className={styles.cardActions}>
+                        <Link className={styles.cardLink} to={`/tools?draft=${encodeURIComponent(toolRecord.id)}`}>
+                          Open Tool
+                        </Link>
+                        <button
+                          type="button"
+                          className={styles.deleteButton}
+                          onClick={() => handleDeleteTool(toolRecord)}
+                          disabled={isDeleting}
+                        >
+                          {isDeleting ? "Deleting..." : "Delete"}
+                        </button>
+                      </div>
+                    </div>
+                    <div className={styles.cardBody}>
+                      {leftTeam || rightTeam
+                        ? `${leftTeam?.fullName || "Left side empty"} vs ${rightTeam?.fullName || "Right side empty"}`
+                        : "Draft saved from Tools."}
+                    </div>
+                    <div className={styles.cardFooter}>Updated {formatTimestamp(toolRecord.updatedAt)}</div>
                   </article>
                 );
               })}

@@ -18,6 +18,7 @@ const PreGame = lazy(() => import("./pages/PreGame.jsx"));
 const Rotations = lazy(() => import("./pages/Rotations.jsx"));
 const Admin = lazy(() => import("./pages/Admin.jsx"));
 const UserContent = lazy(() => import("./pages/UserContent.jsx"));
+const Tools = lazy(() => import("./pages/Tools.jsx"));
 
 function getCurrentBundleFingerprint() {
   if (typeof document === "undefined" || typeof window === "undefined") return "";
@@ -55,7 +56,9 @@ export default function App() {
     requiresPasswordReset,
     signOut,
     isAdmin,
+    hasFeature,
   } = useAuth();
+  const canUseTools = hasFeature("tools");
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -235,6 +238,7 @@ export default function App() {
         onSignOut={signOut}
         profile={profile}
         isAdmin={isAdmin}
+        canUseTools={canUseTools}
       />
       <main>
         <Suspense fallback={<RouteLoadingFallback />}>
@@ -242,6 +246,7 @@ export default function App() {
             <Route path="/" element={<Home />} />
             <Route path="/me" element={<UserContent />} />
             <Route path="/admin" element={<Admin />} />
+            <Route path="/tools" element={<Tools />} />
             <Route path="/g/:gameId" element={<Game />} />
             <Route path="/g/:gameId/atc" element={<Game variant="atc" />} />
             <Route path="/g/:gameId/events" element={<PlayByPlay />} />

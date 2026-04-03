@@ -6,7 +6,7 @@ import { formatDateInput, formatDateLabel, parseDateInput } from "../utils.js";
 import GameCard from "./GameCard.jsx";
 import styles from "./Header.module.css";
 
-export default function Header({ theme, onToggleTheme, onSignOut, profile, isAdmin }) {
+export default function Header({ theme, onToggleTheme, onSignOut, profile, isAdmin, canUseTools }) {
   const [params, setParams] = useSearchParams();
   const inputRef = useRef(null);
   const menuRef = useRef(null);
@@ -110,6 +110,11 @@ export default function Header({ theme, onToggleTheme, onSignOut, profile, isAdm
                 <Link to="/me" className={styles.dropdownItem} role="menuitem" onClick={() => setIsMenuOpen(false)}>
                   My Vault
                 </Link>
+                {canUseTools ? (
+                  <Link to="/tools" className={styles.dropdownItem} role="menuitem" onClick={() => setIsMenuOpen(false)}>
+                    Tools
+                  </Link>
+                ) : null}
                 {isAdmin ? (
                   <Link
                     to="/admin"
