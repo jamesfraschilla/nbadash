@@ -32,20 +32,6 @@ function buildDraftTitle(draft) {
   return "Match-Up Draft";
 }
 
-function sanitizePlayerIds(playerIds, roster) {
-  const allowedIds = new Set((roster || []).map((player) => player.personId));
-  const nextIds = [...EMPTY_PLAYER_IDS];
-  const used = new Set();
-  (Array.isArray(playerIds) ? playerIds : []).forEach((playerId, index) => {
-    if (index >= nextIds.length) return;
-    const normalized = String(playerId || "").trim();
-    if (!normalized || used.has(normalized) || !allowedIds.has(normalized)) return;
-    nextIds[index] = normalized;
-    used.add(normalized);
-  });
-  return nextIds;
-}
-
 function formatPlayerOption(player) {
   return `#${player.jerseyNum || "--"} ${player.fullName}`.trim();
 }
@@ -196,20 +182,6 @@ export default function Tools() {
     });
     setSaveStatus(`Loaded ${savedRecord.title}`);
   }, [draftParam, user?.id]);
-
-  useEffect(() => {
-    setDraft((current) => ({
-      ...current,
-      leftPlayerIds: sanitizePlayerIds(current.leftPlayerIds, leftRoster),
-    }));
-  }, [leftRoster]);
-
-  useEffect(() => {
-    setDraft((current) => ({
-      ...current,
-      rightPlayerIds: sanitizePlayerIds(current.rightPlayerIds, rightRoster),
-    }));
-  }, [rightRoster]);
 
   if (accountsEnabled && !canUseTools) {
     return (

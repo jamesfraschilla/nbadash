@@ -217,8 +217,8 @@ function drawPlayerRow(context, players, images, headshotY, labelY) {
   const leftPadding = 72;
   const usableWidth = EXPORT_WIDTH - leftPadding * 2;
   const slotWidth = usableWidth / 5;
-  const headshotWidth = 282;
-  const headshotHeight = 182;
+  const headshotWidth = 304;
+  const headshotHeight = 208;
 
   players.forEach((player, index) => {
     const centerX = leftPadding + slotWidth * index + slotWidth / 2;
@@ -237,8 +237,8 @@ function drawPlayerRow(context, players, images, headshotY, labelY) {
     context.shadowBlur = 14;
     context.shadowOffsetY = 5;
     drawCenteredText(context, label, centerX - slotWidth / 2, labelY, slotWidth, {
-      size: 58,
-      minSize: 34,
+      size: 48,
+      minSize: 24,
       family: EXPORT_FONT_FAMILIES.body,
       weight: 700,
       color: WHITE,
@@ -249,9 +249,9 @@ function drawPlayerRow(context, players, images, headshotY, labelY) {
 
 function drawLogo(context, logoImage) {
   if (!logoImage) return;
-  const size = 118;
-  const x = EXPORT_WIDTH - size - 84;
-  const y = 28;
+  const size = 132;
+  const x = EXPORT_WIDTH - size - 56;
+  const y = 20;
   context.drawImage(logoImage, x, y, size, size);
 }
 
@@ -321,15 +321,15 @@ export async function exportMatchupGraphic({ leftPlayers, rightPlayers, logoTeam
   drawBackdrop(context);
   drawHeader(context);
   drawLogo(context, logoImage);
-  drawPlayerRow(context, leftPlayers, leftImages, 208, 356);
-  drawPlayerRow(context, rightPlayers, rightImages, 648, 798);
+  drawPlayerRow(context, leftPlayers, leftImages, 168, 354);
+  drawPlayerRow(context, rightPlayers, rightImages, 586, 772);
 
   const leftPadding = 72;
   const usableWidth = EXPORT_WIDTH - leftPadding * 2;
   const slotWidth = usableWidth / 5;
   Array.from({ length: 5 }, (_, index) => {
     const centerX = leftPadding + slotWidth * index + slotWidth / 2;
-    drawArrow(context, centerX, 404, 492);
+    drawArrow(context, centerX, 392, 498);
   });
 
   downloadCanvas(canvas, buildFileName({ leftTeam, rightTeam }));

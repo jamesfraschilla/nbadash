@@ -295,6 +295,17 @@ function moveItem(items, fromIndex, toIndex) {
   return next;
 }
 
+function swapItemPositions(items, fromIndex, toIndex) {
+  if (fromIndex === toIndex) return items;
+  const next = [...items];
+  if (!next[fromIndex]) return items;
+  if (!next[toIndex]) {
+    return moveItem(items, fromIndex, toIndex);
+  }
+  [next[fromIndex], next[toIndex]] = [next[toIndex], next[fromIndex]];
+  return next;
+}
+
 function swapOrReplace(items, index, personId) {
   const next = [...items];
   const existingIndex = next.findIndex((value) => value === personId);
@@ -609,7 +620,7 @@ export default function MatchUps({
 
       if (activeDrag && event.pointerId === activeDrag.pointerId) {
         const slotIds = rowSlotIdsRef.current[activeDrag.side] || [];
-        updateRowSlots(activeDrag.side, moveItem(slotIds, activeDrag.fromIndex, activeDrag.overIndex));
+        updateRowSlots(activeDrag.side, swapItemPositions(slotIds, activeDrag.fromIndex, activeDrag.overIndex));
         triggerSwapFlash(activeDrag.side, activeDrag.fromIndex, activeDrag.overIndex);
         dragStateRef.current = null;
         setDragState(null);

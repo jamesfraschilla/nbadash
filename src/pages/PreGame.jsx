@@ -413,14 +413,17 @@ function drawCenteredTextMiddle(context, text, x, y, width, height, size, color,
 function drawStackedNames(context, names, x, y, width, height, size, color, weight = 700, lineHeight = size) {
   const visibleNames = (names || []).filter(Boolean);
   if (!visibleNames.length) return;
-  const totalHeight = lineHeight * visibleNames.length;
+  const spacing = visibleNames.length > 1
+    ? Math.max(lineHeight, Math.floor(height / (visibleNames.length + 0.45)))
+    : lineHeight;
+  const totalHeight = spacing * (visibleNames.length - 1) + lineHeight;
   const startY = y + ((height - totalHeight) / 2);
   visibleNames.forEach((name, index) => {
     drawCenteredTextMiddle(
       context,
       name.toUpperCase(),
       x,
-      startY + (index * lineHeight),
+      startY + (index * spacing),
       width,
       lineHeight,
       size,
