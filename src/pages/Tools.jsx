@@ -5,6 +5,7 @@ import { fetchCurrentNbaRosters, teamLogoUrl } from "../api.js";
 import { useAuth } from "../auth/useAuth.js";
 import { getNbaTeam, getNbaTeamRoster, NBA_TEAMS } from "../data/nbaTeams.js";
 import { deleteSavedToolRecord, getSavedToolRecord, saveToolRecord } from "../toolVault.js";
+import { exportMatchupGraphic } from "./matchupGraphicExport.js";
 import styles from "./Tools.module.css";
 
 const EMPTY_PLAYER_IDS = Array(5).fill("");
@@ -49,6 +50,14 @@ function formatPlayerOption(player) {
   return `#${player.jerseyNum || "--"} ${player.fullName}`.trim();
 }
 
+function resolveSelectedPlayers(playerIds, roster) {
+  const playersById = new Map((roster || []).map((player) => [player.personId, player]));
+  return [...EMPTY_PLAYER_IDS].map((_, index) => {
+    const playerId = String(playerIds?.[index] || "").trim();
+    return playersById.get(playerId) || null;
+  });
+}
+
 function ToolColumn({
   label,
   teamId,
@@ -62,7 +71,6 @@ function ToolColumn({
   return (
     <section className={styles.toolColumn}>
       <label className={styles.field}>
-        <span className={styles.fieldLabel}>{label} Team</span>
         <select className={styles.select} value={teamId} onChange={(event) => onTeamChange(event.target.value)}>
           <option value="">Team</option>
           {NBA_TEAMS.map((team) => (
@@ -78,7 +86,6 @@ function ToolColumn({
           selectedIds.delete(currentId);
           return (
             <label key={`${label}-player-${index}`} className={styles.field}>
-              <span className={styles.fieldLabel}>{`${label} Player ${index + 1}`}</span>
               <select
                 className={styles.select}
                 value={currentId}
@@ -110,6 +117,7 @@ export default function Tools() {
   const [draft, setDraft] = useState(buildEmptyDraft);
   const [recordId, setRecordId] = useState("");
   const [saveStatus, setSaveStatus] = useState("");
+  const [busyAction, setBusyAction] = useState("");
 
   const canUseTools = hasFeature("tools");
   const draftParam = String(params.get("draft") || "").trim();
@@ -144,6 +152,23 @@ export default function Tools() {
 
   const leftRoster = useMemo(() => rosterMap[String(draft.leftTeamId || "")] || [], [draft.leftTeamId, rosterMap]);
   const rightRoster = useMemo(() => rosterMap[String(draft.rightTeamId || "")] || [], [draft.rightTeamId, rosterMap]);
+  const leftTeam = useMemo(() => getNbaTeam(draft.leftTeamId), [draft.leftTeamId]);
+  const rightTeam = useMemo(() => getNbaTeam(draft.rightTeamId), [draft.rightTeamId]);
+  const selectedLeftPlayers = useMemo(
+    () => resolveSelectedPlayers(draft.leftPlayerIds, leftRoster),
+    [draft.leftPlayerIds, leftRoster]
+  );
+  const selectedRightPlayers = useMemo(
+    () => resolveSelectedPlayers(draft.rightPlayerIds, rightRoster),
+    [draft.rightPlayerIds, rightRoster]
+  );
+  const exportReady = Boolean(
+    leftTeam &&
+    rightTeam &&
+    draft.logoTeamId &&
+    selectedLeftPlayers.every(Boolean) &&
+    selectedRightPlayers.every(Boolean)
+  );
 
   useEffect(() => {
     if (!draftParam || !user?.id) {
@@ -253,6 +278,38 @@ export default function Tools() {
     setSaveStatus("Deleted saved draft.");
   };
 
+  const handleReset = () => {
+    const confirmed = window.confirm("Are you sure you want to reset this match-up graphic?");
+    if (!confirmed) return;
+    setDraft(buildEmptyDraft());
+    setRecordId("");
+    const nextParams = new URLSearchParams(params);
+    nextParams.delete("draft");
+    setParams(nextParams, { replace: true });
+    setSaveStatus("Reset match-up graphic.");
+  };
+
+  const handleExport = async () => {
+    if (!exportReady || busyAction) return;
+    setBusyAction("export");
+    setSaveStatus("Rendering export...");
+    try {
+      await exportMatchupGraphic({
+        leftPlayers: selectedLeftPlayers,
+        rightPlayers: selectedRightPlayers,
+        logoTeamId: draft.logoTeamId,
+        leftTeam,
+        rightTeam,
+      });
+      setSaveStatus("Exported match-up PNG.");
+    } catch (error) {
+      console.error("Failed to export match-up graphic.", error);
+      setSaveStatus("Export failed. Please try again.");
+    } finally {
+      setBusyAction("");
+    }
+  };
+
   const logoPreviewUrl = draft.logoTeamId ? teamLogoUrl(draft.logoTeamId, "nba") : "";
 
   return (
@@ -261,7 +318,7 @@ export default function Tools() {
         <div className={styles.kicker}>Tools</div>
         <h1 className={styles.title}>Match-Up Graphic Generator</h1>
         <p className={styles.subtitle}>
-          Build the matchup shell now. The export renderer will come next, but team, player, logo, and saved draft state are ready.
+          Build and save a matchup graphic, then export a 1920x1080 PNG with player headshots, default number-plus-last-name labels, and the selected logo.
         </p>
         {!remoteRostersPayload?.teams ? (
           <p className={styles.statusNote}>
@@ -317,15 +374,24 @@ export default function Tools() {
 
           <div className={styles.actionCluster}>
             {recordId ? (
-              <button type="button" className={styles.secondaryButton} onClick={handleDelete}>
+              <button type="button" className={styles.secondaryButton} onClick={handleDelete} disabled={Boolean(busyAction)}>
                 Delete
               </button>
             ) : null}
-            <button type="button" className={styles.primaryButton} onClick={handleSave}>
+            <button type="button" className={styles.secondaryButton} onClick={handleReset} disabled={Boolean(busyAction)}>
+              Reset
+            </button>
+            <button type="button" className={styles.primaryButton} onClick={handleSave} disabled={Boolean(busyAction)}>
               Save
             </button>
-            <button type="button" className={styles.secondaryButton} disabled title="Export renderer coming next">
-              Export
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              onClick={handleExport}
+              disabled={!exportReady || Boolean(busyAction)}
+              title={exportReady ? "Export the matchup graphic as a PNG" : "Select both teams, all ten players, and a logo first"}
+            >
+              {busyAction === "export" ? "Exporting..." : "Export"}
             </button>
           </div>
         </div>

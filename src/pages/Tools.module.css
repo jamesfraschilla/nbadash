@@ -141,6 +141,7 @@
   color: var(--text);
 }
 
+.primaryButton:disabled,
 .secondaryButton:disabled {
   opacity: 0.55;
   cursor: not-allowed;
