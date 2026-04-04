@@ -13,6 +13,9 @@ const EXPORT_FONT_FAMILIES = {
   header: "\"DIN\"",
   body: "\"DINalt\", sans-serif",
 };
+const SUPABASE_FUNCTIONS_BASE = import.meta.env.VITE_SUPABASE_URL
+  ? `${String(import.meta.env.VITE_SUPABASE_URL).replace(/\/$/, "")}/functions/v1`
+  : "";
 
 const loadedImageCache = new Map();
 let exportFontsPromise = null;
@@ -98,6 +101,12 @@ function buildPlayerHeadshotCandidates(player) {
   ].filter((url, index, urls) => url && urls.indexOf(url) === index);
 }
 
+function buildProxyUrl(url) {
+  const safeUrl = String(url || "").trim();
+  if (!safeUrl || !SUPABASE_FUNCTIONS_BASE) return safeUrl;
+  return `${SUPABASE_FUNCTIONS_BASE}/export-image?url=${encodeURIComponent(safeUrl)}`;
+}
+
 function loadImage(url) {
   if (!url) return Promise.resolve(null);
   if (loadedImageCache.has(url)) return loadedImageCache.get(url);
@@ -117,7 +126,7 @@ function loadImage(url) {
 
 async function loadFirstImage(urls) {
   for (const url of urls) {
-    const image = await loadImage(url);
+    const image = await loadImage(buildProxyUrl(url));
     if (image) return image;
   }
   return null;
@@ -305,7 +314,7 @@ export async function exportMatchupGraphic({ leftPlayers, rightPlayers, logoTeam
   const [leftImages, rightImages, logoImage] = await Promise.all([
     Promise.all((leftPlayers || []).map((player) => loadFirstImage(buildPlayerHeadshotCandidates(player)))),
     Promise.all((rightPlayers || []).map((player) => loadFirstImage(buildPlayerHeadshotCandidates(player)))),
-    loadImage(logoTeamId ? teamLogoUrl(logoTeamId, "nba") : null),
+    loadImage(logoTeamId ? buildProxyUrl(teamLogoUrl(logoTeamId, "nba")) : null),
   ]);
 
   const { canvas, context } = makeCanvas(EXPORT_WIDTH, EXPORT_HEIGHT, NAVY);
