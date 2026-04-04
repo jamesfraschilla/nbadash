@@ -87,6 +87,13 @@ export async function fetchCurrentNbaRosters() {
   return requestJson(`${SUPABASE_FUNCTIONS_BASE}/nba-rosters`);
 }
 
+export async function fetchCurrentGLeagueRosters() {
+  if (!SUPABASE_FUNCTIONS_BASE) {
+    throw new Error("Supabase functions are not configured.");
+  }
+  return requestJson(`${SUPABASE_FUNCTIONS_BASE}/gleague-rosters`);
+}
+
 export function nbaEventVideoUrl({ gameId, actionNumber, seasonYear, title }) {
   if (!gameId || actionNumber == null) return null;
 

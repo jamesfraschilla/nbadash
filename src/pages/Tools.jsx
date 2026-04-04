@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { fetchCurrentNbaRosters, teamLogoUrl } from "../api.js";
+import { fetchCurrentGLeagueRosters, fetchCurrentNbaRosters, teamLogoUrl } from "../api.js";
 import { useAuth } from "../auth/useAuth.js";
-import { getNbaTeam, getNbaTeamRoster, NBA_TEAMS } from "../data/nbaTeams.js";
+import {
+  GLEAGUE_TEAMS,
+  getLeagueTeam,
+  getNbaTeamRoster,
+  NBA_TEAMS,
+} from "../data/nbaTeams.js";
 import { deleteSavedToolRecord, getSavedToolRecord, saveToolRecord } from "../toolVault.js";
 import { exportMatchupGraphic } from "./matchupGraphicExport.js";
 import styles from "./Tools.module.css";
@@ -12,6 +17,7 @@ const EMPTY_PLAYER_IDS = Array(5).fill("");
 
 function buildEmptyDraft() {
   return {
+    league: "nba",
     leftTeamId: "",
     rightTeamId: "",
     leftPlayerIds: [...EMPTY_PLAYER_IDS],
@@ -20,16 +26,30 @@ function buildEmptyDraft() {
   };
 }
 
+function teamDisplayCode(team) {
+  const explicitCode = String(team?.tricode || team?.teamAbbreviation || "").trim();
+  if (explicitCode) return explicitCode.toUpperCase();
+  return String(team?.fullName || "Match-Up")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word[0])
+    .join("")
+    .slice(0, 4)
+    .toUpperCase();
+}
+
 function buildDraftTitle(draft) {
-  const leftTeam = getNbaTeam(draft?.leftTeamId);
-  const rightTeam = getNbaTeam(draft?.rightTeamId);
+  const league = String(draft?.league || "nba").trim() === "gleague" ? "gleague" : "nba";
+  const leftTeam = getLeagueTeam(draft?.leftTeamId, league);
+  const rightTeam = getLeagueTeam(draft?.rightTeamId, league);
   if (leftTeam && rightTeam) {
-    return `${leftTeam.tricode} vs ${rightTeam.tricode} Match-Up`;
+    return `${teamDisplayCode(leftTeam)} vs ${teamDisplayCode(rightTeam)} Match-Up`;
   }
   if (leftTeam || rightTeam) {
-    return `${(leftTeam || rightTeam)?.tricode || "NBA"} Match-Up`;
+    return `${teamDisplayCode(leftTeam || rightTeam) || (league === "gleague" ? "G League" : "NBA")} Match-Up`;
   }
-  return "Match-Up Draft";
+  return league === "gleague" ? "G League Match-Up Draft" : "NBA Match-Up Draft";
 }
 
 function formatPlayerOption(player) {
@@ -45,8 +65,9 @@ function resolveSelectedPlayers(playerIds, roster) {
 }
 
 function ToolColumn({
-  label,
+  columnId,
   teamId,
+  teams,
   playerIds,
   rosterMap,
   onTeamChange,
@@ -59,7 +80,7 @@ function ToolColumn({
       <label className={styles.field}>
         <select className={styles.select} value={teamId} onChange={(event) => onTeamChange(event.target.value)}>
           <option value="">Team</option>
-          {NBA_TEAMS.map((team) => (
+          {teams.map((team) => (
             <option key={team.teamId} value={team.teamId}>{team.fullName}</option>
           ))}
         </select>
@@ -71,7 +92,7 @@ function ToolColumn({
           const currentId = playerIds[index] || "";
           selectedIds.delete(currentId);
           return (
-            <label key={`${label}-player-${index}`} className={styles.field}>
+            <label key={`${columnId}-player-${index}`} className={styles.field}>
               <select
                 className={styles.select}
                 value={currentId}
@@ -107,17 +128,24 @@ export default function Tools() {
 
   const canUseTools = hasFeature("tools");
   const draftParam = String(params.get("draft") || "").trim();
-  const { data: remoteRostersPayload } = useQuery({
+  const { data: remoteNbaRostersPayload } = useQuery({
     queryKey: ["tools-current-nba-rosters"],
     queryFn: fetchCurrentNbaRosters,
     enabled: canUseTools,
     staleTime: 6 * 60 * 60 * 1000,
     retry: 1,
   });
+  const { data: remoteGLeagueRostersPayload } = useQuery({
+    queryKey: ["tools-current-gleague-rosters"],
+    queryFn: fetchCurrentGLeagueRosters,
+    enabled: canUseTools,
+    staleTime: 6 * 60 * 60 * 1000,
+    retry: 1,
+  });
 
-  const rosterMap = useMemo(() => {
-    const remoteTeams = remoteRostersPayload?.teams && typeof remoteRostersPayload.teams === "object"
-      ? remoteRostersPayload.teams
+  const nbaRosterMap = useMemo(() => {
+    const remoteTeams = remoteNbaRostersPayload?.teams && typeof remoteNbaRostersPayload.teams === "object"
+      ? remoteNbaRostersPayload.teams
       : {};
     const next = {};
     NBA_TEAMS.forEach((team) => {
@@ -134,12 +162,36 @@ export default function Tools() {
       next[team.teamId] = remoteRoster.length ? remoteRoster : getNbaTeamRoster(team.teamId);
     });
     return next;
-  }, [remoteRostersPayload]);
+  }, [remoteNbaRostersPayload]);
 
+  const gLeagueRosterMap = useMemo(() => {
+    const remoteTeams = remoteGLeagueRostersPayload?.teams && typeof remoteGLeagueRostersPayload.teams === "object"
+      ? remoteGLeagueRostersPayload.teams
+      : {};
+    const next = {};
+    GLEAGUE_TEAMS.forEach((team) => {
+      next[team.teamId] = Array.isArray(remoteTeams?.[team.teamId]?.players)
+        ? remoteTeams[team.teamId].players.map((player) => ({
+          personId: String(player?.personId || "").trim(),
+          firstName: String(player?.firstName || "").trim(),
+          familyName: String(player?.familyName || "").trim(),
+          fullName: String(player?.fullName || "").trim(),
+          jerseyNum: String(player?.jerseyNum || "").trim(),
+          teamId: String(player?.teamId || team.teamId).trim() || team.teamId,
+        })).filter((player) => player.personId && player.fullName)
+        : [];
+    });
+    return next;
+  }, [remoteGLeagueRostersPayload]);
+
+  const league = draft.league === "gleague" ? "gleague" : "nba";
+  const availableTeams = league === "gleague" ? GLEAGUE_TEAMS : NBA_TEAMS;
+  const rosterMap = league === "gleague" ? gLeagueRosterMap : nbaRosterMap;
+  const remoteRostersPayload = league === "gleague" ? remoteGLeagueRostersPayload : remoteNbaRostersPayload;
   const leftRoster = useMemo(() => rosterMap[String(draft.leftTeamId || "")] || [], [draft.leftTeamId, rosterMap]);
   const rightRoster = useMemo(() => rosterMap[String(draft.rightTeamId || "")] || [], [draft.rightTeamId, rosterMap]);
-  const leftTeam = useMemo(() => getNbaTeam(draft.leftTeamId), [draft.leftTeamId]);
-  const rightTeam = useMemo(() => getNbaTeam(draft.rightTeamId), [draft.rightTeamId]);
+  const leftTeam = useMemo(() => getLeagueTeam(draft.leftTeamId, league), [draft.leftTeamId, league]);
+  const rightTeam = useMemo(() => getLeagueTeam(draft.rightTeamId, league), [draft.rightTeamId, league]);
   const selectedLeftPlayers = useMemo(
     () => resolveSelectedPlayers(draft.leftPlayerIds, leftRoster),
     [draft.leftPlayerIds, leftRoster]
@@ -174,6 +226,7 @@ export default function Tools() {
 
     setRecordId(savedRecord.id);
     setDraft({
+      league: String(savedRecord.payload.league || "nba").trim() === "gleague" ? "gleague" : "nba",
       leftTeamId: String(savedRecord.payload.leftTeamId || "").trim(),
       rightTeamId: String(savedRecord.payload.rightTeamId || "").trim(),
       leftPlayerIds: [...EMPTY_PLAYER_IDS].map((_, index) => String(savedRecord.payload.leftPlayerIds?.[index] || "").trim()),
@@ -213,6 +266,15 @@ export default function Tools() {
         ...current,
         [key]: nextIds,
       };
+    });
+    setSaveStatus("");
+  };
+
+  const handleLeagueChange = (nextLeague) => {
+    const normalizedLeague = nextLeague === "gleague" ? "gleague" : "nba";
+    setDraft({
+      ...buildEmptyDraft(),
+      league: normalizedLeague,
     });
     setSaveStatus("");
   };
@@ -267,6 +329,7 @@ export default function Tools() {
     setSaveStatus("Rendering export...");
     try {
       await exportMatchupGraphic({
+        league,
         leftPlayers: selectedLeftPlayers,
         rightPlayers: selectedRightPlayers,
         logoTeamId: draft.logoTeamId,
@@ -282,7 +345,7 @@ export default function Tools() {
     }
   };
 
-  const logoPreviewUrl = draft.logoTeamId ? teamLogoUrl(draft.logoTeamId, "nba") : "";
+  const logoPreviewUrl = draft.logoTeamId ? teamLogoUrl(draft.logoTeamId, league) : "";
 
   return (
     <div className={styles.page}>
@@ -294,16 +357,30 @@ export default function Tools() {
         </p>
         {!remoteRostersPayload?.teams ? (
           <p className={styles.statusNote}>
-            Live NBA rosters will appear here once the `nba-rosters` Supabase function is deployed. Until then, this page falls back to the bundled roster snapshot.
+            {league === "gleague"
+              ? "Live G League rosters will appear here once the `gleague-rosters` Supabase function is deployed."
+              : "Live NBA rosters will appear here once the `nba-rosters` Supabase function is deployed. Until then, this page falls back to the bundled roster snapshot."}
           </p>
         ) : null}
       </section>
 
       <section className={styles.workspace}>
+        <label className={`${styles.field} ${styles.leagueField}`}>
+          <select
+            className={styles.select}
+            value={league}
+            onChange={(event) => handleLeagueChange(event.target.value)}
+          >
+            <option value="nba">NBA</option>
+            <option value="gleague">G League</option>
+          </select>
+        </label>
+
         <div className={styles.toolGrid}>
           <ToolColumn
-            label="Left"
+            columnId="left"
             teamId={draft.leftTeamId}
+            teams={availableTeams}
             playerIds={draft.leftPlayerIds}
             rosterMap={rosterMap}
             onTeamChange={(nextTeamId) => handleTeamChange("left", nextTeamId)}
@@ -311,8 +388,9 @@ export default function Tools() {
           />
 
           <ToolColumn
-            label="Right"
+            columnId="right"
             teamId={draft.rightTeamId}
+            teams={availableTeams}
             playerIds={draft.rightPlayerIds}
             rosterMap={rosterMap}
             onTeamChange={(nextTeamId) => handleTeamChange("right", nextTeamId)}
@@ -332,7 +410,7 @@ export default function Tools() {
               }}
             >
               <option value="">Logo</option>
-              {NBA_TEAMS.map((team) => (
+              {availableTeams.map((team) => (
                 <option key={`logo-${team.teamId}`} value={team.teamId}>{team.fullName}</option>
               ))}
             </select>

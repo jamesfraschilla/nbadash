@@ -256,8 +256,12 @@ function drawLogo(context, logoImage) {
 }
 
 function buildFileName({ leftTeam, rightTeam }) {
-  const left = leftTeam?.tricode || "LEFT";
-  const right = rightTeam?.tricode || "RIGHT";
+  const left = String(leftTeam?.tricode || leftTeam?.teamAbbreviation || leftTeam?.fullName || "LEFT")
+    .trim()
+    .replace(/\s+/g, "-");
+  const right = String(rightTeam?.tricode || rightTeam?.teamAbbreviation || rightTeam?.fullName || "RIGHT")
+    .trim()
+    .replace(/\s+/g, "-");
   return `${left}-vs-${right}-matchups.png`.toLowerCase();
 }
 
@@ -305,7 +309,7 @@ export function ensureMatchupExportFonts() {
   return exportFontsPromise;
 }
 
-export async function exportMatchupGraphic({ leftPlayers, rightPlayers, logoTeamId, leftTeam, rightTeam }) {
+export async function exportMatchupGraphic({ league = "nba", leftPlayers, rightPlayers, logoTeamId, leftTeam, rightTeam }) {
   await ensureMatchupExportFonts();
   if (document.fonts?.ready) {
     await document.fonts.ready;
@@ -314,7 +318,7 @@ export async function exportMatchupGraphic({ leftPlayers, rightPlayers, logoTeam
   const [leftImages, rightImages, logoImage] = await Promise.all([
     Promise.all((leftPlayers || []).map((player) => loadFirstImage(buildPlayerHeadshotCandidates(player)))),
     Promise.all((rightPlayers || []).map((player) => loadFirstImage(buildPlayerHeadshotCandidates(player)))),
-    loadImage(logoTeamId ? buildProxyUrl(teamLogoUrl(logoTeamId, "nba")) : null),
+    loadImage(logoTeamId ? buildProxyUrl(teamLogoUrl(logoTeamId, league)) : null),
   ]);
 
   const { canvas, context } = makeCanvas(EXPORT_WIDTH, EXPORT_HEIGHT, NAVY);

@@ -64,6 +64,10 @@
   gap: 8px;
 }
 
+.leagueField {
+  max-width: 220px;
+}
+
 .fieldLabel {
   font-size: 0.76rem;
   font-weight: 700;
