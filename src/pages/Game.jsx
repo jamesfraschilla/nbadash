@@ -2145,6 +2145,7 @@ export default function Game({ variant = "full" }) {
         officials={officials}
         gameId={gameId}
         publishedOrder={publishedOfficialOrder}
+        gameTimeLocal={game?.gameEt}
       />
       <Officials
         officials={officials}

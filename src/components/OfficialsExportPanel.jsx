@@ -170,6 +170,14 @@ function getColors(themeMode) {
   };
 }
 
+function getOfficialsHeader(gameTimeLocal) {
+  const raw = String(gameTimeLocal || "").trim();
+  if (!raw) return "TONIGHT'S OFFICIALS";
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return "TONIGHT'S OFFICIALS";
+  return parsed.getHours() < 17 ? "TODAY'S OFFICIALS" : "TONIGHT'S OFFICIALS";
+}
+
 function ensureExportFonts() {
   if (typeof document === "undefined" || typeof FontFace === "undefined") {
     return Promise.resolve();
@@ -379,7 +387,7 @@ function drawAvatar(context, image, official, x, y, size, radius, variant) {
   context.restore();
 }
 
-function drawPortraitTemplate(primaryOfficials, alternates, imageMap, themeMode, scale = 1) {
+function drawPortraitTemplate(primaryOfficials, alternates, imageMap, themeMode, gameTimeLocal, scale = 1) {
   const width = EXPORT_SPECS.portrait.logicalWidth;
   const height = EXPORT_SPECS.portrait.logicalHeight;
   const colors = getColors(themeMode);
@@ -401,6 +409,7 @@ function drawPortraitTemplate(primaryOfficials, alternates, imageMap, themeMode,
 
   const footerText = alternates.length ? `Alternate: ${alternates.join(", ")}` : "";
   const footerHeight = footerText ? 16 : 0;
+  const headerText = getOfficialsHeader(gameTimeLocal);
   const footerTop = height - padding.bottom - footerHeight;
   const baseHeaderY = padding.top;
   const baseListTop = baseHeaderY + headerHeight + headerGap;
@@ -410,7 +419,7 @@ function drawPortraitTemplate(primaryOfficials, alternates, imageMap, themeMode,
   const listTop = baseListTop + topShift;
   const listBottom = footerTop;
 
-  drawCenteredText(context, "TONIGHT'S OFFICIALS", padding.left, headerY, contentWidth, {
+  drawCenteredText(context, headerText, padding.left, headerY, contentWidth, {
     size: headerHeight,
     family: headerFamily,
     weight: 700,
@@ -477,7 +486,7 @@ function drawPortraitTemplate(primaryOfficials, alternates, imageMap, themeMode,
   return canvas;
 }
 
-function drawLandscapeTemplate(primaryOfficials, alternates, imageMap, themeMode, scale = 1) {
+function drawLandscapeTemplate(primaryOfficials, alternates, imageMap, themeMode, gameTimeLocal, scale = 1) {
   const width = EXPORT_SPECS.landscape.logicalWidth;
   const height = EXPORT_SPECS.landscape.logicalHeight;
   const colors = getColors(themeMode);
@@ -488,6 +497,7 @@ function drawLandscapeTemplate(primaryOfficials, alternates, imageMap, themeMode
   const textFamily = EXPORT_FONT_FAMILIES.body;
   const headerFamily = EXPORT_FONT_FAMILIES.header;
   const footerText = alternates.length ? `Alternate: ${alternates.join(", ")}` : "";
+  const headerText = getOfficialsHeader(gameTimeLocal);
   const footerBlockHeight = footerText ? 18 : 0;
   const footerGap = footerText ? 6 : 0;
   const rowAreaHeight = 360;
@@ -510,7 +520,7 @@ function drawLandscapeTemplate(primaryOfficials, alternates, imageMap, themeMode
   const rowY = rowAreaY + rowContentOffset;
   const footerY = footerText ? rowAreaY + rowAreaHeight + footerGap : null;
 
-  drawCenteredText(context, "TONIGHT'S OFFICIALS", padding.left, headerY, contentWidth, {
+  drawCenteredText(context, headerText, padding.left, headerY, contentWidth, {
     size: 50,
     family: headerFamily,
     weight: 700,
@@ -586,7 +596,7 @@ function drawLandscapeTemplate(primaryOfficials, alternates, imageMap, themeMode
   return canvas;
 }
 
-async function buildExportCanvas(format, primaryOfficials, alternates, themeMode) {
+async function buildExportCanvas(format, primaryOfficials, alternates, themeMode, gameTimeLocal) {
   const imageMap = await buildLoadedImageMap(primaryOfficials);
   const portraitSpec = EXPORT_SPECS.portrait;
   const landscapeSpec = EXPORT_SPECS.landscape;
@@ -594,11 +604,11 @@ async function buildExportCanvas(format, primaryOfficials, alternates, themeMode
   const landscapeScale = landscapeSpec.outputWidth / landscapeSpec.logicalWidth;
 
   if (format === "portrait") {
-    return drawPortraitTemplate(primaryOfficials, alternates, imageMap, themeMode, portraitScale);
+    return drawPortraitTemplate(primaryOfficials, alternates, imageMap, themeMode, gameTimeLocal, portraitScale);
   }
 
   if (format === "landscape") {
-    return drawLandscapeTemplate(primaryOfficials, alternates, imageMap, themeMode, landscapeScale);
+    return drawLandscapeTemplate(primaryOfficials, alternates, imageMap, themeMode, gameTimeLocal, landscapeScale);
   }
 
   const portraitCanvas = drawPortraitTemplate(
@@ -606,6 +616,7 @@ async function buildExportCanvas(format, primaryOfficials, alternates, themeMode
     alternates,
     imageMap,
     themeMode,
+    gameTimeLocal,
     portraitScale
   );
   const spec = EXPORT_SPECS.was;
@@ -642,7 +653,7 @@ function Spinner() {
   return <span className={styles.spinner} aria-hidden="true" />;
 }
 
-export default function OfficialsExportPanel({ officials, gameId, publishedOrder }) {
+export default function OfficialsExportPanel({ officials, gameId, publishedOrder, gameTimeLocal = "" }) {
   const { primary, alternates } = useMemo(
     () => buildOfficialsData(officials, publishedOrder),
     [officials, publishedOrder]
@@ -660,7 +671,7 @@ export default function OfficialsExportPanel({ officials, gameId, publishedOrder
         await document.fonts.ready;
       }
 
-      const canvas = await buildExportCanvas(format, primary, alternates, getThemeMode());
+      const canvas = await buildExportCanvas(format, primary, alternates, getThemeMode(), gameTimeLocal);
       downloadCanvas(canvas, `officials-${gameId || "game"}-${format}.png`);
       setExportOpen(false);
     } catch (error) {
