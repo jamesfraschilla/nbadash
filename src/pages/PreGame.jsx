@@ -410,6 +410,26 @@ function drawCenteredTextMiddle(context, text, x, y, width, height, size, color,
   context.fillText(text, x + (width / 2), y + (height / 2));
 }
 
+function drawStackedNames(context, names, x, y, width, height, size, color, weight = 700, lineHeight = size) {
+  const visibleNames = (names || []).filter(Boolean);
+  if (!visibleNames.length) return;
+  const totalHeight = lineHeight * visibleNames.length;
+  const startY = y + ((height - totalHeight) / 2);
+  visibleNames.forEach((name, index) => {
+    drawCenteredTextMiddle(
+      context,
+      name.toUpperCase(),
+      x,
+      startY + (index * lineHeight),
+      width,
+      lineHeight,
+      size,
+      color,
+      weight
+    );
+  });
+}
+
 function drawLandscapeExport(slots, playerById, headerLineTwo, logoImage, themeMode, scale = 1) {
   const spec = EXPORT_SPECS.landscape;
   const colors = getExportColors(themeMode);
@@ -437,21 +457,27 @@ function drawLandscapeExport(slots, playerById, headerLineTwo, logoImage, themeM
 
     const row1Y = tableY + timeHeight;
     const row2Y = row1Y + rowHeight;
+    const displays = slot.playerIds.slice(0, 3).map((id) => playerById.get(id)?.display || "");
+    const visibleDisplays = displays.filter(Boolean);
+
     context.fillStyle = colors.cellBg;
+    if (visibleDisplays.length >= 3) {
+      context.fillRect(x, row1Y, colWidth, rowHeight * 2);
+      context.strokeRect(x, row1Y, colWidth, rowHeight * 2);
+      drawStackedNames(context, visibleDisplays.slice(0, 3), x, row1Y, colWidth, rowHeight * 2, 24, colors.cellText, 700, 26);
+      return;
+    }
+
     context.fillRect(x, row1Y, colWidth, rowHeight);
     context.fillRect(x, row2Y, colWidth, rowHeight);
     context.strokeRect(x, row1Y, colWidth, rowHeight);
     context.strokeRect(x, row2Y, colWidth, rowHeight);
 
-    const displays = slot.playerIds.slice(0, 3).map((id) => playerById.get(id)?.display || "");
-    const first = displays[0] || "";
-    const rest = displays.slice(1).filter(Boolean);
-    if (first) {
-      drawCenteredTextMiddle(context, first.toUpperCase(), x, row1Y, colWidth, rowHeight, 24, colors.cellText, 700);
+    if (visibleDisplays[0]) {
+      drawCenteredTextMiddle(context, visibleDisplays[0].toUpperCase(), x, row1Y, colWidth, rowHeight, 24, colors.cellText, 700);
     }
-    if (rest.length) {
-      const restText = rest.join("  ").toUpperCase();
-      drawCenteredTextMiddle(context, restText, x, row2Y, colWidth, rowHeight, 24, colors.cellText, 700);
+    if (visibleDisplays[1]) {
+      drawCenteredTextMiddle(context, visibleDisplays[1].toUpperCase(), x, row2Y, colWidth, rowHeight, 24, colors.cellText, 700);
     }
   });
 
@@ -494,28 +520,13 @@ function drawPortraitExport(slots, playerById, headerLineTwo, logoImage, themeMo
     const x1 = tableX + timeColWidth;
     const x2 = x1 + playerColWidth;
     const displays = slot.playerIds.slice(0, 3).map((id) => playerById.get(id)?.display || "");
-    const presentCount = displays.filter(Boolean).length;
+    const visibleDisplays = displays.filter(Boolean);
 
-    if (slot.playerIds.length >= 3 && presentCount >= 3) {
+    if (visibleDisplays.length >= 3) {
       context.fillStyle = colors.cellBg;
       context.fillRect(x1, y, playerColWidth * 2, rowHeight);
       context.strokeRect(x1, y, playerColWidth * 2, rowHeight);
-      const lineHeight = 24;
-      const totalHeight = lineHeight * 3;
-      const startY = y + ((rowHeight - totalHeight) / 2);
-      displays.slice(0, 3).forEach((name, idx) => {
-        drawCenteredTextMiddle(
-          context,
-          name.toUpperCase(),
-          x1,
-          startY + (idx * lineHeight),
-          playerColWidth * 2,
-          lineHeight,
-          24,
-          colors.cellText,
-          700
-        );
-      });
+      drawStackedNames(context, visibleDisplays.slice(0, 3), x1, y, playerColWidth * 2, rowHeight, 24, colors.cellText, 700, 24);
       return;
     }
 
@@ -525,13 +536,11 @@ function drawPortraitExport(slots, playerById, headerLineTwo, logoImage, themeMo
     context.strokeRect(x1, y, playerColWidth, rowHeight);
     context.strokeRect(x2, y, playerColWidth, rowHeight);
 
-    if (displays[0]) {
-      drawCenteredTextMiddle(context, displays[0].toUpperCase(), x1, y, playerColWidth, rowHeight, 24, colors.cellText, 700);
+    if (visibleDisplays[0]) {
+      drawCenteredTextMiddle(context, visibleDisplays[0].toUpperCase(), x1, y, playerColWidth, rowHeight, 24, colors.cellText, 700);
     }
-    const rest = displays.slice(1).filter(Boolean);
-    if (rest.length) {
-      const restText = rest.join("  ").toUpperCase();
-      drawCenteredTextMiddle(context, restText, x2, y, playerColWidth, rowHeight, 24, colors.cellText, 700);
+    if (visibleDisplays[1]) {
+      drawCenteredTextMiddle(context, visibleDisplays[1].toUpperCase(), x2, y, playerColWidth, rowHeight, 24, colors.cellText, 700);
     }
   });
 
@@ -1008,7 +1017,8 @@ export default function PreGame() {
             <tr>
               {slots.map((slot) => {
                 const displays = slot.playerIds.slice(0, 3).map((id) => playerById.get(id)?.display || "");
-                const hasThree = slot.playerIds.length >= 3;
+                const visibleDisplays = displays.filter(Boolean);
+                const hasThree = visibleDisplays.length >= 3;
                 if (hasThree) {
                   return (
                     <td key={`merged-${slot.id}`} className={styles.playerCellMerged} rowSpan={2}>
@@ -1039,7 +1049,7 @@ export default function PreGame() {
                         </div>
                       ) : (
                         <button type="button" className={styles.cellButton} onClick={() => setActivePlayerCell({ slotId: slot.id, index: "merged" })}>
-                          {displays.filter(Boolean).map((name, idx) => (
+                          {visibleDisplays.map((name, idx) => (
                             <div key={`${slot.id}-${idx}`} className={styles.nameLine}>{name.toUpperCase()}</div>
                           ))}
                         </button>
@@ -1083,7 +1093,7 @@ export default function PreGame() {
             <tr>
               {slots.map((slot) => {
                 const displays = slot.playerIds.slice(0, 3).map((id) => playerById.get(id)?.display || "");
-                if (slot.playerIds.length >= 3) return null;
+                if (displays.filter(Boolean).length >= 3) return null;
                 return (
                   <td key={`slot-bottom-${slot.id}`} className={styles.playerCell}>
                     {activePlayerCell?.slotId === slot.id && activePlayerCell?.index === 1 ? (
