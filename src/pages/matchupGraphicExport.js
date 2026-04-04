@@ -250,7 +250,7 @@ function drawPlayerRow(context, players, images, headshotY, labelY) {
 function drawLogo(context, logoImage) {
   if (!logoImage) return;
   const size = 132;
-  const x = EXPORT_WIDTH - size - 44;
+  const x = EXPORT_WIDTH - size - 36;
   const y = 20;
   context.drawImage(logoImage, x, y, size, size);
 }
@@ -321,7 +321,7 @@ export async function exportMatchupGraphic({ leftPlayers, rightPlayers, logoTeam
   drawBackdrop(context);
   drawHeader(context);
   drawLogo(context, logoImage);
-  drawPlayerRow(context, leftPlayers, leftImages, 188, 386);
+  drawPlayerRow(context, leftPlayers, leftImages, 202, 400);
   drawPlayerRow(context, rightPlayers, rightImages, 618, 816);
 
   const leftPadding = 72;
@@ -329,7 +329,7 @@ export async function exportMatchupGraphic({ leftPlayers, rightPlayers, logoTeam
   const slotWidth = usableWidth / 5;
   Array.from({ length: 5 }, (_, index) => {
     const centerX = leftPadding + slotWidth * index + slotWidth / 2;
-    drawArrow(context, centerX, 438, 506);
+    drawArrow(context, centerX, 452, 518);
   });
 
   downloadCanvas(canvas, buildFileName({ leftTeam, rightTeam }));
