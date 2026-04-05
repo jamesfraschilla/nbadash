@@ -131,6 +131,13 @@ const serializeSnapshotEntry = (entry) => {
   };
 };
 
+const cleanWheelDescriptor = (value) => (
+  String(value || "")
+    .replace(/\s*\([^)]*\b\d+\s*ft\b[^)]*\)/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim()
+);
+
 const loadSnapshots = (gameId) => {
   if (typeof window === "undefined") return [];
   const raw = readLocalStorage(`${SNAPSHOT_STORAGE_PREFIX}${gameId}`);
@@ -1881,7 +1888,7 @@ export default function Game({ variant = "full" }) {
                     : "Team";
                 const clockText = action.clock ? normalizeClock(action.clock) : "";
                 const periodText = action.period ? `Q${action.period}` : "";
-                const descriptor = describePlayByPlayAction(action) || action.actionType || "";
+                const descriptor = cleanWheelDescriptor(describePlayByPlayAction(action) || action.actionType || "");
                 const isHome = action.teamId && action.teamId === homeTeam?.teamId;
                 const isTimeout = action.actionType === "timeout";
                 const scoreText = action.scoreHome && action.scoreAway
