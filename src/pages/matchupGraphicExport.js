@@ -263,8 +263,8 @@ function drawLogo(context, logoImage) {
   if (!logoImage) return;
   const boxWidth = 124;
   const boxHeight = 100;
-  const x = EXPORT_WIDTH - boxWidth - 24;
-  const y = 20;
+  const x = EXPORT_WIDTH - boxWidth - 34;
+  const y = 30;
   drawContain(context, logoImage, x, y, boxWidth, boxHeight);
 }
 
@@ -339,7 +339,7 @@ export async function exportMatchupGraphic({ league = "nba", leftPlayers, rightP
   drawHeader(context);
   drawLogo(context, logoImage);
   drawPlayerRow(context, leftPlayers, leftImages, 286, 484);
-  drawPlayerRow(context, rightPlayers, rightImages, 734, 930);
+  drawPlayerRow(context, rightPlayers, rightImages, 700, 896);
 
   const leftPadding = 72;
   const usableWidth = EXPORT_WIDTH - leftPadding * 2;
