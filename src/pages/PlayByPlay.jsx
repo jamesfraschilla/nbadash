@@ -19,24 +19,27 @@ import { normalizeClock } from "../utils.js";
 import styles from "./PlayByPlay.module.css";
 
 function shouldShowClip(action) {
+  const actionText = [
+    action?.actionType,
+    action?.foulType,
+    action?.subType,
+    action?.descriptor,
+    action?.description,
+    action?.officialDescription,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
   const isBasketAttempt =
     (action.actionType === "2pt" || action.actionType === "3pt") &&
     (action.shotResult === "Made" || action.shotResult === "Missed");
   if (isBasketAttempt) return true;
   if (action.actionType === "turnover") return true;
+  if (actionText.includes("goaltend")) return true;
+  if (actionText.includes("flagrant 1") || actionText.includes("flagrant 2")) return true;
 
   if (action.actionType !== "foul") return false;
-  const foulText = [
-    action.foulType,
-    action.subType,
-    action.descriptor,
-    action.description,
-    action.officialDescription,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-  return foulText.includes("shooting");
+  return actionText.includes("shooting");
 }
 
 export default function PlayByPlay() {

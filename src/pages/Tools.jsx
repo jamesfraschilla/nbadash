@@ -9,11 +9,20 @@ import {
   getNbaTeamRoster,
   NBA_TEAMS,
 } from "../data/nbaTeams.js";
-import { deleteSavedToolRecord, getSavedToolRecord, saveToolRecord } from "../toolVault.js";
+import {
+  deleteSavedToolRecord,
+  deleteSavedToolRecordRemote,
+  getSavedToolRecord,
+  getSavedToolRecordRemote,
+  saveToolRecord,
+  saveToolRecordRemote,
+} from "../toolVault.js";
 import { exportMatchupGraphic } from "./matchupGraphicExport.js";
 import styles from "./Tools.module.css";
 
 const EMPTY_PLAYER_IDS = Array(5).fill("");
+const WIZARDS_TEAM_ID = "1610612764";
+const CAPITAL_CITY_TEAM_ID = "1612709928";
 
 function buildEmptyDraft() {
   return {
@@ -24,6 +33,46 @@ function buildEmptyDraft() {
     rightPlayerIds: [...EMPTY_PLAYER_IDS],
     logoTeamId: "",
   };
+}
+
+function normalizeTeamScopes(teamScopes) {
+  return new Set(
+    (Array.isArray(teamScopes) ? teamScopes : [])
+      .map((value) => String(value || "").trim().toLowerCase().replace(/\s+/g, "_"))
+      .filter(Boolean)
+  );
+}
+
+function buildDefaultDraftForLeague(league, teamScopes) {
+  const normalizedLeague = league === "gleague" ? "gleague" : "nba";
+  const scopes = normalizeTeamScopes(teamScopes);
+  const nextDraft = {
+    ...buildEmptyDraft(),
+    league: normalizedLeague,
+  };
+
+  if (normalizedLeague === "nba" && scopes.has("washington")) {
+    nextDraft.leftTeamId = WIZARDS_TEAM_ID;
+    nextDraft.logoTeamId = WIZARDS_TEAM_ID;
+  }
+
+  if (normalizedLeague === "gleague" && scopes.has("capital_city")) {
+    nextDraft.leftTeamId = CAPITAL_CITY_TEAM_ID;
+    nextDraft.logoTeamId = CAPITAL_CITY_TEAM_ID;
+  }
+
+  return nextDraft;
+}
+
+function buildDefaultDraftForProfile(profile) {
+  const scopes = normalizeTeamScopes(profile?.team_scopes);
+  if (scopes.has("washington")) {
+    return buildDefaultDraftForLeague("nba", scopes);
+  }
+  if (scopes.has("capital_city")) {
+    return buildDefaultDraftForLeague("gleague", scopes);
+  }
+  return buildEmptyDraft();
 }
 
 function teamDisplayCode(team) {
@@ -119,9 +168,10 @@ function ToolColumn({
 }
 
 export default function Tools() {
-  const { accountsEnabled, user, hasFeature } = useAuth();
+  const { accountsEnabled, user, profile, hasFeature } = useAuth();
   const [params, setParams] = useSearchParams();
-  const [draft, setDraft] = useState(buildEmptyDraft);
+  const defaultDraft = useMemo(() => buildDefaultDraftForProfile(profile), [profile]);
+  const [draft, setDraft] = useState(defaultDraft);
   const [recordId, setRecordId] = useState("");
   const [saveStatus, setSaveStatus] = useState("");
   const [busyAction, setBusyAction] = useState("");
@@ -209,32 +259,54 @@ export default function Tools() {
   );
 
   useEffect(() => {
-    if (!draftParam || !user?.id) {
-      setRecordId("");
-      setDraft(buildEmptyDraft());
-      setSaveStatus("");
-      return;
+    let cancelled = false;
+
+    async function loadDraft() {
+      if (!draftParam || !user?.id) {
+        if (cancelled) return;
+        setRecordId("");
+        setDraft(defaultDraft);
+        setSaveStatus("");
+        return;
+      }
+
+      let savedRecord = null;
+      try {
+        savedRecord = accountsEnabled
+          ? await getSavedToolRecordRemote(user.id, draftParam)
+          : getSavedToolRecord(user.id, draftParam);
+      } catch (error) {
+        console.error("Failed to load remote tool draft, falling back to local storage.", error);
+        savedRecord = getSavedToolRecord(user.id, draftParam);
+      }
+
+      if (cancelled) return;
+
+      if (!savedRecord?.payload) {
+        setRecordId("");
+        setDraft(defaultDraft);
+        setSaveStatus("");
+        return;
+      }
+
+      setRecordId(savedRecord.id);
+      setDraft({
+        league: String(savedRecord.payload.league || "nba").trim() === "gleague" ? "gleague" : "nba",
+        leftTeamId: String(savedRecord.payload.leftTeamId || "").trim(),
+        rightTeamId: String(savedRecord.payload.rightTeamId || "").trim(),
+        leftPlayerIds: [...EMPTY_PLAYER_IDS].map((_, index) => String(savedRecord.payload.leftPlayerIds?.[index] || "").trim()),
+        rightPlayerIds: [...EMPTY_PLAYER_IDS].map((_, index) => String(savedRecord.payload.rightPlayerIds?.[index] || "").trim()),
+        logoTeamId: String(savedRecord.payload.logoTeamId || "").trim(),
+      });
+      setSaveStatus(`Loaded ${savedRecord.title}`);
     }
 
-    const savedRecord = getSavedToolRecord(user.id, draftParam);
-    if (!savedRecord?.payload) {
-      setRecordId("");
-      setDraft(buildEmptyDraft());
-      setSaveStatus("");
-      return;
-    }
+    loadDraft();
 
-    setRecordId(savedRecord.id);
-    setDraft({
-      league: String(savedRecord.payload.league || "nba").trim() === "gleague" ? "gleague" : "nba",
-      leftTeamId: String(savedRecord.payload.leftTeamId || "").trim(),
-      rightTeamId: String(savedRecord.payload.rightTeamId || "").trim(),
-      leftPlayerIds: [...EMPTY_PLAYER_IDS].map((_, index) => String(savedRecord.payload.leftPlayerIds?.[index] || "").trim()),
-      rightPlayerIds: [...EMPTY_PLAYER_IDS].map((_, index) => String(savedRecord.payload.rightPlayerIds?.[index] || "").trim()),
-      logoTeamId: String(savedRecord.payload.logoTeamId || "").trim(),
-    });
-    setSaveStatus(`Loaded ${savedRecord.title}`);
-  }, [draftParam, user?.id]);
+    return () => {
+      cancelled = true;
+    };
+  }, [accountsEnabled, defaultDraft, draftParam, user?.id]);
 
   if (accountsEnabled && !canUseTools) {
     return (
@@ -272,50 +344,85 @@ export default function Tools() {
 
   const handleLeagueChange = (nextLeague) => {
     const normalizedLeague = nextLeague === "gleague" ? "gleague" : "nba";
-    setDraft({
-      ...buildEmptyDraft(),
-      league: normalizedLeague,
-    });
+    setDraft(buildDefaultDraftForLeague(normalizedLeague, profile?.team_scopes));
     setSaveStatus("");
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!user?.id) return;
+    if (busyAction) return;
+    setBusyAction("save");
     const id = recordId || crypto.randomUUID();
-    const updatedAt = new Date().toISOString();
-    const savedRecord = saveToolRecord(user.id, {
+    const timestamp = new Date().toISOString();
+    const record = {
       id,
       type: "matchup_graphic",
       title: buildDraftTitle(draft),
-      updatedAt,
-      createdAt: updatedAt,
+      updatedAt: timestamp,
+      createdAt: timestamp,
       payload: draft,
-    });
-    if (!savedRecord) return;
-    setRecordId(savedRecord.id);
-    const nextParams = new URLSearchParams(params);
-    nextParams.set("draft", savedRecord.id);
-    setParams(nextParams, { replace: true });
-    setSaveStatus(`Saved to My Vault as ${savedRecord.title}`);
+    };
+
+    try {
+      const savedRecord = accountsEnabled
+        ? await saveToolRecordRemote(user.id, record)
+        : saveToolRecord(user.id, record);
+      if (!savedRecord) return;
+      setRecordId(savedRecord.id);
+      const nextParams = new URLSearchParams(params);
+      nextParams.set("draft", savedRecord.id);
+      setParams(nextParams, { replace: true });
+      setSaveStatus(`Saved to My Vault as ${savedRecord.title}`);
+    } catch (error) {
+      console.error("Failed to save tool draft remotely, falling back to local storage.", error);
+      const savedRecord = saveToolRecord(user.id, record);
+      if (!savedRecord) return;
+      setRecordId(savedRecord.id);
+      const nextParams = new URLSearchParams(params);
+      nextParams.set("draft", savedRecord.id);
+      setParams(nextParams, { replace: true });
+      setSaveStatus(`Saved locally as ${savedRecord.title}`);
+    } finally {
+      setBusyAction("");
+    }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!user?.id || !recordId) return;
     const confirmed = window.confirm("Delete this saved match-up draft?");
     if (!confirmed) return;
-    deleteSavedToolRecord(user.id, recordId);
-    setRecordId("");
-    setDraft(buildEmptyDraft());
-    const nextParams = new URLSearchParams(params);
-    nextParams.delete("draft");
-    setParams(nextParams, { replace: true });
-    setSaveStatus("Deleted saved draft.");
+    if (busyAction) return;
+    setBusyAction("delete");
+    try {
+      if (accountsEnabled) {
+        await deleteSavedToolRecordRemote(user.id, recordId);
+      } else {
+        deleteSavedToolRecord(user.id, recordId);
+      }
+      setRecordId("");
+      setDraft(defaultDraft);
+      const nextParams = new URLSearchParams(params);
+      nextParams.delete("draft");
+      setParams(nextParams, { replace: true });
+      setSaveStatus("Deleted saved draft.");
+    } catch (error) {
+      console.error("Failed to delete remote tool draft, falling back to local storage.", error);
+      deleteSavedToolRecord(user.id, recordId);
+      setRecordId("");
+      setDraft(defaultDraft);
+      const nextParams = new URLSearchParams(params);
+      nextParams.delete("draft");
+      setParams(nextParams, { replace: true });
+      setSaveStatus("Deleted saved draft locally.");
+    } finally {
+      setBusyAction("");
+    }
   };
 
   const handleReset = () => {
     const confirmed = window.confirm("Are you sure you want to reset this match-up graphic?");
     if (!confirmed) return;
-    setDraft(buildEmptyDraft());
+    setDraft(defaultDraft);
     setRecordId("");
     const nextParams = new URLSearchParams(params);
     nextParams.delete("draft");
@@ -350,11 +457,7 @@ export default function Tools() {
   return (
     <div className={styles.page}>
       <section className={styles.hero}>
-        <div className={styles.kicker}>Tools</div>
         <h1 className={styles.title}>Match-Up Graphic Generator</h1>
-        <p className={styles.subtitle}>
-          Build and save a matchup graphic, then export a 1920x1080 PNG with player headshots, default number-plus-last-name labels, and the selected logo.
-        </p>
         {!remoteRostersPayload?.teams ? (
           <p className={styles.statusNote}>
             {league === "gleague"

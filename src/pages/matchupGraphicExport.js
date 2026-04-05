@@ -216,7 +216,7 @@ function drawHeader(context) {
   context.shadowBlur = 24;
   context.shadowOffsetY = 6;
   drawCenteredText(context, "MATCH-UPS", 0, 96, EXPORT_WIDTH, {
-    size: 108,
+    size: 122,
     minSize: 72,
     family: EXPORT_FONT_FAMILIES.header,
     weight: 700,

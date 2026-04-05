@@ -4,8 +4,13 @@ import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { deleteDrawingRecord, deleteNoteRecord, listOwnedDrawings, listOwnedNotes } from "../accountData.js";
 import { useAuth } from "../auth/useAuth.js";
 import { fetchGame } from "../api.js";
-import { getNbaTeam } from "../data/nbaTeams.js";
-import { deleteSavedToolRecord, listSavedToolRecords } from "../toolVault.js";
+import { getLeagueTeam } from "../data/nbaTeams.js";
+import {
+  deleteSavedToolRecord,
+  deleteSavedToolRecordRemote,
+  listSavedToolRecords,
+  listSavedToolRecordsRemote,
+} from "../toolVault.js";
 import styles from "./UserContent.module.css";
 
 const DEFAULT_NOTE_TAG_OPTIONS = [
@@ -105,7 +110,7 @@ function buildGameMeta(game) {
 }
 
 export default function UserContent() {
-  const { user, profile, hasFeature } = useAuth();
+  const { user, profile, hasFeature, accountsEnabled } = useAuth();
   const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
   const canUseTools = hasFeature("tools");
@@ -116,7 +121,6 @@ export default function UserContent() {
   const [opponentFilter, setOpponentFilter] = useState("all");
   const [tagFilters, setTagFilters] = useState([]);
   const [deletingKey, setDeletingKey] = useState("");
-  const [toolRecordsVersion, setToolRecordsVersion] = useState(0);
 
   const { data: notes = [], isLoading: loadingNotes } = useQuery({
     queryKey: ["owned-notes", user?.id],
@@ -130,10 +134,20 @@ export default function UserContent() {
     enabled: Boolean(user?.id),
   });
 
-  const savedTools = useMemo(
-    () => (user?.id && canUseTools ? listSavedToolRecords(user.id) : []),
-    [canUseTools, toolRecordsVersion, user?.id]
-  );
+  const { data: savedTools = [] } = useQuery({
+    queryKey: ["owned-tools", user?.id],
+    enabled: Boolean(user?.id && canUseTools),
+    queryFn: async () => {
+      if (!user?.id || !canUseTools) return [];
+      if (!accountsEnabled) return listSavedToolRecords(user.id);
+      try {
+        return await listSavedToolRecordsRemote(user.id);
+      } catch (error) {
+        console.error("Failed to load remote tool drafts, falling back to local storage.", error);
+        return listSavedToolRecords(user.id);
+      }
+    },
+  });
 
   const uniqueGameIds = useMemo(() => (
     Array.from(
@@ -277,8 +291,16 @@ export default function UserContent() {
     const key = `tool:${toolRecord.id}`;
     try {
       setDeletingKey(key);
+      if (accountsEnabled) {
+        await deleteSavedToolRecordRemote(user.id, toolRecord.id);
+      } else {
+        deleteSavedToolRecord(user.id, toolRecord.id);
+      }
+      await queryClient.invalidateQueries({ queryKey: ["owned-tools", user.id] });
+    } catch (error) {
+      console.error("Failed to delete remote tool draft, falling back to local storage.", error);
       deleteSavedToolRecord(user.id, toolRecord.id);
-      setToolRecordsVersion((current) => current + 1);
+      await queryClient.invalidateQueries({ queryKey: ["owned-tools", user.id] });
     } finally {
       setDeletingKey("");
     }
@@ -322,7 +344,7 @@ export default function UserContent() {
             className={`${styles.tabButton} ${tab === "tools" ? styles.tabButtonActive : ""}`}
             onClick={() => setTab("tools")}
           >
-            Tools
+            Match-Up Graphics
           </button>
         ) : null}
       </div>
@@ -514,20 +536,21 @@ export default function UserContent() {
       ) : (
         <section className={styles.section}>
           {savedTools.length === 0 ? (
-            <div className={styles.emptyState}>You have not saved any tool drafts yet.</div>
+            <div className={styles.emptyState}>You have not saved any match-up graphics yet.</div>
           ) : (
             <div className={styles.list}>
               {savedTools.map((toolRecord) => {
                 const isDeleting = deletingKey === `tool:${toolRecord.id}`;
-                const leftTeam = getNbaTeam(toolRecord.payload?.leftTeamId);
-                const rightTeam = getNbaTeam(toolRecord.payload?.rightTeamId);
+                const league = String(toolRecord.payload?.league || "nba").trim() === "gleague" ? "gleague" : "nba";
+                const leftTeam = getLeagueTeam(toolRecord.payload?.leftTeamId, league);
+                const rightTeam = getLeagueTeam(toolRecord.payload?.rightTeamId, league);
                 return (
                   <article key={toolRecord.id} className={styles.card}>
                     <div className={styles.cardHeader}>
                       <div className={styles.cardTitleGroup}>
                         <div className={styles.cardTitle}>{toolRecord.title || "Untitled"}</div>
                         <div className={styles.cardMeta}>
-                          Match-Up Graphic Generator · Local draft
+                          Match-Up Graphics · Saved draft
                         </div>
                       </div>
                       <div className={styles.cardActions}>
@@ -547,7 +570,7 @@ export default function UserContent() {
                     <div className={styles.cardBody}>
                       {leftTeam || rightTeam
                         ? `${leftTeam?.fullName || "Left side empty"} vs ${rightTeam?.fullName || "Right side empty"}`
-                        : "Draft saved from Tools."}
+                        : "Saved match-up graphic."}
                     </div>
                     <div className={styles.cardFooter}>Updated {formatTimestamp(toolRecord.updatedAt)}</div>
                   </article>

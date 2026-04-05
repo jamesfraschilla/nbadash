@@ -793,7 +793,6 @@ export default function Game({ variant = "full" }) {
     const filtered = actions.filter((action) => (
       action.actionType === "2pt" ||
       action.actionType === "3pt" ||
-      action.actionType === "freethrow" ||
       action.actionType === "turnover" ||
       action.actionType === "foul" ||
       action.actionType === "timeout"

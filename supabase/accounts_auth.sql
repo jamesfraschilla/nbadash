@@ -89,6 +89,16 @@ create table if not exists public.user_drawings (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.user_tool_records (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references public.profiles(id) on delete cascade,
+  type text not null default 'matchup_graphic',
+  title text not null default 'Untitled',
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.user_drawing_shares (
   drawing_id uuid not null references public.user_drawings(id) on delete cascade,
   user_id uuid not null references public.profiles(id) on delete cascade,
@@ -123,6 +133,7 @@ create index if not exists idx_user_notes_owner_id on public.user_notes (owner_i
 create unique index if not exists idx_user_notes_owner_legacy_local_id
 on public.user_notes (owner_id, legacy_local_id);
 create index if not exists idx_user_drawings_owner_id on public.user_drawings (owner_id);
+create index if not exists idx_user_tool_records_owner_id on public.user_tool_records (owner_id);
 create index if not exists idx_audit_logs_actor_id on public.audit_logs (actor_id);
 
 drop trigger if exists set_account_invites_updated_at on public.account_invites;
@@ -146,6 +157,12 @@ execute function public.set_updated_at();
 drop trigger if exists set_user_drawings_updated_at on public.user_drawings;
 create trigger set_user_drawings_updated_at
 before update on public.user_drawings
+for each row
+execute function public.set_updated_at();
+
+drop trigger if exists set_user_tool_records_updated_at on public.user_tool_records;
+create trigger set_user_tool_records_updated_at
+before update on public.user_tool_records
 for each row
 execute function public.set_updated_at();
 
@@ -249,6 +266,24 @@ as $$
   );
 $$;
 
+create or replace function public.can_access_tool_record(tool_row_id uuid, target_user uuid default auth.uid())
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists(
+    select 1
+    from public.user_tool_records t
+    where t.id = tool_row_id
+      and (
+        t.owner_id = coalesce(target_user, auth.uid())
+        or public.is_admin_user(target_user)
+      )
+  );
+$$;
+
 create or replace function public.handle_new_account_user()
 returns trigger
 language plpgsql
@@ -316,6 +351,7 @@ alter table public.user_notes enable row level security;
 alter table public.user_note_shares enable row level security;
 alter table public.user_note_versions enable row level security;
 alter table public.user_drawings enable row level security;
+alter table public.user_tool_records enable row level security;
 alter table public.user_drawing_shares enable row level security;
 alter table public.user_drawing_versions enable row level security;
 alter table public.audit_logs enable row level security;
@@ -450,6 +486,35 @@ with check (public.can_access_drawing(id));
 drop policy if exists "drawings delete owner admin" on public.user_drawings;
 create policy "drawings delete owner admin"
 on public.user_drawings
+for delete
+to authenticated
+using (owner_id = auth.uid() or public.is_admin_user());
+
+drop policy if exists "tool records visible to owner admin" on public.user_tool_records;
+create policy "tool records visible to owner admin"
+on public.user_tool_records
+for select
+to authenticated
+using (public.can_access_tool_record(id));
+
+drop policy if exists "tool records insert own rows" on public.user_tool_records;
+create policy "tool records insert own rows"
+on public.user_tool_records
+for insert
+to authenticated
+with check (owner_id = auth.uid() or public.is_admin_user());
+
+drop policy if exists "tool records update owner admin" on public.user_tool_records;
+create policy "tool records update owner admin"
+on public.user_tool_records
+for update
+to authenticated
+using (public.can_access_tool_record(id))
+with check (public.can_access_tool_record(id));
+
+drop policy if exists "tool records delete owner admin" on public.user_tool_records;
+create policy "tool records delete owner admin"
+on public.user_tool_records
 for delete
 to authenticated
 using (owner_id = auth.uid() or public.is_admin_user());
