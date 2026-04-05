@@ -75,6 +75,29 @@ function buildDefaultDraftForProfile(profile) {
   return buildEmptyDraft();
 }
 
+function isDraftBlank(draft) {
+  if (!draft || typeof draft !== "object") return true;
+  const leftPlayerIds = Array.isArray(draft.leftPlayerIds) ? draft.leftPlayerIds : [];
+  const rightPlayerIds = Array.isArray(draft.rightPlayerIds) ? draft.rightPlayerIds : [];
+  return !String(draft.leftTeamId || "").trim() &&
+    !String(draft.rightTeamId || "").trim() &&
+    !String(draft.logoTeamId || "").trim() &&
+    !leftPlayerIds.some((value) => String(value || "").trim()) &&
+    !rightPlayerIds.some((value) => String(value || "").trim());
+}
+
+function hydrateDraftPayload(payload, fallbackDraft) {
+  const normalizedLeague = String(payload?.league || fallbackDraft?.league || "nba").trim() === "gleague" ? "gleague" : "nba";
+  return {
+    league: normalizedLeague,
+    leftTeamId: String(payload?.leftTeamId || "").trim() || String(fallbackDraft?.leftTeamId || "").trim(),
+    rightTeamId: String(payload?.rightTeamId || "").trim(),
+    leftPlayerIds: [...EMPTY_PLAYER_IDS].map((_, index) => String(payload?.leftPlayerIds?.[index] || "").trim()),
+    rightPlayerIds: [...EMPTY_PLAYER_IDS].map((_, index) => String(payload?.rightPlayerIds?.[index] || "").trim()),
+    logoTeamId: String(payload?.logoTeamId || "").trim() || String(fallbackDraft?.logoTeamId || "").trim(),
+  };
+}
+
 function teamDisplayCode(team) {
   const explicitCode = String(team?.tricode || team?.teamAbbreviation || "").trim();
   if (explicitCode) return explicitCode.toUpperCase();
@@ -290,14 +313,7 @@ export default function Tools() {
       }
 
       setRecordId(savedRecord.id);
-      setDraft({
-        league: String(savedRecord.payload.league || "nba").trim() === "gleague" ? "gleague" : "nba",
-        leftTeamId: String(savedRecord.payload.leftTeamId || "").trim(),
-        rightTeamId: String(savedRecord.payload.rightTeamId || "").trim(),
-        leftPlayerIds: [...EMPTY_PLAYER_IDS].map((_, index) => String(savedRecord.payload.leftPlayerIds?.[index] || "").trim()),
-        rightPlayerIds: [...EMPTY_PLAYER_IDS].map((_, index) => String(savedRecord.payload.rightPlayerIds?.[index] || "").trim()),
-        logoTeamId: String(savedRecord.payload.logoTeamId || "").trim(),
-      });
+      setDraft(hydrateDraftPayload(savedRecord.payload, defaultDraft));
       setSaveStatus(`Loaded ${savedRecord.title}`);
     }
 
@@ -307,6 +323,11 @@ export default function Tools() {
       cancelled = true;
     };
   }, [accountsEnabled, defaultDraft, draftParam, user?.id]);
+
+  useEffect(() => {
+    if (draftParam) return;
+    setDraft((current) => (isDraftBlank(current) ? defaultDraft : current));
+  }, [defaultDraft, draftParam]);
 
   if (accountsEnabled && !canUseTools) {
     return (
