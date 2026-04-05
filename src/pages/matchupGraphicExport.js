@@ -78,6 +78,18 @@ function drawContainBottom(context, source, targetX, targetY, targetWidth, targe
   context.drawImage(source, drawX, drawY, drawWidth, drawHeight);
 }
 
+function drawContain(context, source, targetX, targetY, targetWidth, targetHeight) {
+  const sourceWidth = source.width || source.naturalWidth;
+  const sourceHeight = source.height || source.naturalHeight;
+  if (!sourceWidth || !sourceHeight) return;
+  const scale = Math.min(targetWidth / sourceWidth, targetHeight / sourceHeight);
+  const drawWidth = sourceWidth * scale;
+  const drawHeight = sourceHeight * scale;
+  const drawX = targetX + (targetWidth - drawWidth) / 2;
+  const drawY = targetY + (targetHeight - drawHeight) / 2;
+  context.drawImage(source, drawX, drawY, drawWidth, drawHeight);
+}
+
 function normalizeLastName(player) {
   const explicitLast = String(player?.familyName || "").trim();
   if (explicitLast) return explicitLast.toUpperCase();
@@ -203,7 +215,7 @@ function drawHeader(context) {
   context.shadowColor = SHADOW;
   context.shadowBlur = 24;
   context.shadowOffsetY = 6;
-  drawCenteredText(context, "MATCH-UPS", 0, 72, EXPORT_WIDTH, {
+  drawCenteredText(context, "MATCH-UPS", 0, 96, EXPORT_WIDTH, {
     size: 108,
     minSize: 72,
     family: EXPORT_FONT_FAMILIES.header,
@@ -249,10 +261,11 @@ function drawPlayerRow(context, players, images, headshotY, labelY) {
 
 function drawLogo(context, logoImage) {
   if (!logoImage) return;
-  const size = 132;
-  const x = EXPORT_WIDTH - size - 36;
+  const boxWidth = 124;
+  const boxHeight = 100;
+  const x = EXPORT_WIDTH - boxWidth - 24;
   const y = 20;
-  context.drawImage(logoImage, x, y, size, size);
+  drawContain(context, logoImage, x, y, boxWidth, boxHeight);
 }
 
 function buildFileName({ leftTeam, rightTeam }) {
@@ -325,15 +338,15 @@ export async function exportMatchupGraphic({ league = "nba", leftPlayers, rightP
   drawBackdrop(context);
   drawHeader(context);
   drawLogo(context, logoImage);
-  drawPlayerRow(context, leftPlayers, leftImages, 230, 428);
-  drawPlayerRow(context, rightPlayers, rightImages, 618, 816);
+  drawPlayerRow(context, leftPlayers, leftImages, 286, 484);
+  drawPlayerRow(context, rightPlayers, rightImages, 734, 930);
 
   const leftPadding = 72;
   const usableWidth = EXPORT_WIDTH - leftPadding * 2;
   const slotWidth = usableWidth / 5;
   Array.from({ length: 5 }, (_, index) => {
     const centerX = leftPadding + slotWidth * index + slotWidth / 2;
-    drawArrow(context, centerX, 480, 546);
+    drawArrow(context, centerX, 566, 640);
   });
 
   downloadCanvas(canvas, buildFileName({ leftTeam, rightTeam }));
