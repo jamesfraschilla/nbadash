@@ -8,13 +8,13 @@ const MATCH_UP_STORAGE_PREFIX = "nba-dashboard:match-ups:";
 const DRAG_ARM_MS_MOUSE = 20;
 const DRAG_ARM_MS_TOUCH = 90;
 const DOUBLE_ACTIVATE_MS_MOUSE = 360;
-const DOUBLE_ACTIVATE_MS_TOUCH = 650;
 const PRESS_MOVE_TOLERANCE_PX_MOUSE = 8;
 const PRESS_MOVE_TOLERANCE_PX_TOUCH = 16;
-const DOUBLE_TAP_DISTANCE_PX_TOUCH = 26;
 const SWAP_FLASH_MS = 180;
 const ROW_SLOT_COUNT = 5;
 const DRAG_TARGET_PADDING_PX = 22;
+const PICKER_OPEN_GUARD_MS = 260;
+const PICKER_HOLD_MS_TOUCH = 420;
 
 function isGLeagueTeamId(teamId) {
   const numericTeamId = Number(teamId);
@@ -384,7 +384,7 @@ function moveToleranceForPointer(pointerType) {
 }
 
 function doubleActivateMsForPointer(pointerType) {
-  return isTouchPointer(pointerType) ? DOUBLE_ACTIVATE_MS_TOUCH : DOUBLE_ACTIVATE_MS_MOUSE;
+  return DOUBLE_ACTIVATE_MS_MOUSE;
 }
 
 function MatchUpTile({ player, isDraggingSource, isTarget, isSwapAnimating, onPointerDown }) {
@@ -525,7 +525,9 @@ export default function MatchUps({
     y: 0,
   });
   const swapFlashTimeoutRef = useRef(null);
+  const pickerHoldTimeoutRef = useRef(null);
   const dragStateRef = useRef(null);
+  const pickerOpenedAtRef = useRef(0);
   const expandedOpenRef = useRef(false);
   const isPortraitExpandedLayoutRef = useRef(isPortraitExpandedLayout);
   const rowSlotIdsRef = useRef({
@@ -584,6 +586,10 @@ export default function MatchUps({
   );
 
   const clearPressSession = () => {
+    if (pickerHoldTimeoutRef.current) {
+      clearTimeout(pickerHoldTimeoutRef.current);
+      pickerHoldTimeoutRef.current = null;
+    }
     const activeSession = pressSessionRef.current;
     if (activeSession?.target?.hasPointerCapture?.(activeSession.pointerId)) {
       activeSession.target.releasePointerCapture(activeSession.pointerId);
@@ -722,7 +728,7 @@ export default function MatchUps({
       }
 
       if (pressSession && event.pointerId === pressSession.pointerId) {
-        if (!activeDrag) {
+        if (!activeDrag && !isTouchPointer(pressSession.pointerType)) {
           handlePointerActivate(pressSession);
         }
         clearPressSession();
@@ -742,6 +748,9 @@ export default function MatchUps({
 
   useEffect(() => {
     const handlePointerDownOutside = (event) => {
+      if (pickerState && (Date.now() - pickerOpenedAtRef.current) < PICKER_OPEN_GUARD_MS) {
+        return;
+      }
       if (pickerState && !event.target?.closest?.(`.${styles.pickerDialog}`)) {
         setPickerState(null);
       }
@@ -805,6 +814,7 @@ export default function MatchUps({
   }, []);
 
   const openHeadshotPicker = (session) => {
+    pickerOpenedAtRef.current = Date.now();
     setPickerState({
       side: session.side,
       index: session.index,
@@ -815,13 +825,10 @@ export default function MatchUps({
     const now = Date.now();
     const previous = lastActivateRef.current;
     const doubleActivateMs = doubleActivateMsForPointer(session.pointerType);
-    const pointerDistance = Math.hypot((session.startX || 0) - (previous.x || 0), (session.startY || 0) - (previous.y || 0));
-    const isSameTapZone = !isTouchPointer(session.pointerType) || pointerDistance <= DOUBLE_TAP_DISTANCE_PX_TOUCH;
     if (
       previous.side === session.side &&
       previous.index === session.index &&
       previous.pointerType === session.pointerType &&
-      isSameTapZone &&
       now - previous.at <= doubleActivateMs
     ) {
       lastActivateRef.current = { side: null, index: -1, at: 0, pointerType: null, x: 0, y: 0 };
@@ -875,6 +882,16 @@ export default function MatchUps({
     }
 
     pressSessionRef.current = session;
+
+    if (isTouchPointer(pointerType)) {
+      pickerHoldTimeoutRef.current = setTimeout(() => {
+        const activeSession = pressSessionRef.current;
+        if (!activeSession || activeSession.pointerId !== pointerId || dragStateRef.current) return;
+        clearPressSession();
+        setRefreshMenuOpen(false);
+        openHeadshotPicker(session);
+      }, PICKER_HOLD_MS_TOUCH);
+    }
   };
 
   const handlePickerSelect = (side, index, personId) => {
@@ -1156,7 +1173,7 @@ export default function MatchUps({
       ) : null}
 
       {pickerState ? (
-        <div className={styles.pickerOverlay} onClick={() => setPickerState(null)}>
+        <div className={styles.pickerOverlay}>
           <div className={styles.pickerDialog} onClick={(event) => event.stopPropagation()}>
             <div className={styles.pickerHeader}>
               <div className={styles.pickerTitle}>Select player</div>
