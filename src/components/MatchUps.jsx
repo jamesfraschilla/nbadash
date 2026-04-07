@@ -8,7 +8,7 @@ const MATCH_UP_STORAGE_PREFIX = "nba-dashboard:match-ups:";
 const DRAG_ARM_MS_MOUSE = 20;
 const DRAG_ARM_MS_TOUCH = 90;
 const DOUBLE_ACTIVATE_MS_MOUSE = 360;
-const DOUBLE_ACTIVATE_MS_TOUCH = 480;
+const DOUBLE_ACTIVATE_MS_TOUCH = 650;
 const PRESS_MOVE_TOLERANCE_PX_MOUSE = 8;
 const PRESS_MOVE_TOLERANCE_PX_TOUCH = 16;
 const SWAP_FLASH_MS = 180;
@@ -843,6 +843,21 @@ export default function MatchUps({
     setRefreshMenuOpen(false);
     clearPressSession();
 
+    const pointerType = event.pointerType || "mouse";
+    const now = Date.now();
+    const previous = lastActivateRef.current;
+    const doubleActivateMs = doubleActivateMsForPointer(pointerType);
+    if (
+      previous.side === side &&
+      previous.index === index &&
+      previous.pointerType === pointerType &&
+      now - previous.at <= doubleActivateMs
+    ) {
+      lastActivateRef.current = { side: null, index: -1, at: 0, pointerType: null };
+      openHeadshotPicker({ side, index });
+      return;
+    }
+
     const rect = event.currentTarget.getBoundingClientRect();
     const pointerId = event.pointerId;
     const session = {
@@ -858,7 +873,7 @@ export default function MatchUps({
       width: rect.width,
       rect,
       target: event.currentTarget,
-      pointerType: event.pointerType || "mouse",
+      pointerType,
     };
 
     if (event.currentTarget?.setPointerCapture) {
