@@ -423,10 +423,12 @@ function MatchUpTile({ player, isDraggingSource, isTarget, isSwapAnimating, onPo
   );
 }
 
-function ExpandedTile({ player, teamLabel }) {
+function ExpandedTile({ player, teamLabel, isDraggingSource, isTarget, isSwapAnimating, onPointerDown }) {
+  const tileClassName = `${styles.expandedTile} ${isTarget ? styles.expandedTileTarget : ""} ${isSwapAnimating ? styles.expandedTileSwap : ""}`.trim();
+
   if (!player) {
     return (
-      <div className={`${styles.expandedTile} ${styles.expandedTileEmpty}`}>
+      <div className={`${tileClassName} ${styles.expandedTileEmpty}`.trim()}>
         <div className={styles.expandedAvatarFrame} />
         <div className={styles.expandedPlayerName}>Open</div>
       </div>
@@ -434,18 +436,26 @@ function ExpandedTile({ player, teamLabel }) {
   }
 
   return (
-    <div className={styles.expandedTile} aria-label={`${teamLabel} ${player.fullName || player.lastName}`}>
-      <div className={styles.expandedAvatarFrame}>
-        <PlayerHeadshot
-          className={styles.expandedAvatarImage}
-          personId={player.personId}
-          teamId={player.teamId}
-          alt=""
-          draggable={false}
-        />
+    <button
+      type="button"
+      className={`${styles.expandedTileButton} ${isDraggingSource ? styles.tileButtonDragging : ""}`}
+      onPointerDown={onPointerDown}
+      onContextMenu={(event) => event.preventDefault()}
+      aria-label={`Adjust ${teamLabel} ${player.fullName || player.lastName || "player"}`}
+    >
+      <div className={tileClassName}>
+        <div className={styles.expandedAvatarFrame}>
+          <PlayerHeadshot
+            className={styles.expandedAvatarImage}
+            personId={player.personId}
+            teamId={player.teamId}
+            alt=""
+            draggable={false}
+          />
+        </div>
+        <div className={styles.expandedPlayerName}>{`${player.jerseyNum} ${player.lastName}`.trim()}</div>
       </div>
-      <div className={styles.expandedPlayerName}>{`${player.jerseyNum} ${player.lastName}`.trim()}</div>
-    </div>
+    </button>
   );
 }
 
@@ -464,15 +474,28 @@ export default function MatchUps({
   const [refreshMenuOpen, setRefreshMenuOpen] = useState(false);
   const [expandedOpen, setExpandedOpen] = useState(false);
   const [swapFlash, setSwapFlash] = useState(null);
+  const [isPortraitExpandedLayout, setIsPortraitExpandedLayout] = useState(() => (
+    typeof window !== "undefined" ? window.matchMedia("(orientation: portrait)").matches : false
+  ));
   const pressSessionRef = useRef(null);
   const menuTimeoutRef = useRef(null);
   const swapFlashTimeoutRef = useRef(null);
   const dragStateRef = useRef(null);
+  const expandedOpenRef = useRef(false);
+  const isPortraitExpandedLayoutRef = useRef(isPortraitExpandedLayout);
   const rowSlotIdsRef = useRef({
     away: [],
     home: [],
   });
-  const slotRefs = useRef({
+  const compactSlotRefs = useRef({
+    away: [],
+    home: [],
+  });
+  const expandedLandscapeSlotRefs = useRef({
+    away: [],
+    home: [],
+  });
+  const expandedPortraitSlotRefs = useRef({
     away: [],
     home: [],
   });
@@ -561,11 +584,35 @@ export default function MatchUps({
   }, [dragState]);
 
   useEffect(() => {
+    expandedOpenRef.current = expandedOpen;
+  }, [expandedOpen]);
+
+  useEffect(() => {
+    isPortraitExpandedLayoutRef.current = isPortraitExpandedLayout;
+  }, [isPortraitExpandedLayout]);
+
+  useEffect(() => {
     rowSlotIdsRef.current = {
       away: awayRow.slotIds,
       home: homeRow.slotIds,
     };
   }, [awayRow.slotIds, homeRow.slotIds]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return undefined;
+
+    const mediaQuery = window.matchMedia("(orientation: portrait)");
+    const updateLayout = () => setIsPortraitExpandedLayout(mediaQuery.matches);
+    updateLayout();
+
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener("change", updateLayout);
+      return () => mediaQuery.removeEventListener("change", updateLayout);
+    }
+
+    mediaQuery.addListener(updateLayout);
+    return () => mediaQuery.removeListener(updateLayout);
+  }, []);
 
   useEffect(() => {
     const handlePointerMove = (event) => {
@@ -602,7 +649,13 @@ export default function MatchUps({
       if (!activeDrag || event.pointerId !== activeDrag.pointerId) return;
 
       event.preventDefault();
-      const slots = slotRefs.current[activeDrag.side] || [];
+      const slots = expandedOpenRef.current
+        ? (
+          isPortraitExpandedLayoutRef.current
+            ? expandedPortraitSlotRefs.current[activeDrag.side]
+            : expandedLandscapeSlotRefs.current[activeDrag.side]
+        )
+        : compactSlotRefs.current[activeDrag.side];
       const nextOverIndex = findSlotIndex(slots, event.clientX, event.clientY);
       const nextDragState = {
         ...activeDrag,
@@ -890,7 +943,7 @@ export default function MatchUps({
                         <div
                           key={`${row.key}-${player?.personId || `slot-${index}`}`}
                           ref={(node) => {
-                            slotRefs.current[row.key][index] = node;
+                            compactSlotRefs.current[row.key][index] = node;
                           }}
                           className={`${styles.slot} ${isTarget ? styles.slotTarget : ""}`}
                         >
@@ -938,13 +991,29 @@ export default function MatchUps({
                       </div>
                     </div>
                     <div className={styles.expandedSlotGrid}>
-                      {Array.from({ length: ROW_SLOT_COUNT }, (_, index) => (
-                        <ExpandedTile
-                          key={`expanded-${row.key}-${row.players[index]?.personId || `slot-${index}`}`}
-                          player={row.players[index] || null}
-                          teamLabel={row.label}
-                        />
-                      ))}
+                      {Array.from({ length: ROW_SLOT_COUNT }, (_, index) => {
+                        const player = row.players[index] || null;
+                        const isSource = dragState?.side === row.key && dragState?.fromIndex === index;
+                        const isTarget = dragState?.side === row.key && dragState?.overIndex === index;
+                        const isSwapAnimating = swapFlash?.side === row.key && swapFlash.indexes.includes(index);
+                        return (
+                          <div
+                            key={`expanded-${row.key}-${player?.personId || `slot-${index}`}`}
+                            ref={(node) => {
+                              expandedLandscapeSlotRefs.current[row.key][index] = node;
+                            }}
+                          >
+                            <ExpandedTile
+                              player={player}
+                              teamLabel={row.label}
+                              isDraggingSource={isSource}
+                              isTarget={isTarget}
+                              isSwapAnimating={isSwapAnimating}
+                              onPointerDown={(event) => handlePointerDown(row.key, index, event)}
+                            />
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );
@@ -965,14 +1034,31 @@ export default function MatchUps({
               <div className={styles.expandedPortraitRows}>
                 {Array.from({ length: ROW_SLOT_COUNT }, (_, index) => (
                   <div key={`portrait-pair-${index}`} className={styles.expandedPortraitPair}>
-                    <ExpandedTile
-                      player={rows[0]?.players[index] || null}
-                      teamLabel={rows[0]?.label || "Away"}
-                    />
-                    <ExpandedTile
-                      player={rows[1]?.players[index] || null}
-                      teamLabel={rows[1]?.label || "Home"}
-                    />
+                    {rows.slice(0, 2).map((row) => {
+                      const player = row?.players[index] || null;
+                      const isSource = dragState?.side === row?.key && dragState?.fromIndex === index;
+                      const isTarget = dragState?.side === row?.key && dragState?.overIndex === index;
+                      const isSwapAnimating = swapFlash?.side === row?.key && swapFlash.indexes.includes(index);
+                      return (
+                        <div
+                          key={`portrait-${row?.key || "row"}-${index}-${player?.personId || "open"}`}
+                          ref={(node) => {
+                            if (row?.key) {
+                              expandedPortraitSlotRefs.current[row.key][index] = node;
+                            }
+                          }}
+                        >
+                          <ExpandedTile
+                            player={player}
+                            teamLabel={row?.label || "Team"}
+                            isDraggingSource={isSource}
+                            isTarget={isTarget}
+                            isSwapAnimating={isSwapAnimating}
+                            onPointerDown={(event) => row?.key && handlePointerDown(row.key, index, event)}
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
                 ))}
               </div>
