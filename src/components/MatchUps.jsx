@@ -11,6 +11,7 @@ const DOUBLE_ACTIVATE_MS_MOUSE = 360;
 const DOUBLE_ACTIVATE_MS_TOUCH = 650;
 const PRESS_MOVE_TOLERANCE_PX_MOUSE = 8;
 const PRESS_MOVE_TOLERANCE_PX_TOUCH = 16;
+const DOUBLE_TAP_DISTANCE_PX_TOUCH = 26;
 const SWAP_FLASH_MS = 180;
 const ROW_SLOT_COUNT = 5;
 const DRAG_TARGET_PADDING_PX = 22;
@@ -520,6 +521,8 @@ export default function MatchUps({
     index: -1,
     at: 0,
     pointerType: null,
+    x: 0,
+    y: 0,
   });
   const swapFlashTimeoutRef = useRef(null);
   const dragStateRef = useRef(null);
@@ -666,7 +669,7 @@ export default function MatchUps({
         }
 
         clearPressSession();
-        lastActivateRef.current = { side: null, index: -1, at: 0, pointerType: null };
+        lastActivateRef.current = { side: null, index: -1, at: 0, pointerType: null, x: 0, y: 0 };
         const nextDragState = {
           side: pressSession.side,
           fromIndex: pressSession.index,
@@ -713,7 +716,7 @@ export default function MatchUps({
         const slotIds = rowSlotIdsRef.current[activeDrag.side] || [];
         updateRowSlots(activeDrag.side, swapItemPositions(slotIds, activeDrag.fromIndex, activeDrag.overIndex));
         triggerSwapFlash(activeDrag.side, activeDrag.fromIndex, activeDrag.overIndex);
-        lastActivateRef.current = { side: null, index: -1, at: 0, pointerType: null };
+        lastActivateRef.current = { side: null, index: -1, at: 0, pointerType: null, x: 0, y: 0 };
         dragStateRef.current = null;
         setDragState(null);
       }
@@ -812,13 +815,16 @@ export default function MatchUps({
     const now = Date.now();
     const previous = lastActivateRef.current;
     const doubleActivateMs = doubleActivateMsForPointer(session.pointerType);
+    const pointerDistance = Math.hypot((session.startX || 0) - (previous.x || 0), (session.startY || 0) - (previous.y || 0));
+    const isSameTapZone = !isTouchPointer(session.pointerType) || pointerDistance <= DOUBLE_TAP_DISTANCE_PX_TOUCH;
     if (
       previous.side === session.side &&
       previous.index === session.index &&
       previous.pointerType === session.pointerType &&
+      isSameTapZone &&
       now - previous.at <= doubleActivateMs
     ) {
-      lastActivateRef.current = { side: null, index: -1, at: 0, pointerType: null };
+      lastActivateRef.current = { side: null, index: -1, at: 0, pointerType: null, x: 0, y: 0 };
       setRefreshMenuOpen(false);
       openHeadshotPicker(session);
       return;
@@ -829,6 +835,8 @@ export default function MatchUps({
       index: session.index,
       at: now,
       pointerType: session.pointerType,
+      x: session.startX || 0,
+      y: session.startY || 0,
     };
   };
 
@@ -843,23 +851,9 @@ export default function MatchUps({
     setRefreshMenuOpen(false);
     clearPressSession();
 
-    const pointerType = event.pointerType || "mouse";
-    const now = Date.now();
-    const previous = lastActivateRef.current;
-    const doubleActivateMs = doubleActivateMsForPointer(pointerType);
-    if (
-      previous.side === side &&
-      previous.index === index &&
-      previous.pointerType === pointerType &&
-      now - previous.at <= doubleActivateMs
-    ) {
-      lastActivateRef.current = { side: null, index: -1, at: 0, pointerType: null };
-      openHeadshotPicker({ side, index });
-      return;
-    }
-
     const rect = event.currentTarget.getBoundingClientRect();
     const pointerId = event.pointerId;
+    const pointerType = event.pointerType || "mouse";
     const session = {
       side,
       index,
@@ -1194,21 +1188,36 @@ export default function MatchUps({
           }}
           aria-hidden="true"
         >
-          <div className={styles.tile}>
-            <div className={styles.avatarFrame}>
-              <PlayerHeadshot
-                className={styles.avatarImage}
-                personId={dragState.player.personId}
-                teamId={dragState.player.teamId}
-                style={isGLeagueTeamId(dragState.player.teamId) ? { mixBlendMode: "multiply" } : undefined}
-                alt=""
-                draggable={false}
-              />
+          {expandedOpen ? (
+            <div className={styles.expandedTile}>
+              <div className={styles.expandedAvatarFrame}>
+                <PlayerHeadshot
+                  className={styles.expandedAvatarImage}
+                  personId={dragState.player.personId}
+                  teamId={dragState.player.teamId}
+                  alt=""
+                  draggable={false}
+                />
+              </div>
+              <div className={styles.expandedPlayerName}>{`${dragState.player.jerseyNum} ${dragState.player.lastName}`.trim()}</div>
             </div>
-            <div className={styles.playerMeta}>
-              <div className={styles.playerName}>{`${dragState.player.jerseyNum} ${dragState.player.lastName}`.trim()}</div>
+          ) : (
+            <div className={styles.tile}>
+              <div className={styles.avatarFrame}>
+                <PlayerHeadshot
+                  className={styles.avatarImage}
+                  personId={dragState.player.personId}
+                  teamId={dragState.player.teamId}
+                  style={isGLeagueTeamId(dragState.player.teamId) ? { mixBlendMode: "multiply" } : undefined}
+                  alt=""
+                  draggable={false}
+                />
+              </div>
+              <div className={styles.playerMeta}>
+                <div className={styles.playerName}>{`${dragState.player.jerseyNum} ${dragState.player.lastName}`.trim()}</div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       ) : null}
     </section>
