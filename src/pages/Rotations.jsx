@@ -30,6 +30,7 @@ const POSITION_COLUMNS = [1, 2, 3, 4, 5];
 const TOTAL_PER_QUARTER = MINUTES.length * POSITION_COLUMNS.length;
 const MAX_LINEUP_HISTORY = 100;
 const LONG_PRESS_DURATION_MS = 700;
+const TOUCH_FILL_MOVE_TOLERANCE_PX = 16;
 const DEPTH_OUT_PRESS_DURATION_MS = 1000;
 const DEPTH_PRESS_RELEASE_LOCK_MS = 120;
 const DEFAULT_VERSION_OPTIONS = {
@@ -2356,6 +2357,40 @@ export default function Rotations() {
     });
   };
 
+  const updateTouchFillTarget = (clientX, clientY) => {
+    if (!touchFillRef.current.active) return;
+    const target = document.elementFromPoint(clientX, clientY);
+    const meta = getCellMetaFromElement(target);
+    if (!meta || meta.quarter !== touchFillRef.current.quarter) return;
+    if (
+      touchFillRef.current.endMinuteIndex === meta.minuteIndex &&
+      touchFillRef.current.endPositionIndex === meta.positionIndex
+    ) {
+      return;
+    }
+    touchFillRef.current.endMinuteIndex = meta.minuteIndex;
+    touchFillRef.current.endPositionIndex = meta.positionIndex;
+    setTouchPreview({
+      quarter: meta.quarter,
+      startMinuteIndex: touchFillRef.current.originMinuteIndex,
+      startPositionIndex: touchFillRef.current.originPositionIndex,
+      endMinuteIndex: meta.minuteIndex,
+      endPositionIndex: meta.positionIndex,
+    });
+  };
+
+  const commitTouchFill = () => {
+    if (!touchFillRef.current.active) return;
+    fillLineupRange(
+      touchFillRef.current.quarter,
+      touchFillRef.current.originMinuteIndex,
+      touchFillRef.current.originPositionIndex,
+      touchFillRef.current.endMinuteIndex,
+      touchFillRef.current.endPositionIndex,
+      touchFillRef.current.value
+    );
+  };
+
   const resetAll = () => {
     updateActiveVersion((currentVersion) => {
       lineupHistoryRef.current = [...lineupHistoryRef.current, currentVersion.lineups].slice(-MAX_LINEUP_HISTORY);
@@ -2682,6 +2717,7 @@ export default function Rotations() {
       dragFillRef.current.active = false;
       cancelSavedLineupPress();
       if (touchFillRef.current.active) {
+        commitTouchFill();
         stopTouchFill();
       }
     };
@@ -2703,8 +2739,21 @@ export default function Rotations() {
 
   useEffect(() => {
     const handleTouchMove = (event) => {
-      if (!touchFillRef.current.active) return;
+      const touch = event.touches?.[0];
+      if (!touch) return;
+
+      if (!touchFillRef.current.active) {
+        if (!touchFillRef.current.timerId) return;
+        const dx = Math.abs(touch.clientX - touchFillRef.current.startTouchX);
+        const dy = Math.abs(touch.clientY - touchFillRef.current.startTouchY);
+        if (dx > TOUCH_FILL_MOVE_TOLERANCE_PX || dy > TOUCH_FILL_MOVE_TOLERANCE_PX) {
+          clearTouchFillTimer();
+        }
+        return;
+      }
+
       event.preventDefault();
+      updateTouchFillTarget(touch.clientX, touch.clientY);
     };
     window.addEventListener("touchmove", handleTouchMove, { passive: false });
     return () => window.removeEventListener("touchmove", handleTouchMove);
@@ -3491,7 +3540,7 @@ export default function Rotations() {
                                     endMinuteIndex: minuteIndex,
                                     endPositionIndex: positionIndex,
                                   });
-                                }, 1000);
+                                }, LONG_PRESS_DURATION_MS);
                               }}
                               onTouchMove={(event) => {
                                 const touch = event.touches?.[0];
@@ -3500,35 +3549,17 @@ export default function Rotations() {
                                 if (!touchFillRef.current.active) {
                                   const dx = Math.abs(touch.clientX - touchFillRef.current.startTouchX);
                                   const dy = Math.abs(touch.clientY - touchFillRef.current.startTouchY);
-                                  if (dx > 8 || dy > 8) clearTouchFillTimer();
+                                  if (dx > TOUCH_FILL_MOVE_TOLERANCE_PX || dy > TOUCH_FILL_MOVE_TOLERANCE_PX) clearTouchFillTimer();
                                   return;
                                 }
 
                                 event.preventDefault();
-                                const target = document.elementFromPoint(touch.clientX, touch.clientY);
-                                const meta = getCellMetaFromElement(target);
-                                if (!meta || meta.quarter !== touchFillRef.current.quarter) return;
-                                touchFillRef.current.endMinuteIndex = meta.minuteIndex;
-                                touchFillRef.current.endPositionIndex = meta.positionIndex;
-                                setTouchPreview({
-                                  quarter: meta.quarter,
-                                  startMinuteIndex: touchFillRef.current.originMinuteIndex,
-                                  startPositionIndex: touchFillRef.current.originPositionIndex,
-                                  endMinuteIndex: meta.minuteIndex,
-                                  endPositionIndex: meta.positionIndex,
-                                });
+                                updateTouchFillTarget(touch.clientX, touch.clientY);
                               }}
                               onTouchEnd={(event) => {
                                 if (touchFillRef.current.active) {
                                   event.preventDefault();
-                                  fillLineupRange(
-                                    touchFillRef.current.quarter,
-                                    touchFillRef.current.originMinuteIndex,
-                                    touchFillRef.current.originPositionIndex,
-                                    touchFillRef.current.endMinuteIndex,
-                                    touchFillRef.current.endPositionIndex,
-                                    touchFillRef.current.value
-                                  );
+                                  commitTouchFill();
                                 }
                                 stopTouchFill();
                               }}
