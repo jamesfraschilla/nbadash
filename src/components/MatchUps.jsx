@@ -6,7 +6,7 @@ import styles from "./MatchUps.module.css";
 
 const MATCH_UP_STORAGE_PREFIX = "nba-dashboard:match-ups:";
 const DRAG_ARM_MS = 20;
-const MENU_HOLD_MS = 1000;
+const DOUBLE_ACTIVATE_MS = 360;
 const PRESS_MOVE_TOLERANCE_PX = 8;
 const SWAP_FLASH_MS = 180;
 const ROW_SLOT_COUNT = 5;
@@ -70,18 +70,6 @@ function formatPlayerNameCase(value = "") {
     .trim()
     .toLowerCase()
     .replace(/\b([a-z])/g, (match) => match.toUpperCase());
-}
-
-function playerMenuLabel(player) {
-  const jerseyPrefix = String(player?.jerseyNum || "").trim();
-  const nameValue = String(
-    player?.displayName ||
-    player?.fullName ||
-    [player?.firstName, player?.lastName].filter(Boolean).join(" ") ||
-    player?.lastName ||
-    ""
-  ).trim();
-  return [jerseyPrefix, formatPlayerNameCase(nameValue)].filter(Boolean).join(" ").trim();
 }
 
 function buildCurrentStint(minutesData) {
@@ -459,6 +447,36 @@ function ExpandedTile({ player, teamLabel, isDraggingSource, isTarget, isSwapAni
   );
 }
 
+function HeadshotPickerTile({ player, isActive, onClick }) {
+  const displayLabel = String(
+    player?.displayName ||
+    player?.fullName ||
+    [player?.firstName, player?.lastName].filter(Boolean).join(" ") ||
+    player?.lastName ||
+    ""
+  ).trim();
+
+  return (
+    <button
+      type="button"
+      className={`${styles.pickerItem} ${isActive ? styles.pickerItemActive : ""}`.trim()}
+      onClick={onClick}
+    >
+      <div className={styles.pickerAvatarFrame}>
+        <PlayerHeadshot
+          className={styles.pickerAvatarImage}
+          personId={player.personId}
+          teamId={player.teamId}
+          style={isGLeagueTeamId(player.teamId) ? { mixBlendMode: "multiply" } : undefined}
+          alt=""
+          draggable={false}
+        />
+      </div>
+      <div className={styles.pickerPlayerLabel}>{`${player.jerseyNum ? `#${player.jerseyNum} ` : ""}${formatPlayerNameCase(displayLabel)}`.trim()}</div>
+    </button>
+  );
+}
+
 export default function MatchUps({
   gameId,
   awayTeam,
@@ -470,7 +488,7 @@ export default function MatchUps({
 }) {
   const [persistedState, setPersistedState] = useState(() => loadMatchUpState(gameId));
   const [dragState, setDragState] = useState(null);
-  const [menuState, setMenuState] = useState(null);
+  const [pickerState, setPickerState] = useState(null);
   const [refreshMenuOpen, setRefreshMenuOpen] = useState(false);
   const [expandedOpen, setExpandedOpen] = useState(false);
   const [swapFlash, setSwapFlash] = useState(null);
@@ -478,7 +496,11 @@ export default function MatchUps({
     typeof window !== "undefined" ? window.matchMedia("(orientation: portrait)").matches : false
   ));
   const pressSessionRef = useRef(null);
-  const menuTimeoutRef = useRef(null);
+  const lastActivateRef = useRef({
+    side: null,
+    index: -1,
+    at: 0,
+  });
   const swapFlashTimeoutRef = useRef(null);
   const dragStateRef = useRef(null);
   const expandedOpenRef = useRef(false);
@@ -499,13 +521,12 @@ export default function MatchUps({
     away: [],
     home: [],
   });
-  const menuRef = useRef(null);
   const refreshMenuRef = useRef(null);
   const refreshButtonRef = useRef(null);
 
   useEffect(() => {
     setPersistedState(loadMatchUpState(gameId));
-    setMenuState(null);
+    setPickerState(null);
     setRefreshMenuOpen(false);
     setExpandedOpen(false);
     setDragState(null);
@@ -543,10 +564,6 @@ export default function MatchUps({
     const activeSession = pressSessionRef.current;
     if (activeSession?.target?.hasPointerCapture?.(activeSession.pointerId)) {
       activeSession.target.releasePointerCapture(activeSession.pointerId);
-    }
-    if (menuTimeoutRef.current) {
-      clearTimeout(menuTimeoutRef.current);
-      menuTimeoutRef.current = null;
     }
     pressSessionRef.current = null;
   };
@@ -629,6 +646,7 @@ export default function MatchUps({
         }
 
         clearPressSession();
+        lastActivateRef.current = { side: null, index: -1, at: 0 };
         const nextDragState = {
           side: pressSession.side,
           fromIndex: pressSession.index,
@@ -675,11 +693,15 @@ export default function MatchUps({
         const slotIds = rowSlotIdsRef.current[activeDrag.side] || [];
         updateRowSlots(activeDrag.side, swapItemPositions(slotIds, activeDrag.fromIndex, activeDrag.overIndex));
         triggerSwapFlash(activeDrag.side, activeDrag.fromIndex, activeDrag.overIndex);
+        lastActivateRef.current = { side: null, index: -1, at: 0 };
         dragStateRef.current = null;
         setDragState(null);
       }
 
       if (pressSession && event.pointerId === pressSession.pointerId) {
+        if (!activeDrag) {
+          handlePointerActivate(pressSession);
+        }
         clearPressSession();
       }
     };
@@ -697,8 +719,8 @@ export default function MatchUps({
 
   useEffect(() => {
     const handlePointerDownOutside = (event) => {
-      if (!menuState || !menuRef.current?.contains(event.target)) {
-        setMenuState(null);
+      if (pickerState && !event.target?.closest?.(`.${styles.pickerDialog}`)) {
+        setPickerState(null);
       }
       if (!refreshMenuRef.current?.contains(event.target) && !refreshButtonRef.current?.contains(event.target)) {
         setRefreshMenuOpen(false);
@@ -707,7 +729,7 @@ export default function MatchUps({
 
     const handleEscape = (event) => {
       if (event.key === "Escape") {
-        setMenuState(null);
+        setPickerState(null);
       }
     };
 
@@ -718,12 +740,13 @@ export default function MatchUps({
       window.removeEventListener("pointerdown", handlePointerDownOutside);
       window.removeEventListener("keydown", handleEscape);
     };
-  }, [menuState]);
+  }, [pickerState]);
 
   useEffect(() => {
     const handleEscape = (event) => {
       if (event.key === "Escape") {
         setExpandedOpen(false);
+        setPickerState(null);
       }
     };
 
@@ -758,14 +781,32 @@ export default function MatchUps({
     }
   }, []);
 
-  const openRosterMenu = (session) => {
-    setMenuState({
+  const openHeadshotPicker = (session) => {
+    setPickerState({
       side: session.side,
       index: session.index,
-      left: session.rect.left,
-      top: session.rect.bottom + 8,
-      width: session.rect.width,
     });
+  };
+
+  const handlePointerActivate = (session) => {
+    const now = Date.now();
+    const previous = lastActivateRef.current;
+    if (
+      previous.side === session.side &&
+      previous.index === session.index &&
+      now - previous.at <= DOUBLE_ACTIVATE_MS
+    ) {
+      lastActivateRef.current = { side: null, index: -1, at: 0 };
+      setRefreshMenuOpen(false);
+      openHeadshotPicker(session);
+      return;
+    }
+
+    lastActivateRef.current = {
+      side: session.side,
+      index: session.index,
+      at: now,
+    };
   };
 
   const handlePointerDown = (side, index, event) => {
@@ -775,7 +816,7 @@ export default function MatchUps({
     if (!player) return;
 
     event.preventDefault();
-    setMenuState(null);
+    setPickerState(null);
     setRefreshMenuOpen(false);
     clearPressSession();
 
@@ -801,28 +842,22 @@ export default function MatchUps({
     }
 
     pressSessionRef.current = session;
-    menuTimeoutRef.current = setTimeout(() => {
-      const activeSession = pressSessionRef.current;
-      if (!activeSession || activeSession.pointerId !== pointerId) return;
-      clearPressSession();
-      openRosterMenu(activeSession);
-    }, MENU_HOLD_MS);
   };
 
-  const handleRosterSelect = (side, index, personId) => {
+  const handlePickerSelect = (side, index, personId) => {
     const row = side === "away" ? awayRow : homeRow;
     if (!row.rosterMap.has(personId)) return;
     updateRowSlots(side, swapOrReplace(row.slotIds, index, personId));
-    setMenuState(null);
+    setPickerState(null);
   };
 
   const toggleRefreshMenu = () => {
-    setMenuState(null);
+    setPickerState(null);
     setRefreshMenuOpen((current) => !current);
   };
 
   const openExpandedView = () => {
-    setMenuState(null);
+    setPickerState(null);
     setRefreshMenuOpen(false);
     setExpandedOpen(true);
   };
@@ -853,7 +888,7 @@ export default function MatchUps({
   };
 
   const updateCollapsed = () => {
-    setMenuState(null);
+    setPickerState(null);
     setRefreshMenuOpen(false);
     setExpandedOpen(false);
     setPersistedState((current) => ({
@@ -869,6 +904,7 @@ export default function MatchUps({
       teamName: awayTeam?.teamName || "Visiting Team",
       teamId: awayTeam?.teamId,
       roster: awayRow.roster,
+      slotIds: awayRow.slotIds,
       preferredSlotIds: awayRow.preferredSlotIds,
       players: awayRow.players,
     },
@@ -878,14 +914,18 @@ export default function MatchUps({
       teamName: homeTeam?.teamName || "Home Team",
       teamId: homeTeam?.teamId,
       roster: homeRow.roster,
+      slotIds: homeRow.slotIds,
       preferredSlotIds: homeRow.preferredSlotIds,
       players: homeRow.players,
     },
   ];
 
   const hasLineups = awayRow.players.length || homeRow.players.length;
-  const menuRow = menuState?.side === "away" ? rows[0] : rows[1];
-  const menuOptions = menuRow ? sortRosterOptions(menuRow.roster) : [];
+  const pickerRow = pickerState?.side === "away" ? rows[0] : pickerState?.side === "home" ? rows[1] : null;
+  const pickerOptions = pickerRow ? sortRosterOptions(pickerRow.roster) : [];
+  const pickerSelectedPersonId = pickerRow && Number.isInteger(pickerState?.index)
+    ? pickerRow.slotIds[pickerState.index] || ""
+    : "";
 
   return (
     <section className={styles.container} aria-label="Match-Ups">
@@ -1082,28 +1122,25 @@ export default function MatchUps({
         </div>
       ) : null}
 
-      {menuState ? (
-        <div
-          ref={menuRef}
-          className={styles.menu}
-          style={{
-            left: `${Math.max(12, menuState.left)}px`,
-            top: `${menuState.top}px`,
-            width: `${Math.max(menuState.width, 180)}px`,
-          }}
-        >
-          <div className={styles.menuHeader}>Select player</div>
-          <div className={styles.menuList}>
-            {menuOptions.map((player) => (
-              <button
-                key={player.personId}
-                type="button"
-                className={styles.menuItem}
-                onClick={() => handleRosterSelect(menuState.side, menuState.index, player.personId)}
-              >
-                {playerMenuLabel(player)}
+      {pickerState ? (
+        <div className={styles.pickerOverlay} onClick={() => setPickerState(null)}>
+          <div className={styles.pickerDialog} onClick={(event) => event.stopPropagation()}>
+            <div className={styles.pickerHeader}>
+              <div className={styles.pickerTitle}>Select player</div>
+              <button type="button" className={styles.pickerCloseButton} onClick={() => setPickerState(null)}>
+                Close
               </button>
-            ))}
+            </div>
+            <div className={styles.pickerGrid}>
+              {pickerOptions.map((player) => (
+                <HeadshotPickerTile
+                  key={player.personId}
+                  player={player}
+                  isActive={player.personId === pickerSelectedPersonId}
+                  onClick={() => handlePickerSelect(pickerState.side, pickerState.index, player.personId)}
+                />
+              ))}
+            </div>
           </div>
         </div>
       ) : null}

@@ -283,6 +283,112 @@
   background: var(--highlight-bg);
 }
 
+.pickerOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 85;
+  background: rgba(8, 10, 16, 0.72);
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+.pickerDialog {
+  width: min(960px, 100%);
+  max-height: min(78vh, 820px);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--panel);
+  box-shadow: 0 24px 56px rgba(15, 23, 42, 0.28);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+}
+
+.pickerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.pickerTitle {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.pickerCloseButton {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  padding: 7px 12px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pickerGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 12px;
+  padding: 14px;
+  overflow-y: auto;
+}
+
+.pickerItem {
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: transparent;
+  color: inherit;
+  padding: 8px;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.pickerItem:hover {
+  background: var(--highlight-bg);
+  border-color: rgba(148, 163, 184, 0.28);
+}
+
+.pickerItemActive {
+  background: var(--highlight-bg);
+  border-color: var(--highlight-text);
+  box-shadow: 0 0 0 1px var(--highlight-text);
+}
+
+.pickerAvatarFrame {
+  width: 100px;
+  height: 82px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: transparent;
+}
+
+.pickerAvatarImage {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  object-position: center top;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+
+.pickerPlayerLabel {
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+}
+
 .expandedOverlay {
   position: fixed;
   inset: 0;
