@@ -5,9 +5,12 @@ import { readLocalStorage, writeLocalStorage } from "../storage.js";
 import styles from "./MatchUps.module.css";
 
 const MATCH_UP_STORAGE_PREFIX = "nba-dashboard:match-ups:";
-const DRAG_ARM_MS = 20;
-const DOUBLE_ACTIVATE_MS = 360;
-const PRESS_MOVE_TOLERANCE_PX = 8;
+const DRAG_ARM_MS_MOUSE = 20;
+const DRAG_ARM_MS_TOUCH = 90;
+const DOUBLE_ACTIVATE_MS_MOUSE = 360;
+const DOUBLE_ACTIVATE_MS_TOUCH = 480;
+const PRESS_MOVE_TOLERANCE_PX_MOUSE = 8;
+const PRESS_MOVE_TOLERANCE_PX_TOUCH = 16;
 const SWAP_FLASH_MS = 180;
 const ROW_SLOT_COUNT = 5;
 const DRAG_TARGET_PADDING_PX = 22;
@@ -367,6 +370,22 @@ function findSlotIndex(slots, clientX, clientY) {
   return matchedIndex;
 }
 
+function isTouchPointer(pointerType) {
+  return pointerType === "touch" || pointerType === "pen";
+}
+
+function dragArmMsForPointer(pointerType) {
+  return isTouchPointer(pointerType) ? DRAG_ARM_MS_TOUCH : DRAG_ARM_MS_MOUSE;
+}
+
+function moveToleranceForPointer(pointerType) {
+  return isTouchPointer(pointerType) ? PRESS_MOVE_TOLERANCE_PX_TOUCH : PRESS_MOVE_TOLERANCE_PX_MOUSE;
+}
+
+function doubleActivateMsForPointer(pointerType) {
+  return isTouchPointer(pointerType) ? DOUBLE_ACTIVATE_MS_TOUCH : DOUBLE_ACTIVATE_MS_MOUSE;
+}
+
 function MatchUpTile({ player, isDraggingSource, isTarget, isSwapAnimating, onPointerDown }) {
   const tileClassName = `${styles.tile} ${isTarget ? styles.tileTarget : ""} ${isSwapAnimating ? styles.tileSwap : ""}`.trim();
   const headshotStyle = player && isGLeagueTeamId(player.teamId)
@@ -500,6 +519,7 @@ export default function MatchUps({
     side: null,
     index: -1,
     at: 0,
+    pointerType: null,
   });
   const swapFlashTimeoutRef = useRef(null);
   const dragStateRef = useRef(null);
@@ -639,14 +659,14 @@ export default function MatchUps({
       if (pressSession && !activeDrag && event.pointerId === pressSession.pointerId) {
         const deltaX = event.clientX - pressSession.startX;
         const deltaY = event.clientY - pressSession.startY;
-        if (Math.hypot(deltaX, deltaY) <= PRESS_MOVE_TOLERANCE_PX) return;
+        if (Math.hypot(deltaX, deltaY) <= moveToleranceForPointer(pressSession.pointerType)) return;
 
-        if ((Date.now() - pressSession.startedAt) < DRAG_ARM_MS) {
+        if ((Date.now() - pressSession.startedAt) < dragArmMsForPointer(pressSession.pointerType)) {
           return;
         }
 
         clearPressSession();
-        lastActivateRef.current = { side: null, index: -1, at: 0 };
+        lastActivateRef.current = { side: null, index: -1, at: 0, pointerType: null };
         const nextDragState = {
           side: pressSession.side,
           fromIndex: pressSession.index,
@@ -693,7 +713,7 @@ export default function MatchUps({
         const slotIds = rowSlotIdsRef.current[activeDrag.side] || [];
         updateRowSlots(activeDrag.side, swapItemPositions(slotIds, activeDrag.fromIndex, activeDrag.overIndex));
         triggerSwapFlash(activeDrag.side, activeDrag.fromIndex, activeDrag.overIndex);
-        lastActivateRef.current = { side: null, index: -1, at: 0 };
+        lastActivateRef.current = { side: null, index: -1, at: 0, pointerType: null };
         dragStateRef.current = null;
         setDragState(null);
       }
@@ -791,12 +811,14 @@ export default function MatchUps({
   const handlePointerActivate = (session) => {
     const now = Date.now();
     const previous = lastActivateRef.current;
+    const doubleActivateMs = doubleActivateMsForPointer(session.pointerType);
     if (
       previous.side === session.side &&
       previous.index === session.index &&
-      now - previous.at <= DOUBLE_ACTIVATE_MS
+      previous.pointerType === session.pointerType &&
+      now - previous.at <= doubleActivateMs
     ) {
-      lastActivateRef.current = { side: null, index: -1, at: 0 };
+      lastActivateRef.current = { side: null, index: -1, at: 0, pointerType: null };
       setRefreshMenuOpen(false);
       openHeadshotPicker(session);
       return;
@@ -806,6 +828,7 @@ export default function MatchUps({
       side: session.side,
       index: session.index,
       at: now,
+      pointerType: session.pointerType,
     };
   };
 
@@ -835,6 +858,7 @@ export default function MatchUps({
       width: rect.width,
       rect,
       target: event.currentTarget,
+      pointerType: event.pointerType || "mouse",
     };
 
     if (event.currentTarget?.setPointerCapture) {
