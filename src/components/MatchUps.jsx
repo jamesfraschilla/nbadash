@@ -634,6 +634,35 @@ export default function MatchUps({
   }, [expandedOpen]);
 
   useEffect(() => {
+    if (!expandedOpen || typeof window === "undefined") return undefined;
+
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousBodyPosition = document.body.style.position;
+    const previousBodyTop = document.body.style.top;
+    const previousBodyWidth = document.body.style.width;
+    const previousBodyOverscroll = document.body.style.overscrollBehavior;
+    const scrollY = window.scrollY;
+
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = "100%";
+    document.body.style.overscrollBehavior = "none";
+
+    return () => {
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+      document.body.style.position = previousBodyPosition;
+      document.body.style.top = previousBodyTop;
+      document.body.style.width = previousBodyWidth;
+      document.body.style.overscrollBehavior = previousBodyOverscroll;
+      window.scrollTo(0, scrollY);
+    };
+  }, [expandedOpen]);
+
+  useEffect(() => {
     isPortraitExpandedLayoutRef.current = isPortraitExpandedLayout;
   }, [isPortraitExpandedLayout]);
 

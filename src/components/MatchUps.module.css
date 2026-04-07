@@ -395,6 +395,8 @@
   z-index: 80;
   background: rgba(8, 10, 16, 0.9);
   padding: 16px;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 .expandedView {
@@ -407,8 +409,8 @@
   display: grid;
   grid-template-rows: auto 1fr;
   gap: 14px;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 .closeButton {
