@@ -396,8 +396,18 @@ function drawStrokeOnCanvas(context, stroke, width, height) {
   context.lineJoin = "round";
   context.lineCap = "round";
   context.strokeStyle = stroke.color;
+  context.fillStyle = stroke.color;
   context.lineWidth = stroke.size;
   context.globalCompositeOperation = stroke.tool === "eraser" ? "destination-out" : "source-over";
+  if (stroke.points.length === 1) {
+    const point = stroke.points[0];
+    const x = point.x * width;
+    const y = point.y * height;
+    context.beginPath();
+    context.arc(x, y, Math.max(1, stroke.size / 2), 0, Math.PI * 2);
+    context.fill();
+    return;
+  }
   context.beginPath();
   stroke.points.forEach((point, index) => {
     const x = point.x * width;
@@ -877,6 +887,16 @@ export default function MatchUps({
     if (expandedDrawingPointerIdRef.current !== event.pointerId) return;
     event.preventDefault();
     event.stopPropagation();
+    const point = getExpandedCanvasPoint(event);
+    const stroke = expandedDrawingCurrentStrokeRef.current;
+    if (point && stroke) {
+      const normalizedPoint = normalizeExpandedCanvasPoint(point);
+      const lastPoint = stroke.points[stroke.points.length - 1];
+      if (!lastPoint || lastPoint.x !== normalizedPoint.x || lastPoint.y !== normalizedPoint.y) {
+        stroke.points.push(normalizedPoint);
+        redrawExpandedCanvas();
+      }
+    }
     finishExpandedStroke(event);
   };
 
