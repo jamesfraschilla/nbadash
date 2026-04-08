@@ -15,9 +15,9 @@ const ROW_SLOT_COUNT = 5;
 const DRAG_TARGET_PADDING_PX = 22;
 const PICKER_OPEN_GUARD_MS = 260;
 const PICKER_HOLD_MS_TOUCH = 420;
-const DRAW_STROKE_COLOR = "#facc15";
-const DRAW_STROKE_WIDTH = 5;
-const DRAW_COLORS = ["#facc15", "#f8fafc", "#ef4444", "#38bdf8", "#22c55e"];
+const DRAW_STROKE_COLOR = "#f8fafc";
+const DRAW_STROKE_WIDTH = 3;
+const DRAW_COLORS = ["#f8fafc", "#facc15", "#ef4444", "#38bdf8", "#22c55e"];
 const DRAW_SIZES = [3, 5, 8, 12];
 
 function isGLeagueTeamId(teamId) {
@@ -539,6 +539,7 @@ export default function MatchUps({
   const [expandedDrawTool, setExpandedDrawTool] = useState("pen");
   const [expandedDrawColor, setExpandedDrawColor] = useState(DRAW_STROKE_COLOR);
   const [expandedDrawSize, setExpandedDrawSize] = useState(DRAW_STROKE_WIDTH);
+  const [expandedStrokeCount, setExpandedStrokeCount] = useState(0);
   const [swapFlash, setSwapFlash] = useState(null);
   const [isPortraitExpandedLayout, setIsPortraitExpandedLayout] = useState(() => (
     typeof window !== "undefined" ? window.matchMedia("(orientation: portrait)").matches : false
@@ -563,6 +564,7 @@ export default function MatchUps({
   const expandedDrawingRef = useRef(false);
   const expandedDrawingCurrentStrokeRef = useRef(null);
   const expandedDrawingStrokesRef = useRef([]);
+  const expandedDrawingPointerIdRef = useRef(null);
   const expandedCanvasSizeRef = useRef({ width: 1, height: 1 });
   const isPortraitExpandedLayoutRef = useRef(isPortraitExpandedLayout);
   const rowSlotIdsRef = useRef({
@@ -593,10 +595,12 @@ export default function MatchUps({
     setExpandedDrawTool("pen");
     setExpandedDrawColor(DRAW_STROKE_COLOR);
     setExpandedDrawSize(DRAW_STROKE_WIDTH);
+    setExpandedStrokeCount(0);
     setDragState(null);
     expandedDrawingRef.current = false;
     expandedDrawingCurrentStrokeRef.current = null;
     expandedDrawingStrokesRef.current = [];
+    expandedDrawingPointerIdRef.current = null;
   }, [gameId]);
 
   useEffect(() => {
@@ -788,6 +792,8 @@ export default function MatchUps({
     expandedDrawingRef.current = false;
     expandedDrawingCurrentStrokeRef.current = null;
     expandedDrawingStrokesRef.current = [];
+    expandedDrawingPointerIdRef.current = null;
+    setExpandedStrokeCount(0);
     redrawExpandedCanvas();
   };
 
@@ -796,7 +802,20 @@ export default function MatchUps({
     expandedDrawingRef.current = false;
     expandedDrawingCurrentStrokeRef.current = null;
     expandedDrawingStrokesRef.current = expandedDrawingStrokesRef.current.slice(0, -1);
+    expandedDrawingPointerIdRef.current = null;
+    setExpandedStrokeCount(expandedDrawingStrokesRef.current.length);
     redrawExpandedCanvas();
+  };
+
+  const finishExpandedStroke = (event) => {
+    if (!expandedDrawingRef.current) return;
+    expandedDrawingRef.current = false;
+    expandedDrawingCurrentStrokeRef.current = null;
+    const pointerId = expandedDrawingPointerIdRef.current;
+    expandedDrawingPointerIdRef.current = null;
+    if (event?.currentTarget?.hasPointerCapture?.(pointerId)) {
+      event.currentTarget.releasePointerCapture(pointerId);
+    }
   };
 
   const getExpandedCanvasPoint = (event) => {
@@ -823,6 +842,7 @@ export default function MatchUps({
     if (event.button !== 0 && event.pointerType === "mouse") return;
     event.preventDefault();
     event.stopPropagation();
+    finishExpandedStroke(event);
     const point = getExpandedCanvasPoint(event);
     if (!point) return;
     const stroke = {
@@ -834,12 +854,15 @@ export default function MatchUps({
     expandedDrawingRef.current = true;
     expandedDrawingCurrentStrokeRef.current = stroke;
     expandedDrawingStrokesRef.current = [...expandedDrawingStrokesRef.current, stroke];
+    expandedDrawingPointerIdRef.current = event.pointerId;
+    setExpandedStrokeCount(expandedDrawingStrokesRef.current.length);
     redrawExpandedCanvas();
     event.currentTarget.setPointerCapture?.(event.pointerId);
   };
 
   const handleExpandedCanvasPointerMove = (event) => {
     if (!expandedDrawModeRef.current || !expandedDrawingRef.current) return;
+    if (expandedDrawingPointerIdRef.current !== event.pointerId) return;
     event.preventDefault();
     event.stopPropagation();
     const point = getExpandedCanvasPoint(event);
@@ -851,13 +874,10 @@ export default function MatchUps({
 
   const handleExpandedCanvasPointerUp = (event) => {
     if (!expandedDrawModeRef.current || !expandedDrawingRef.current) return;
+    if (expandedDrawingPointerIdRef.current !== event.pointerId) return;
     event.preventDefault();
     event.stopPropagation();
-    expandedDrawingRef.current = false;
-    expandedDrawingCurrentStrokeRef.current = null;
-    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
+    finishExpandedStroke(event);
   };
 
   useEffect(() => {
@@ -1284,7 +1304,7 @@ export default function MatchUps({
                   type="button"
                   className={styles.drawToggleButton}
                   onClick={clearExpandedDrawing}
-                  disabled={!expandedDrawingStrokesRef.current.length}
+                  disabled={!expandedStrokeCount}
                 >
                   Clear
                 </button>
@@ -1312,7 +1332,7 @@ export default function MatchUps({
                     type="button"
                     className={styles.drawToolbarButton}
                     onClick={undoExpandedDrawing}
-                    disabled={!expandedDrawingStrokesRef.current.length}
+                    disabled={!expandedStrokeCount}
                   >
                     Undo
                   </button>
@@ -1445,6 +1465,7 @@ export default function MatchUps({
                 onPointerMove={handleExpandedCanvasPointerMove}
                 onPointerUp={handleExpandedCanvasPointerUp}
                 onPointerCancel={handleExpandedCanvasPointerUp}
+                onLostPointerCapture={handleExpandedCanvasPointerUp}
               />
             </div>
           </div>
