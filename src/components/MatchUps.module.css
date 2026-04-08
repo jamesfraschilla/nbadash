@@ -413,6 +413,19 @@
   overscroll-behavior: none;
 }
 
+.expandedTopBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.expandedTopActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .closeButton {
   justify-self: start;
   border: 1px solid rgba(248, 250, 252, 0.32);
@@ -426,6 +439,47 @@
   position: sticky;
   top: 0;
   z-index: 3;
+}
+
+.drawToggleButton {
+  border: 1px solid rgba(248, 250, 252, 0.32);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.4);
+  color: #f8fafc;
+  padding: 7px 12px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.drawToggleButton:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.drawToggleButtonActive {
+  border-color: rgba(250, 204, 21, 0.9);
+  background: rgba(250, 204, 21, 0.16);
+  color: #fde68a;
+}
+
+.expandedContent {
+  position: relative;
+  min-height: 0;
+}
+
+.expandedDrawCanvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  touch-action: none;
+}
+
+.expandedDrawCanvasActive {
+  pointer-events: auto;
+  cursor: crosshair;
 }
 
 .expandedLandscape,

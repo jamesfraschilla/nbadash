@@ -2,7 +2,14 @@ import { Link, useSearchParams, useParams } from "react-router-dom";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createNote } from "../accountData.js";
-import { fetchGame, fetchMinutes, teamLogoUrl } from "../api.js";
+import {
+  fetchCurrentGLeagueRosters,
+  fetchCurrentNbaRosters,
+  fetchGame,
+  fetchMinutes,
+  inferLeagueFromTeamId,
+  teamLogoUrl,
+} from "../api.js";
 import { useAuth } from "../auth/useAuth.js";
 import {
   buildDefaultNoteForm,
@@ -30,6 +37,7 @@ import { fetchPublishedOrderForOfficials } from "../officialAssignments.js";
 import {
   fetchRemotePregamePlayers,
   getPregameTeamScopeForTeam,
+  linkPregamePlayersToApiPlayers,
   loadPregamePlayersPayload,
   resolveSharedPregamePlayersPayload,
 } from "../pregamePlayers.js";
@@ -92,6 +100,78 @@ const SEGMENT_STAT_DEFAULTS = {
   possessionsFor: 0,
   possessionsAgainst: 0,
 };
+
+const normalizeRosterPersonId = (value) => String(value || "").trim();
+const normalizeRosterName = (value) => String(value || "").trim().replace(/\s+/g, " ");
+const buildRosterMatchKey = (value) => normalizeRosterName(value).toUpperCase().replace(/[^A-Z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+
+const normalizeLiveRosterPlayers = (players, teamId) => (
+  (Array.isArray(players) ? players : [])
+    .map((player) => {
+      const personId = normalizeRosterPersonId(player?.personId);
+      const firstName = normalizeRosterName(player?.firstName || "");
+      const familyName = normalizeRosterName(player?.familyName || "");
+      const fullName = normalizeRosterName(player?.fullName || [firstName, familyName].filter(Boolean).join(" "));
+      if (!personId || !fullName) return null;
+      return {
+        personId,
+        firstName,
+        familyName,
+        fullName,
+        display: fullName,
+        name: fullName,
+        jerseyNum: String(player?.jerseyNum || "").trim(),
+        teamId: String(player?.teamId || teamId || "").trim() || String(teamId || "").trim(),
+      };
+    })
+    .filter(Boolean)
+);
+
+function mergeRosterPools(sharedPlayers, livePlayers) {
+  const next = [];
+  const byPersonId = new Map();
+  const byName = new Map();
+
+  const upsertPlayer = (player, preferExisting = false) => {
+    if (!player) return;
+    const personId = normalizeRosterPersonId(player.personId);
+    const fullName = normalizeRosterName(player.fullName || player.display || player.name || "");
+    const nameKey = buildRosterMatchKey(fullName);
+    const existing =
+      (personId && byPersonId.get(personId)) ||
+      (nameKey && byName.get(nameKey)) ||
+      null;
+
+    if (existing) {
+      if (!preferExisting) {
+        Object.assign(existing, {
+          ...player,
+          cap: existing.cap ?? player.cap,
+          display: existing.display || player.display || player.fullName || player.name || "",
+          name: existing.name || player.name || player.fullName || player.display || "",
+        });
+      }
+      if (personId) byPersonId.set(personId, existing);
+      if (nameKey) byName.set(nameKey, existing);
+      return;
+    }
+
+    const entry = {
+      ...player,
+      personId,
+      fullName: fullName || normalizeRosterName(player.display || player.name || ""),
+      display: normalizeRosterName(player.display || player.fullName || player.name || ""),
+      name: normalizeRosterName(player.name || player.fullName || player.display || ""),
+    };
+    next.push(entry);
+    if (personId) byPersonId.set(personId, entry);
+    if (nameKey) byName.set(nameKey, entry);
+  };
+
+  (sharedPlayers || []).forEach((player) => upsertPlayer(player, true));
+  (livePlayers || []).forEach((player) => upsertPlayer(player, false));
+  return next;
+}
 
 const reviveSnapshotEntry = (entry) => {
   if (!entry?.snapshot) return entry;
@@ -582,6 +662,24 @@ export default function Game({ variant = "full" }) {
 
   const awayTeamScope = getPregameTeamScopeForTeam(game?.awayTeam);
   const homeTeamScope = getPregameTeamScopeForTeam(game?.homeTeam);
+  const awayLeague = inferLeagueFromTeamId(game?.awayTeam?.teamId);
+  const homeLeague = inferLeagueFromTeamId(game?.homeTeam?.teamId);
+
+  const { data: currentNbaRostersPayload } = useQuery({
+    queryKey: ["game-current-nba-rosters"],
+    queryFn: fetchCurrentNbaRosters,
+    enabled: awayLeague === "nba" || homeLeague === "nba",
+    staleTime: 6 * 60 * 60 * 1000,
+    retry: 1,
+  });
+
+  const { data: currentGLeagueRostersPayload } = useQuery({
+    queryKey: ["game-current-gleague-rosters"],
+    queryFn: fetchCurrentGLeagueRosters,
+    enabled: awayLeague === "gleague" || homeLeague === "gleague",
+    staleTime: 6 * 60 * 60 * 1000,
+    retry: 1,
+  });
 
   const { data: awayRemoteRoster } = useQuery({
     queryKey: ["game-roster-caps", awayTeamScope],
@@ -661,20 +759,32 @@ export default function Game({ variant = "full" }) {
     ...(boxScore?.home?.players || []),
   ];
 
-  const getRosterForScope = (teamScope, remoteRoster) => {
-    if (!teamScope) return [];
+  const getRosterForTeam = (team, teamScope, remoteRoster) => {
+    const teamId = String(team?.teamId || "").trim();
+    const league = inferLeagueFromTeamId(teamId);
+    const liveRosterTeams = league === "gleague"
+      ? currentGLeagueRostersPayload?.teams
+      : currentNbaRostersPayload?.teams;
+    const liveRoster = normalizeLiveRosterPlayers(liveRosterTeams?.[teamId]?.players, teamId);
+
+    if (!teamScope) {
+      return liveRoster;
+    }
+
     const localRoster = loadPregamePlayersPayload(teamScope);
-    return resolveSharedPregamePlayersPayload(localRoster, remoteRoster).players;
+    const sharedRoster = resolveSharedPregamePlayersPayload(localRoster, remoteRoster).players;
+    const linkedSharedRoster = linkPregamePlayersToApiPlayers(sharedRoster, liveRoster);
+    return mergeRosterPools(linkedSharedRoster, liveRoster);
   };
 
   const awayRosterPlayers = useMemo(
-    () => getRosterForScope(awayTeamScope, awayRemoteRoster),
-    [awayTeamScope, awayRemoteRoster]
+    () => getRosterForTeam(game?.awayTeam, awayTeamScope, awayRemoteRoster),
+    [awayRemoteRoster, awayTeamScope, currentGLeagueRostersPayload?.teams, currentNbaRostersPayload?.teams, game?.awayTeam]
   );
 
   const homeRosterPlayers = useMemo(
-    () => getRosterForScope(homeTeamScope, homeRemoteRoster),
-    [homeTeamScope, homeRemoteRoster]
+    () => getRosterForTeam(game?.homeTeam, homeTeamScope, homeRemoteRoster),
+    [currentGLeagueRostersPayload?.teams, currentNbaRostersPayload?.teams, game?.homeTeam, homeRemoteRoster, homeTeamScope]
   );
 
   const awayMinuteCapsByPersonId = useMemo(() => new Map(

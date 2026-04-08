@@ -15,6 +15,8 @@ const ROW_SLOT_COUNT = 5;
 const DRAG_TARGET_PADDING_PX = 22;
 const PICKER_OPEN_GUARD_MS = 260;
 const PICKER_HOLD_MS_TOUCH = 420;
+const DRAW_STROKE_COLOR = "#facc15";
+const DRAW_STROKE_WIDTH = 5;
 
 function isGLeagueTeamId(teamId) {
   const numericTeamId = Number(teamId);
@@ -387,6 +389,26 @@ function doubleActivateMsForPointer(pointerType) {
   return DOUBLE_ACTIVATE_MS_MOUSE;
 }
 
+function drawStrokeOnCanvas(context, stroke, width, height) {
+  if (!context || !stroke?.points?.length) return;
+  context.lineJoin = "round";
+  context.lineCap = "round";
+  context.strokeStyle = stroke.color;
+  context.lineWidth = stroke.size;
+  context.globalCompositeOperation = "source-over";
+  context.beginPath();
+  stroke.points.forEach((point, index) => {
+    const x = point.x * width;
+    const y = point.y * height;
+    if (index === 0) {
+      context.moveTo(x, y);
+    } else {
+      context.lineTo(x, y);
+    }
+  });
+  context.stroke();
+}
+
 function MatchUpTile({ player, isDraggingSource, isTarget, isSwapAnimating, onPointerDown }) {
   const tileClassName = `${styles.tile} ${isTarget ? styles.tileTarget : ""} ${isSwapAnimating ? styles.tileSwap : ""}`.trim();
   const headshotStyle = player && isGLeagueTeamId(player.teamId)
@@ -511,6 +533,7 @@ export default function MatchUps({
   const [pickerState, setPickerState] = useState(null);
   const [refreshMenuOpen, setRefreshMenuOpen] = useState(false);
   const [expandedOpen, setExpandedOpen] = useState(false);
+  const [expandedDrawMode, setExpandedDrawMode] = useState(false);
   const [swapFlash, setSwapFlash] = useState(null);
   const [isPortraitExpandedLayout, setIsPortraitExpandedLayout] = useState(() => (
     typeof window !== "undefined" ? window.matchMedia("(orientation: portrait)").matches : false
@@ -529,6 +552,13 @@ export default function MatchUps({
   const dragStateRef = useRef(null);
   const pickerOpenedAtRef = useRef(0);
   const expandedOpenRef = useRef(false);
+  const expandedDrawModeRef = useRef(false);
+  const expandedCanvasRef = useRef(null);
+  const expandedCanvasStageRef = useRef(null);
+  const expandedDrawingRef = useRef(false);
+  const expandedDrawingCurrentStrokeRef = useRef(null);
+  const expandedDrawingStrokesRef = useRef([]);
+  const expandedCanvasSizeRef = useRef({ width: 1, height: 1 });
   const isPortraitExpandedLayoutRef = useRef(isPortraitExpandedLayout);
   const rowSlotIdsRef = useRef({
     away: [],
@@ -554,7 +584,11 @@ export default function MatchUps({
     setPickerState(null);
     setRefreshMenuOpen(false);
     setExpandedOpen(false);
+    setExpandedDrawMode(false);
     setDragState(null);
+    expandedDrawingRef.current = false;
+    expandedDrawingCurrentStrokeRef.current = null;
+    expandedDrawingStrokesRef.current = [];
   }, [gameId]);
 
   useEffect(() => {
@@ -634,6 +668,16 @@ export default function MatchUps({
   }, [expandedOpen]);
 
   useEffect(() => {
+    expandedDrawModeRef.current = expandedDrawMode;
+  }, [expandedDrawMode]);
+
+  useEffect(() => {
+    if (!expandedOpen) {
+      setExpandedDrawMode(false);
+    }
+  }, [expandedOpen]);
+
+  useEffect(() => {
     if (!expandedOpen || typeof window === "undefined") return undefined;
 
     const previousHtmlOverflow = document.documentElement.style.overflow;
@@ -688,6 +732,116 @@ export default function MatchUps({
     mediaQuery.addListener(updateLayout);
     return () => mediaQuery.removeListener(updateLayout);
   }, []);
+
+  const redrawExpandedCanvas = () => {
+    const canvas = expandedCanvasRef.current;
+    if (!canvas) return;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    const { width, height } = expandedCanvasSizeRef.current;
+    context.clearRect(0, 0, width, height);
+    expandedDrawingStrokesRef.current.forEach((stroke) => {
+      drawStrokeOnCanvas(context, stroke, width, height);
+    });
+  };
+
+  const resizeExpandedCanvas = () => {
+    const canvas = expandedCanvasRef.current;
+    const stage = expandedCanvasStageRef.current;
+    if (!canvas || !stage || typeof window === "undefined") return;
+    const rect = stage.getBoundingClientRect();
+    const width = Math.max(1, Math.round(rect.width));
+    const height = Math.max(1, Math.round(rect.height));
+    const ratio = window.devicePixelRatio || 1;
+    expandedCanvasSizeRef.current = { width, height };
+    canvas.width = Math.max(1, Math.floor(width * ratio));
+    canvas.height = Math.max(1, Math.floor(height * ratio));
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    redrawExpandedCanvas();
+  };
+
+  useEffect(() => {
+    if (!expandedOpen) return undefined;
+    resizeExpandedCanvas();
+    const stage = expandedCanvasStageRef.current;
+    if (!stage || typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(() => {
+      resizeExpandedCanvas();
+    });
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, [expandedOpen, isPortraitExpandedLayout]);
+
+  const clearExpandedDrawing = () => {
+    expandedDrawingRef.current = false;
+    expandedDrawingCurrentStrokeRef.current = null;
+    expandedDrawingStrokesRef.current = [];
+    redrawExpandedCanvas();
+  };
+
+  const getExpandedCanvasPoint = (event) => {
+    const canvas = expandedCanvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    };
+  };
+
+  const normalizeExpandedCanvasPoint = (point) => {
+    const { width, height } = expandedCanvasSizeRef.current;
+    if (!width || !height) return { x: 0, y: 0 };
+    return {
+      x: point.x / width,
+      y: point.y / height,
+    };
+  };
+
+  const handleExpandedCanvasPointerDown = (event) => {
+    if (!expandedDrawModeRef.current) return;
+    if (event.button !== 0 && event.pointerType === "mouse") return;
+    event.preventDefault();
+    event.stopPropagation();
+    const point = getExpandedCanvasPoint(event);
+    if (!point) return;
+    const stroke = {
+      color: DRAW_STROKE_COLOR,
+      size: DRAW_STROKE_WIDTH,
+      points: [normalizeExpandedCanvasPoint(point)],
+    };
+    expandedDrawingRef.current = true;
+    expandedDrawingCurrentStrokeRef.current = stroke;
+    expandedDrawingStrokesRef.current = [...expandedDrawingStrokesRef.current, stroke];
+    redrawExpandedCanvas();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const handleExpandedCanvasPointerMove = (event) => {
+    if (!expandedDrawModeRef.current || !expandedDrawingRef.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const point = getExpandedCanvasPoint(event);
+    const stroke = expandedDrawingCurrentStrokeRef.current;
+    if (!point || !stroke) return;
+    stroke.points.push(normalizeExpandedCanvasPoint(point));
+    redrawExpandedCanvas();
+  };
+
+  const handleExpandedCanvasPointerUp = (event) => {
+    if (!expandedDrawModeRef.current || !expandedDrawingRef.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+    expandedDrawingRef.current = false;
+    expandedDrawingCurrentStrokeRef.current = null;
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
 
   useEffect(() => {
     const handlePointerMove = (event) => {
@@ -877,6 +1031,7 @@ export default function MatchUps({
   };
 
   const handlePointerDown = (side, index, event) => {
+    if (expandedOpenRef.current && expandedDrawModeRef.current) return;
     if (event.button != null && event.button !== 0) return;
     const row = side === "away" ? awayRow : homeRow;
     const player = row.players[index];
@@ -1089,98 +1244,131 @@ export default function MatchUps({
       {expandedOpen ? (
         <div className={styles.expandedOverlay}>
           <div className={styles.expandedView}>
-            <button
-              type="button"
-              className={styles.closeButton}
-              onClick={() => setExpandedOpen(false)}
-            >
-              Close
-            </button>
+            <div className={styles.expandedTopBar}>
+              <button
+                type="button"
+                className={styles.closeButton}
+                onClick={() => setExpandedOpen(false)}
+              >
+                Close
+              </button>
+              <div className={styles.expandedTopActions}>
+                <button
+                  type="button"
+                  className={`${styles.drawToggleButton} ${expandedDrawMode ? styles.drawToggleButtonActive : ""}`.trim()}
+                  onClick={() => {
+                    setPickerState(null);
+                    setExpandedDrawMode((current) => !current);
+                  }}
+                >
+                  Pen
+                </button>
+                <button
+                  type="button"
+                  className={styles.drawToggleButton}
+                  onClick={clearExpandedDrawing}
+                  disabled={!expandedDrawingStrokesRef.current.length}
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
 
-            <div className={styles.expandedLandscape}>
-              {rows.map((row) => {
-                const logoUrl = row.teamId ? teamLogoUrl(row.teamId) : "";
-                return (
-                  <div key={`expanded-${row.key}`} className={styles.expandedRow}>
-                    <div className={styles.expandedRowHeader}>
-                      {logoUrl ? <img className={styles.expandedTeamLogo} src={logoUrl} alt="" /> : null}
-                      <div>
-                        <div className={styles.expandedTeamCode}>{row.label}</div>
-                        <div className={styles.expandedTeamName}>{row.teamName}</div>
+            <div ref={expandedCanvasStageRef} className={styles.expandedContent}>
+              <div className={styles.expandedLandscape}>
+                {rows.map((row) => {
+                  const logoUrl = row.teamId ? teamLogoUrl(row.teamId) : "";
+                  return (
+                    <div key={`expanded-${row.key}`} className={styles.expandedRow}>
+                      <div className={styles.expandedRowHeader}>
+                        {logoUrl ? <img className={styles.expandedTeamLogo} src={logoUrl} alt="" /> : null}
+                        <div>
+                          <div className={styles.expandedTeamCode}>{row.label}</div>
+                          <div className={styles.expandedTeamName}>{row.teamName}</div>
+                        </div>
+                      </div>
+                      <div className={styles.expandedSlotGrid}>
+                        {Array.from({ length: ROW_SLOT_COUNT }, (_, index) => {
+                          const player = row.players[index] || null;
+                          const isSource = dragState?.side === row.key && dragState?.fromIndex === index;
+                          const isTarget = dragState?.side === row.key && dragState?.overIndex === index;
+                          const isSwapAnimating = swapFlash?.side === row.key && swapFlash.indexes.includes(index);
+                          return (
+                            <div
+                              key={`expanded-${row.key}-${player?.personId || `slot-${index}`}`}
+                              ref={(node) => {
+                                expandedLandscapeSlotRefs.current[row.key][index] = node;
+                              }}
+                            >
+                              <ExpandedTile
+                                player={player}
+                                teamLabel={row.label}
+                                isDraggingSource={isSource}
+                                isTarget={isTarget}
+                                isSwapAnimating={isSwapAnimating}
+                                onPointerDown={(event) => handlePointerDown(row.key, index, event)}
+                              />
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
-                    <div className={styles.expandedSlotGrid}>
-                      {Array.from({ length: ROW_SLOT_COUNT }, (_, index) => {
-                        const player = row.players[index] || null;
-                        const isSource = dragState?.side === row.key && dragState?.fromIndex === index;
-                        const isTarget = dragState?.side === row.key && dragState?.overIndex === index;
-                        const isSwapAnimating = swapFlash?.side === row.key && swapFlash.indexes.includes(index);
+                  );
+                })}
+              </div>
+
+              <div className={styles.expandedPortrait}>
+                <div className={styles.expandedPortraitHeader}>
+                  <div className={styles.expandedPortraitTeam}>
+                    {rows[0]?.teamId ? <img className={styles.expandedTeamLogo} src={teamLogoUrl(rows[0].teamId)} alt="" /> : null}
+                    <span>{rows[0]?.label}</span>
+                  </div>
+                  <div className={styles.expandedPortraitTeam}>
+                    {rows[1]?.teamId ? <img className={styles.expandedTeamLogo} src={teamLogoUrl(rows[1].teamId)} alt="" /> : null}
+                    <span>{rows[1]?.label}</span>
+                  </div>
+                </div>
+                <div className={styles.expandedPortraitRows}>
+                  {Array.from({ length: ROW_SLOT_COUNT }, (_, index) => (
+                    <div key={`portrait-pair-${index}`} className={styles.expandedPortraitPair}>
+                      {rows.slice(0, 2).map((row) => {
+                        const player = row?.players[index] || null;
+                        const isSource = dragState?.side === row?.key && dragState?.fromIndex === index;
+                        const isTarget = dragState?.side === row?.key && dragState?.overIndex === index;
+                        const isSwapAnimating = swapFlash?.side === row?.key && swapFlash.indexes.includes(index);
                         return (
                           <div
-                            key={`expanded-${row.key}-${player?.personId || `slot-${index}`}`}
+                            key={`portrait-${row?.key || "row"}-${index}-${player?.personId || "open"}`}
                             ref={(node) => {
-                              expandedLandscapeSlotRefs.current[row.key][index] = node;
+                              if (row?.key) {
+                                expandedPortraitSlotRefs.current[row.key][index] = node;
+                              }
                             }}
                           >
                             <ExpandedTile
                               player={player}
-                              teamLabel={row.label}
+                              teamLabel={row?.label || "Team"}
                               isDraggingSource={isSource}
                               isTarget={isTarget}
                               isSwapAnimating={isSwapAnimating}
-                              onPointerDown={(event) => handlePointerDown(row.key, index, event)}
+                              onPointerDown={(event) => row?.key && handlePointerDown(row.key, index, event)}
                             />
                           </div>
                         );
                       })}
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  ))}
+                </div>
+              </div>
 
-            <div className={styles.expandedPortrait}>
-              <div className={styles.expandedPortraitHeader}>
-                <div className={styles.expandedPortraitTeam}>
-                  {rows[0]?.teamId ? <img className={styles.expandedTeamLogo} src={teamLogoUrl(rows[0].teamId)} alt="" /> : null}
-                  <span>{rows[0]?.label}</span>
-                </div>
-                <div className={styles.expandedPortraitTeam}>
-                  {rows[1]?.teamId ? <img className={styles.expandedTeamLogo} src={teamLogoUrl(rows[1].teamId)} alt="" /> : null}
-                  <span>{rows[1]?.label}</span>
-                </div>
-              </div>
-              <div className={styles.expandedPortraitRows}>
-                {Array.from({ length: ROW_SLOT_COUNT }, (_, index) => (
-                  <div key={`portrait-pair-${index}`} className={styles.expandedPortraitPair}>
-                    {rows.slice(0, 2).map((row) => {
-                      const player = row?.players[index] || null;
-                      const isSource = dragState?.side === row?.key && dragState?.fromIndex === index;
-                      const isTarget = dragState?.side === row?.key && dragState?.overIndex === index;
-                      const isSwapAnimating = swapFlash?.side === row?.key && swapFlash.indexes.includes(index);
-                      return (
-                        <div
-                          key={`portrait-${row?.key || "row"}-${index}-${player?.personId || "open"}`}
-                          ref={(node) => {
-                            if (row?.key) {
-                              expandedPortraitSlotRefs.current[row.key][index] = node;
-                            }
-                          }}
-                        >
-                          <ExpandedTile
-                            player={player}
-                            teamLabel={row?.label || "Team"}
-                            isDraggingSource={isSource}
-                            isTarget={isTarget}
-                            isSwapAnimating={isSwapAnimating}
-                            onPointerDown={(event) => row?.key && handlePointerDown(row.key, index, event)}
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
+              <canvas
+                ref={expandedCanvasRef}
+                className={`${styles.expandedDrawCanvas} ${expandedDrawMode ? styles.expandedDrawCanvasActive : ""}`.trim()}
+                onPointerDown={handleExpandedCanvasPointerDown}
+                onPointerMove={handleExpandedCanvasPointerMove}
+                onPointerUp={handleExpandedCanvasPointerUp}
+                onPointerCancel={handleExpandedCanvasPointerUp}
+              />
             </div>
           </div>
         </div>
