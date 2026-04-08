@@ -426,6 +426,32 @@
   gap: 8px;
 }
 
+.drawToolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid rgba(248, 250, 252, 0.18);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.drawToolbarGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.drawToolbarLabel {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(248, 250, 252, 0.72);
+}
+
 .closeButton {
   justify-self: start;
   border: 1px solid rgba(248, 250, 252, 0.32);
@@ -461,6 +487,44 @@
   border-color: rgba(250, 204, 21, 0.9);
   background: rgba(250, 204, 21, 0.16);
   color: #fde68a;
+}
+
+.drawToolbarButton,
+.drawSizeButton {
+  border: 1px solid rgba(248, 250, 252, 0.24);
+  border-radius: 9px;
+  background: rgba(15, 23, 42, 0.38);
+  color: #f8fafc;
+  padding: 6px 10px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.drawToolbarButton:disabled,
+.drawSizeButton:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.drawToolbarButtonActive,
+.drawSizeButtonActive {
+  border-color: rgba(250, 204, 21, 0.9);
+  background: rgba(250, 204, 21, 0.16);
+  color: #fde68a;
+}
+
+.drawColorButton {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 2px solid rgba(248, 250, 252, 0.28);
+  cursor: pointer;
+}
+
+.drawColorButtonActive {
+  border-color: #f8fafc;
+  box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.45);
 }
 
 .expandedContent {

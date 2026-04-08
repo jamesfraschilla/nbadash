@@ -17,6 +17,8 @@ const PICKER_OPEN_GUARD_MS = 260;
 const PICKER_HOLD_MS_TOUCH = 420;
 const DRAW_STROKE_COLOR = "#facc15";
 const DRAW_STROKE_WIDTH = 5;
+const DRAW_COLORS = ["#facc15", "#f8fafc", "#ef4444", "#38bdf8", "#22c55e"];
+const DRAW_SIZES = [3, 5, 8, 12];
 
 function isGLeagueTeamId(teamId) {
   const numericTeamId = Number(teamId);
@@ -395,7 +397,7 @@ function drawStrokeOnCanvas(context, stroke, width, height) {
   context.lineCap = "round";
   context.strokeStyle = stroke.color;
   context.lineWidth = stroke.size;
-  context.globalCompositeOperation = "source-over";
+  context.globalCompositeOperation = stroke.tool === "eraser" ? "destination-out" : "source-over";
   context.beginPath();
   stroke.points.forEach((point, index) => {
     const x = point.x * width;
@@ -534,6 +536,9 @@ export default function MatchUps({
   const [refreshMenuOpen, setRefreshMenuOpen] = useState(false);
   const [expandedOpen, setExpandedOpen] = useState(false);
   const [expandedDrawMode, setExpandedDrawMode] = useState(false);
+  const [expandedDrawTool, setExpandedDrawTool] = useState("pen");
+  const [expandedDrawColor, setExpandedDrawColor] = useState(DRAW_STROKE_COLOR);
+  const [expandedDrawSize, setExpandedDrawSize] = useState(DRAW_STROKE_WIDTH);
   const [swapFlash, setSwapFlash] = useState(null);
   const [isPortraitExpandedLayout, setIsPortraitExpandedLayout] = useState(() => (
     typeof window !== "undefined" ? window.matchMedia("(orientation: portrait)").matches : false
@@ -585,6 +590,9 @@ export default function MatchUps({
     setRefreshMenuOpen(false);
     setExpandedOpen(false);
     setExpandedDrawMode(false);
+    setExpandedDrawTool("pen");
+    setExpandedDrawColor(DRAW_STROKE_COLOR);
+    setExpandedDrawSize(DRAW_STROKE_WIDTH);
     setDragState(null);
     expandedDrawingRef.current = false;
     expandedDrawingCurrentStrokeRef.current = null;
@@ -783,6 +791,14 @@ export default function MatchUps({
     redrawExpandedCanvas();
   };
 
+  const undoExpandedDrawing = () => {
+    if (!expandedDrawingStrokesRef.current.length) return;
+    expandedDrawingRef.current = false;
+    expandedDrawingCurrentStrokeRef.current = null;
+    expandedDrawingStrokesRef.current = expandedDrawingStrokesRef.current.slice(0, -1);
+    redrawExpandedCanvas();
+  };
+
   const getExpandedCanvasPoint = (event) => {
     const canvas = expandedCanvasRef.current;
     if (!canvas) return null;
@@ -810,8 +826,9 @@ export default function MatchUps({
     const point = getExpandedCanvasPoint(event);
     if (!point) return;
     const stroke = {
-      color: DRAW_STROKE_COLOR,
-      size: DRAW_STROKE_WIDTH,
+      color: expandedDrawTool === "eraser" ? "#000000" : expandedDrawColor,
+      size: expandedDrawSize,
+      tool: expandedDrawTool,
       points: [normalizeExpandedCanvasPoint(point)],
     };
     expandedDrawingRef.current = true;
@@ -1261,7 +1278,7 @@ export default function MatchUps({
                     setExpandedDrawMode((current) => !current);
                   }}
                 >
-                  Pen
+                  {expandedDrawMode ? "Done" : "Pen"}
                 </button>
                 <button
                   type="button"
@@ -1273,6 +1290,66 @@ export default function MatchUps({
                 </button>
               </div>
             </div>
+
+            {expandedDrawMode ? (
+              <div className={styles.drawToolbar}>
+                <div className={styles.drawToolbarGroup}>
+                  <button
+                    type="button"
+                    className={`${styles.drawToolbarButton} ${expandedDrawTool === "pen" ? styles.drawToolbarButtonActive : ""}`.trim()}
+                    onClick={() => setExpandedDrawTool("pen")}
+                  >
+                    Pen
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.drawToolbarButton} ${expandedDrawTool === "eraser" ? styles.drawToolbarButtonActive : ""}`.trim()}
+                    onClick={() => setExpandedDrawTool("eraser")}
+                  >
+                    Eraser
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.drawToolbarButton}
+                    onClick={undoExpandedDrawing}
+                    disabled={!expandedDrawingStrokesRef.current.length}
+                  >
+                    Undo
+                  </button>
+                </div>
+
+                <div className={styles.drawToolbarGroup}>
+                  <span className={styles.drawToolbarLabel}>Color</span>
+                  {DRAW_COLORS.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      className={`${styles.drawColorButton} ${expandedDrawColor === color ? styles.drawColorButtonActive : ""}`.trim()}
+                      style={{ backgroundColor: color }}
+                      onClick={() => {
+                        setExpandedDrawTool("pen");
+                        setExpandedDrawColor(color);
+                      }}
+                      aria-label={`Use ${color} pen`}
+                    />
+                  ))}
+                </div>
+
+                <div className={styles.drawToolbarGroup}>
+                  <span className={styles.drawToolbarLabel}>Size</span>
+                  {DRAW_SIZES.map((size) => (
+                    <button
+                      key={size}
+                      type="button"
+                      className={`${styles.drawSizeButton} ${expandedDrawSize === size ? styles.drawSizeButtonActive : ""}`.trim()}
+                      onClick={() => setExpandedDrawSize(size)}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             <div ref={expandedCanvasStageRef} className={styles.expandedContent}>
               <div className={styles.expandedLandscape}>
