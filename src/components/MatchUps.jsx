@@ -817,15 +817,11 @@ export default function MatchUps({
     redrawExpandedCanvas();
   };
 
-  const finishExpandedStroke = (event) => {
+  const finishExpandedStroke = () => {
     if (!expandedDrawingRef.current) return;
     expandedDrawingRef.current = false;
     expandedDrawingCurrentStrokeRef.current = null;
-    const pointerId = expandedDrawingPointerIdRef.current;
     expandedDrawingPointerIdRef.current = null;
-    if (event?.currentTarget?.hasPointerCapture?.(pointerId)) {
-      event.currentTarget.releasePointerCapture(pointerId);
-    }
   };
 
   const getExpandedCanvasPoint = (event) => {
@@ -852,7 +848,7 @@ export default function MatchUps({
     if (event.button !== 0 && event.pointerType === "mouse") return;
     event.preventDefault();
     event.stopPropagation();
-    finishExpandedStroke(event);
+    finishExpandedStroke();
     const point = getExpandedCanvasPoint(event);
     if (!point) return;
     const stroke = {
@@ -867,7 +863,6 @@ export default function MatchUps({
     expandedDrawingPointerIdRef.current = event.pointerId;
     setExpandedStrokeCount(expandedDrawingStrokesRef.current.length);
     redrawExpandedCanvas();
-    event.currentTarget.setPointerCapture?.(event.pointerId);
   };
 
   const handleExpandedCanvasPointerMove = (event) => {
@@ -897,7 +892,7 @@ export default function MatchUps({
         redrawExpandedCanvas();
       }
     }
-    finishExpandedStroke(event);
+    finishExpandedStroke();
   };
 
   useEffect(() => {
@@ -1485,7 +1480,6 @@ export default function MatchUps({
                 onPointerMove={handleExpandedCanvasPointerMove}
                 onPointerUp={handleExpandedCanvasPointerUp}
                 onPointerCancel={handleExpandedCanvasPointerUp}
-                onLostPointerCapture={handleExpandedCanvasPointerUp}
               />
             </div>
           </div>
