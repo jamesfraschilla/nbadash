@@ -834,6 +834,16 @@ export default function MatchUps({
     };
   };
 
+  const getExpandedCanvasPointFromClient = (clientX, clientY) => {
+    const canvas = expandedCanvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: clientX - rect.left,
+      y: clientY - rect.top,
+    };
+  };
+
   const normalizeExpandedCanvasPoint = (point) => {
     const { width, height } = expandedCanvasSizeRef.current;
     if (!width || !height) return { x: 0, y: 0 };
@@ -843,14 +853,9 @@ export default function MatchUps({
     };
   };
 
-  const handleExpandedCanvasPointerDown = (event) => {
-    if (!expandedDrawModeRef.current) return;
-    if (event.button !== 0 && event.pointerType === "mouse") return;
-    event.preventDefault();
-    event.stopPropagation();
-    finishExpandedStroke();
-    const point = getExpandedCanvasPoint(event);
+  const startExpandedStrokeAt = (point, pointerId = null) => {
     if (!point) return;
+    finishExpandedStroke();
     const stroke = {
       color: expandedDrawTool === "eraser" ? "#000000" : expandedDrawColor,
       size: expandedDrawSize,
@@ -860,29 +865,19 @@ export default function MatchUps({
     expandedDrawingRef.current = true;
     expandedDrawingCurrentStrokeRef.current = stroke;
     expandedDrawingStrokesRef.current = [...expandedDrawingStrokesRef.current, stroke];
-    expandedDrawingPointerIdRef.current = event.pointerId;
+    expandedDrawingPointerIdRef.current = pointerId;
     setExpandedStrokeCount(expandedDrawingStrokesRef.current.length);
     redrawExpandedCanvas();
   };
 
-  const handleExpandedCanvasPointerMove = (event) => {
-    if (!expandedDrawModeRef.current || !expandedDrawingRef.current) return;
-    if (expandedDrawingPointerIdRef.current !== event.pointerId) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const point = getExpandedCanvasPoint(event);
+  const extendExpandedStrokeAt = (point) => {
     const stroke = expandedDrawingCurrentStrokeRef.current;
     if (!point || !stroke) return;
     stroke.points.push(normalizeExpandedCanvasPoint(point));
     redrawExpandedCanvas();
   };
 
-  const handleExpandedCanvasPointerUp = (event) => {
-    if (!expandedDrawModeRef.current || !expandedDrawingRef.current) return;
-    if (expandedDrawingPointerIdRef.current !== event.pointerId) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const point = getExpandedCanvasPoint(event);
+  const endExpandedStrokeAt = (point) => {
     const stroke = expandedDrawingCurrentStrokeRef.current;
     if (point && stroke) {
       const normalizedPoint = normalizeExpandedCanvasPoint(point);
@@ -893,6 +888,61 @@ export default function MatchUps({
       }
     }
     finishExpandedStroke();
+  };
+
+  const handleExpandedCanvasPointerDown = (event) => {
+    if (!expandedDrawModeRef.current) return;
+    if (event.pointerType === "touch") return;
+    if (event.button !== 0 && event.pointerType === "mouse") return;
+    event.preventDefault();
+    event.stopPropagation();
+    startExpandedStrokeAt(getExpandedCanvasPoint(event), event.pointerId);
+  };
+
+  const handleExpandedCanvasPointerMove = (event) => {
+    if (!expandedDrawModeRef.current || !expandedDrawingRef.current) return;
+    if (event.pointerType === "touch") return;
+    if (expandedDrawingPointerIdRef.current !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    extendExpandedStrokeAt(getExpandedCanvasPoint(event));
+  };
+
+  const handleExpandedCanvasPointerUp = (event) => {
+    if (!expandedDrawModeRef.current || !expandedDrawingRef.current) return;
+    if (event.pointerType === "touch") return;
+    if (expandedDrawingPointerIdRef.current !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    endExpandedStrokeAt(getExpandedCanvasPoint(event));
+  };
+
+  const handleExpandedCanvasTouchStart = (event) => {
+    if (!expandedDrawModeRef.current) return;
+    const touch = event.changedTouches?.[0];
+    if (!touch) return;
+    event.preventDefault();
+    event.stopPropagation();
+    startExpandedStrokeAt(getExpandedCanvasPointFromClient(touch.clientX, touch.clientY), "touch");
+  };
+
+  const handleExpandedCanvasTouchMove = (event) => {
+    if (!expandedDrawModeRef.current || !expandedDrawingRef.current) return;
+    if (expandedDrawingPointerIdRef.current !== "touch") return;
+    const touch = event.changedTouches?.[0];
+    if (!touch) return;
+    event.preventDefault();
+    event.stopPropagation();
+    extendExpandedStrokeAt(getExpandedCanvasPointFromClient(touch.clientX, touch.clientY));
+  };
+
+  const handleExpandedCanvasTouchEnd = (event) => {
+    if (!expandedDrawModeRef.current || !expandedDrawingRef.current) return;
+    if (expandedDrawingPointerIdRef.current !== "touch") return;
+    const touch = event.changedTouches?.[0];
+    event.preventDefault();
+    event.stopPropagation();
+    endExpandedStrokeAt(touch ? getExpandedCanvasPointFromClient(touch.clientX, touch.clientY) : null);
   };
 
   useEffect(() => {
@@ -1480,6 +1530,10 @@ export default function MatchUps({
                 onPointerMove={handleExpandedCanvasPointerMove}
                 onPointerUp={handleExpandedCanvasPointerUp}
                 onPointerCancel={handleExpandedCanvasPointerUp}
+                onTouchStart={handleExpandedCanvasTouchStart}
+                onTouchMove={handleExpandedCanvasTouchMove}
+                onTouchEnd={handleExpandedCanvasTouchEnd}
+                onTouchCancel={handleExpandedCanvasTouchEnd}
               />
             </div>
           </div>
