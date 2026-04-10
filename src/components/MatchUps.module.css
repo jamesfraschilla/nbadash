@@ -766,12 +766,13 @@
   .expandedPortrait {
     display: block;
     align-self: start;
-    width: min(100%, 640px);
+    width: min(100%, 520px);
     margin-inline: auto;
   }
 
   .expandedPortraitHeader {
-    margin-bottom: 22px;
+    gap: 168px;
+    margin-bottom: 26px;
   }
 
   .expandedAvatarFrame {
@@ -781,5 +782,13 @@
 
   .expandedPlayerName {
     font-size: clamp(0.86rem, 2.2vw, 1rem);
+  }
+
+  .expandedPortraitRows {
+    gap: 38px;
+  }
+
+  .expandedPortraitPair {
+    gap: 168px;
   }
 }
