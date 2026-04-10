@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { teamLogoUrl } from "../api.js";
+import rostersByTeamId from "../data/rosters.json";
 import PlayerHeadshot from "./PlayerHeadshot.jsx";
 import { readLocalStorage, writeLocalStorage } from "../storage.js";
 import styles from "./MatchUps.module.css";
@@ -15,14 +16,22 @@ const ROW_SLOT_COUNT = 5;
 const DRAG_TARGET_PADDING_PX = 22;
 const PICKER_OPEN_GUARD_MS = 260;
 const PICKER_HOLD_MS_TOUCH = 420;
+const WIZARDS_TEAM_ID = "1610612764";
+const CAPITAL_CITY_TEAM_ID = "1612709928";
 const DRAW_STROKE_COLOR = "#f8fafc";
 const DRAW_STROKE_WIDTH = 3;
 const DRAW_COLORS = ["#f8fafc", "#facc15", "#ef4444", "#38bdf8", "#22c55e"];
 const DRAW_SIZES = [3, 5, 8, 12];
+const DEFAULT_POSITION_RANK = 3;
 
 function isGLeagueTeamId(teamId) {
   const numericTeamId = Number(teamId);
   return numericTeamId >= 1612700000 && numericTeamId < 1612710000;
+}
+
+function isPriorityMatchupTeam(teamId) {
+  const normalizedTeamId = String(teamId || "");
+  return normalizedTeamId === WIZARDS_TEAM_ID || normalizedTeamId === CAPITAL_CITY_TEAM_ID;
 }
 
 function buildEmptyState() {
@@ -80,6 +89,177 @@ function formatPlayerNameCase(value = "") {
     .replace(/\b([a-z])/g, (match) => match.toUpperCase());
 }
 
+function normalizePosition(value = "") {
+  return String(value || "").trim().toUpperCase();
+}
+
+function buildStaticRosterPositionMap(teamId) {
+  const players = Array.isArray(rostersByTeamId?.[String(teamId || "")])
+    ? rostersByTeamId[String(teamId || "")]
+    : [];
+
+  return new Map(
+    players
+      .map((player) => [String(player?.personId || "").trim(), normalizePosition(player?.position)])
+      .filter(([personId]) => personId)
+  );
+}
+
+function getPositionRank(position) {
+  const normalized = normalizePosition(position);
+  if (normalized === "G") return 1;
+  if (normalized === "G-F" || normalized === "F-G") return 2;
+  if (normalized === "F") return 3;
+  if (normalized === "F-C" || normalized === "C-F") return 4;
+  if (normalized === "C") return 5;
+  return DEFAULT_POSITION_RANK;
+}
+
+function getPositionGroup(position) {
+  const rank = getPositionRank(position);
+  if (rank <= 2) return "guard";
+  if (rank === 3) return "wing";
+  return "big";
+}
+
+function buildSmartSortKey(player, index) {
+  return {
+    rank: getPositionRank(player?.position),
+    jersey: Number.parseInt(String(player?.jerseyNum || ""), 10),
+    index,
+  };
+}
+
+function sortLineupForMatchups(players) {
+  return [...players]
+    .map((player, index) => ({ player, index, key: buildSmartSortKey(player, index) }))
+    .sort((a, b) => {
+      if (a.key.rank !== b.key.rank) return a.key.rank - b.key.rank;
+      const aJersey = Number.isFinite(a.key.jersey) ? a.key.jersey : Number.POSITIVE_INFINITY;
+      const bJersey = Number.isFinite(b.key.jersey) ? b.key.jersey : Number.POSITIVE_INFINITY;
+      if (aJersey !== bJersey) return aJersey - bJersey;
+      return a.index - b.index;
+    })
+    .map(({ player }) => player);
+}
+
+function scoreMatchup(defender, offensivePlayer) {
+  const defenderRank = getPositionRank(defender?.position);
+  const offensiveRank = getPositionRank(offensivePlayer?.position);
+  const rankGap = Math.abs(defenderRank - offensiveRank);
+  let score = rankGap * 24;
+
+  if (rankGap >= 3) score += 120;
+  if (rankGap >= 4) score += 420;
+
+  const defenderGroup = getPositionGroup(defender?.position);
+  const offensiveGroup = getPositionGroup(offensivePlayer?.position);
+  if (defenderGroup !== offensiveGroup) {
+    score += 22;
+  }
+
+  if (defenderGroup === "guard" && offensiveGroup === "big") score += 220;
+  if (defenderGroup === "big" && offensiveGroup === "guard") score += 120;
+
+  return score;
+}
+
+function buildLineupPermutations(players) {
+  const permutations = [];
+  const next = [...players];
+
+  const walk = (startIndex) => {
+    if (startIndex === next.length - 1) {
+      permutations.push([...next]);
+      return;
+    }
+    for (let index = startIndex; index < next.length; index += 1) {
+      [next[startIndex], next[index]] = [next[index], next[startIndex]];
+      walk(startIndex + 1);
+      [next[startIndex], next[index]] = [next[index], next[startIndex]];
+    }
+  };
+
+  if (!players.length) return permutations;
+  walk(0);
+  return permutations;
+}
+
+function chooseBestOpponentOrdering(anchorPlayers, opponentPlayers) {
+  const permutations = buildLineupPermutations(opponentPlayers);
+  let bestPermutation = opponentPlayers;
+  let bestScore = Number.POSITIVE_INFINITY;
+
+  permutations.forEach((candidate) => {
+    const score = anchorPlayers.reduce((total, defender, index) => {
+      return total + scoreMatchup(defender, candidate[index]);
+    }, 0);
+
+    if (score < bestScore) {
+      bestScore = score;
+      bestPermutation = candidate;
+    }
+  });
+
+  return bestPermutation;
+}
+
+function reorderRowToSlotIds(row, slotIds) {
+  const used = new Set();
+  const nextSlotIds = [];
+
+  (slotIds || []).forEach((personId) => {
+    const normalizedId = String(personId || "");
+    if (!normalizedId || used.has(normalizedId) || !row.rosterMap.has(normalizedId)) return;
+    used.add(normalizedId);
+    nextSlotIds.push(normalizedId);
+  });
+
+  row.slotIds.forEach((personId) => {
+    if (nextSlotIds.length >= ROW_SLOT_COUNT || used.has(personId) || !row.rosterMap.has(personId)) return;
+    used.add(personId);
+    nextSlotIds.push(personId);
+  });
+
+  return {
+    ...row,
+    slotIds: nextSlotIds,
+    players: nextSlotIds.map((personId) => row.rosterMap.get(personId) || null),
+  };
+}
+
+function buildSmartMatchupSlotIds(awayRow, homeRow) {
+  const awayPlayers = awayRow.players.filter(Boolean);
+  const homePlayers = homeRow.players.filter(Boolean);
+  if (awayPlayers.length !== ROW_SLOT_COUNT || homePlayers.length !== ROW_SLOT_COUNT) {
+    return {
+      away: awayRow.slotIds,
+      home: homeRow.slotIds,
+    };
+  }
+
+  const anchorSide = isPriorityMatchupTeam(awayRow.teamId)
+    ? "away"
+    : isPriorityMatchupTeam(homeRow.teamId)
+      ? "home"
+      : "away";
+  const anchorRow = anchorSide === "away" ? awayRow : homeRow;
+  const opponentRow = anchorSide === "away" ? homeRow : awayRow;
+
+  const sortedAnchorPlayers = sortLineupForMatchups(anchorRow.players.filter(Boolean));
+  const sortedOpponentPlayers = chooseBestOpponentOrdering(sortedAnchorPlayers, opponentRow.players.filter(Boolean));
+
+  return anchorSide === "away"
+    ? {
+      away: sortedAnchorPlayers.map((player) => player.personId),
+      home: sortedOpponentPlayers.map((player) => player.personId),
+    }
+    : {
+      away: sortedOpponentPlayers.map((player) => player.personId),
+      home: sortedAnchorPlayers.map((player) => player.personId),
+    };
+}
+
 function buildCurrentStint(minutesData) {
   const periods = Array.isArray(minutesData?.periods) ? minutesData.periods : [];
   for (let periodIndex = periods.length - 1; periodIndex >= 0; periodIndex -= 1) {
@@ -104,7 +284,7 @@ function normalizeStintPlayers(players) {
     .slice(0, ROW_SLOT_COUNT);
 }
 
-function normalizeRosterPlayer(player, fallback = null, teamId = null) {
+function normalizeRosterPlayer(player, fallback = null, teamId = null, staticPositionMap = null) {
   if (!player && !fallback) return null;
   const personId = String(player?.personId || fallback?.personId || "");
   if (!personId) return null;
@@ -130,6 +310,14 @@ function normalizeRosterPlayer(player, fallback = null, teamId = null) {
     displayName: formatPlayerNameCase(
       String(player?.display || player?.fullName || player?.name || fallback?.display || fallback?.fullName || fallback?.nameI || fallback?.name || "").trim()
     ),
+    position: normalizePosition(
+      player?.position ||
+      player?.pos ||
+      fallback?.position ||
+      fallback?.pos ||
+      staticPositionMap?.get(personId) ||
+      ""
+    ),
     teamId,
   };
 }
@@ -137,23 +325,24 @@ function normalizeRosterPlayer(player, fallback = null, teamId = null) {
 function buildRosterPlayers(teamBoxPlayers, stintPlayers, extraRosterPlayers, teamId) {
   const roster = [];
   const byId = new Map();
+  const staticPositionMap = buildStaticRosterPositionMap(teamId);
 
   (teamBoxPlayers || []).forEach((player) => {
-    const normalized = normalizeRosterPlayer(player, null, teamId);
+    const normalized = normalizeRosterPlayer(player, null, teamId, staticPositionMap);
     if (!normalized || byId.has(normalized.personId)) return;
     byId.set(normalized.personId, normalized);
     roster.push(normalized);
   });
 
   normalizeStintPlayers(stintPlayers).forEach((player) => {
-    const normalized = normalizeRosterPlayer(null, player, teamId);
+    const normalized = normalizeRosterPlayer(null, player, teamId, staticPositionMap);
     if (!normalized || byId.has(normalized.personId)) return;
     byId.set(normalized.personId, normalized);
     roster.push(normalized);
   });
 
   (extraRosterPlayers || []).forEach((player) => {
-    const normalized = normalizeRosterPlayer(player, null, teamId);
+    const normalized = normalizeRosterPlayer(player, null, teamId, staticPositionMap);
     if (!normalized || byId.has(normalized.personId)) return;
     byId.set(normalized.personId, normalized);
     roster.push(normalized);
@@ -733,13 +922,6 @@ export default function MatchUps({
   }, [isPortraitExpandedLayout]);
 
   useEffect(() => {
-    rowSlotIdsRef.current = {
-      away: awayRow.slotIds,
-      home: homeRow.slotIds,
-    };
-  }, [awayRow.slotIds, homeRow.slotIds]);
-
-  useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return undefined;
 
     const mediaQuery = window.matchMedia("(orientation: portrait)");
@@ -1135,7 +1317,7 @@ export default function MatchUps({
   const handlePointerDown = (side, index, event) => {
     if (expandedOpenRef.current && expandedDrawModeRef.current) return;
     if (event.button != null && event.button !== 0) return;
-    const row = side === "away" ? awayRow : homeRow;
+    const row = rowsByKey.get(side) || (side === "away" ? awayRow : homeRow);
     const player = row.players[index];
     if (!player) return;
 
@@ -1181,7 +1363,7 @@ export default function MatchUps({
   };
 
   const handlePickerSelect = (side, index, personId) => {
-    const row = side === "away" ? awayRow : homeRow;
+    const row = rowsByKey.get(side) || (side === "away" ? awayRow : homeRow);
     if (!row.rosterMap.has(personId)) return;
     updateRowSlots(side, swapOrReplace(row.slotIds, index, personId));
     setPickerState(null);
@@ -1199,7 +1381,7 @@ export default function MatchUps({
   };
 
   const handleRefreshRow = (side) => {
-    const row = side === "away" ? awayRow : homeRow;
+    const row = rowsByKey.get(side) || (side === "away" ? awayRow : homeRow);
     if (!row.currentStintSlotIds.length) {
       setRefreshMenuOpen(false);
       return;
@@ -1212,12 +1394,20 @@ export default function MatchUps({
   };
 
   const handleRefreshAll = () => {
+    const nextAwayRow = awayRow.currentStintSlotIds.length
+      ? reorderRowToSlotIds(awayRow, awayRow.currentStintSlotIds)
+      : awayRow;
+    const nextHomeRow = homeRow.currentStintSlotIds.length
+      ? reorderRowToSlotIds(homeRow, homeRow.currentStintSlotIds)
+      : homeRow;
+    const smartSlotIds = buildSmartMatchupSlotIds(nextAwayRow, nextHomeRow);
+
     setPersistedState((current) => ({
       ...current,
       slots: {
         ...current.slots,
-        away: awayRow.currentStintSlotIds.length ? awayRow.currentStintSlotIds : current.slots.away,
-        home: homeRow.currentStintSlotIds.length ? homeRow.currentStintSlotIds : current.slots.home,
+        away: awayRow.currentStintSlotIds.length ? smartSlotIds.away : current.slots.away,
+        home: homeRow.currentStintSlotIds.length ? smartSlotIds.home : current.slots.home,
       },
     }));
     setRefreshMenuOpen(false);
@@ -1233,31 +1423,64 @@ export default function MatchUps({
     }));
   };
 
+  const smartDefaultSlotIds = useMemo(() => {
+    if (persistedState.slots.away.length || persistedState.slots.home.length) return null;
+    return buildSmartMatchupSlotIds(awayRow, homeRow);
+  }, [awayRow, homeRow, persistedState.slots.away.length, persistedState.slots.home.length]);
+
+  const renderedAwayRow = useMemo(
+    () => smartDefaultSlotIds?.away ? reorderRowToSlotIds(awayRow, smartDefaultSlotIds.away) : awayRow,
+    [awayRow, smartDefaultSlotIds]
+  );
+
+  const renderedHomeRow = useMemo(
+    () => smartDefaultSlotIds?.home ? reorderRowToSlotIds(homeRow, smartDefaultSlotIds.home) : homeRow,
+    [homeRow, smartDefaultSlotIds]
+  );
+
   const rows = [
     {
       key: "away",
       label: awayTeam?.teamTricode || "Away",
       teamName: awayTeam?.teamName || "Visiting Team",
       teamId: awayTeam?.teamId,
-      roster: awayRow.roster,
-      slotIds: awayRow.slotIds,
-      preferredSlotIds: awayRow.preferredSlotIds,
-      players: awayRow.players,
+      roster: renderedAwayRow.roster,
+      rosterMap: renderedAwayRow.rosterMap,
+      currentStintSlotIds: renderedAwayRow.currentStintSlotIds,
+      slotIds: renderedAwayRow.slotIds,
+      preferredSlotIds: renderedAwayRow.preferredSlotIds,
+      players: renderedAwayRow.players,
     },
     {
       key: "home",
       label: homeTeam?.teamTricode || "Home",
       teamName: homeTeam?.teamName || "Home Team",
       teamId: homeTeam?.teamId,
-      roster: homeRow.roster,
-      slotIds: homeRow.slotIds,
-      preferredSlotIds: homeRow.preferredSlotIds,
-      players: homeRow.players,
+      roster: renderedHomeRow.roster,
+      rosterMap: renderedHomeRow.rosterMap,
+      currentStintSlotIds: renderedHomeRow.currentStintSlotIds,
+      slotIds: renderedHomeRow.slotIds,
+      preferredSlotIds: renderedHomeRow.preferredSlotIds,
+      players: renderedHomeRow.players,
     },
-  ];
+  ].sort((a, b) => {
+    const aPriority = isPriorityMatchupTeam(a.teamId);
+    const bPriority = isPriorityMatchupTeam(b.teamId);
+    if (aPriority === bPriority) return 0;
+    return aPriority ? -1 : 1;
+  });
+
+  const rowsByKey = useMemo(() => new Map(rows.map((row) => [row.key, row])), [rows]);
+
+  useEffect(() => {
+    rowSlotIdsRef.current = {
+      away: rowsByKey.get("away")?.slotIds || [],
+      home: rowsByKey.get("home")?.slotIds || [],
+    };
+  }, [rowsByKey]);
 
   const hasLineups = awayRow.players.length || homeRow.players.length;
-  const pickerRow = pickerState?.side === "away" ? rows[0] : pickerState?.side === "home" ? rows[1] : null;
+  const pickerRow = pickerState?.side ? rows.find((row) => row.key === pickerState.side) || null : null;
   const pickerOptions = pickerRow ? sortRosterOptions(pickerRow.roster) : [];
   const pickerSelectedPersonId = pickerRow && Number.isInteger(pickerState?.index)
     ? pickerRow.slotIds[pickerState.index] || ""
@@ -1277,7 +1500,7 @@ export default function MatchUps({
 
       {persistedState.collapsed ? null : (
         <div className={styles.body}>
-          {hasLineups ? rows.map((row) => {
+          {hasLineups ? rows.map((row, rowIndex) => {
             const logoUrl = row.teamId ? teamLogoUrl(row.teamId) : "";
             return (
               <div key={row.key} className={styles.row}>
@@ -1287,7 +1510,7 @@ export default function MatchUps({
                     <div className={styles.teamCode}>{row.label}</div>
                     <div className={styles.teamName}>{row.teamName}</div>
                   </div>
-                  {row.key === "away" ? (
+                  {rowIndex === 0 ? (
                     <div className={styles.headerActions}>
                       <button
                         type="button"
