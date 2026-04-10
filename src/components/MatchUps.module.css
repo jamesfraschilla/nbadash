@@ -51,6 +51,7 @@
 
 .expandButton,
 .refreshButton,
+.magicButton,
 .refreshMenuButton {
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -64,6 +65,21 @@
   padding: 6px 12px;
   font-size: 0.8rem;
   font-weight: 700;
+}
+
+.magicButton {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  color: var(--highlight-text);
+}
+
+.magicButton svg {
+  width: 16px;
+  height: 16px;
+  display: block;
 }
 
 .refreshMenu {

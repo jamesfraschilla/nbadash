@@ -848,6 +848,21 @@ function HeadshotPickerTile({ player, isActive, onClick }) {
   );
 }
 
+function MagicWandIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path
+        d="M4.2 19.8 11.5 12.5m0 0 1.7-1.7m-1.7 1.7-3.3-3.3m3.3 3.3 3.3 3.3m2.3-11.1 0 2.8m-1.4-1.4 2.8 0m1.6 4.3 0 2m-1-1 2 0M8 3.7l.5 1.5L10 5.7l-1.5.5L8 7.7l-.5-1.5L6 5.7l1.5-.5L8 3.7Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export default function MatchUps({
   gameId,
   awayTeam,
@@ -1555,6 +1570,20 @@ export default function MatchUps({
     setRefreshMenuOpen(false);
   };
 
+  const handleSmartReorder = () => {
+    setPickerState(null);
+    setRefreshMenuOpen(false);
+    const smartSlotIds = buildSmartMatchupSlotIds(renderedAwayRow, renderedHomeRow, matchupProfileMap);
+    setPersistedState((current) => ({
+      ...current,
+      slots: {
+        ...current.slots,
+        away: smartSlotIds.away,
+        home: smartSlotIds.home,
+      },
+    }));
+  };
+
   const updateCollapsed = () => {
     setPickerState(null);
     setRefreshMenuOpen(false);
@@ -1668,6 +1697,15 @@ export default function MatchUps({
                         onClick={toggleRefreshMenu}
                       >
                         Refresh
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.magicButton}
+                        onClick={handleSmartReorder}
+                        aria-label="Smart reorder matchups"
+                        title="Smart reorder matchups"
+                      >
+                        <MagicWandIcon />
                       </button>
                     </div>
                   ) : null}
