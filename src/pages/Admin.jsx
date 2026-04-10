@@ -72,6 +72,42 @@ function parseHeightToInches(value) {
   return (Number.parseInt(match[1], 10) * 12) + Number.parseInt(match[2], 10);
 }
 
+function formatHeightLabel(heightIn) {
+  const numericHeight = Number.parseInt(String(heightIn || "").trim(), 10);
+  if (!Number.isFinite(numericHeight) || numericHeight <= 0) return "Unavailable";
+  const feet = Math.floor(numericHeight / 12);
+  const inches = numericHeight % 12;
+  return `${feet}'${inches}"`;
+}
+
+const ADMIN_SECTIONS = [
+  {
+    key: "accounts",
+    kicker: "Accounts",
+    title: "User administration",
+  },
+  {
+    key: "invites",
+    kicker: "Accounts",
+    title: "Pending invites",
+  },
+  {
+    key: "users",
+    kicker: "Accounts",
+    title: "User profiles",
+  },
+  {
+    key: "rosters",
+    kicker: "Team Data",
+    title: "Shared team rosters",
+  },
+  {
+    key: "matchups",
+    kicker: "Match-Ups",
+    title: "Smart matchup profiles",
+  },
+];
+
 function ProfileCard({ profile, actorId, onSave }) {
   const [draftRole, setDraftRole] = useState(profile.role || "coach");
   const [draftStatus, setDraftStatus] = useState(profile.status || "active");
@@ -298,6 +334,7 @@ function MatchupProfileCard({
   onDelete,
 }) {
   const [draft, setDraft] = useState(buildEmptyMatchupProfileDraft());
+  const [useHeightOverride, setUseHeightOverride] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -313,6 +350,13 @@ function MatchupProfileCard({
       return String(a.fullName || "").localeCompare(String(b.fullName || ""));
     });
   }, [draft.teamId, rosterMap]);
+
+  const selectedPlayer = useMemo(
+    () => teamPlayers.find((player) => player.personId === draft.personId) || null,
+    [draft.personId, teamPlayers]
+  );
+
+  const derivedHeightIn = selectedPlayer?.heightIn ?? "";
 
   const allLeaguePlayers = useMemo(() => {
     const options = Object.values(rosterMap || {})
@@ -336,6 +380,7 @@ function MatchupProfileCard({
       ...buildEmptyMatchupProfileDraft(),
       league: value === "gleague" ? "gleague" : "nba",
     });
+    setUseHeightOverride(false);
     setSaveMessage("");
   };
 
@@ -349,6 +394,7 @@ function MatchupProfileCard({
       preferOpponentIds: [],
       avoidOpponentIds: [],
     }));
+    setUseHeightOverride(false);
     setSaveMessage("");
   };
 
@@ -356,6 +402,8 @@ function MatchupProfileCard({
     const selected = teamPlayers.find((player) => player.personId === personId) || null;
     const existing = savedProfiles.find((profile) => profile.personId === personId) || null;
     if (existing) {
+      const selectedHeight = selected?.heightIn ?? "";
+      const existingHeight = existing.heightIn ?? "";
       setDraft({
         personId: existing.personId,
         league: existing.league,
@@ -370,6 +418,7 @@ function MatchupProfileCard({
         preferOpponentIds: [...(existing.preferOpponentIds || [])],
         avoidOpponentIds: [...(existing.avoidOpponentIds || [])],
       });
+      setUseHeightOverride(existingHeight !== "" && String(existingHeight) !== String(selectedHeight));
       setSaveMessage("");
       return;
     }
@@ -378,14 +427,19 @@ function MatchupProfileCard({
       ...current,
       personId,
       fullName: selected?.fullName || "",
-      heightIn: selected?.heightIn ?? "",
+      heightIn: "",
       preferOpponentIds: [],
       avoidOpponentIds: [],
     }));
+    setUseHeightOverride(false);
     setSaveMessage("");
   };
 
   const handleEdit = (profile) => {
+    const rosterPlayer = (rosterSources?.[profile.league] || {});
+    const selectedHeight = Array.isArray(rosterPlayer?.[profile.teamId])
+      ? (rosterPlayer[profile.teamId].find((player) => player.personId === profile.personId)?.heightIn ?? "")
+      : "";
     setDraft({
       personId: profile.personId,
       league: profile.league,
@@ -400,11 +454,13 @@ function MatchupProfileCard({
       preferOpponentIds: [...(profile.preferOpponentIds || [])],
       avoidOpponentIds: [...(profile.avoidOpponentIds || [])],
     });
+    setUseHeightOverride(profile.heightIn != null && String(profile.heightIn) !== "" && String(profile.heightIn) !== String(selectedHeight));
     setSaveMessage("");
   };
 
   const handleReset = () => {
     setDraft(buildEmptyMatchupProfileDraft());
+    setUseHeightOverride(false);
     setSaveMessage("");
   };
 
@@ -418,7 +474,9 @@ function MatchupProfileCard({
     try {
       await onSave({
         ...draft,
-        heightIn: draft.heightIn === "" ? null : draft.heightIn,
+        heightIn: useHeightOverride
+          ? (draft.heightIn === "" ? null : draft.heightIn)
+          : (derivedHeightIn === "" ? null : derivedHeightIn),
       });
       setSaveMessage("Matchup profile saved.");
     } catch (error) {
@@ -480,15 +538,35 @@ function MatchupProfileCard({
           </select>
         </label>
         <label className={styles.field}>
-          <span>Height (inches)</span>
-          <input
-            type="number"
-            value={draft.heightIn}
-            onChange={(event) => handleDraftChange("heightIn", event.target.value)}
-            placeholder="Optional"
-          />
+          <span>Roster height</span>
+          <input type="text" value={formatHeightLabel(derivedHeightIn)} readOnly />
         </label>
       </div>
+
+      <div className={styles.scopeGroup}>
+        <label className={styles.scopeOption}>
+          <input
+            type="checkbox"
+            checked={useHeightOverride}
+            onChange={(event) => setUseHeightOverride(event.target.checked)}
+          />
+          <span>Override roster height</span>
+        </label>
+      </div>
+
+      {useHeightOverride ? (
+        <div className={styles.formGrid}>
+          <label className={styles.field}>
+            <span>Height override (inches)</span>
+            <input
+              type="number"
+              value={draft.heightIn}
+              onChange={(event) => handleDraftChange("heightIn", event.target.value)}
+              placeholder="Optional"
+            />
+          </label>
+        </div>
+      ) : null}
 
       <div className={styles.formGrid}>
         <label className={styles.field}>
@@ -596,6 +674,7 @@ function MatchupProfileCard({
 export default function Admin() {
   const { user, session, profile } = useAuth();
   const queryClient = useQueryClient();
+  const [activeSection, setActiveSection] = useState("accounts");
   const [inviteForm, setInviteForm] = useState({
     email: "",
     displayName: "",
@@ -702,6 +781,7 @@ export default function Admin() {
   }), [gLeagueRosterSources, nbaRosterSources]);
 
   const sortedInvites = useMemo(() => invites, [invites]);
+  const activeSectionConfig = ADMIN_SECTIONS.find((section) => section.key === activeSection) || ADMIN_SECTIONS[0];
 
   if (profile?.role !== "admin") {
     return (
@@ -773,159 +853,179 @@ export default function Admin() {
 
   return (
     <div className={styles.page}>
-      <section className={styles.section}>
+      <aside className={styles.sidebar}>
+        <div className={styles.sidebarHeader}>
+          <div className={styles.kicker}>Admin</div>
+          <h2 className={styles.title}>Settings</h2>
+        </div>
+        <nav className={styles.sidebarNav} aria-label="Admin sections">
+          {ADMIN_SECTIONS.map((section) => (
+            <button
+              key={section.key}
+              type="button"
+              className={`${styles.sidebarButton} ${activeSection === section.key ? styles.sidebarButtonActive : ""}`.trim()}
+              onClick={() => setActiveSection(section.key)}
+            >
+              <span className={styles.sidebarButtonKicker}>{section.kicker}</span>
+              <span className={styles.sidebarButtonTitle}>{section.title}</span>
+            </button>
+          ))}
+        </nav>
+      </aside>
+
+      <section className={styles.content}>
         <div className={styles.sectionHeader}>
           <div>
-            <div className={styles.kicker}>Accounts</div>
-            <h2 className={styles.title}>User administration</h2>
+            <div className={styles.kicker}>{activeSectionConfig.kicker}</div>
+            <h3 className={styles.subTitle}>{activeSectionConfig.title}</h3>
           </div>
         </div>
 
-        <form className={styles.inviteCard} onSubmit={handleInvite}>
-          <div className={styles.formGrid}>
-            <label className={styles.field}>
-              <span>Email</span>
-              <input
-                type="email"
-                value={inviteForm.email}
-                onChange={(event) => setInviteForm((prev) => ({ ...prev, email: event.target.value }))}
-                placeholder="name@monumentalsports.com"
-              />
-            </label>
-            <label className={styles.field}>
-              <span>Display name</span>
-              <input
-                type="text"
-                value={inviteForm.displayName}
-                onChange={(event) => setInviteForm((prev) => ({ ...prev, displayName: event.target.value }))}
-                placeholder="Optional"
-              />
-            </label>
-            <label className={styles.field}>
-              <span>Password</span>
-              <input
-                type="password"
-                value={inviteForm.password}
-                onChange={(event) => setInviteForm((prev) => ({ ...prev, password: event.target.value }))}
-                placeholder="Required for direct account creation"
-              />
-            </label>
-            <label className={styles.field}>
-              <span>Role</span>
-              <select
-                value={inviteForm.role}
-                onChange={(event) => setInviteForm((prev) => ({ ...prev, role: event.target.value }))}
-              >
-                {ACCOUNT_ROLES.map((role) => (
-                  <option key={role} value={role}>{role}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <div className={styles.scopeGroup}>
-            <div className={styles.scopeLabel}>Team scopes</div>
-            <div className={styles.scopeOptions}>
-              {ACCOUNT_TEAM_SCOPES.map((scope) => (
-                <label key={scope} className={styles.scopeOption}>
+        {activeSection === "accounts" ? (
+          <div className={styles.section}>
+            <form className={styles.inviteCard} onSubmit={handleInvite}>
+              <div className={styles.formGrid}>
+                <label className={styles.field}>
+                  <span>Email</span>
                   <input
-                    type="checkbox"
-                    checked={inviteForm.teamScopes.includes(scope)}
-                    onChange={() => toggleInviteScope(scope)}
+                    type="email"
+                    value={inviteForm.email}
+                    onChange={(event) => setInviteForm((prev) => ({ ...prev, email: event.target.value }))}
+                    placeholder="name@monumentalsports.com"
                   />
-                  <span>{scope}</span>
                 </label>
-              ))}
-            </div>
-          </div>
+                <label className={styles.field}>
+                  <span>Display name</span>
+                  <input
+                    type="text"
+                    value={inviteForm.displayName}
+                    onChange={(event) => setInviteForm((prev) => ({ ...prev, displayName: event.target.value }))}
+                    placeholder="Optional"
+                  />
+                </label>
+                <label className={styles.field}>
+                  <span>Password</span>
+                  <input
+                    type="password"
+                    value={inviteForm.password}
+                    onChange={(event) => setInviteForm((prev) => ({ ...prev, password: event.target.value }))}
+                    placeholder="Required for direct account creation"
+                  />
+                </label>
+                <label className={styles.field}>
+                  <span>Role</span>
+                  <select
+                    value={inviteForm.role}
+                    onChange={(event) => setInviteForm((prev) => ({ ...prev, role: event.target.value }))}
+                  >
+                    {ACCOUNT_ROLES.map((role) => (
+                      <option key={role} value={role}>{role}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
 
-          {inviteMessage ? <div className={styles.message}>{inviteMessage}</div> : null}
-
-          <div className={styles.inviteActions}>
-            <button
-              type="button"
-              className={styles.secondaryButton}
-              onClick={handleCreateUser}
-              disabled={!inviteForm.email.trim() || inviteForm.password.length < 8}
-            >
-              Create User
-            </button>
-            <button type="submit" className={styles.primaryButton}>
-              Send Invite
-            </button>
-          </div>
-        </form>
-      </section>
-
-      <section className={styles.section}>
-        <div className={styles.sectionHeader}>
-          <h3 className={styles.subTitle}>Pending invites</h3>
-        </div>
-        <div className={styles.list}>
-          {loadingInvites ? (
-            <div className={styles.noticeCard}>Loading invites...</div>
-          ) : sortedInvites.length === 0 ? (
-            <div className={styles.noticeCard}>No pending invites.</div>
-          ) : (
-            sortedInvites.map((invite) => (
-              <div key={invite.id} className={styles.inviteRow}>
-                <div>
-                  <div className={styles.inviteEmail}>{invite.email}</div>
-                  <div className={styles.inviteMeta}>
-                    {invite.role} · {invite.team_scopes?.join(", ") || "No team scopes"}
-                  </div>
-                </div>
-                <div className={styles.inviteStatus}>
-                  {invite.status} · {formatTimestamp(invite.created_at)}
+              <div className={styles.scopeGroup}>
+                <div className={styles.scopeLabel}>Team scopes</div>
+                <div className={styles.scopeOptions}>
+                  {ACCOUNT_TEAM_SCOPES.map((scope) => (
+                    <label key={scope} className={styles.scopeOption}>
+                      <input
+                        type="checkbox"
+                        checked={inviteForm.teamScopes.includes(scope)}
+                        onChange={() => toggleInviteScope(scope)}
+                      />
+                      <span>{scope}</span>
+                    </label>
+                  ))}
                 </div>
               </div>
-            ))
-          )}
-        </div>
-      </section>
 
-      <section className={styles.section}>
-        <div className={styles.sectionHeader}>
-          <h3 className={styles.subTitle}>Users</h3>
-        </div>
-        <div className={styles.list}>
-          {loadingProfiles ? (
-            <div className={styles.noticeCard}>Loading users...</div>
-          ) : (
-            profiles.map((item) => (
-              <ProfileCard
-                key={item.id}
-                profile={item}
-                actorId={user?.id}
-                onSave={async (profileId, updates) => {
-                  await saveProfileMutation.mutateAsync({ profileId, updates });
-                }}
-              />
-            ))
-          )}
-        </div>
-      </section>
+              {inviteMessage ? <div className={styles.message}>{inviteMessage}</div> : null}
 
-      <section className={styles.section}>
-        <div className={styles.sectionHeader}>
-          <h3 className={styles.subTitle}>Shared Team Rosters</h3>
-        </div>
-        <div className={styles.list}>
-          <TeamRosterCard teamScope="washington" title="Washington" />
-          <TeamRosterCard teamScope="capital_city" title="Capital City" />
-        </div>
-      </section>
+              <div className={styles.inviteActions}>
+                <button
+                  type="button"
+                  className={styles.secondaryButton}
+                  onClick={handleCreateUser}
+                  disabled={!inviteForm.email.trim() || inviteForm.password.length < 8}
+                >
+                  Create User
+                </button>
+                <button type="submit" className={styles.primaryButton}>
+                  Send Invite
+                </button>
+              </div>
+            </form>
+          </div>
+        ) : null}
 
-      <section className={styles.section}>
-        <div className={styles.sectionHeader}>
-          <h3 className={styles.subTitle}>Smart Matchup Profiles</h3>
-        </div>
-        <MatchupProfileCard
-          rosterSources={rosterSources}
-          savedProfiles={savedMatchupProfiles.map((profile) => normalizeMatchupProfileRecord(profile)).filter(Boolean)}
-          onSave={(record) => saveMatchupProfileMutation.mutateAsync(record)}
-          onDelete={(personId) => deleteMatchupProfileMutation.mutateAsync(personId)}
-        />
+        {activeSection === "invites" ? (
+          <div className={styles.section}>
+            <div className={styles.list}>
+              {loadingInvites ? (
+                <div className={styles.noticeCard}>Loading invites...</div>
+              ) : sortedInvites.length === 0 ? (
+                <div className={styles.noticeCard}>No pending invites.</div>
+              ) : (
+                sortedInvites.map((invite) => (
+                  <div key={invite.id} className={styles.inviteRow}>
+                    <div>
+                      <div className={styles.inviteEmail}>{invite.email}</div>
+                      <div className={styles.inviteMeta}>
+                        {invite.role} · {invite.team_scopes?.join(", ") || "No team scopes"}
+                      </div>
+                    </div>
+                    <div className={styles.inviteStatus}>
+                      {invite.status} · {formatTimestamp(invite.created_at)}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        {activeSection === "users" ? (
+          <div className={styles.section}>
+            <div className={styles.list}>
+              {loadingProfiles ? (
+                <div className={styles.noticeCard}>Loading users...</div>
+              ) : (
+                profiles.map((item) => (
+                  <ProfileCard
+                    key={item.id}
+                    profile={item}
+                    actorId={user?.id}
+                    onSave={async (profileId, updates) => {
+                      await saveProfileMutation.mutateAsync({ profileId, updates });
+                    }}
+                  />
+                ))
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        {activeSection === "rosters" ? (
+          <div className={styles.section}>
+            <div className={styles.list}>
+              <TeamRosterCard teamScope="washington" title="Washington" />
+              <TeamRosterCard teamScope="capital_city" title="Capital City" />
+            </div>
+          </div>
+        ) : null}
+
+        {activeSection === "matchups" ? (
+          <div className={styles.section}>
+            <MatchupProfileCard
+              rosterSources={rosterSources}
+              savedProfiles={savedMatchupProfiles.map((profile) => normalizeMatchupProfileRecord(profile)).filter(Boolean)}
+              onSave={(record) => saveMatchupProfileMutation.mutateAsync(record)}
+              onDelete={(personId) => deleteMatchupProfileMutation.mutateAsync(personId)}
+            />
+          </div>
+        ) : null}
       </section>
     </div>
   );

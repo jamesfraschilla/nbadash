@@ -1,6 +1,64 @@
 .page {
   display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
   gap: 20px;
+}
+
+.sidebar,
+.content {
+  display: grid;
+  gap: 16px;
+}
+
+.sidebar {
+  align-content: start;
+}
+
+.sidebarHeader {
+  display: grid;
+  gap: 4px;
+  padding: 4px 2px;
+}
+
+.sidebarNav {
+  display: grid;
+  gap: 10px;
+}
+
+.sidebarButton {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.sidebarButton:hover {
+  border-color: var(--highlight-text);
+}
+
+.sidebarButtonActive {
+  border-color: var(--highlight-text);
+  background: color-mix(in srgb, var(--highlight-text) 8%, var(--panel));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--highlight-text) 42%, transparent);
+}
+
+.sidebarButtonKicker {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.sidebarButtonTitle {
+  font-size: 0.96rem;
+  font-weight: 700;
 }
 
 .section {
@@ -229,6 +287,14 @@
 }
 
 @media (max-width: 768px) {
+  .page {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebarNav {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
+
   .inviteRow,
   .profileHeader,
   .rosterHeader {
