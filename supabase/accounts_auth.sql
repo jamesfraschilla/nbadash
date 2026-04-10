@@ -99,6 +99,23 @@ create table if not exists public.user_tool_records (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.matchup_player_profiles (
+  person_id text primary key,
+  league text not null default 'nba' check (league in ('nba', 'gleague')),
+  team_id text,
+  full_name text,
+  height_in integer,
+  archetype text,
+  defender_role text,
+  offensive_role text,
+  prefer_offensive_roles text[] not null default '{}',
+  avoid_offensive_roles text[] not null default '{}',
+  prefer_opponent_ids text[] not null default '{}',
+  avoid_opponent_ids text[] not null default '{}',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.user_drawing_shares (
   drawing_id uuid not null references public.user_drawings(id) on delete cascade,
   user_id uuid not null references public.profiles(id) on delete cascade,
@@ -135,6 +152,7 @@ on public.user_notes (owner_id, legacy_local_id);
 create index if not exists idx_user_drawings_owner_id on public.user_drawings (owner_id);
 create index if not exists idx_user_tool_records_owner_id on public.user_tool_records (owner_id);
 create index if not exists idx_audit_logs_actor_id on public.audit_logs (actor_id);
+create index if not exists idx_matchup_player_profiles_team_id on public.matchup_player_profiles (team_id);
 
 drop trigger if exists set_account_invites_updated_at on public.account_invites;
 create trigger set_account_invites_updated_at
@@ -163,6 +181,12 @@ execute function public.set_updated_at();
 drop trigger if exists set_user_tool_records_updated_at on public.user_tool_records;
 create trigger set_user_tool_records_updated_at
 before update on public.user_tool_records
+for each row
+execute function public.set_updated_at();
+
+drop trigger if exists set_matchup_player_profiles_updated_at on public.matchup_player_profiles;
+create trigger set_matchup_player_profiles_updated_at
+before update on public.matchup_player_profiles
 for each row
 execute function public.set_updated_at();
 
@@ -355,6 +379,7 @@ alter table public.user_tool_records enable row level security;
 alter table public.user_drawing_shares enable row level security;
 alter table public.user_drawing_versions enable row level security;
 alter table public.audit_logs enable row level security;
+alter table public.matchup_player_profiles enable row level security;
 
 drop policy if exists "admins manage invites" on public.account_invites;
 create policy "admins manage invites"
@@ -518,6 +543,35 @@ on public.user_tool_records
 for delete
 to authenticated
 using (owner_id = auth.uid() or public.is_admin_user());
+
+drop policy if exists "matchup profiles read authenticated" on public.matchup_player_profiles;
+create policy "matchup profiles read authenticated"
+on public.matchup_player_profiles
+for select
+to authenticated
+using (true);
+
+drop policy if exists "matchup profiles insert admin" on public.matchup_player_profiles;
+create policy "matchup profiles insert admin"
+on public.matchup_player_profiles
+for insert
+to authenticated
+with check (public.is_admin_user());
+
+drop policy if exists "matchup profiles update admin" on public.matchup_player_profiles;
+create policy "matchup profiles update admin"
+on public.matchup_player_profiles
+for update
+to authenticated
+using (public.is_admin_user())
+with check (public.is_admin_user());
+
+drop policy if exists "matchup profiles delete admin" on public.matchup_player_profiles;
+create policy "matchup profiles delete admin"
+on public.matchup_player_profiles
+for delete
+to authenticated
+using (public.is_admin_user());
 
 drop policy if exists "drawing shares visible to related users" on public.user_drawing_shares;
 create policy "drawing shares visible to related users"

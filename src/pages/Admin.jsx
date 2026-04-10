@@ -3,6 +3,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createManagedUser, createUserInvite, fetchPendingInvites, fetchVisibleProfiles, updateProfile } from "../accountData.js";
 import { ACCOUNT_FEATURE_FLAGS, ACCOUNT_ROLES, ACCOUNT_TEAM_SCOPES } from "../authConfig.js";
 import { useAuth } from "../auth/useAuth.js";
+import { fetchCurrentGLeagueRosters, fetchCurrentNbaRosters } from "../api.js";
+import { GLEAGUE_TEAMS, NBA_TEAMS } from "../data/nbaTeams.js";
+import {
+  deleteMatchupProfile,
+  listMatchupProfiles,
+  MATCHUP_ARCHETYPE_OPTIONS,
+  MATCHUP_DEFENDER_ROLE_OPTIONS,
+  MATCHUP_OFFENSIVE_ROLE_OPTIONS,
+  normalizeMatchupProfileRecord,
+  saveMatchupProfile,
+} from "../matchupProfileData.js";
 import {
   fetchRemotePregamePlayers,
   loadPregamePlayersPayload,
@@ -18,6 +29,47 @@ function formatTimestamp(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Never";
   return date.toLocaleString();
+}
+
+function buildEmptyMatchupProfileDraft() {
+  return {
+    personId: "",
+    league: "nba",
+    teamId: "",
+    fullName: "",
+    heightIn: "",
+    archetype: "",
+    defenderRole: "",
+    offensiveRole: "",
+    preferOffensiveRoles: [],
+    avoidOffensiveRoles: [],
+    preferOpponentIds: [],
+    avoidOpponentIds: [],
+  };
+}
+
+function buildSortableJersey(value) {
+  const parsed = Number.parseInt(String(value || "").trim(), 10);
+  return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
+}
+
+function formatPlayerOption(player) {
+  const jersey = String(player?.jerseyNum || "").trim();
+  const label = String(player?.fullName || "").trim();
+  if (!label) return "";
+  return jersey ? `#${jersey} ${label}` : label;
+}
+
+function parseMultiSelectValues(event) {
+  return Array.from(event.target.selectedOptions || []).map((option) => String(option.value || "").trim()).filter(Boolean);
+}
+
+function parseHeightToInches(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const match = text.match(/(\d+)\D+(\d+)/);
+  if (!match?.[1] || !match?.[2]) return "";
+  return (Number.parseInt(match[1], 10) * 12) + Number.parseInt(match[2], 10);
 }
 
 function ProfileCard({ profile, actorId, onSave }) {
@@ -239,6 +291,308 @@ function TeamRosterCard({ teamScope, title }) {
   );
 }
 
+function MatchupProfileCard({
+  rosterSources,
+  savedProfiles,
+  onSave,
+  onDelete,
+}) {
+  const [draft, setDraft] = useState(buildEmptyMatchupProfileDraft());
+  const [saveMessage, setSaveMessage] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const leagueTeams = draft.league === "gleague" ? GLEAGUE_TEAMS : NBA_TEAMS;
+  const rosterMap = draft.league === "gleague" ? rosterSources.gleague : rosterSources.nba;
+
+  const teamPlayers = useMemo(() => {
+    const players = Array.isArray(rosterMap?.[draft.teamId]) ? rosterMap[draft.teamId] : [];
+    return [...players].sort((a, b) => {
+      const jerseyCompare = buildSortableJersey(a.jerseyNum) - buildSortableJersey(b.jerseyNum);
+      if (jerseyCompare !== 0) return jerseyCompare;
+      return String(a.fullName || "").localeCompare(String(b.fullName || ""));
+    });
+  }, [draft.teamId, rosterMap]);
+
+  const allLeaguePlayers = useMemo(() => {
+    const options = Object.values(rosterMap || {})
+      .flat()
+      .filter((player) => player?.personId && player?.fullName);
+    return [...options].sort((a, b) => {
+      const teamCompare = String(a.teamName || "").localeCompare(String(b.teamName || ""));
+      if (teamCompare !== 0) return teamCompare;
+      const jerseyCompare = buildSortableJersey(a.jerseyNum) - buildSortableJersey(b.jerseyNum);
+      if (jerseyCompare !== 0) return jerseyCompare;
+      return String(a.fullName || "").localeCompare(String(b.fullName || ""));
+    });
+  }, [rosterMap]);
+
+  const handleDraftChange = (field, value) => {
+    setDraft((current) => ({ ...current, [field]: value }));
+  };
+
+  const handleLeagueChange = (value) => {
+    setDraft({
+      ...buildEmptyMatchupProfileDraft(),
+      league: value === "gleague" ? "gleague" : "nba",
+    });
+    setSaveMessage("");
+  };
+
+  const handleTeamChange = (teamId) => {
+    setDraft((current) => ({
+      ...current,
+      teamId,
+      personId: "",
+      fullName: "",
+      heightIn: "",
+      preferOpponentIds: [],
+      avoidOpponentIds: [],
+    }));
+    setSaveMessage("");
+  };
+
+  const handlePlayerChange = (personId) => {
+    const selected = teamPlayers.find((player) => player.personId === personId) || null;
+    const existing = savedProfiles.find((profile) => profile.personId === personId) || null;
+    if (existing) {
+      setDraft({
+        personId: existing.personId,
+        league: existing.league,
+        teamId: existing.teamId,
+        fullName: existing.fullName,
+        heightIn: existing.heightIn ?? "",
+        archetype: existing.archetype || "",
+        defenderRole: existing.defenderRole || "",
+        offensiveRole: existing.offensiveRole || "",
+        preferOffensiveRoles: [...(existing.preferOffensiveRoles || [])],
+        avoidOffensiveRoles: [...(existing.avoidOffensiveRoles || [])],
+        preferOpponentIds: [...(existing.preferOpponentIds || [])],
+        avoidOpponentIds: [...(existing.avoidOpponentIds || [])],
+      });
+      setSaveMessage("");
+      return;
+    }
+
+    setDraft((current) => ({
+      ...current,
+      personId,
+      fullName: selected?.fullName || "",
+      heightIn: selected?.heightIn ?? "",
+      preferOpponentIds: [],
+      avoidOpponentIds: [],
+    }));
+    setSaveMessage("");
+  };
+
+  const handleEdit = (profile) => {
+    setDraft({
+      personId: profile.personId,
+      league: profile.league,
+      teamId: profile.teamId,
+      fullName: profile.fullName,
+      heightIn: profile.heightIn ?? "",
+      archetype: profile.archetype || "",
+      defenderRole: profile.defenderRole || "",
+      offensiveRole: profile.offensiveRole || "",
+      preferOffensiveRoles: [...(profile.preferOffensiveRoles || [])],
+      avoidOffensiveRoles: [...(profile.avoidOffensiveRoles || [])],
+      preferOpponentIds: [...(profile.preferOpponentIds || [])],
+      avoidOpponentIds: [...(profile.avoidOpponentIds || [])],
+    });
+    setSaveMessage("");
+  };
+
+  const handleReset = () => {
+    setDraft(buildEmptyMatchupProfileDraft());
+    setSaveMessage("");
+  };
+
+  const handleSave = async () => {
+    if (!draft.personId || !draft.fullName) {
+      setSaveMessage("Select a player first.");
+      return;
+    }
+    setIsSaving(true);
+    setSaveMessage("");
+    try {
+      await onSave({
+        ...draft,
+        heightIn: draft.heightIn === "" ? null : draft.heightIn,
+      });
+      setSaveMessage("Matchup profile saved.");
+    } catch (error) {
+      setSaveMessage(error?.message || "Unable to save matchup profile.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!draft.personId) {
+      setSaveMessage("Select a saved profile to delete.");
+      return;
+    }
+    setIsDeleting(true);
+    setSaveMessage("");
+    try {
+      await onDelete(draft.personId);
+      setSaveMessage("Matchup profile deleted.");
+      setDraft(buildEmptyMatchupProfileDraft());
+    } catch (error) {
+      setSaveMessage(error?.message || "Unable to delete matchup profile.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  return (
+    <div className={styles.rosterCard}>
+      <div className={styles.rosterHeader}>
+        <h3 className={styles.subTitle}>Matchup Profiles</h3>
+        <button type="button" className={styles.secondaryButton} onClick={handleReset}>New Profile</button>
+      </div>
+
+      <div className={styles.formGrid}>
+        <label className={styles.field}>
+          <span>League</span>
+          <select value={draft.league} onChange={(event) => handleLeagueChange(event.target.value)}>
+            <option value="nba">NBA</option>
+            <option value="gleague">G League</option>
+          </select>
+        </label>
+        <label className={styles.field}>
+          <span>Team</span>
+          <select value={draft.teamId} onChange={(event) => handleTeamChange(event.target.value)}>
+            <option value="">Select team</option>
+            {leagueTeams.map((team) => (
+              <option key={team.teamId} value={team.teamId}>{team.fullName}</option>
+            ))}
+          </select>
+        </label>
+        <label className={styles.field}>
+          <span>Player</span>
+          <select value={draft.personId} onChange={(event) => handlePlayerChange(event.target.value)} disabled={!draft.teamId}>
+            <option value="">Select player</option>
+            {teamPlayers.map((player) => (
+              <option key={player.personId} value={player.personId}>{formatPlayerOption(player)}</option>
+            ))}
+          </select>
+        </label>
+        <label className={styles.field}>
+          <span>Height (inches)</span>
+          <input
+            type="number"
+            value={draft.heightIn}
+            onChange={(event) => handleDraftChange("heightIn", event.target.value)}
+            placeholder="Optional"
+          />
+        </label>
+      </div>
+
+      <div className={styles.formGrid}>
+        <label className={styles.field}>
+          <span>Archetype</span>
+          <select value={draft.archetype} onChange={(event) => handleDraftChange("archetype", event.target.value)}>
+            <option value="">Auto</option>
+            {MATCHUP_ARCHETYPE_OPTIONS.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        </label>
+        <label className={styles.field}>
+          <span>Defender role</span>
+          <select value={draft.defenderRole} onChange={(event) => handleDraftChange("defenderRole", event.target.value)}>
+            <option value="">Auto</option>
+            {MATCHUP_DEFENDER_ROLE_OPTIONS.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        </label>
+        <label className={styles.field}>
+          <span>Offensive role</span>
+          <select value={draft.offensiveRole} onChange={(event) => handleDraftChange("offensiveRole", event.target.value)}>
+            <option value="">Auto</option>
+            {MATCHUP_OFFENSIVE_ROLE_OPTIONS.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className={styles.formGrid}>
+        <label className={styles.field}>
+          <span>Prefer offensive roles</span>
+          <select multiple value={draft.preferOffensiveRoles} onChange={(event) => handleDraftChange("preferOffensiveRoles", parseMultiSelectValues(event))}>
+            {MATCHUP_OFFENSIVE_ROLE_OPTIONS.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        </label>
+        <label className={styles.field}>
+          <span>Avoid offensive roles</span>
+          <select multiple value={draft.avoidOffensiveRoles} onChange={(event) => handleDraftChange("avoidOffensiveRoles", parseMultiSelectValues(event))}>
+            {MATCHUP_OFFENSIVE_ROLE_OPTIONS.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className={styles.formGrid}>
+        <label className={styles.field}>
+          <span>Prefer opponents</span>
+          <select multiple value={draft.preferOpponentIds} onChange={(event) => handleDraftChange("preferOpponentIds", parseMultiSelectValues(event))}>
+            {allLeaguePlayers.map((player) => (
+              <option key={`prefer-${player.personId}`} value={player.personId}>
+                {`${player.teamName || ""} · ${formatPlayerOption(player)}`.trim()}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className={styles.field}>
+          <span>Avoid opponents</span>
+          <select multiple value={draft.avoidOpponentIds} onChange={(event) => handleDraftChange("avoidOpponentIds", parseMultiSelectValues(event))}>
+            {allLeaguePlayers.map((player) => (
+              <option key={`avoid-${player.personId}`} value={player.personId}>
+                {`${player.teamName || ""} · ${formatPlayerOption(player)}`.trim()}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className={styles.profileActions}>
+        <button type="button" className={styles.dangerButton} onClick={handleDelete} disabled={isDeleting || !draft.personId}>
+          {isDeleting ? "Deleting..." : "Delete Profile"}
+        </button>
+        <button type="button" className={styles.saveButton} onClick={handleSave} disabled={isSaving}>
+          {isSaving ? "Saving..." : "Save Profile"}
+        </button>
+      </div>
+      {saveMessage ? <div className={styles.message}>{saveMessage}</div> : null}
+
+      <div className={styles.list}>
+        {savedProfiles.length ? savedProfiles.map((profile) => (
+          <div key={profile.personId} className={styles.inviteRow}>
+            <div>
+              <div className={styles.profileName}>{profile.fullName || profile.personId}</div>
+              <div className={styles.inviteMeta}>
+                {[profile.league === "gleague" ? "G League" : "NBA", profile.archetype || "auto", profile.defenderRole || "auto", profile.offensiveRole || "auto"]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </div>
+            </div>
+            <button type="button" className={styles.secondaryButton} onClick={() => handleEdit(profile)}>Edit</button>
+          </div>
+        )) : (
+          <div className={styles.noticeCard}>No matchup profile overrides saved yet.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Admin() {
   const { user, session, profile } = useAuth();
   const queryClient = useQueryClient();
@@ -263,12 +617,89 @@ export default function Admin() {
     enabled: Boolean(user?.id),
   });
 
+  const { data: remoteNbaRostersPayload } = useQuery({
+    queryKey: ["admin-current-nba-rosters"],
+    queryFn: fetchCurrentNbaRosters,
+    staleTime: 6 * 60 * 60 * 1000,
+    retry: 1,
+    enabled: Boolean(user?.id),
+  });
+
+  const { data: remoteGLeagueRostersPayload } = useQuery({
+    queryKey: ["admin-current-gleague-rosters"],
+    queryFn: fetchCurrentGLeagueRosters,
+    staleTime: 6 * 60 * 60 * 1000,
+    retry: 1,
+    enabled: Boolean(user?.id),
+  });
+
+  const { data: savedMatchupProfiles = [] } = useQuery({
+    queryKey: ["matchup-player-profiles"],
+    queryFn: listMatchupProfiles,
+    enabled: Boolean(user?.id),
+  });
+
   const saveProfileMutation = useMutation({
     mutationFn: ({ profileId, updates }) => updateProfile(profileId, updates, user?.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["visible-profiles"] });
     },
   });
+
+  const saveMatchupProfileMutation = useMutation({
+    mutationFn: saveMatchupProfile,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["matchup-player-profiles"] });
+    },
+  });
+
+  const deleteMatchupProfileMutation = useMutation({
+    mutationFn: deleteMatchupProfile,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["matchup-player-profiles"] });
+    },
+  });
+
+  const nbaRosterSources = useMemo(() => {
+    const remoteTeams = remoteNbaRostersPayload?.teams && typeof remoteNbaRostersPayload.teams === "object"
+      ? remoteNbaRostersPayload.teams
+      : {};
+    return NBA_TEAMS.reduce((accumulator, team) => {
+      const players = Array.isArray(remoteTeams?.[team.teamId]?.players) ? remoteTeams[team.teamId].players : [];
+      accumulator[team.teamId] = players.map((player) => ({
+        personId: String(player?.personId || "").trim(),
+        fullName: String(player?.fullName || "").trim(),
+        jerseyNum: String(player?.jerseyNum || "").trim(),
+        teamId: String(player?.teamId || team.teamId).trim() || team.teamId,
+        teamName: team.fullName,
+        heightIn: parseHeightToInches(player?.height),
+      })).filter((player) => player.personId && player.fullName);
+      return accumulator;
+    }, {});
+  }, [remoteNbaRostersPayload]);
+
+  const gLeagueRosterSources = useMemo(() => {
+    const remoteTeams = remoteGLeagueRostersPayload?.teams && typeof remoteGLeagueRostersPayload.teams === "object"
+      ? remoteGLeagueRostersPayload.teams
+      : {};
+    return GLEAGUE_TEAMS.reduce((accumulator, team) => {
+      const players = Array.isArray(remoteTeams?.[team.teamId]?.players) ? remoteTeams[team.teamId].players : [];
+      accumulator[team.teamId] = players.map((player) => ({
+        personId: String(player?.personId || "").trim(),
+        fullName: String(player?.fullName || "").trim(),
+        jerseyNum: String(player?.jerseyNum || "").trim(),
+        teamId: String(player?.teamId || team.teamId).trim() || team.teamId,
+        teamName: team.fullName,
+        heightIn: parseHeightToInches(player?.height),
+      })).filter((player) => player.personId && player.fullName);
+      return accumulator;
+    }, {});
+  }, [remoteGLeagueRostersPayload]);
+
+  const rosterSources = useMemo(() => ({
+    nba: nbaRosterSources,
+    gleague: gLeagueRosterSources,
+  }), [gLeagueRosterSources, nbaRosterSources]);
 
   const sortedInvites = useMemo(() => invites, [invites]);
 
@@ -483,6 +914,18 @@ export default function Admin() {
           <TeamRosterCard teamScope="washington" title="Washington" />
           <TeamRosterCard teamScope="capital_city" title="Capital City" />
         </div>
+      </section>
+
+      <section className={styles.section}>
+        <div className={styles.sectionHeader}>
+          <h3 className={styles.subTitle}>Smart Matchup Profiles</h3>
+        </div>
+        <MatchupProfileCard
+          rosterSources={rosterSources}
+          savedProfiles={savedMatchupProfiles.map((profile) => normalizeMatchupProfileRecord(profile)).filter(Boolean)}
+          onSave={(record) => saveMatchupProfileMutation.mutateAsync(record)}
+          onDelete={(personId) => deleteMatchupProfileMutation.mutateAsync(personId)}
+        />
       </section>
     </div>
   );

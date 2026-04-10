@@ -63,6 +63,10 @@
   font-size: 0.95rem;
 }
 
+.field select[multiple] {
+  min-height: 180px;
+}
+
 .scopeGroup {
   display: grid;
   gap: 8px;
@@ -96,6 +100,7 @@
 .profileActions {
   display: flex;
   justify-content: flex-end;
+  gap: 10px;
   margin-top: 14px;
 }
 
