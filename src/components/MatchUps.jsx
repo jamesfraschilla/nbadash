@@ -1803,7 +1803,7 @@ export default function MatchUps({
 
       {dragState?.player ? (
         <div
-          className={styles.dragGhost}
+          className={`${styles.dragGhost} ${expandedOpen ? styles.dragGhostExpanded : ""}`.trim()}
           style={{
             width: `${dragState.width}px`,
             left: `${dragState.pointerX - dragState.offsetX}px`,

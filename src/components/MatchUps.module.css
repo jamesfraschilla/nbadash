@@ -702,6 +702,10 @@
   transform: rotate(-2deg);
 }
 
+.dragGhostExpanded {
+  z-index: 95;
+}
+
 .dragGhost .tile,
 .dragGhost .expandedTile {
   box-shadow: 0 14px 36px rgba(15, 23, 42, 0.28);
