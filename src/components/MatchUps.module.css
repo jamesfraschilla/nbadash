@@ -766,18 +766,21 @@
   .expandedPortrait {
     display: block;
     align-self: start;
-    width: min(100%, 560px);
+    width: 100%;
     margin-inline: auto;
   }
 
   .expandedPortraitHeader {
-    gap: 212px;
-    margin-bottom: 30px;
+    grid-template-columns: max-content max-content;
+    justify-content: space-between;
+    gap: 0;
+    margin-bottom: 24px;
+    padding-inline: 6px;
   }
 
   .expandedAvatarFrame {
-    width: min(29vw, 138px);
-    height: min(24vw, 112px);
+    width: min(38vw, 178px);
+    height: min(31vw, 148px);
   }
 
   .expandedPlayerName {
@@ -785,10 +788,13 @@
   }
 
   .expandedPortraitRows {
-    gap: 46px;
+    gap: 38px;
   }
 
   .expandedPortraitPair {
-    gap: 212px;
+    grid-template-columns: max-content max-content;
+    justify-content: space-between;
+    gap: 0;
+    padding-inline: 6px;
   }
 }
