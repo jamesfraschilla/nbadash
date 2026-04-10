@@ -338,9 +338,18 @@ function MatchupProfileCard({
   const [saveMessage, setSaveMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [savedTeamFilter, setSavedTeamFilter] = useState("all");
 
   const leagueTeams = draft.league === "gleague" ? GLEAGUE_TEAMS : NBA_TEAMS;
   const rosterMap = draft.league === "gleague" ? rosterSources.gleague : rosterSources.nba;
+  const nbaTeamNameById = useMemo(
+    () => Object.fromEntries(NBA_TEAMS.map((team) => [String(team.teamId), team.fullName])),
+    []
+  );
+  const gLeagueTeamNameById = useMemo(
+    () => Object.fromEntries(GLEAGUE_TEAMS.map((team) => [String(team.teamId), team.fullName])),
+    []
+  );
 
   const teamPlayers = useMemo(() => {
     const players = Array.isArray(rosterMap?.[draft.teamId]) ? rosterMap[draft.teamId] : [];
@@ -370,6 +379,35 @@ function MatchupProfileCard({
       return String(a.fullName || "").localeCompare(String(b.fullName || ""));
     });
   }, [rosterMap]);
+
+  const savedTeamOptions = useMemo(() => {
+    const seen = new Set();
+    return savedProfiles
+      .map((profile) => {
+        const league = profile.league === "gleague" ? "gleague" : "nba";
+        const teamId = String(profile.teamId || "").trim();
+        if (!teamId) return null;
+        const key = `${league}:${teamId}`;
+        if (seen.has(key)) return null;
+        seen.add(key);
+        const teamName = league === "gleague"
+          ? (gLeagueTeamNameById[teamId] || teamId)
+          : (nbaTeamNameById[teamId] || teamId);
+        return {
+          key,
+          league,
+          teamId,
+          label: `${league === "gleague" ? "G League" : "NBA"} · ${teamName}`,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [gLeagueTeamNameById, nbaTeamNameById, savedProfiles]);
+
+  const filteredSavedProfiles = useMemo(() => {
+    if (savedTeamFilter === "all") return savedProfiles;
+    return savedProfiles.filter((profile) => `${profile.league === "gleague" ? "gleague" : "nba"}:${profile.teamId}` === savedTeamFilter);
+  }, [savedProfiles, savedTeamFilter]);
 
   const handleDraftChange = (field, value) => {
     setDraft((current) => ({ ...current, [field]: value }));
@@ -651,7 +689,18 @@ function MatchupProfileCard({
       {saveMessage ? <div className={styles.message}>{saveMessage}</div> : null}
 
       <div className={styles.list}>
-        {savedProfiles.length ? savedProfiles.map((profile) => (
+        <div className={styles.formGrid}>
+          <label className={styles.field}>
+            <span>Saved team</span>
+            <select value={savedTeamFilter} onChange={(event) => setSavedTeamFilter(event.target.value)}>
+              <option value="all">All teams</option>
+              {savedTeamOptions.map((option) => (
+                <option key={option.key} value={option.key}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        {filteredSavedProfiles.length ? filteredSavedProfiles.map((profile) => (
           <div key={profile.personId} className={styles.inviteRow}>
             <div>
               <div className={styles.profileName}>{profile.fullName || profile.personId}</div>
@@ -664,7 +713,9 @@ function MatchupProfileCard({
             <button type="button" className={styles.secondaryButton} onClick={() => handleEdit(profile)}>Edit</button>
           </div>
         )) : (
-          <div className={styles.noticeCard}>No matchup profile overrides saved yet.</div>
+          <div className={styles.noticeCard}>
+            {savedProfiles.length ? "No matchup profile overrides saved for that team yet." : "No matchup profile overrides saved yet."}
+          </div>
         )}
       </div>
     </div>
