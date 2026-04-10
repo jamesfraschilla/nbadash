@@ -571,16 +571,16 @@
   display: grid;
   align-content: start;
   gap: 0;
-  padding-block: 12px 18px;
+  padding-block: 14px 26px;
 }
 
 .expandedRow {
   display: grid;
-  gap: 10px;
+  gap: 14px;
 }
 
 .expandedRow + .expandedRow {
-  margin-top: 118px;
+  margin-top: 176px;
 }
 
 .expandedRowHeader {
@@ -686,8 +686,8 @@
 .expandedPortraitHeader {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 92px;
-  margin-bottom: 14px;
+  gap: 132px;
+  margin-bottom: 18px;
 }
 
 .expandedPortraitTeam {
@@ -701,13 +701,13 @@
 
 .expandedPortraitRows {
   display: grid;
-  gap: 28px;
+  gap: 34px;
 }
 
 .expandedPortraitPair {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 92px;
+  gap: 132px;
 }
 
 .dragGhost {
