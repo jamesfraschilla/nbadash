@@ -775,7 +775,7 @@
     justify-content: space-between;
     gap: 0;
     margin-bottom: 24px;
-    padding-inline: 6px;
+    padding-inline: 78px;
   }
 
   .expandedAvatarFrame {
@@ -795,6 +795,6 @@
     grid-template-columns: max-content max-content;
     justify-content: space-between;
     gap: 0;
-    padding-inline: 6px;
+    padding-inline: 78px;
   }
 }
