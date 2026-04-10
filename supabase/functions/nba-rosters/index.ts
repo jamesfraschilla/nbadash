@@ -81,6 +81,7 @@ Deno.serve(async (req) => {
         fullName: string;
         jerseyNum: string;
         position: string;
+        height: string;
         teamId: string;
       }>;
     }> = {};
@@ -113,6 +114,7 @@ Deno.serve(async (req) => {
         fullName,
         jerseyNum: String(player?.JERSEY_NUMBER || "").trim(),
         position: String(player?.POSITION || "").trim(),
+        height: String(player?.HEIGHT || "").trim(),
         teamId,
       });
     });

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { teamLogoUrl } from "../api.js";
+import { getMatchupPlayerProfile } from "../data/matchupProfiles.js";
 import rostersByTeamId from "../data/rosters.json";
 import PlayerHeadshot from "./PlayerHeadshot.jsx";
 import { readLocalStorage, writeLocalStorage } from "../storage.js";
@@ -93,6 +94,18 @@ function normalizePosition(value = "") {
   return String(value || "").trim().toUpperCase();
 }
 
+function parseHeightToInches(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const text = String(value || "").trim();
+  if (!text) return null;
+  const match = text.match(/(\d+)\D+(\d+)/);
+  if (!match) return null;
+  const feet = Number.parseInt(match[1], 10);
+  const inches = Number.parseInt(match[2], 10);
+  if (!Number.isFinite(feet) || !Number.isFinite(inches)) return null;
+  return feet * 12 + inches;
+}
+
 function buildStaticRosterPositionMap(teamId) {
   const players = Array.isArray(rostersByTeamId?.[String(teamId || "")])
     ? rostersByTeamId[String(teamId || "")]
@@ -122,9 +135,46 @@ function getPositionGroup(position) {
   return "big";
 }
 
+function inferArchetypeFromPosition(position, heightIn = null) {
+  const rank = getPositionRank(position);
+  if (rank <= 1) {
+    return heightIn != null && heightIn >= 75 ? "big_guard" : "small_guard";
+  }
+  if (rank === 2) {
+    return heightIn != null && heightIn >= 79 ? "power_wing" : "wing";
+  }
+  if (rank === 3) {
+    return heightIn != null && heightIn >= 80 ? "power_wing" : "wing";
+  }
+  if (rank === 4) {
+    return heightIn != null && heightIn >= 82 ? "power_big" : "stretch_big";
+  }
+  return "center_big";
+}
+
+function inferOffensiveRoleFromArchetype(archetype) {
+  if (archetype === "small_guard") return "combo_guard";
+  if (archetype === "big_guard") return "combo_guard";
+  if (archetype === "wing") return "wing_creator";
+  if (archetype === "power_wing") return "power_wing";
+  if (archetype === "stretch_big") return "stretch_big";
+  if (archetype === "power_big") return "power_big";
+  return "center_big";
+}
+
+function inferDefenderRoleFromArchetype(archetype) {
+  if (archetype === "small_guard") return "small_guard";
+  if (archetype === "big_guard") return "point_of_attack";
+  if (archetype === "wing" || archetype === "power_wing") return "wing_stopper";
+  return "big_anchor";
+}
+
 function buildSmartSortKey(player, index) {
+  const profile = getMatchupPlayerProfile(player?.personId);
+  const heightIn = parseHeightToInches(player?.height) ?? profile?.heightIn ?? null;
   return {
     rank: getPositionRank(player?.position),
+    archetype: profile?.archetype || inferArchetypeFromPosition(player?.position, heightIn),
     jersey: Number.parseInt(String(player?.jerseyNum || ""), 10),
     index,
   };
@@ -135,6 +185,18 @@ function sortLineupForMatchups(players) {
     .map((player, index) => ({ player, index, key: buildSmartSortKey(player, index) }))
     .sort((a, b) => {
       if (a.key.rank !== b.key.rank) return a.key.rank - b.key.rank;
+      const archetypeRank = {
+        small_guard: 1,
+        big_guard: 2,
+        wing: 3,
+        power_wing: 4,
+        stretch_big: 5,
+        power_big: 6,
+        center_big: 7,
+      };
+      const aArchetypeRank = archetypeRank[a.key.archetype] ?? 99;
+      const bArchetypeRank = archetypeRank[b.key.archetype] ?? 99;
+      if (aArchetypeRank !== bArchetypeRank) return aArchetypeRank - bArchetypeRank;
       const aJersey = Number.isFinite(a.key.jersey) ? a.key.jersey : Number.POSITIVE_INFINITY;
       const bJersey = Number.isFinite(b.key.jersey) ? b.key.jersey : Number.POSITIVE_INFINITY;
       if (aJersey !== bJersey) return aJersey - bJersey;
@@ -144,22 +206,72 @@ function sortLineupForMatchups(players) {
 }
 
 function scoreMatchup(defender, offensivePlayer) {
+  const defenderProfile = getMatchupPlayerProfile(defender?.personId);
+  const offensiveProfile = getMatchupPlayerProfile(offensivePlayer?.personId);
   const defenderRank = getPositionRank(defender?.position);
   const offensiveRank = getPositionRank(offensivePlayer?.position);
   const rankGap = Math.abs(defenderRank - offensiveRank);
-  let score = rankGap * 24;
+  const defenderHeight = parseHeightToInches(defender?.height) ?? defenderProfile?.heightIn ?? null;
+  const offensiveHeight = parseHeightToInches(offensivePlayer?.height) ?? offensiveProfile?.heightIn ?? null;
+  const defenderArchetype = defenderProfile?.archetype || inferArchetypeFromPosition(defender?.position, defenderHeight);
+  const offensiveArchetype = offensiveProfile?.archetype || inferArchetypeFromPosition(offensivePlayer?.position, offensiveHeight);
+  const defenderRole = defenderProfile?.defenderRole || inferDefenderRoleFromArchetype(defenderArchetype);
+  const offensiveRole = offensiveProfile?.offensiveRole || inferOffensiveRoleFromArchetype(offensiveArchetype);
 
-  if (rankGap >= 3) score += 120;
-  if (rankGap >= 4) score += 420;
+  let score = rankGap * 20;
+
+  if (rankGap >= 3) score += 110;
+  if (rankGap >= 4) score += 380;
 
   const defenderGroup = getPositionGroup(defender?.position);
   const offensiveGroup = getPositionGroup(offensivePlayer?.position);
   if (defenderGroup !== offensiveGroup) {
-    score += 22;
+    score += 18;
   }
 
-  if (defenderGroup === "guard" && offensiveGroup === "big") score += 220;
-  if (defenderGroup === "big" && offensiveGroup === "guard") score += 120;
+  if (defenderGroup === "guard" && offensiveGroup === "big") score += 200;
+  if (defenderGroup === "big" && offensiveGroup === "guard") score += 110;
+
+  if (defenderHeight != null && offensiveHeight != null) {
+    const heightGap = Math.abs(defenderHeight - offensiveHeight);
+    score += Math.max(0, heightGap - 1) * 12;
+    if (defenderHeight + 5 <= offensiveHeight) score += 90;
+    if (defenderHeight + 7 <= offensiveHeight) score += 180;
+  }
+
+  if (defenderArchetype === "small_guard" && (offensiveArchetype === "power_wing" || offensiveArchetype === "stretch_big" || offensiveArchetype === "power_big" || offensiveArchetype === "center_big")) {
+    score += 220;
+  }
+
+  if (defenderArchetype === "big_guard" && offensiveArchetype === "power_wing") {
+    score += 40;
+  }
+
+  if (defenderRole === "point_of_attack" && offensiveRole === "primary_ball_guard") {
+    score -= 85;
+  }
+  if (defenderRole === "small_guard" && offensiveRole === "primary_ball_guard") {
+    score -= 35;
+  }
+  if (defenderRole === "wing_stopper" && (offensiveRole === "wing_creator" || offensiveRole === "power_wing")) {
+    score -= 55;
+  }
+  if (defenderRole === "big_anchor" && (offensiveRole === "stretch_big" || offensiveRole === "power_big" || offensiveRole === "center_big")) {
+    score -= 60;
+  }
+
+  if (defenderProfile?.preferOffensiveRoles?.includes(offensiveRole)) {
+    score -= 90;
+  }
+  if (defenderProfile?.avoidOffensiveRoles?.includes(offensiveRole)) {
+    score += 180;
+  }
+  if (defenderProfile?.preferOpponentIds?.includes(String(offensivePlayer?.personId || ""))) {
+    score -= 120;
+  }
+  if (defenderProfile?.avoidOpponentIds?.includes(String(offensivePlayer?.personId || ""))) {
+    score += 260;
+  }
 
   return score;
 }
@@ -288,6 +400,7 @@ function normalizeRosterPlayer(player, fallback = null, teamId = null, staticPos
   if (!player && !fallback) return null;
   const personId = String(player?.personId || fallback?.personId || "");
   if (!personId) return null;
+  const profile = getMatchupPlayerProfile(personId);
 
   const fullNameSource = String(
     player?.fullName ||
@@ -318,6 +431,14 @@ function normalizeRosterPlayer(player, fallback = null, teamId = null, staticPos
       staticPositionMap?.get(personId) ||
       ""
     ),
+    height: String(
+      player?.height ||
+      player?.heightFeet ||
+      fallback?.height ||
+      fallback?.heightFeet ||
+      profile?.heightIn ||
+      ""
+    ).trim(),
     teamId,
   };
 }

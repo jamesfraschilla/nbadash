@@ -121,6 +121,8 @@ const normalizeLiveRosterPlayers = (players, teamId) => (
         display: fullName,
         name: fullName,
         jerseyNum: String(player?.jerseyNum || "").trim(),
+        position: String(player?.position || "").trim(),
+        height: String(player?.height || "").trim(),
         teamId: String(player?.teamId || teamId || "").trim() || String(teamId || "").trim(),
       };
     })
