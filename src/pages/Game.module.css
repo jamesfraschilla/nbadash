@@ -511,6 +511,9 @@ html[data-theme="dark"] .pbpWheel {
   letter-spacing: 0.4px;
   text-transform: uppercase;
   color: #ffffff;
+  border: 1px solid #ffffff;
+  border-radius: 2px;
+  padding: 0 4px;
 }
 
 .resetUsed {
