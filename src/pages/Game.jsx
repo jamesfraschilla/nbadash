@@ -662,7 +662,7 @@ export default function Game({ variant = "full" }) {
 
   const { data: game, isLoading, error } = useQuery({
     queryKey: ["game", gameId, segmentParam],
-    queryFn: () => fetchGame(gameId, segmentParam),
+    queryFn: () => fetchGame(gameId, segmentParam, { dateStr: dateParam }),
     enabled: Boolean(gameId),
     staleTime: 30_000,
     refetchInterval: (data) => (data?.gameStatus === 3 ? false : 15_000),

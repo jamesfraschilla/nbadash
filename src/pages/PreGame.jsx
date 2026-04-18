@@ -605,7 +605,7 @@ export default function PreGame() {
 
   const { data: game, isLoading, error } = useQuery({
     queryKey: ["game-pregame", gameId],
-    queryFn: () => fetchGame(gameId),
+    queryFn: () => fetchGame(gameId, null, { dateStr: dateParam }),
     enabled: Boolean(gameId),
   });
 

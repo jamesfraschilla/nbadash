@@ -64,7 +64,7 @@ export default function PlayByPlay() {
 
   const { data: game, isLoading, error } = useQuery({
     queryKey: ["game", gameId],
-    queryFn: () => fetchGame(gameId),
+    queryFn: () => fetchGame(gameId, null, { dateStr: dateParam }),
     enabled: Boolean(gameId),
     staleTime: 30_000,
   });

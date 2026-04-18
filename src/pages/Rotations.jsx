@@ -1472,7 +1472,7 @@ export default function Rotations() {
 
   const { data: game, isLoading, error } = useQuery({
     queryKey: ["game-rotations", gameId],
-    queryFn: () => fetchGame(gameId),
+    queryFn: () => fetchGame(gameId, null, { dateStr: dateParam }),
     enabled: Boolean(gameId),
   });
 
