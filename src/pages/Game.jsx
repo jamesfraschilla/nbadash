@@ -298,6 +298,21 @@ const diffSnapshots = (startSnapshot, endSnapshot, basePlayers) => {
 
 const getPeriodEndKey = (period) => `period-end-${period}`;
 
+function hasUsedResetTimeout(actions, teamId, currentPeriod) {
+  if (!teamId) return false;
+
+  const overtimePhase = Number(currentPeriod) > 4;
+  return (actions || []).some((action) => {
+    if (String(action?.actionType || "").toLowerCase() !== "timeout") return false;
+    if (String(action?.subType || "").toLowerCase() !== "reset") return false;
+    if (String(action?.teamId || "") !== String(teamId)) return false;
+
+    const actionPeriod = Number(action?.period || 0);
+    if (overtimePhase) return actionPeriod > 4;
+    return actionPeriod > 0 && actionPeriod <= 4;
+  });
+}
+
 const buildChallengeCircles = (challenges) => {
   const total = challenges?.challengesTotal ?? 0;
   const won = challenges?.challengesWon ?? 0;
@@ -1746,7 +1761,7 @@ export default function Game({ variant = "full" }) {
     return "home";
   })();
   const lockIcon = isLocked ? "🔒" : "🔓";
-  const renderTimeouts = (remaining, showMandatory) => (
+  const renderTimeouts = (remaining, showMandatory, showReset, resetUsed) => (
     <div className={styles.metaBlock}>
       <div className={styles.metaLabel}>Timeouts</div>
       <div className={styles.timeoutsNumbers}>
@@ -1763,6 +1778,11 @@ export default function Game({ variant = "full" }) {
           );
         })}
       </div>
+      <div className={styles.resetLine}>
+        {showReset ? (
+          <span className={`${styles.resetLabel} ${resetUsed ? styles.resetUsed : ""}`}>RESET</span>
+        ) : null}
+      </div>
       <div className={styles.mandatoryLine}>
         {isLive && showMandatory ? (
           <span className={styles.mandatoryActive}>NEXT MANDATORY</span>
@@ -1773,6 +1793,9 @@ export default function Game({ variant = "full" }) {
   );
   const awayTimeoutsRemaining = isPregame ? 7 : timeouts?.away;
   const homeTimeoutsRemaining = isPregame ? 7 : timeouts?.home;
+  const isGLeagueGame = awayLeague === "gleague" || homeLeague === "gleague";
+  const awayResetUsed = hasUsedResetTimeout(game?.playByPlayActions || [], awayTeamId, game?.period);
+  const homeResetUsed = hasUsedResetTimeout(game?.playByPlayActions || [], homeTeamId, game?.period);
   const renderFouls = (count) => (
     <div className={styles.metaBlock}>
       <div className={styles.metaLabel}>Fouls</div>
@@ -1865,7 +1888,12 @@ export default function Game({ variant = "full" }) {
             />
             {(timeouts || isPregame) && (
               <div className={styles.teamMetaRow}>
-                {renderTimeouts(awayTimeoutsRemaining, mandatoryTimeoutTeam === "away")}
+                {renderTimeouts(
+                  awayTimeoutsRemaining,
+                  mandatoryTimeoutTeam === "away",
+                  isGLeagueGame,
+                  awayResetUsed
+                )}
               </div>
           )}
           <div className={styles.teamMetaRow}>
@@ -1951,7 +1979,12 @@ export default function Game({ variant = "full" }) {
             />
             {(timeouts || isPregame) && (
               <div className={styles.teamMetaRow}>
-                {renderTimeouts(homeTimeoutsRemaining, mandatoryTimeoutTeam === "home")}
+                {renderTimeouts(
+                  homeTimeoutsRemaining,
+                  mandatoryTimeoutTeam === "home",
+                  isGLeagueGame,
+                  homeResetUsed
+                )}
               </div>
           )}
           <div className={styles.teamMetaRow}>
