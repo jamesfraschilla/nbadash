@@ -1,5 +1,6 @@
 import { gLeagueHeadshotOverrides } from "./gLeagueHeadshotOverrides.js";
 import { NBA_TEAMS } from "./data/nbaTeams.js";
+import { aggregateSegmentStats } from "./segmentStats.js";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const ALL_ORIGINS_RAW_URL = "https://api.allorigins.win/raw?url=";
@@ -76,6 +77,669 @@ function safeRatio(numerator, denominator) {
   const safeDenominator = safeNumber(denominator, 0);
   if (safeDenominator <= 0) return 0;
   return (safeNumber(numerator, 0) / safeDenominator) * 100;
+}
+
+function normalizeText(value) {
+  return String(value || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9]+/g, " ")
+    .trim()
+    .toUpperCase();
+}
+
+function formatClockToIso(value) {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(String(value || "").trim());
+  if (!match) return "PT00M00.00S";
+  return `PT${Number(match[1])}M${Number(match[2])}.00S`;
+}
+
+function formatMinutesToIso(value) {
+  return formatClockToIso(value);
+}
+
+function splitMarkdownRow(line) {
+  return String(line || "")
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim());
+}
+
+function parseMarkdownNumeric(value, fallback = 0) {
+  const normalized = String(value || "").replace(/[+,]/g, "").trim();
+  if (!normalized) return fallback;
+  const numeric = Number(normalized);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function buildPlayerNameParts(fullName = "") {
+  const parts = String(fullName || "").trim().split(/\s+/).filter(Boolean);
+  return {
+    firstName: parts.slice(0, -1).join(" ") || parts[0] || "",
+    familyName: parts.length > 1 ? parts[parts.length - 1] : "",
+  };
+}
+
+function extractMarkdownPlayerLabel(cell = "") {
+  const cleaned = String(cell || "").replace(/!\[[^\]]*]\([^)]+\)/g, "");
+  const match = /\[(.+?)]\(https:\/\/www\.nba\.com\/player\/(\d+)\/[^)]+\)([A-Z]*)/.exec(cleaned);
+  if (!match) return null;
+  const rawLabel = String(match[1] || "").trim();
+  const rawTokens = rawLabel.split(/\s+/).filter(Boolean);
+  const shortNameIndex = rawTokens.findIndex((token) => token.includes("."));
+  const fullName = (shortNameIndex > 0 ? rawTokens.slice(0, shortNameIndex) : rawTokens).join(" ").trim();
+  return {
+    personId: safeNumber(match[2], 0),
+    fullName,
+    position: String(match[3] || "").trim(),
+  };
+}
+
+function parseSummerBoxScoreTable(markdown, heading, teamMeta) {
+  const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const sectionMatch = new RegExp(
+    `## ${escapedHeading}\\n\\n\\| PLAYER \\| MIN \\|[\\s\\S]*?\\n\\| ---[\\s\\S]*?\\n([\\s\\S]*?)(?=\\n## |\\nNBA Organization|$)`
+  ).exec(markdown);
+  if (!sectionMatch) {
+    return {
+      teamId: safeNumber(teamMeta?.teamId, 0),
+      teamName: teamMeta?.teamName || "",
+      teamCity: teamMeta?.teamCity || "",
+      teamTricode: teamMeta?.teamTricode || "",
+      players: [],
+      totals: null,
+    };
+  }
+
+  const lines = sectionMatch[1]
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("|"));
+
+  const players = [];
+  let totals = null;
+
+  lines.forEach((line) => {
+    const cells = splitMarkdownRow(line);
+    if (!cells.length || /^---/.test(cells[0])) return;
+    if (cells[0] === "TOTALS") {
+      totals = {
+        points: parseMarkdownNumeric(cells[19]),
+        reboundsTotal: parseMarkdownNumeric(cells[13]),
+        reboundsOffensive: parseMarkdownNumeric(cells[11]),
+        assists: parseMarkdownNumeric(cells[14]),
+        blocks: parseMarkdownNumeric(cells[16]),
+        steals: parseMarkdownNumeric(cells[15]),
+        turnovers: parseMarkdownNumeric(cells[17]),
+        foulsPersonal: parseMarkdownNumeric(cells[18]),
+        fieldGoalsMade: parseMarkdownNumeric(cells[2]),
+        fieldGoalsAttempted: parseMarkdownNumeric(cells[3]),
+        threePointersMade: parseMarkdownNumeric(cells[5]),
+        threePointersAttempted: parseMarkdownNumeric(cells[6]),
+        freeThrowsMade: parseMarkdownNumeric(cells[8]),
+        freeThrowsAttempted: parseMarkdownNumeric(cells[9]),
+        rimFieldGoalsMade: 0,
+        rimFieldGoalsAttempted: 0,
+        midFieldGoalsMade: 0,
+        midFieldGoalsAttempted: 0,
+      };
+      return;
+    }
+    if (/DNP/i.test(cells[1] || "")) return;
+    const playerLabel = extractMarkdownPlayerLabel(cells[0]);
+    if (!playerLabel?.personId) return;
+    const nameParts = buildPlayerNameParts(playerLabel.fullName);
+    players.push({
+      personId: playerLabel.personId,
+      firstName: nameParts.firstName,
+      familyName: nameParts.familyName,
+      jerseyNum: "",
+      position: playerLabel.position,
+      minutes: formatMinutesToIso(cells[1]),
+      plusMinusPoints: parseMarkdownNumeric(cells[20]),
+      points: parseMarkdownNumeric(cells[19]),
+      reboundsTotal: parseMarkdownNumeric(cells[13]),
+      reboundsOffensive: parseMarkdownNumeric(cells[11]),
+      assists: parseMarkdownNumeric(cells[14]),
+      blocks: parseMarkdownNumeric(cells[16]),
+      steals: parseMarkdownNumeric(cells[15]),
+      turnovers: parseMarkdownNumeric(cells[17]),
+      foulsPersonal: parseMarkdownNumeric(cells[18]),
+      fieldGoalsMade: parseMarkdownNumeric(cells[2]),
+      fieldGoalsAttempted: parseMarkdownNumeric(cells[3]),
+      threePointersMade: parseMarkdownNumeric(cells[5]),
+      threePointersAttempted: parseMarkdownNumeric(cells[6]),
+      freeThrowsMade: parseMarkdownNumeric(cells[8]),
+      freeThrowsAttempted: parseMarkdownNumeric(cells[9]),
+      offensiveRating: null,
+      defensiveRating: null,
+      rimFieldGoalsMade: 0,
+      rimFieldGoalsAttempted: 0,
+      midFieldGoalsMade: 0,
+      midFieldGoalsAttempted: 0,
+      chargesDrawn: 0,
+      deflections: 0,
+    });
+  });
+
+  return {
+    teamId: safeNumber(teamMeta?.teamId, 0),
+    teamName: teamMeta?.teamName || "",
+    teamCity: teamMeta?.teamCity || "",
+    teamTricode: teamMeta?.teamTricode || "",
+    players,
+    totals,
+  };
+}
+
+function parseSummerLeagueBoxScoreMarkdown(markdown, shareUrl) {
+  const slugMatch = /\/game\/([a-z]{2,4})-vs-([a-z]{2,4})-\d+/i.exec(String(shareUrl || ""));
+  const awayTricode = String(slugMatch?.[1] || "").toUpperCase();
+  const homeTricode = String(slugMatch?.[2] || "").toUpperCase();
+  const awayMeta = NBA_TEAM_BY_TRICODE.get(awayTricode) || {};
+  const homeMeta = NBA_TEAM_BY_TRICODE.get(homeTricode) || {};
+  const awayHeadingMatch = /## ([^\n]+)\n\n\| PLAYER \| MIN \|/m.exec(markdown);
+  const homeHeadingMatch = /## ([^\n]+)\n\n\| PLAYER \| MIN \|[\s\S]*?\n## ([^\n]+)\n\n\| PLAYER \| MIN \|/m.exec(markdown);
+  const awayHeading = awayHeadingMatch?.[1] || awayMeta.fullName || awayTricode;
+  const homeHeading = homeHeadingMatch?.[2] || homeMeta.fullName || homeTricode;
+  const awayTeam = parseSummerBoxScoreTable(markdown, awayHeading, {
+    teamId: awayMeta.teamId,
+    teamName: awayMeta.nickname || awayMeta.fullName?.split(" ").slice(-1)[0] || awayHeading,
+    teamCity: awayMeta.city || awayMeta.fullName?.replace(/\s+[^ ]+$/, "") || "",
+    teamTricode: awayTricode,
+  });
+  const homeTeam = parseSummerBoxScoreTable(markdown, homeHeading, {
+    teamId: homeMeta.teamId,
+    teamName: homeMeta.nickname || homeMeta.fullName?.split(" ").slice(-1)[0] || homeHeading,
+    teamCity: homeMeta.city || homeMeta.fullName?.replace(/\s+[^ ]+$/, "") || "",
+    teamTricode: homeTricode,
+  });
+
+  const scoreMatch = new RegExp(
+    `${awayTricode}\\n\\n(\\d+)\\n\\n([^\\n]+)\\n\\n(\\d+)\\n\\n${homeTricode}`,
+    "i"
+  ).exec(markdown);
+  const statusText = String(scoreMatch?.[2] || "").trim();
+  const dateMatch = /\n([A-Za-z]+,\s+[A-Za-z]+\s+\d{1,2}(?:st|nd|rd|th),\s+\d{4})\n/.exec(markdown);
+  const arenaMatch = /\n([^\n]+,\s+[A-Za-z .'-]+,\s+[A-Z]{2})\n/.exec(markdown);
+  const periodMatch = /^Q(\d+)/i.exec(statusText);
+  const clockMatch = /^Q\d\s+(\d{1,2}:\d{2})/i.exec(statusText);
+  const parsedDate = dateMatch?.[1] || "";
+  const seasonYearMatch = /(\d{4})/.exec(parsedDate);
+
+  return {
+    gameStatus: /^final/i.test(statusText) ? 3 : /^q\d/i.test(statusText) ? 2 : 1,
+    gameStatusText: statusText || "",
+    period: safeNumber(periodMatch?.[1], /^final/i.test(statusText) ? 4 : 0),
+    gameClock: clockMatch ? formatClockToIso(clockMatch[1]) : "PT00M00.00S",
+    seasonYear: seasonYearMatch?.[1] || "",
+    arena: {
+      arenaName: arenaMatch?.[1]?.split(",")[0] || "",
+      arenaCity: arenaMatch?.[1]?.split(",")[1]?.trim() || "",
+      arenaState: arenaMatch?.[1]?.split(",")[2]?.trim() || "",
+    },
+    awayScore: parseMarkdownNumeric(scoreMatch?.[1], awayTeam.totals?.points || 0),
+    homeScore: parseMarkdownNumeric(scoreMatch?.[3], homeTeam.totals?.points || 0),
+    awayTeam,
+    homeTeam,
+  };
+}
+
+function buildSummerPlayerAliasMap(teams = []) {
+  const aliases = [];
+  const lastNameCounts = new Map();
+
+  teams.forEach((team) => {
+    (team.players || []).forEach((player) => {
+      const fullName = `${player.firstName || ""} ${player.familyName || ""}`.trim();
+      const lastName = String(player.familyName || "").trim();
+      if (lastName) {
+        const key = normalizeText(lastName);
+        lastNameCounts.set(key, (lastNameCounts.get(key) || 0) + 1);
+      }
+      if (fullName) {
+        aliases.push({
+          alias: fullName,
+          normalized: normalizeText(fullName),
+          personId: player.personId,
+          teamId: team.teamId,
+        });
+      }
+      if (player.firstName && player.familyName) {
+        aliases.push({
+          alias: `${player.firstName[0]}. ${player.familyName}`,
+          normalized: normalizeText(`${player.firstName[0]}. ${player.familyName}`),
+          personId: player.personId,
+          teamId: team.teamId,
+        });
+      }
+    });
+  });
+
+  teams.forEach((team) => {
+    (team.players || []).forEach((player) => {
+      const lastName = String(player.familyName || "").trim();
+      const key = normalizeText(lastName);
+      if (!lastName || lastNameCounts.get(key) !== 1) return;
+      aliases.push({
+        alias: lastName,
+        normalized: key,
+        personId: player.personId,
+        teamId: team.teamId,
+      });
+    });
+  });
+
+  return aliases
+    .filter((entry) => entry.normalized)
+    .sort((left, right) => right.alias.length - left.alias.length);
+}
+
+function parseSummerPlayByPlayMarkdown(markdown, awayTeam, homeTeam) {
+  const lines = String(markdown || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim());
+  const aliases = buildSummerPlayerAliasMap([awayTeam, homeTeam]);
+  const teamByName = new Map([
+    [normalizeText(`${awayTeam.teamCity} ${awayTeam.teamName}`), awayTeam],
+    [normalizeText(`${homeTeam.teamCity} ${homeTeam.teamName}`), homeTeam],
+    [normalizeText(awayTeam.teamTricode), awayTeam],
+    [normalizeText(homeTeam.teamTricode), homeTeam],
+    [normalizeText(awayTeam.teamName), awayTeam],
+    [normalizeText(homeTeam.teamName), homeTeam],
+  ]);
+
+  const findAliasAtStart = (text) => {
+    const normalizedText = normalizeText(text);
+    for (const alias of aliases) {
+      if (normalizedText === alias.normalized || normalizedText.startsWith(`${alias.normalized} `)) {
+        return alias;
+      }
+    }
+    return null;
+  };
+
+  const parseTeamId = (blockLines, description) => {
+    for (const line of blockLines) {
+      const team = teamByName.get(normalizeText(line));
+      if (team) return team.teamId;
+    }
+    const reboundMatch = /^([A-Z]{2,4})\s+REBOUND$/i.exec(description);
+    if (reboundMatch) {
+      return teamByName.get(normalizeText(reboundMatch[1]))?.teamId || null;
+    }
+    const alias = findAliasAtStart(description.replace(/^MISS\s+/, "").replace(/^SUB:\s+/, ""));
+    return alias?.teamId || null;
+  };
+
+  let currentPeriod = 0;
+  let orderNumber = 1;
+  let pendingTurnoverBeneficiary = null;
+  let pendingOffensiveReboundTeamId = null;
+  let pendingMissTeamId = null;
+  const actions = [];
+
+  const pushAction = (action) => {
+    actions.push({
+      actionNumber: orderNumber,
+      orderNumber,
+      clock: formatClockToIso(action.clockText),
+      period: currentPeriod,
+      teamId: action.teamId ?? null,
+      teamTricode:
+        action.teamId === awayTeam.teamId
+          ? awayTeam.teamTricode
+          : action.teamId === homeTeam.teamId
+            ? homeTeam.teamTricode
+            : null,
+      description: action.description || "",
+      qualifier: null,
+      qualifiers: action.qualifiers || [],
+      actionType: action.actionType || "",
+      subType: action.subType || "",
+      descriptor: action.descriptor || "",
+      personId: action.personId ?? null,
+      assistPersonId: action.assistPersonId ?? 0,
+      shotDistance: action.shotDistance ?? null,
+      shotResult: action.shotResult || null,
+      playerName: action.playerName || null,
+      playerNameI: action.playerName || null,
+      isFieldGoal: action.actionType === "2pt" || action.actionType === "3pt" ? 1 : 0,
+      timeActual: "",
+      scoreHome: "",
+      scoreAway: "",
+      location: "",
+      edited: "",
+      personIdsFilter: [],
+    });
+    orderNumber += 1;
+  };
+
+  const isTimestamp = (line) => /^\d{1,2}:\d{2}(?:\s+\d+\s*-\s*\d+)?$/.test(line);
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const qMatch = /^## Q(\d+) start$/i.exec(line);
+    if (qMatch) {
+      currentPeriod = safeNumber(qMatch[1], currentPeriod);
+      pendingTurnoverBeneficiary = null;
+      pendingOffensiveReboundTeamId = null;
+      pendingMissTeamId = null;
+      continue;
+    }
+    if (!isTimestamp(line) || !currentPeriod) continue;
+
+    const clockText = line.split(/\s+/)[0];
+    const blockLines = [];
+    let nextIndex = index + 1;
+    while (nextIndex < lines.length && !isTimestamp(lines[nextIndex]) && !/^## /i.test(lines[nextIndex])) {
+      if (lines[nextIndex]) blockLines.push(lines[nextIndex]);
+      nextIndex += 1;
+    }
+    index = nextIndex - 1;
+    if (!blockLines.length) continue;
+
+    const description = blockLines
+      .filter((entry) => !entry.startsWith("![Image"))
+      .slice(-1)[0];
+    if (!description) continue;
+
+    const teamId = parseTeamId(blockLines, description);
+    const otherTeamId =
+      teamId === awayTeam.teamId ? homeTeam.teamId : teamId === homeTeam.teamId ? awayTeam.teamId : null;
+
+    if (/^Timeout:/i.test(description) || /^Jump Ball/i.test(description)) {
+      pendingTurnoverBeneficiary = null;
+      continue;
+    }
+
+    const reboundMatch = /^(?:([A-Z]{2,4})|(.+?))\s+REBOUND(?:\s+\(Off:(\d+)\s+Def:(\d+)\))?$/i.exec(description);
+    if (reboundMatch) {
+      const alias = reboundMatch[2] ? findAliasAtStart(reboundMatch[2]) : null;
+      const reboundTeamId = teamId ?? alias?.teamId ?? null;
+      const isOffensive = reboundTeamId != null && pendingMissTeamId != null && reboundTeamId === pendingMissTeamId;
+      pushAction({
+        clockText,
+        teamId: reboundTeamId,
+        actionType: "rebound",
+        subType: isOffensive ? "offensive" : "defensive",
+        description,
+        personId: alias?.personId ?? null,
+        playerName: reboundMatch[2] || reboundMatch[1] || null,
+      });
+      pendingOffensiveReboundTeamId = isOffensive ? reboundTeamId : null;
+      pendingMissTeamId = null;
+      continue;
+    }
+
+    const stealMatch = /^(.+?)\s+STEAL\b/i.exec(description);
+    if (stealMatch) {
+      const alias = findAliasAtStart(stealMatch[1]);
+      pushAction({
+        clockText,
+        teamId: alias?.teamId ?? teamId ?? null,
+        actionType: "steal",
+        description,
+        personId: alias?.personId ?? null,
+        playerName: stealMatch[1],
+      });
+      pendingTurnoverBeneficiary = alias?.teamId ?? teamId ?? null;
+      continue;
+    }
+
+    const blockMatch = /^(.+?)\s+BLOCK\b/i.exec(description);
+    if (blockMatch) {
+      const alias = findAliasAtStart(blockMatch[1]);
+      pushAction({
+        clockText,
+        teamId: alias?.teamId ?? teamId ?? null,
+        actionType: "block",
+        description,
+        personId: alias?.personId ?? null,
+        playerName: blockMatch[1],
+      });
+      continue;
+    }
+
+    const turnoverMatch = /^(.+?)\s+.+?\s+Turnover\b/i.exec(description);
+    if (turnoverMatch) {
+      const alias = findAliasAtStart(turnoverMatch[1]);
+      const turnoverTeamId = alias?.teamId ?? teamId ?? null;
+      pushAction({
+        clockText,
+        teamId: turnoverTeamId,
+        actionType: "turnover",
+        description,
+        personId: alias?.personId ?? null,
+        playerName: turnoverMatch[1],
+      });
+      pendingTurnoverBeneficiary =
+        turnoverTeamId === awayTeam.teamId ? homeTeam.teamId : turnoverTeamId === homeTeam.teamId ? awayTeam.teamId : null;
+      pendingOffensiveReboundTeamId = null;
+      pendingMissTeamId = null;
+      continue;
+    }
+
+    const foulMatch = /^(.+?)\s+([A-Z.]+FOUL)\b/i.exec(description);
+    if (foulMatch) {
+      const alias = findAliasAtStart(foulMatch[1]);
+      const foulType = foulMatch[2].toUpperCase();
+      pushAction({
+        clockText,
+        teamId: alias?.teamId ?? teamId ?? null,
+        actionType: "foul",
+        subType: foulType.includes("OFF") ? "offensive" : foulType.includes("T.") ? "technical" : "personal",
+        description,
+        personId: alias?.personId ?? null,
+        playerName: foulMatch[1],
+      });
+      pendingTurnoverBeneficiary = null;
+      if (!foulType.includes("OFF")) pendingOffensiveReboundTeamId = null;
+      continue;
+    }
+
+    const subMatch = /^SUB:\s+(.+?)\s+FOR\s+(.+)$/i.exec(description);
+    if (subMatch) {
+      const incoming = findAliasAtStart(subMatch[1]);
+      const outgoing = findAliasAtStart(subMatch[2]);
+      const subTeamId = incoming?.teamId ?? outgoing?.teamId ?? teamId ?? null;
+      if (outgoing?.personId) {
+        pushAction({
+          clockText,
+          teamId: subTeamId,
+          actionType: "substitution",
+          subType: "out",
+          description,
+          personId: outgoing.personId,
+          playerName: subMatch[2],
+        });
+      }
+      if (incoming?.personId) {
+        pushAction({
+          clockText,
+          teamId: subTeamId,
+          actionType: "substitution",
+          subType: "in",
+          description,
+          personId: incoming.personId,
+          playerName: subMatch[1],
+        });
+      }
+      continue;
+    }
+
+    const freeThrowMatch = /^(MISS\s+)?(.+?)\s+Free Throw\s+\d+\s+of\s+\d+/i.exec(description);
+    if (freeThrowMatch) {
+      const alias = findAliasAtStart(freeThrowMatch[2]);
+      const shotResult = freeThrowMatch[1] ? "Missed" : "Made";
+      const qualifiers = [];
+      if (pendingTurnoverBeneficiary && alias?.teamId === pendingTurnoverBeneficiary) qualifiers.push("fromturnover");
+      pushAction({
+        clockText,
+        teamId: alias?.teamId ?? teamId ?? null,
+        actionType: "freethrow",
+        description,
+        personId: alias?.personId ?? null,
+        playerName: freeThrowMatch[2],
+        shotResult,
+        qualifiers,
+      });
+      if (shotResult === "Missed") {
+        pendingMissTeamId = alias?.teamId ?? teamId ?? null;
+      } else {
+        pendingMissTeamId = null;
+      }
+      pendingTurnoverBeneficiary = null;
+      continue;
+    }
+
+    const shotMatch = /^(MISS\s+)?(.+?)\s+(?:(\d+)'\s+)?(.+)$/i.exec(description);
+    if (shotMatch) {
+      const alias = findAliasAtStart(shotMatch[2]);
+      if (alias?.personId) {
+        const shotText = `${shotMatch[3] ? `${shotMatch[3]}' ` : ""}${shotMatch[4]}`.trim();
+        const isThree = /\b3PT\b/i.test(shotText);
+        const shotResult = shotMatch[1] ? "Missed" : /\(\d+\s+PTS\)/i.test(description) ? "Made" : null;
+        const assistMatch = /\((.+?)\s+\d+\s+AST\)/i.exec(description);
+        const assistAlias = assistMatch ? findAliasAtStart(assistMatch[1]) : null;
+        const qualifiers = [];
+        if (!isThree && (Number(shotMatch[3] || 0) <= 8 || /layup|dunk|tip|hook/i.test(shotText))) {
+          qualifiers.push("pointsinthepaint");
+        }
+        if (pendingOffensiveReboundTeamId && alias.teamId === pendingOffensiveReboundTeamId) {
+          qualifiers.push("2ndchance");
+        }
+        if (pendingTurnoverBeneficiary && alias.teamId === pendingTurnoverBeneficiary) {
+          qualifiers.push("fromturnover", "fastbreak");
+        }
+        pushAction({
+          clockText,
+          teamId: alias.teamId,
+          actionType: isThree ? "3pt" : "2pt",
+          description: shotText,
+          descriptor: shotText,
+          personId: alias.personId,
+          playerName: shotMatch[2],
+          assistPersonId: assistAlias?.personId ?? 0,
+          shotDistance: shotMatch[3] ? safeNumber(shotMatch[3], null) : null,
+          shotResult,
+          qualifiers,
+        });
+        pendingMissTeamId = shotResult === "Missed" ? alias.teamId : null;
+        pendingOffensiveReboundTeamId = null;
+        pendingTurnoverBeneficiary = null;
+        continue;
+      }
+    }
+
+    pendingTurnoverBeneficiary = null;
+  }
+
+  return actions.map(normalizeSummerAction);
+}
+
+function mergeSummerPlayerWithDerived(player, derived = {}) {
+  return {
+    ...player,
+    rimFieldGoalsMade: safeNumber(derived.rimFieldGoalsMade, 0),
+    rimFieldGoalsAttempted: safeNumber(derived.rimFieldGoalsAttempted, 0),
+    midFieldGoalsMade: safeNumber(derived.midFieldGoalsMade, 0),
+    midFieldGoalsAttempted: safeNumber(derived.midFieldGoalsAttempted, 0),
+  };
+}
+
+function mergeSummerTeamTotals(base = {}, derived = {}) {
+  return {
+    ...base,
+    rimFieldGoalsMade: safeNumber(derived.rimFieldGoalsMade, 0),
+    rimFieldGoalsAttempted: safeNumber(derived.rimFieldGoalsAttempted, 0),
+    midFieldGoalsMade: safeNumber(derived.midFieldGoalsMade, 0),
+    midFieldGoalsAttempted: safeNumber(derived.midFieldGoalsAttempted, 0),
+    drivingFGMade: safeNumber(derived.drivingFGMade, 0),
+    drivingFGAttempted: safeNumber(derived.drivingFGAttempted, 0),
+    cuttingFGMade: safeNumber(derived.cuttingFGMade, 0),
+    cuttingFGAttempted: safeNumber(derived.cuttingFGAttempted, 0),
+    catchAndShoot3FGMade: safeNumber(derived.catchAndShoot3FGMade, 0),
+    catchAndShoot3FGAttempted: safeNumber(derived.catchAndShoot3FGAttempted, 0),
+    secondChance3FGMade: safeNumber(derived.secondChance3FGMade, 0),
+    secondChance3FGAttempted: safeNumber(derived.secondChance3FGAttempted, 0),
+    offensiveFoulsDrawn: safeNumber(derived.offensiveFoulsDrawn, 0),
+    transitionPoints: safeNumber(derived.transitionPoints, 0),
+    transitionTurnovers: safeNumber(derived.transitionTurnovers, 0),
+    transitionPossessions: safeNumber(derived.transitionPossessions, 0),
+    secondChancePoints: safeNumber(derived.secondChancePoints, 0),
+    pointsOffTurnovers: safeNumber(derived.pointsOffTurnovers, 0),
+    paintPoints: safeNumber(derived.paintPoints, 0),
+    threePointOReb: safeNumber(derived.threePointOReb, 0),
+  };
+}
+
+function buildSummerTeamAdvancedStatsFromTotals(teamTotals = {}) {
+  return {
+    drivingFGPercent: safeRatio(teamTotals.drivingFGMade, teamTotals.drivingFGAttempted).toFixed(1),
+    drivingFGMade: safeNumber(teamTotals.drivingFGMade, 0),
+    drivingFGAttempted: safeNumber(teamTotals.drivingFGAttempted, 0),
+    cuttingFGPercent: safeRatio(teamTotals.cuttingFGMade, teamTotals.cuttingFGAttempted).toFixed(1),
+    cuttingFGMade: safeNumber(teamTotals.cuttingFGMade, 0),
+    cuttingFGAttempted: safeNumber(teamTotals.cuttingFGAttempted, 0),
+    catchAndShoot3FGPercent: safeRatio(teamTotals.catchAndShoot3FGMade, teamTotals.catchAndShoot3FGAttempted).toFixed(1),
+    catchAndShoot3FGMade: safeNumber(teamTotals.catchAndShoot3FGMade, 0),
+    catchAndShoot3FGAttempted: safeNumber(teamTotals.catchAndShoot3FGAttempted, 0),
+    chargesDrawn: safeNumber(teamTotals.chargesDrawn, 0),
+    offensiveFoulsDrawn: safeNumber(teamTotals.offensiveFoulsDrawn, 0),
+    deflections: safeNumber(teamTotals.deflections, 0),
+  };
+}
+
+function buildSummerTeamStatsFromTotals(teamTotals = {}, opponentTotals = {}) {
+  const possessions = estimatePossessions(teamTotals, opponentTotals);
+  const points = safeNumber(teamTotals.points, 0);
+  const opponentPoints = safeNumber(opponentTotals.points, 0);
+  return {
+    possessions,
+    offensiveRating: possessions > 0 ? (points / possessions) * 100 : 0,
+    killsData: {
+      three: 0,
+      four: 0,
+      five: 0,
+      six: 0,
+      seven: 0,
+      eight: 0,
+      delta: 0,
+      pi: 0,
+    },
+    transitionStats: {
+      transitionRate: possessions > 0 ? (safeNumber(teamTotals.transitionPossessions, 0) / possessions) * 100 : 0,
+      transitionPoints: safeNumber(teamTotals.transitionPoints, 0),
+      transitionTurnovers: safeNumber(teamTotals.transitionTurnovers, 0),
+      secondChancePoints: safeNumber(teamTotals.secondChancePoints, 0),
+      threePointORebPercent: safeRatio(teamTotals.threePointOReb, teamTotals.reboundsOffensive),
+      pointsOffTurnovers: safeNumber(teamTotals.pointsOffTurnovers, 0),
+      paintPoints: safeNumber(teamTotals.paintPoints, 0),
+      transitionPossessions: safeNumber(teamTotals.transitionPossessions, 0),
+    },
+    defensiveRating: possessions > 0 ? (opponentPoints / possessions) * 100 : 0,
+    netRating: possessions > 0 ? ((points - opponentPoints) / possessions) * 100 : 0,
+    shotProfile: {
+      rimRate: safeRatio(teamTotals.rimFieldGoalsAttempted, teamTotals.fieldGoalsAttempted),
+      midRate: safeRatio(teamTotals.midFieldGoalsAttempted, teamTotals.fieldGoalsAttempted),
+      threePRate: safeRatio(teamTotals.threePointersAttempted, teamTotals.fieldGoalsAttempted),
+    },
+    shotEfficiency: {
+      rimFGPercent: safeRatio(teamTotals.rimFieldGoalsMade, teamTotals.rimFieldGoalsAttempted),
+      rimFGMade: safeNumber(teamTotals.rimFieldGoalsMade, 0),
+      rimFGAttempted: safeNumber(teamTotals.rimFieldGoalsAttempted, 0),
+      midFGPercent: safeRatio(teamTotals.midFieldGoalsMade, teamTotals.midFieldGoalsAttempted),
+      midFGMade: safeNumber(teamTotals.midFieldGoalsMade, 0),
+      midFGAttempted: safeNumber(teamTotals.midFieldGoalsAttempted, 0),
+      threeFGPercent: safeRatio(teamTotals.threePointersMade, teamTotals.threePointersAttempted),
+      threeFGMade: safeNumber(teamTotals.threePointersMade, 0),
+      threeFGAttempted: safeNumber(teamTotals.threePointersAttempted, 0),
+    },
+    advancedStats: buildSummerTeamAdvancedStatsFromTotals(teamTotals),
+  };
 }
 
 function toIsoClock(value) {
@@ -514,71 +1178,98 @@ function normalizeSummerAction(action = {}) {
 
 async function fetchSummerLeagueGame(gameId, dateStr = null) {
   const shareUrl = await findSummerLeagueGameUrlById(gameId, dateStr);
-  const [boxHtml, playByPlayHtml] = await Promise.all([
-    requestText(`${shareUrl}/box-score`),
-    requestText(`${shareUrl}/play-by-play`),
+  const [boxMarkdown, playByPlayMarkdown] = await Promise.all([
+    requestText(`https://r.jina.ai/http://${shareUrl}/box-score`, "text/plain"),
+    requestText(`https://r.jina.ai/http://${shareUrl}/play-by-play`, "text/plain"),
   ]);
-  const boxData = extractNextDataFromHtml(boxHtml);
-  const playByPlayData = extractNextDataFromHtml(playByPlayHtml);
-  const boxPageProps = boxData?.props?.pageProps || {};
-  const playByPlayPageProps = playByPlayData?.props?.pageProps || {};
-  const game = boxPageProps.game || {};
-  const playByPlay = playByPlayPageProps.playByPlay || {};
+  const parsedBox = parseSummerLeagueBoxScoreMarkdown(boxMarkdown, shareUrl);
+  const playByPlayActions = parseSummerPlayByPlayMarkdown(
+    playByPlayMarkdown,
+    parsedBox.awayTeam,
+    parsedBox.homeTeam
+  );
+  const basePlayers = [...parsedBox.awayTeam.players, ...parsedBox.homeTeam.players];
+  const aggregated = aggregateSegmentStats({
+    actions: playByPlayActions,
+    segment: "all",
+    minutesData: null,
+    homeTeam: parsedBox.homeTeam,
+    awayTeam: parsedBox.awayTeam,
+    basePlayers,
+    currentPeriod: parsedBox.period,
+    currentClock: parsedBox.gameClock,
+    isLive: parsedBox.gameStatus === 2,
+  });
+  const awayDerivedTotals = aggregated.teamTotals[parsedBox.awayTeam.teamId] || {};
+  const homeDerivedTotals = aggregated.teamTotals[parsedBox.homeTeam.teamId] || {};
+  const playerDerivedMap = aggregated.playerMap || new Map();
+  const awayBox = {
+    ...parsedBox.awayTeam,
+    players: parsedBox.awayTeam.players.map((player) => mergeSummerPlayerWithDerived(
+      player,
+      playerDerivedMap.get(player.personId) || {}
+    )),
+    totals: mergeSummerTeamTotals(parsedBox.awayTeam.totals || {}, awayDerivedTotals),
+  };
+  const homeBox = {
+    ...parsedBox.homeTeam,
+    players: parsedBox.homeTeam.players.map((player) => mergeSummerPlayerWithDerived(
+      player,
+      playerDerivedMap.get(player.personId) || {}
+    )),
+    totals: mergeSummerTeamTotals(parsedBox.homeTeam.totals || {}, homeDerivedTotals),
+  };
 
   return {
-    gameId: String(game.gameId || gameId),
-    gameCode: game.gameCode || "",
-    gameStatus: safeNumber(game.gameStatus, 1),
-    gameStatusText: game.gameStatusText || "",
-    period: safeNumber(game.period, 0),
-    gameClock: toIsoClock(game.gameClock),
-    gameTimeUTC: game.gameTimeUTC || "",
-    gameEt: game.gameEt || "",
-    seasonYear: String(boxPageProps?.analyticsObject?.season || parseDateParts(game.gameTimeUTC?.slice(0, 10))?.year || ""),
+    gameId: String(gameId),
+    gameCode: "",
+    gameStatus: parsedBox.gameStatus,
+    gameStatusText: parsedBox.gameStatusText,
+    period: parsedBox.period,
+    gameClock: parsedBox.gameClock,
+    gameTimeUTC: "",
+    gameEt: "",
+    seasonYear: String(parsedBox.seasonYear || parseDateParts(dateStr)?.year || ""),
     seasonType: "Summer League",
-    arena: {
-      arenaName: game?.arena?.arenaName || "",
-      arenaState: game?.arena?.arenaState || "",
-      arenaCity: game?.arena?.arenaCity || "",
-    },
+    arena: parsedBox.arena,
     homeTeam: {
-      teamId: safeNumber(game?.homeTeam?.teamId, 0),
-      teamName: game?.homeTeam?.teamName || "",
-      teamCity: game?.homeTeam?.teamCity || "",
-      teamTricode: game?.homeTeam?.teamTricode || "",
-      wins: safeNumber(game?.homeTeam?.teamWins, 0),
-      losses: safeNumber(game?.homeTeam?.teamLosses, 0),
-      score: safeNumber(game?.homeTeam?.score, 0),
-      timeoutsRemaining: safeNumber(game?.homeTeam?.timeoutsRemaining, 0),
+      teamId: parsedBox.homeTeam.teamId,
+      teamName: parsedBox.homeTeam.teamName,
+      teamCity: parsedBox.homeTeam.teamCity,
+      teamTricode: parsedBox.homeTeam.teamTricode,
+      wins: 0,
+      losses: 0,
+      score: parsedBox.homeScore,
+      timeoutsRemaining: 0,
     },
     awayTeam: {
-      teamId: safeNumber(game?.awayTeam?.teamId, 0),
-      teamName: game?.awayTeam?.teamName || "",
-      teamCity: game?.awayTeam?.teamCity || "",
-      teamTricode: game?.awayTeam?.teamTricode || "",
-      wins: safeNumber(game?.awayTeam?.teamWins, 0),
-      losses: safeNumber(game?.awayTeam?.teamLosses, 0),
-      score: safeNumber(game?.awayTeam?.score, 0),
-      timeoutsRemaining: safeNumber(game?.awayTeam?.timeoutsRemaining, 0),
+      teamId: parsedBox.awayTeam.teamId,
+      teamName: parsedBox.awayTeam.teamName,
+      teamCity: parsedBox.awayTeam.teamCity,
+      teamTricode: parsedBox.awayTeam.teamTricode,
+      wins: 0,
+      losses: 0,
+      score: parsedBox.awayScore,
+      timeoutsRemaining: 0,
     },
-    officials: (Array.isArray(game.officials) ? game.officials : []).slice(0, 3).map(normalizeSummerOfficial),
+    officials: [],
     callsAgainst: null,
     timeouts: {
-      home: safeNumber(game?.homeTeam?.timeoutsRemaining, 0),
-      away: safeNumber(game?.awayTeam?.timeoutsRemaining, 0),
+      home: 0,
+      away: 0,
     },
     challenges: {
       home: { challengesTotal: 0, challengesWon: 0 },
       away: { challengesTotal: 0, challengesWon: 0 },
     },
-    playByPlayActions: (Array.isArray(playByPlay.actions) ? playByPlay.actions : []).map(normalizeSummerAction),
+    playByPlayActions,
     teamStats: {
-      home: buildSummerTeamStats(game.homeTeam, game.awayTeam),
-      away: buildSummerTeamStats(game.awayTeam, game.homeTeam),
+      home: buildSummerTeamStatsFromTotals(homeBox.totals, awayBox.totals),
+      away: buildSummerTeamStatsFromTotals(awayBox.totals, homeBox.totals),
     },
     boxScore: {
-      home: normalizeSummerBoxScoreTeam(game.homeTeam, game.homeTeamPlayers),
-      away: normalizeSummerBoxScoreTeam(game.awayTeam, game.awayTeamPlayers),
+      home: homeBox,
+      away: awayBox,
     },
   };
 }
