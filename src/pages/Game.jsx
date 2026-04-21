@@ -24,9 +24,11 @@ import {
   NOTE_TAG_OPTIONS,
 } from "../noteHelpers.js";
 import {
+  applyAnalysisSegmentShortcut,
   analysisPeriodLabel,
   buildAnalysisMinuteOptions,
   buildAnalysisPeriodOptions,
+  buildAnalysisSegmentOptions,
   buildAnalysisSecondOptions,
   buildInitialAnalysisForm,
   formatAnalysisPoint,
@@ -58,6 +60,13 @@ import {
   segmentPeriods,
 } from "../segmentStats.js";
 import { supabase } from "../supabaseClient.js";
+import {
+  getSavedToolRecord,
+  getSavedToolRecordRemote,
+  saveToolRecord,
+  saveToolRecordRemote,
+  TOOL_RECORD_TYPES,
+} from "../toolVault.js";
 import { readLocalStorage, writeLocalStorage } from "../storage.js";
 import styles from "./Game.module.css";
 
@@ -488,9 +497,10 @@ const compareActionsByChronology = (a, b) => {
 
 export default function Game({ variant = "full" }) {
   const { gameId } = useParams();
-  const { user, canUseMatchUps, isAdmin } = useAuth();
+  const { user, canUseMatchUps, accountsEnabled } = useAuth();
   const [params, setParams] = useSearchParams();
   const dateParam = params.get("d");
+  const analysisRecordParam = String(params.get("analysis") || "").trim();
   const courtBackUrl = dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`;
   const urlSegmentParam = params.get("segment");
   const segmentFromUrl = useMemo(() => {
@@ -532,6 +542,9 @@ export default function Game({ variant = "full" }) {
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
   const [analysisResult, setAnalysisResult] = useState(null);
+  const [analysisUniformOpen, setAnalysisUniformOpen] = useState(false);
+  const [analysisSaveStatus, setAnalysisSaveStatus] = useState("");
+  const [analysisSaving, setAnalysisSaving] = useState(false);
   const [analysisForm, setAnalysisForm] = useState(() => buildInitialAnalysisForm(null, false));
   const isAtc = variant === "atc";
   const showExtras = !isAtc;
@@ -897,8 +910,12 @@ export default function Game({ variant = "full" }) {
     if (isLive) {
       setAnalysisForm((prev) => {
         const nextDefaults = buildInitialAnalysisForm(game, isLive);
+        if (prev.segmentShortcut && prev.segmentShortcut !== "custom") {
+          return prev;
+        }
         return {
           ...prev,
+          segmentShortcut: prev.segmentShortcut,
           maxPeriod: nextDefaults.maxPeriod,
           maxMinutes: nextDefaults.maxMinutes,
           maxSeconds: nextDefaults.maxSeconds,
@@ -906,6 +923,42 @@ export default function Game({ variant = "full" }) {
       });
     }
   }, [analysisModalOpen, game, isLive]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!analysisRecordParam || !user?.id || !gameId) return () => {
+      cancelled = true;
+    };
+
+    const loadSavedAnalysis = async () => {
+      try {
+        const record = accountsEnabled
+          ? await getSavedToolRecordRemote(user.id, analysisRecordParam)
+          : getSavedToolRecord(user.id, analysisRecordParam);
+        if (cancelled || !record || record.type !== TOOL_RECORD_TYPES.GAME_ANALYSIS) return;
+        const payload = record.payload && typeof record.payload === "object" ? record.payload : {};
+        if (String(payload.gameId || "") !== String(gameId || "")) return;
+        if (payload.analysisForm && typeof payload.analysisForm === "object") {
+          setAnalysisForm(payload.analysisForm);
+        }
+        setAnalysisResult(payload.analysisResult || null);
+        setAnalysisUniformOpen(false);
+        setAnalysisSaveStatus(`Loaded from My Vault: ${record.title}`);
+        setAnalysisError("");
+        setAnalysisModalOpen(true);
+      } catch (error) {
+        if (!cancelled) {
+          setAnalysisError(error?.message || "Unable to load saved analysis.");
+          setAnalysisModalOpen(true);
+        }
+      }
+    };
+
+    loadSavedAnalysis();
+    return () => {
+      cancelled = true;
+    };
+  }, [accountsEnabled, analysisRecordParam, gameId, user?.id]);
 
   const segmentStats = homeTeam?.teamId && awayTeam?.teamId
     ? aggregateSegmentStats({
@@ -1026,6 +1079,7 @@ export default function Game({ variant = "full" }) {
     setAnalysisForm((prev) => {
       const next = {
         ...prev,
+        segmentShortcut: "custom",
         [`${prefix}${field}`]: value,
       };
       const period = Number(next[`${prefix}Period`]) || 1;
@@ -1042,6 +1096,15 @@ export default function Game({ variant = "full" }) {
     });
   };
 
+  const updateAnalysisSegmentShortcut = (value) => {
+    setAnalysisForm((prev) => {
+      if (value === "custom") {
+        return { ...prev, segmentShortcut: "custom" };
+      }
+      return applyAnalysisSegmentShortcut(value, game, isLive);
+    });
+  };
+
   const openAddNote = () => {
     setNoteSourceAction(null);
     setNoteForm(buildDefaultNoteForm(game, isLive));
@@ -1052,6 +1115,8 @@ export default function Game({ variant = "full" }) {
     setAnalysisForm(buildInitialAnalysisForm(game, isLive));
     setAnalysisError("");
     setAnalysisResult(null);
+    setAnalysisUniformOpen(false);
+    setAnalysisSaveStatus("");
     setAnalysisModalOpen(true);
   };
 
@@ -1073,6 +1138,8 @@ export default function Game({ variant = "full" }) {
     setAnalysisLoading(false);
     setAnalysisError("");
     setAnalysisResult(null);
+    setAnalysisUniformOpen(false);
+    setAnalysisSaveStatus("");
   };
 
   const requestCancelNote = () => {
@@ -1115,6 +1182,7 @@ export default function Game({ variant = "full" }) {
 
   const analysisValidation = validateAnalysisForm(analysisForm, game, isLive);
   const analysisPeriodOptions = buildAnalysisPeriodOptions(game?.period || 4);
+  const analysisSegmentOptions = buildAnalysisSegmentOptions(game, isLive);
   const minMinuteOptions = buildAnalysisMinuteOptions(analysisForm.minPeriod);
   const minSecondOptions = buildAnalysisSecondOptions(analysisForm.minPeriod, analysisForm.minMinutes);
   const maxMinuteOptions = buildAnalysisMinuteOptions(analysisForm.maxPeriod);
@@ -1145,10 +1213,52 @@ export default function Game({ variant = "full" }) {
         },
       });
       setAnalysisResult(result);
+      setAnalysisUniformOpen(false);
+      setAnalysisSaveStatus("");
     } catch (error) {
       setAnalysisError(error?.message || "Unable to generate analysis.");
     } finally {
       setAnalysisLoading(false);
+    }
+  };
+
+  const saveAnalysisToVault = async () => {
+    if (!user?.id || !analysisResult || analysisSaving || !gameId) return;
+    const title = `${analysisValidation.rangeLabel} Analysis`;
+    const recordId = analysisRecordParam || crypto.randomUUID();
+    const timestamp = new Date().toISOString();
+    const record = {
+      id: recordId,
+      type: TOOL_RECORD_TYPES.GAME_ANALYSIS,
+      title,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      payload: {
+        gameId,
+        rangeLabel: analysisValidation.rangeLabel,
+        analysisForm,
+        analysisResult,
+      },
+    };
+    try {
+      setAnalysisSaving(true);
+      const savedRecord = accountsEnabled
+        ? await saveToolRecordRemote(user.id, record)
+        : saveToolRecord(user.id, record);
+      if (!savedRecord) return;
+      const nextParams = new URLSearchParams(params);
+      nextParams.set("analysis", savedRecord.id);
+      setParams(nextParams, { replace: true });
+      setAnalysisSaveStatus(`Saved to My Vault as ${savedRecord.title}`);
+    } catch (error) {
+      const savedRecord = saveToolRecord(user.id, record);
+      if (!savedRecord) return;
+      const nextParams = new URLSearchParams(params);
+      nextParams.set("analysis", savedRecord.id);
+      setParams(nextParams, { replace: true });
+      setAnalysisSaveStatus(`Saved locally as ${savedRecord.title}`);
+    } finally {
+      setAnalysisSaving(false);
     }
   };
 
@@ -2133,17 +2243,15 @@ export default function Game({ variant = "full" }) {
             <Link to={`/g/${gameId}/notes${notesParams}`}>
               View Notes
             </Link>
-            {isAdmin && (
-              <button
-                type="button"
-                className={styles.navButton}
-                onClick={openAnalysisModal}
-                disabled={!hasAnalysisData || isPregame}
-                title={analysisDisabledReason || undefined}
-              >
-                Analysis
-              </button>
-            )}
+            <button
+              type="button"
+              className={styles.navButton}
+              onClick={openAnalysisModal}
+              disabled={!hasAnalysisData || isPregame}
+              title={analysisDisabledReason || undefined}
+            >
+              Analysis
+            </button>
           </div>
 
           <div className={styles.pbpWheel} ref={pbpWheelRef} onScroll={clearHoldTimer}>
@@ -2396,6 +2504,23 @@ export default function Game({ variant = "full" }) {
               </div>
             </div>
 
+            <div className={styles.noteTimeRow}>
+              <div className={styles.noteTimeLabel}>Segment shortcut</div>
+              <div className={styles.noteTimeControls}>
+                <select
+                  className={styles.noteSelect}
+                  value={analysisForm.segmentShortcut || "custom"}
+                  onChange={(event) => updateAnalysisSegmentShortcut(event.target.value)}
+                >
+                  {analysisSegmentOptions.map((option) => (
+                    <option key={`segment-${option.value}`} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             {analysisValidation.error ? (
               <div className={styles.analysisError}>{analysisValidation.error}</div>
             ) : (
@@ -2403,6 +2528,7 @@ export default function Game({ variant = "full" }) {
             )}
 
             {analysisError ? <div className={styles.analysisError}>{analysisError}</div> : null}
+            {analysisSaveStatus ? <div className={styles.analysisRangeSummary}>{analysisSaveStatus}</div> : null}
 
             {analysisResult ? (
               <div className={styles.analysisResult}>
@@ -2460,16 +2586,68 @@ export default function Game({ variant = "full" }) {
                   </div>
                   ) : null
                 ) : null}
+                {analysisResult.uniformDetails && (
+                  <div className={styles.analysisUniformWrap}>
+                    <button
+                      type="button"
+                      className={styles.analysisUniformToggle}
+                      onClick={() => setAnalysisUniformOpen((prev) => !prev)}
+                    >
+                      {analysisUniformOpen ? "Hide Uniform View" : "Show Uniform View"}
+                    </button>
+                    {analysisUniformOpen ? (
+                      <div className={styles.analysisUniformPanel}>
+                        {Array.isArray(analysisResult.uniformDetails.swingFactors) && analysisResult.uniformDetails.swingFactors.length ? (
+                          <div className={styles.analysisSection}>
+                            <div className={styles.analysisSectionTitle}>Swing Factors</div>
+                            <ul className={styles.analysisList}>
+                              {analysisResult.uniformDetails.swingFactors.map((item) => (
+                                <li key={item}>{item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                        {Array.isArray(analysisResult.uniformDetails.lineupNotes) && analysisResult.uniformDetails.lineupNotes.length ? (
+                          <div className={styles.analysisSection}>
+                            <div className={styles.analysisSectionTitle}>Lineup Notes</div>
+                            <ul className={styles.analysisList}>
+                              {analysisResult.uniformDetails.lineupNotes.map((item) => (
+                                <li key={item}>{item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                        {Array.isArray(analysisResult.uniformDetails.statOutliers) && analysisResult.uniformDetails.statOutliers.length ? (
+                          <div className={styles.analysisSection}>
+                            <div className={styles.analysisSectionTitle}>Stat Outliers</div>
+                            <ul className={styles.analysisList}>
+                              {analysisResult.uniformDetails.statOutliers.map((item) => (
+                                <li key={item}>{item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                )}
               </div>
             ) : null}
 
             <div className={styles.noteActions}>
-              <button type="button" className={styles.noteCancel} onClick={requestCancelAnalysis} disabled={analysisLoading}>
+              <button type="button" className={styles.noteCancel} onClick={requestCancelAnalysis} disabled={analysisLoading || analysisSaving}>
                 Cancel
               </button>
-              <button type="button" className={styles.noteSave} onClick={generateAnalysis} disabled={analysisLoading || Boolean(analysisValidation.error)}>
-                {analysisLoading ? "Generating..." : "Generate"}
-              </button>
+              <div className={styles.noteActionsRight}>
+                {analysisResult ? (
+                  <button type="button" className={styles.noteSave} onClick={saveAnalysisToVault} disabled={analysisLoading || analysisSaving}>
+                    {analysisSaving ? "Saving..." : "Save"}
+                  </button>
+                ) : null}
+                <button type="button" className={styles.noteSave} onClick={generateAnalysis} disabled={analysisLoading || analysisSaving || Boolean(analysisValidation.error)}>
+                  {analysisLoading ? "Generating..." : "Generate"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

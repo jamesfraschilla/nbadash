@@ -105,7 +105,7 @@ function getUserClient(authHeader: string) {
   });
 }
 
-async function requireAdmin(userClient: ReturnType<typeof createClient>, req: Request) {
+async function requireActiveUser(userClient: ReturnType<typeof createClient>, req: Request) {
   const authHeader = req.headers.get("Authorization") || "";
   let token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
   if (!token) {
@@ -128,11 +128,11 @@ async function requireAdmin(userClient: ReturnType<typeof createClient>, req: Re
     .eq("id", userData.user.id)
     .maybeSingle();
 
-  if (profileError || !profile || profile.role !== "admin" || profile.status !== "active") {
-    return { error: "Admin access required.", status: 403 } as const;
+  if (profileError || !profile || profile.status !== "active") {
+    return { error: "Active account required.", status: 403 } as const;
   }
 
-  return { adminUserId: profile.id } as const;
+  return { userId: profile.id } as const;
 }
 
 async function requestJson(url: string) {
@@ -831,6 +831,11 @@ function buildTemplateAnalysis(features: ReturnType<typeof buildFeaturePayload>)
     headline: `${headlineLead}${margin === 0 ? "" : ` by ${margin}`} from ${features.range.startLabel} to ${features.range.endLabel}.`,
     summary: `${leader.tricode} outscored ${trailer.tricode} ${leaderPoints}-${trailerPoints} over ${features.range.duration}. The score moved from ${features.score.start.away}-${features.score.start.home} to ${features.score.end.away}-${features.score.end.home}.`,
     sections,
+    uniformDetails: {
+      swingFactors,
+      lineupNotes: features.lineupNotes,
+      statOutliers,
+    },
     swingFactors,
     lineupNotes: features.lineupNotes,
     statOutliers,
@@ -909,6 +914,7 @@ async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayloa
         .filter(Boolean)
         .slice(0, 3)
       : [],
+    uniformDetails: null,
     swingFactors: Array.isArray(parsed?.swingFactors) ? parsed.swingFactors.map((item: unknown) => String(item || "").trim()).filter(Boolean) : [],
     lineupNotes: Array.isArray(parsed?.lineupNotes) ? parsed.lineupNotes.map((item: unknown) => String(item || "").trim()).filter(Boolean) : [],
     statOutliers: Array.isArray(parsed?.statOutliers) ? parsed.statOutliers.map((item: unknown) => String(item || "").trim()).filter(Boolean) : [],
@@ -931,7 +937,7 @@ Deno.serve(async (req) => {
     return jsonResponse(500, { error: error instanceof Error ? error.message : "Configuration error." });
   }
 
-  const permission = await requireAdmin(userClient, req);
+  const permission = await requireActiveUser(userClient, req);
   if ("error" in permission) {
     return jsonResponse(permission.status, { error: permission.error });
   }
@@ -963,6 +969,7 @@ Deno.serve(async (req) => {
 
     return jsonResponse(200, {
       ...analysis,
+      uniformDetails: templateAnalysis.uniformDetails,
       rangeLabel: `${features.range.startLabel} to ${features.range.endLabel}`,
     });
   } catch (error) {
