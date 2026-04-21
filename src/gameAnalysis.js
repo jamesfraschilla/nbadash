@@ -104,13 +104,46 @@ export function buildCurrentAnalysisPoint(game, isLive) {
   });
 }
 
+function isAnalysisAnchorAction(action, livePeriod) {
+  const actionType = String(action?.actionType || "").toLowerCase();
+  const subType = String(action?.subType || "").toLowerCase();
+  const period = safeNumber(action?.period, 0);
+  if (!period || (livePeriod && period > livePeriod)) return false;
+  if (actionType === "timeout") return true;
+  return actionType === "period" && subType === "start";
+}
+
+function buildLiveDefaultMinPoint(game) {
+  const livePeriod = safeNumber(game?.period, 0);
+  const actions = Array.isArray(game?.playByPlayActions) ? game.playByPlayActions : [];
+  const anchor = [...actions]
+    .filter((action) => isAnalysisAnchorAction(action, livePeriod))
+    .sort((a, b) => safeNumber(b?.orderNumber ?? b?.actionNumber, 0) - safeNumber(a?.orderNumber ?? a?.actionNumber, 0))[0];
+
+  if (!anchor) return null;
+
+  const normalizedClock = normalizeClock(anchor.clock);
+  const [minutesRaw, secondsRaw] = normalizedClock.split(":");
+  return normalizeAnalysisPoint({
+    period: safeNumber(anchor.period, 1),
+    minutes: safeNumber(minutesRaw, analysisPeriodLengthMinutes(safeNumber(anchor.period, 1))),
+    seconds: safeNumber(secondsRaw, 0),
+  });
+}
+
 export function buildInitialAnalysisForm(game, isLive) {
   const maxPoint = buildCurrentAnalysisPoint(game, isLive);
-  const minPoint = normalizeAnalysisPoint({
-    period: 1,
-    minutes: analysisPeriodLengthMinutes(1),
-    seconds: 0,
-  });
+  const minPoint = isLive
+    ? (buildLiveDefaultMinPoint(game) || normalizeAnalysisPoint({
+      period: 1,
+      minutes: analysisPeriodLengthMinutes(1),
+      seconds: 0,
+    }))
+    : normalizeAnalysisPoint({
+      period: 1,
+      minutes: analysisPeriodLengthMinutes(1),
+      seconds: 0,
+    });
   return {
     minPeriod: String(minPoint.period),
     minMinutes: String(minPoint.minutes),

@@ -88,21 +88,24 @@ function describeLineup(players: Array<Record<string, unknown>>) {
     .join(", ");
 }
 
-function getAdminClient() {
+function getUserClient(authHeader: string) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-  if (!supabaseUrl || !serviceRoleKey) {
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+  if (!supabaseUrl || !anonKey) {
     throw new Error("Supabase function secrets are missing.");
   }
-  return createClient(supabaseUrl, serviceRoleKey, {
+  return createClient(supabaseUrl, anonKey, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
     },
+    global: {
+      headers: authHeader ? { Authorization: authHeader } : {},
+    },
   });
 }
 
-async function requireAdmin(adminClient: ReturnType<typeof createClient>, req: Request) {
+async function requireAdmin(userClient: ReturnType<typeof createClient>, req: Request) {
   const authHeader = req.headers.get("Authorization") || "";
   let token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
   if (!token) {
@@ -114,12 +117,12 @@ async function requireAdmin(adminClient: ReturnType<typeof createClient>, req: R
     return { error: "Missing authorization token.", status: 401 } as const;
   }
 
-  const { data: userData, error: authError } = await adminClient.auth.getUser(token);
+  const { data: userData, error: authError } = await userClient.auth.getUser(token);
   if (authError || !userData?.user?.id) {
     return { error: "Unable to verify session.", status: 401 } as const;
   }
 
-  const { data: profile, error: profileError } = await adminClient
+  const { data: profile, error: profileError } = await userClient
     .from("profiles")
     .select("id,role,status")
     .eq("id", userData.user.id)
@@ -514,6 +517,27 @@ function describeLineupString(players: string) {
   return players;
 }
 
+function leaderInfo(features: ReturnType<typeof buildFeaturePayload>) {
+  const { home, away } = features.teams;
+  const homeMargin = safeNumber(features.score.margin.home, 0);
+  const leader = homeMargin >= 0 ? home : away;
+  const trailer = homeMargin >= 0 ? away : home;
+  const leaderPoints = homeMargin >= 0
+    ? safeNumber(features.score.rangePoints.home, 0)
+    : safeNumber(features.score.rangePoints.away, 0);
+  const trailerPoints = homeMargin >= 0
+    ? safeNumber(features.score.rangePoints.away, 0)
+    : safeNumber(features.score.rangePoints.home, 0);
+  return {
+    homeMargin,
+    margin: Math.abs(homeMargin),
+    leader,
+    trailer,
+    leaderPoints,
+    trailerPoints,
+  };
+}
+
 function buildFeaturePayload(
   game: Record<string, unknown>,
   minutesData: Record<string, unknown> | null,
@@ -629,6 +653,107 @@ function buildFeaturePayload(
   };
 }
 
+function buildInsightSignals(features: ReturnType<typeof buildFeaturePayload>) {
+  const { home, away } = features.teams;
+  const { leader, trailer, margin } = leaderInfo(features);
+  const signals = [
+    {
+      key: "run",
+      title: "Run",
+      strength: Math.max(
+        safeNumber(home.largestRun?.points, 0),
+        safeNumber(away.largestRun?.points, 0),
+      ),
+      items: [home, away]
+        .filter((team) => team.largestRun?.points)
+        .sort((a, b) => safeNumber(b.largestRun?.points, 0) - safeNumber(a.largestRun?.points, 0))
+        .slice(0, 1)
+        .map((team) => `${team.tricode} had the biggest unanswered run at ${team.largestRun?.points}-0 from ${team.largestRun?.startLabel} to ${team.largestRun?.endLabel}.`),
+    },
+    {
+      key: "turnovers",
+      title: "Possession Battle",
+      strength: Math.abs(home.totals.turnovers - away.totals.turnovers) * 1.2,
+      items: [
+        `${home.tricode} turnovers: ${home.totals.turnovers}. ${away.tricode} turnovers: ${away.totals.turnovers}.`,
+        `${home.tricode} points off turnovers: ${home.totals.pointsOffTurnovers}. ${away.tricode} points off turnovers: ${away.totals.pointsOffTurnovers}.`,
+      ],
+    },
+    {
+      key: "paint",
+      title: "Shot Profile",
+      strength: Math.abs(home.totals.paintPoints - away.totals.paintPoints),
+      items: [
+        `${home.tricode} paint points: ${home.totals.paintPoints}. ${away.tricode} paint points: ${away.totals.paintPoints}.`,
+        `${home.tricode} rim scoring was ${home.totals.rimFieldGoalsMade}-${home.totals.rimFieldGoalsAttempted}; ${away.tricode} was ${away.totals.rimFieldGoalsMade}-${away.totals.rimFieldGoalsAttempted}.`,
+      ],
+    },
+    {
+      key: "transition",
+      title: "Transition",
+      strength: Math.abs(home.totals.transitionPoints - away.totals.transitionPoints),
+      items: [
+        `${home.tricode} transition points: ${home.totals.transitionPoints}. ${away.tricode} transition points: ${away.totals.transitionPoints}.`,
+        `${home.tricode} second-chance points: ${home.totals.secondChancePoints}. ${away.tricode} second-chance points: ${away.totals.secondChancePoints}.`,
+      ],
+    },
+    {
+      key: "shooting",
+      title: "Shooting",
+      strength: Math.abs(home.shooting.fgPct - away.shooting.fgPct) + (margin * 0.5),
+      items: [
+        `${home.tricode} shot ${home.totals.fieldGoalsMade}-${home.totals.fieldGoalsAttempted} (${home.shooting.fgPct}%) versus ${away.tricode} at ${away.totals.fieldGoalsMade}-${away.totals.fieldGoalsAttempted} (${away.shooting.fgPct}%).`,
+        `${home.tricode} from three: ${home.totals.threePointersMade}-${home.totals.threePointersAttempted}; ${away.tricode}: ${away.totals.threePointersMade}-${away.totals.threePointersAttempted}.`,
+      ],
+    },
+    {
+      key: "lineups",
+      title: "Lineups",
+      strength: features.lineupNotes.length ? 3 : 0,
+      items: features.lineupNotes.slice(0, 2),
+    },
+    {
+      key: "freeThrows",
+      title: "Free Throws",
+      strength: Math.abs(home.totals.freeThrowsAttempted - away.totals.freeThrowsAttempted),
+      items: [
+        `${home.tricode} free throws: ${home.totals.freeThrowsMade}-${home.totals.freeThrowsAttempted}. ${away.tricode}: ${away.totals.freeThrowsMade}-${away.totals.freeThrowsAttempted}.`,
+      ],
+    },
+    {
+      key: "gameFlow",
+      title: "Game Flow",
+      strength: margin,
+      items: [
+        `${leader.tricode} won the stretch ${leaderPointsLabel(features)} and pushed the score from ${features.score.start.away}-${features.score.start.home} to ${features.score.end.away}-${features.score.end.home}.`,
+        `${leader.tricode} controlled this window by ${margin} point${margin === 1 ? "" : "s"} over ${features.range.duration}.`,
+      ],
+    },
+  ];
+
+  return signals
+    .map((signal) => ({
+      ...signal,
+      items: signal.items.filter(Boolean),
+    }))
+    .filter((signal) => signal.strength > 0 && signal.items.length);
+}
+
+function leaderPointsLabel(features: ReturnType<typeof buildFeaturePayload>) {
+  const info = leaderInfo(features);
+  return `${info.leaderPoints}-${info.trailerPoints}`;
+}
+
+function buildTemplateSections(features: ReturnType<typeof buildFeaturePayload>) {
+  return buildInsightSignals(features)
+    .sort((a, b) => b.strength - a.strength)
+    .slice(0, 3)
+    .map((signal) => ({
+      title: signal.title,
+      items: signal.items.slice(0, signal.key === "gameFlow" ? 1 : 2),
+    }));
+}
+
 function buildSwingFactors(features: ReturnType<typeof buildFeaturePayload>) {
   const { home, away } = features.teams;
   const factors = [
@@ -688,27 +813,27 @@ function buildStatOutliers(features: ReturnType<typeof buildFeaturePayload>) {
 }
 
 function buildTemplateAnalysis(features: ReturnType<typeof buildFeaturePayload>) {
-  const { home, away } = features.teams;
-  const homeMargin = safeNumber(features.score.margin.home, 0);
-  const leader = homeMargin >= 0 ? home.tricode : away.tricode;
-  const trailer = homeMargin >= 0 ? away.tricode : home.tricode;
-  const margin = Math.abs(homeMargin);
-  const leaderPoints = homeMargin >= 0 ? safeNumber(features.score.rangePoints.home, 0) : safeNumber(features.score.rangePoints.away, 0);
-  const trailerPoints = homeMargin >= 0 ? safeNumber(features.score.rangePoints.away, 0) : safeNumber(features.score.rangePoints.home, 0);
+  const { leader, trailer, margin, leaderPoints, trailerPoints } = leaderInfo(features);
   const swingFactors = buildSwingFactors(features);
   const statOutliers = buildStatOutliers(features);
+  const sections = buildTemplateSections(features);
+  const dominantTitle = sections[0]?.title || "Game Flow";
+  const headlineLead = dominantTitle === "Run"
+    ? `${leader.tricode} seized the stretch`
+    : dominantTitle === "Lineups"
+      ? `${leader.tricode} got the better stint`
+      : dominantTitle === "Shooting"
+        ? `${leader.tricode} won the shotmaking window`
+        : `${leader.tricode} won the stretch`;
 
   return {
     source: "template",
-    headline: `${leader} ${margin === 0 ? "played even" : `won the stretch by ${margin}`} from ${features.range.startLabel} to ${features.range.endLabel}.`,
-    summary: `${leader} outscored ${trailer} ${leaderPoints}-${trailerPoints} over ${features.range.duration}. The range moved from ${features.score.start.away}-${features.score.start.home} to ${features.score.end.away}-${features.score.end.home}.`,
+    headline: `${headlineLead}${margin === 0 ? "" : ` by ${margin}`} from ${features.range.startLabel} to ${features.range.endLabel}.`,
+    summary: `${leader.tricode} outscored ${trailer.tricode} ${leaderPoints}-${trailerPoints} over ${features.range.duration}. The score moved from ${features.score.start.away}-${features.score.start.home} to ${features.score.end.away}-${features.score.end.home}.`,
+    sections,
     swingFactors,
     lineupNotes: features.lineupNotes,
     statOutliers,
-    confidenceNotes: [
-      "This pass uses API-only data for the selected game range.",
-      "Lineup and on/off notes are estimated from overlapping minutes stints.",
-    ],
   };
 }
 
@@ -720,9 +845,13 @@ async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayloa
     "You are a basketball analyst.",
     "Use only the structured game data provided.",
     "Do not invent stats, possessions, or player impact claims.",
-    "Focus on scoring swings, lineup/on-off effects, and stat outliers in the selected range.",
-    "Return compact JSON with keys: headline, summary, swingFactors, lineupNotes, statOutliers, confidenceNotes.",
-    "Each list must contain short strings.",
+    "Decide what most shaped this selected stretch instead of forcing equal attention to every category.",
+    "Vary sentence structure and avoid repeating the same opening pattern from one answer to the next.",
+    "If one theme clearly dominates, center the answer on that theme.",
+    "Only mention lineup notes when they materially matter in the range.",
+    "Return compact JSON with keys: headline, summary, sections.",
+    "sections must be an array of 1 to 3 objects with keys: title and items.",
+    "Use short, natural section titles. Each section should have 1 or 2 concise bullet strings.",
   ].join(" ");
 
   const response = await fetch(OPENAI_API_URL, {
@@ -763,10 +892,26 @@ async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayloa
     source: "ai",
     headline: String(parsed?.headline || "").trim(),
     summary: String(parsed?.summary || "").trim(),
+    sections: Array.isArray(parsed?.sections)
+      ? parsed.sections
+        .map((section: unknown) => {
+          if (!section || typeof section !== "object" || Array.isArray(section)) return null;
+          const title = String((section as Record<string, unknown>).title || "").trim();
+          const items = Array.isArray((section as Record<string, unknown>).items)
+            ? ((section as Record<string, unknown>).items as unknown[])
+              .map((item) => String(item || "").trim())
+              .filter(Boolean)
+              .slice(0, 2)
+            : [];
+          if (!title || !items.length) return null;
+          return { title, items };
+        })
+        .filter(Boolean)
+        .slice(0, 3)
+      : [],
     swingFactors: Array.isArray(parsed?.swingFactors) ? parsed.swingFactors.map((item: unknown) => String(item || "").trim()).filter(Boolean) : [],
     lineupNotes: Array.isArray(parsed?.lineupNotes) ? parsed.lineupNotes.map((item: unknown) => String(item || "").trim()).filter(Boolean) : [],
     statOutliers: Array.isArray(parsed?.statOutliers) ? parsed.statOutliers.map((item: unknown) => String(item || "").trim()).filter(Boolean) : [],
-    confidenceNotes: Array.isArray(parsed?.confidenceNotes) ? parsed.confidenceNotes.map((item: unknown) => String(item || "").trim()).filter(Boolean) : [],
   };
 }
 
@@ -779,14 +924,14 @@ Deno.serve(async (req) => {
     return jsonResponse(405, { error: "Method not allowed." });
   }
 
-  let adminClient;
+  let userClient;
   try {
-    adminClient = getAdminClient();
+    userClient = getUserClient(req.headers.get("Authorization") || "");
   } catch (error) {
     return jsonResponse(500, { error: error instanceof Error ? error.message : "Configuration error." });
   }
 
-  const permission = await requireAdmin(adminClient, req);
+  const permission = await requireAdmin(userClient, req);
   if ("error" in permission) {
     return jsonResponse(permission.status, { error: permission.error });
   }

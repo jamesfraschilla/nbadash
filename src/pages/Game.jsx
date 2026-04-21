@@ -2303,9 +2303,6 @@ export default function Game({ variant = "full" }) {
             aria-modal="true"
           >
             <h3>Analysis</h3>
-            <div className={styles.analysisIntro}>
-              Summarize the game between these two points using API-only data.
-            </div>
 
             <div className={styles.noteTimeRow}>
               <div className={styles.noteTimeLabel}>Min time</div>
@@ -2415,7 +2412,20 @@ export default function Game({ variant = "full" }) {
                 {analysisResult.summary ? (
                   <p className={styles.analysisSummary}>{analysisResult.summary}</p>
                 ) : null}
-                {Array.isArray(analysisResult.swingFactors) && analysisResult.swingFactors.length ? (
+                {Array.isArray(analysisResult.sections) && analysisResult.sections.length ? (
+                  analysisResult.sections.map((section) => (
+                    <div key={section.title} className={styles.analysisSection}>
+                      <div className={styles.analysisSectionTitle}>{section.title}</div>
+                      <ul className={styles.analysisList}>
+                        {Array.isArray(section.items) ? section.items.map((item) => (
+                          <li key={item}>{item}</li>
+                        )) : null}
+                      </ul>
+                    </div>
+                  ))
+                ) : null}
+                {!Array.isArray(analysisResult.sections) || !analysisResult.sections.length ? (
+                  Array.isArray(analysisResult.swingFactors) && analysisResult.swingFactors.length ? (
                   <div className={styles.analysisSection}>
                     <div className={styles.analysisSectionTitle}>Swing Factors</div>
                     <ul className={styles.analysisList}>
@@ -2424,8 +2434,10 @@ export default function Game({ variant = "full" }) {
                       ))}
                     </ul>
                   </div>
+                  ) : null
                 ) : null}
-                {Array.isArray(analysisResult.lineupNotes) && analysisResult.lineupNotes.length ? (
+                {!Array.isArray(analysisResult.sections) || !analysisResult.sections.length ? (
+                  Array.isArray(analysisResult.lineupNotes) && analysisResult.lineupNotes.length ? (
                   <div className={styles.analysisSection}>
                     <div className={styles.analysisSectionTitle}>Lineup Notes</div>
                     <ul className={styles.analysisList}>
@@ -2434,8 +2446,10 @@ export default function Game({ variant = "full" }) {
                       ))}
                     </ul>
                   </div>
+                  ) : null
                 ) : null}
-                {Array.isArray(analysisResult.statOutliers) && analysisResult.statOutliers.length ? (
+                {!Array.isArray(analysisResult.sections) || !analysisResult.sections.length ? (
+                  Array.isArray(analysisResult.statOutliers) && analysisResult.statOutliers.length ? (
                   <div className={styles.analysisSection}>
                     <div className={styles.analysisSectionTitle}>Stat Outliers</div>
                     <ul className={styles.analysisList}>
@@ -2444,16 +2458,7 @@ export default function Game({ variant = "full" }) {
                       ))}
                     </ul>
                   </div>
-                ) : null}
-                {Array.isArray(analysisResult.confidenceNotes) && analysisResult.confidenceNotes.length ? (
-                  <div className={styles.analysisSection}>
-                    <div className={styles.analysisSectionTitle}>Notes</div>
-                    <ul className={styles.analysisList}>
-                      {analysisResult.confidenceNotes.map((item) => (
-                        <li key={item}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
+                  ) : null
                 ) : null}
               </div>
             ) : null}

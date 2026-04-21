@@ -277,13 +277,6 @@ html[data-theme="dark"] .pbpWheel {
   color: var(--text);
 }
 
-.analysisIntro {
-  margin-bottom: 12px;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.45;
-}
-
 .noteSourceSummary {
   white-space: pre-wrap;
   margin-bottom: 12px;
