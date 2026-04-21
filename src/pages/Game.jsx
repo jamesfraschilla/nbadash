@@ -2,6 +2,7 @@ import { Link, useSearchParams, useParams } from "react-router-dom";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createNote } from "../accountData.js";
+import { requestGameAnalysis } from "../analysisData.js";
 import {
   fetchCurrentGLeagueRosters,
   fetchCurrentNbaRosters,
@@ -22,6 +23,15 @@ import {
   NOTE_SECOND_OPTIONS,
   NOTE_TAG_OPTIONS,
 } from "../noteHelpers.js";
+import {
+  analysisPeriodLabel,
+  buildAnalysisMinuteOptions,
+  buildAnalysisPeriodOptions,
+  buildAnalysisSecondOptions,
+  buildInitialAnalysisForm,
+  formatAnalysisPoint,
+  validateAnalysisForm,
+} from "../gameAnalysis.js";
 import { gameStatusLabel, normalizeClock } from "../utils.js";
 import BoxScoreTable from "../components/BoxScoreTable.jsx";
 import StatBars from "../components/StatBars.jsx";
@@ -478,7 +488,7 @@ const compareActionsByChronology = (a, b) => {
 
 export default function Game({ variant = "full" }) {
   const { gameId } = useParams();
-  const { user, canUseMatchUps } = useAuth();
+  const { user, canUseMatchUps, isAdmin } = useAuth();
   const [params, setParams] = useSearchParams();
   const dateParam = params.get("d");
   const courtBackUrl = dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`;
@@ -518,6 +528,11 @@ export default function Game({ variant = "full" }) {
     text: "",
     tags: [],
   });
+  const [analysisModalOpen, setAnalysisModalOpen] = useState(false);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisError, setAnalysisError] = useState("");
+  const [analysisResult, setAnalysisResult] = useState(null);
+  const [analysisForm, setAnalysisForm] = useState(() => buildInitialAnalysisForm(null, false));
   const isAtc = variant === "atc";
   const showExtras = !isAtc;
   const notesParams = useMemo(() => {
@@ -749,6 +764,12 @@ export default function Game({ variant = "full" }) {
   const isLive = game?.gameStatus === 2;
   const clock = isLive ? normalizeClock(game?.gameClock) : null;
   const useSnapshots = isLive;
+  const hasAnalysisData = (game?.playByPlayActions || []).length > 0;
+  const analysisDisabledReason = isPregame
+    ? "Analysis is available after tip-off."
+    : !hasAnalysisData
+      ? "Analysis is available once play-by-play data is available."
+      : "";
 
   useEffect(() => {
     let cancelled = false;
@@ -871,6 +892,21 @@ export default function Game({ variant = "full" }) {
     setSnapshots(loadSnapshots(gameId));
   }, [gameId]);
 
+  useEffect(() => {
+    if (!analysisModalOpen) return;
+    if (isLive) {
+      setAnalysisForm((prev) => {
+        const nextDefaults = buildInitialAnalysisForm(game, isLive);
+        return {
+          ...prev,
+          maxPeriod: nextDefaults.maxPeriod,
+          maxMinutes: nextDefaults.maxMinutes,
+          maxSeconds: nextDefaults.maxSeconds,
+        };
+      });
+    }
+  }, [analysisModalOpen, game, isLive]);
+
   const segmentStats = homeTeam?.teamId && awayTeam?.teamId
     ? aggregateSegmentStats({
       actions: game?.playByPlayActions || [],
@@ -985,10 +1021,38 @@ export default function Game({ variant = "full" }) {
     holdPointerStartRef.current = null;
   };
 
+  const updateAnalysisPoint = (prefix, field, value) => {
+    if (prefix === "max" && isLive) return;
+    setAnalysisForm((prev) => {
+      const next = {
+        ...prev,
+        [`${prefix}${field}`]: value,
+      };
+      const period = Number(next[`${prefix}Period`]) || 1;
+      const minuteOptions = buildAnalysisMinuteOptions(period);
+      if (!minuteOptions.includes(String(next[`${prefix}Minutes`]))) {
+        next[`${prefix}Minutes`] = minuteOptions[0];
+      }
+      const secondOptions = buildAnalysisSecondOptions(period, next[`${prefix}Minutes`]);
+      const normalizedSeconds = String(next[`${prefix}Seconds`] ?? "00").padStart(2, "0");
+      if (!secondOptions.includes(normalizedSeconds)) {
+        next[`${prefix}Seconds`] = secondOptions[0];
+      }
+      return next;
+    });
+  };
+
   const openAddNote = () => {
     setNoteSourceAction(null);
     setNoteForm(buildDefaultNoteForm(game, isLive));
     setNoteModalOpen(true);
+  };
+
+  const openAnalysisModal = () => {
+    setAnalysisForm(buildInitialAnalysisForm(game, isLive));
+    setAnalysisError("");
+    setAnalysisResult(null);
+    setAnalysisModalOpen(true);
   };
 
   const openAddNoteForAction = (action) => {
@@ -1004,8 +1068,19 @@ export default function Game({ variant = "full" }) {
     setNoteSourceAction(null);
   };
 
+  const closeAnalysisModal = () => {
+    setAnalysisModalOpen(false);
+    setAnalysisLoading(false);
+    setAnalysisError("");
+    setAnalysisResult(null);
+  };
+
   const requestCancelNote = () => {
     closeAddNote();
+  };
+
+  const requestCancelAnalysis = () => {
+    closeAnalysisModal();
   };
 
   const saveNewNote = async () => {
@@ -1035,6 +1110,45 @@ export default function Game({ variant = "full" }) {
     } catch (error) {
       setSavingNewNote(false);
       window.alert(error?.message || "Unable to save note.");
+    }
+  };
+
+  const analysisValidation = validateAnalysisForm(analysisForm, game, isLive);
+  const analysisPeriodOptions = buildAnalysisPeriodOptions(game?.period || 4);
+  const minMinuteOptions = buildAnalysisMinuteOptions(analysisForm.minPeriod);
+  const minSecondOptions = buildAnalysisSecondOptions(analysisForm.minPeriod, analysisForm.minMinutes);
+  const maxMinuteOptions = buildAnalysisMinuteOptions(analysisForm.maxPeriod);
+  const maxSecondOptions = buildAnalysisSecondOptions(analysisForm.maxPeriod, analysisForm.maxMinutes);
+
+  const generateAnalysis = async () => {
+    if (!gameId || analysisLoading) return;
+    if (analysisValidation.error) {
+      setAnalysisError(analysisValidation.error);
+      return;
+    }
+
+    const { minPoint, maxPoint } = analysisValidation;
+    const toClock = (point) => `${point.minutes}:${String(point.seconds).padStart(2, "0")}`;
+
+    try {
+      setAnalysisLoading(true);
+      setAnalysisError("");
+      const result = await requestGameAnalysis({
+        gameId,
+        range: {
+          minPeriod: minPoint.period,
+          minClock: toClock(minPoint),
+          minLabel: formatAnalysisPoint(minPoint),
+          maxPeriod: maxPoint.period,
+          maxClock: toClock(maxPoint),
+          maxLabel: formatAnalysisPoint(maxPoint),
+        },
+      });
+      setAnalysisResult(result);
+    } catch (error) {
+      setAnalysisError(error?.message || "Unable to generate analysis.");
+    } finally {
+      setAnalysisLoading(false);
     }
   };
 
@@ -2019,6 +2133,17 @@ export default function Game({ variant = "full" }) {
             <Link to={`/g/${gameId}/notes${notesParams}`}>
               View Notes
             </Link>
+            {isAdmin && (
+              <button
+                type="button"
+                className={styles.navButton}
+                onClick={openAnalysisModal}
+                disabled={!hasAnalysisData || isPregame}
+                title={analysisDisabledReason || undefined}
+              >
+                Analysis
+              </button>
+            )}
           </div>
 
           <div className={styles.pbpWheel} ref={pbpWheelRef} onScroll={clearHoldTimer}>
@@ -2167,6 +2292,182 @@ export default function Game({ variant = "full" }) {
             </button>
           </div>
         </>
+      )}
+
+      {analysisModalOpen && (
+        <div className={styles.noteOverlay} onClick={requestCancelAnalysis}>
+          <div
+            className={`${styles.noteModal} ${styles.analysisModal}`}
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <h3>Analysis</h3>
+            <div className={styles.analysisIntro}>
+              Summarize the game between these two points using API-only data.
+            </div>
+
+            <div className={styles.noteTimeRow}>
+              <div className={styles.noteTimeLabel}>Min time</div>
+              <div className={styles.noteTimeControls}>
+                <select
+                  className={styles.noteSelect}
+                  value={analysisForm.minPeriod}
+                  onChange={(event) => updateAnalysisPoint("min", "Period", event.target.value)}
+                >
+                  {analysisPeriodOptions.map((option) => (
+                    <option key={`min-${option.value}`} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <div className={styles.noteClockSelects}>
+                  <select
+                    className={styles.noteSelect}
+                    value={analysisForm.minMinutes}
+                    onChange={(event) => updateAnalysisPoint("min", "Minutes", event.target.value)}
+                  >
+                    {minMinuteOptions.map((option) => (
+                      <option key={`min-minute-${option}`} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                  <span className={styles.noteClockSeparator}>:</span>
+                  <select
+                    className={styles.noteSelect}
+                    value={analysisForm.minSeconds}
+                    onChange={(event) => updateAnalysisPoint("min", "Seconds", event.target.value)}
+                  >
+                    {minSecondOptions.map((option) => (
+                      <option key={`min-second-${option}`} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.noteTimeRow}>
+              <div className={styles.noteTimeLabel}>Max time</div>
+              <div className={styles.noteTimeControls}>
+                <select
+                  className={styles.noteSelect}
+                  value={analysisForm.maxPeriod}
+                  onChange={(event) => updateAnalysisPoint("max", "Period", event.target.value)}
+                  disabled={isLive}
+                >
+                  {analysisPeriodOptions.map((option) => (
+                    <option key={`max-${option.value}`} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <div className={styles.noteClockSelects}>
+                  <select
+                    className={styles.noteSelect}
+                    value={analysisForm.maxMinutes}
+                    onChange={(event) => updateAnalysisPoint("max", "Minutes", event.target.value)}
+                    disabled={isLive}
+                  >
+                    {maxMinuteOptions.map((option) => (
+                      <option key={`max-minute-${option}`} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                  <span className={styles.noteClockSeparator}>:</span>
+                  <select
+                    className={styles.noteSelect}
+                    value={analysisForm.maxSeconds}
+                    onChange={(event) => updateAnalysisPoint("max", "Seconds", event.target.value)}
+                    disabled={isLive}
+                  >
+                    {maxSecondOptions.map((option) => (
+                      <option key={`max-second-${option}`} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {isLive ? (
+                  <span className={styles.analysisLiveCap}>
+                    Live max: {analysisPeriodLabel(game?.period)} {clock}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+
+            {analysisValidation.error ? (
+              <div className={styles.analysisError}>{analysisValidation.error}</div>
+            ) : (
+              <div className={styles.analysisRangeSummary}>{analysisValidation.rangeLabel}</div>
+            )}
+
+            {analysisError ? <div className={styles.analysisError}>{analysisError}</div> : null}
+
+            {analysisResult ? (
+              <div className={styles.analysisResult}>
+                {analysisResult.headline ? (
+                  <div className={styles.analysisHeadline}>{analysisResult.headline}</div>
+                ) : null}
+                {analysisResult.summary ? (
+                  <p className={styles.analysisSummary}>{analysisResult.summary}</p>
+                ) : null}
+                {Array.isArray(analysisResult.swingFactors) && analysisResult.swingFactors.length ? (
+                  <div className={styles.analysisSection}>
+                    <div className={styles.analysisSectionTitle}>Swing Factors</div>
+                    <ul className={styles.analysisList}>
+                      {analysisResult.swingFactors.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {Array.isArray(analysisResult.lineupNotes) && analysisResult.lineupNotes.length ? (
+                  <div className={styles.analysisSection}>
+                    <div className={styles.analysisSectionTitle}>Lineup Notes</div>
+                    <ul className={styles.analysisList}>
+                      {analysisResult.lineupNotes.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {Array.isArray(analysisResult.statOutliers) && analysisResult.statOutliers.length ? (
+                  <div className={styles.analysisSection}>
+                    <div className={styles.analysisSectionTitle}>Stat Outliers</div>
+                    <ul className={styles.analysisList}>
+                      {analysisResult.statOutliers.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {Array.isArray(analysisResult.confidenceNotes) && analysisResult.confidenceNotes.length ? (
+                  <div className={styles.analysisSection}>
+                    <div className={styles.analysisSectionTitle}>Notes</div>
+                    <ul className={styles.analysisList}>
+                      {analysisResult.confidenceNotes.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className={styles.noteActions}>
+              <button type="button" className={styles.noteCancel} onClick={requestCancelAnalysis} disabled={analysisLoading}>
+                Cancel
+              </button>
+              <button type="button" className={styles.noteSave} onClick={generateAnalysis} disabled={analysisLoading || Boolean(analysisValidation.error)}>
+                {analysisLoading ? "Generating..." : "Generate"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {noteModalOpen && (
