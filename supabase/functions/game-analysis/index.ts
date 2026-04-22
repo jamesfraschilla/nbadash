@@ -262,6 +262,181 @@ function buildTeamActionTotals(teamId: string) {
   };
 }
 
+function buildPlayerTotals(teamId: string, personId: string, name: string) {
+  return {
+    teamId,
+    personId,
+    name,
+    points: 0,
+    fieldGoalsMade: 0,
+    fieldGoalsAttempted: 0,
+    threePointersMade: 0,
+    threePointersAttempted: 0,
+    freeThrowsMade: 0,
+    freeThrowsAttempted: 0,
+    reboundsTotal: 0,
+    reboundsOffensive: 0,
+    assists: 0,
+    steals: 0,
+    blocks: 0,
+    turnovers: 0,
+    foulsPersonal: 0,
+  };
+}
+
+function getActionPlayerIdentity(action: Record<string, unknown>) {
+  const personId = String(
+    action.personId ||
+    action.playerId ||
+    action.person_id ||
+    action.player_id ||
+    "",
+  ).trim();
+  const name = String(
+    action.playerNameI ||
+    action.playerName ||
+    action.nameI ||
+    action.fullName ||
+    action.player ||
+    "",
+  ).trim();
+  if (!personId && !name) return null;
+  return {
+    personId: personId || name.toLowerCase().replace(/\s+/g, "-"),
+    name: name || "Unknown",
+  };
+}
+
+function buildPlayerRangeStats(
+  rangeActions: Array<Record<string, unknown>>,
+  scoringEvents: Array<Record<string, unknown>>,
+) {
+  const playerTotals = new Map<string, ReturnType<typeof buildPlayerTotals>>();
+  const scoringByActionNumber = new Map<number, number>();
+
+  scoringEvents.forEach((event) => {
+    scoringByActionNumber.set(safeNumber(event.actionNumber, 0), safeNumber(event.points, 0));
+  });
+
+  const upsertPlayer = (action: Record<string, unknown>) => {
+    const teamId = String(action.teamId || "").trim();
+    const identity = getActionPlayerIdentity(action);
+    if (!teamId || !identity) return null;
+    const key = `${teamId}:${identity.personId}`;
+    if (!playerTotals.has(key)) {
+      playerTotals.set(key, buildPlayerTotals(teamId, identity.personId, identity.name));
+    }
+    return playerTotals.get(key)!;
+  };
+
+  for (const action of rangeActions) {
+    const actionType = String(action.actionType || "").toLowerCase();
+    const player = upsertPlayer(action);
+    if (!player) continue;
+    const points = scoringByActionNumber.get(safeNumber(action.actionNumber, 0)) || 0;
+    const made = points > 0 || String(action.shotResult || "").toLowerCase() === "made";
+
+    if (actionType === "2pt" || actionType === "3pt") {
+      player.fieldGoalsAttempted += 1;
+      if (actionType === "3pt") player.threePointersAttempted += 1;
+      if (made) {
+        player.points += points;
+        player.fieldGoalsMade += 1;
+        if (actionType === "3pt") player.threePointersMade += 1;
+      }
+    }
+
+    if (actionType === "freethrow") {
+      player.freeThrowsAttempted += 1;
+      if (made) {
+        player.freeThrowsMade += 1;
+        player.points += points || 1;
+      }
+    }
+
+    if (actionType === "rebound") {
+      player.reboundsTotal += 1;
+      const subType = String(action.subType || "").toLowerCase();
+      if (subType.includes("offensive")) player.reboundsOffensive += 1;
+    }
+
+    if (actionType === "assist") player.assists += 1;
+    if (actionType === "steal") player.steals += 1;
+    if (actionType === "block") player.blocks += 1;
+    if (actionType === "turnover") player.turnovers += 1;
+    if (actionType === "foul" && isPersonalFoul(action)) player.foulsPersonal += 1;
+  }
+
+  return [...playerTotals.values()];
+}
+
+function buildPlayerInsights(
+  playerTotals: Array<ReturnType<typeof buildPlayerTotals>>,
+  homeTeam: Record<string, unknown>,
+  awayTeam: Record<string, unknown>,
+  homePoints: number,
+  awayPoints: number,
+) {
+  const teamPointsById: Record<string, number> = {
+    [String(homeTeam.teamId || "")]: homePoints,
+    [String(awayTeam.teamId || "")]: awayPoints,
+  };
+  const teamLookup: Record<string, Record<string, unknown>> = {
+    [String(homeTeam.teamId || "")]: homeTeam,
+    [String(awayTeam.teamId || "")]: awayTeam,
+  };
+
+  const featured = Object.keys(teamPointsById)
+    .map((teamId) => {
+      const teamPlayers = playerTotals
+        .filter((entry) => entry.teamId === teamId)
+        .sort((a, b) => {
+          if (b.points !== a.points) return b.points - a.points;
+          if (b.assists !== a.assists) return b.assists - a.assists;
+          return b.reboundsTotal - a.reboundsTotal;
+        });
+      const leader = teamPlayers[0] || null;
+      if (!leader) return null;
+      const teamPoints = Math.max(0, teamPointsById[teamId] || 0);
+      const pointShare = teamPoints > 0 ? leader.points / teamPoints : 0;
+      const statBits = [];
+      if (leader.assists >= 3) statBits.push(`${leader.assists} AST`);
+      if (leader.reboundsTotal >= 4) statBits.push(`${leader.reboundsTotal} REB`);
+      if (leader.steals >= 2) statBits.push(`${leader.steals} STL`);
+      if (leader.blocks >= 2) statBits.push(`${leader.blocks} BLK`);
+
+      const noteStrength = (leader.points * 3) + (pointShare * 10) + leader.assists + leader.reboundsTotal;
+      if (leader.points < 6 && !statBits.length) return null;
+
+      const detail = statBits.length ? ` with ${statBits.join(", ")}` : "";
+      const shareText = teamPoints > 0 && (pointShare >= 0.4 || leader.points >= 10)
+        ? `, accounting for ${leader.points} of ${teamLabel(teamLookup[teamId])}'s ${teamPoints} points`
+        : "";
+
+      return {
+        strength: noteStrength,
+        note: `${teamLabel(teamLookup[teamId])} player note: ${leader.name} had ${leader.points} PTS${detail}${shareText}.`,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b!.strength - a!.strength)
+    .map((entry) => entry!.note);
+
+  const negativeNotes = playerTotals
+    .filter((entry) => entry.turnovers >= 3 || entry.foulsPersonal >= 4)
+    .sort((a, b) => ((b.turnovers + b.foulsPersonal) - (a.turnovers + a.foulsPersonal)))
+    .slice(0, 1)
+    .map((entry) => {
+      const team = teamLookup[entry.teamId];
+      const parts = [];
+      if (entry.turnovers >= 3) parts.push(`${entry.turnovers} TO`);
+      if (entry.foulsPersonal >= 4) parts.push(`${entry.foulsPersonal} PF`);
+      return `${teamLabel(team)} caution: ${entry.name} finished this span with ${parts.join(" and ")}.`;
+    });
+
+  return [...featured, ...negativeNotes].slice(0, 3);
+}
+
 function aggregateRangeStats(
   rangeActions: Array<Record<string, unknown>>,
   scoringEvents: Array<Record<string, unknown>>,
@@ -582,6 +757,7 @@ function buildFeaturePayload(
   const awayMargin = -homeMargin;
 
   const totals = aggregateRangeStats(rangeActions, scoringEvents, homeTeamId, awayTeamId);
+  const playerTotals = buildPlayerRangeStats(rangeActions, scoringEvents);
   const runs = buildRunSummary(scoringEvents, homeTeamId, awayTeamId);
   const lineupInsights = buildLineupInsights(
     minutesData,
@@ -595,6 +771,13 @@ function buildFeaturePayload(
 
   const homeTotals = totals[homeTeamId];
   const awayTotals = totals[awayTeamId];
+  const playerNotes = buildPlayerInsights(
+    playerTotals,
+    homeTeam,
+    awayTeam,
+    homePoints,
+    awayPoints,
+  );
 
   return {
     range: {
@@ -649,6 +832,7 @@ function buildFeaturePayload(
         largestRun: runs[awayTeamId],
       },
     },
+    playerNotes,
     lineupNotes: lineupInsights.lineupNotes,
   };
 }
@@ -705,6 +889,12 @@ function buildInsightSignals(features: ReturnType<typeof buildFeaturePayload>) {
         `${home.tricode} shot ${home.totals.fieldGoalsMade}-${home.totals.fieldGoalsAttempted} (${home.shooting.fgPct}%) versus ${away.tricode} at ${away.totals.fieldGoalsMade}-${away.totals.fieldGoalsAttempted} (${away.shooting.fgPct}%).`,
         `${home.tricode} from three: ${home.totals.threePointersMade}-${home.totals.threePointersAttempted}; ${away.tricode}: ${away.totals.threePointersMade}-${away.totals.threePointersAttempted}.`,
       ],
+    },
+    {
+      key: "players",
+      title: "Players",
+      strength: features.playerNotes.length ? 4.5 : 0,
+      items: features.playerNotes.slice(0, 2),
     },
     {
       key: "lineups",
@@ -801,6 +991,10 @@ function buildStatOutliers(features: ReturnType<typeof buildFeaturePayload>) {
   const { home, away } = features.teams;
   const notes = [];
 
+  if (features.playerNotes.length) {
+    notes.push(...features.playerNotes.slice(0, 2));
+  }
+
   notes.push(`${home.tricode} shot ${home.totals.fieldGoalsMade}-${home.totals.fieldGoalsAttempted} (${home.shooting.fgPct}%) versus ${away.tricode} at ${away.totals.fieldGoalsMade}-${away.totals.fieldGoalsAttempted} (${away.shooting.fgPct}%).`);
   notes.push(`${home.tricode} rim scoring was ${home.totals.rimFieldGoalsMade}-${home.totals.rimFieldGoalsAttempted}; ${away.tricode} was ${away.totals.rimFieldGoalsMade}-${away.totals.rimFieldGoalsAttempted}.`);
   notes.push(`${home.tricode} from three: ${home.totals.threePointersMade}-${home.totals.threePointersAttempted}; ${away.tricode}: ${away.totals.threePointersMade}-${away.totals.threePointersAttempted}.`);
@@ -853,6 +1047,7 @@ async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayloa
     "Decide what most shaped this selected stretch instead of forcing equal attention to every category.",
     "Vary sentence structure and avoid repeating the same opening pattern from one answer to the next.",
     "If one theme clearly dominates, center the answer on that theme.",
+    "Call out notable individual player stretches when the provided data clearly supports it, especially when one player drove a large share of a team's scoring in the selected window.",
     "Only mention lineup notes when they materially matter in the range.",
     "Return compact JSON with keys: headline, summary, sections.",
     "sections must be an array of 1 to 3 objects with keys: title and items.",
