@@ -541,26 +541,48 @@ function buildRosterPlayers(teamBoxPlayers, stintPlayers, extraRosterPlayers, te
   const roster = [];
   const byId = new Map();
   const staticPositionMap = buildStaticRosterPositionMap(teamId);
+  const extraRosterById = new Map(
+    (Array.isArray(extraRosterPlayers) ? extraRosterPlayers : [])
+      .map((player) => [String(player?.personId || "").trim(), player])
+      .filter(([personId]) => personId)
+  );
 
-  (teamBoxPlayers || []).forEach((player) => {
-    const normalized = normalizeRosterPlayer(player, null, teamId, staticPositionMap, profileMap);
-    if (!normalized || byId.has(normalized.personId)) return;
+  const upsertRosterPlayer = (player, fallback = null) => {
+    const normalized = normalizeRosterPlayer(player, fallback, teamId, staticPositionMap, profileMap);
+    if (!normalized) return;
+
+    const existing = byId.get(normalized.personId);
+    if (existing) {
+      existing.jerseyNum = existing.jerseyNum || normalized.jerseyNum;
+      existing.firstName = existing.firstName || normalized.firstName;
+      existing.lastName = existing.lastName || normalized.lastName;
+      existing.fullName = existing.fullName || normalized.fullName;
+      existing.displayName = existing.displayName || normalized.displayName;
+      existing.position = existing.position || normalized.position;
+      existing.height = existing.height || normalized.height;
+      existing.teamId = existing.teamId || normalized.teamId;
+      return;
+    }
+
     byId.set(normalized.personId, normalized);
     roster.push(normalized);
+  };
+
+  (teamBoxPlayers || []).forEach((player) => {
+    const fallback = extraRosterById.get(String(player?.personId || "").trim()) || null;
+    upsertRosterPlayer(player, fallback);
   });
 
   normalizeStintPlayers(stintPlayers).forEach((player) => {
-    const normalized = normalizeRosterPlayer(null, player, teamId, staticPositionMap, profileMap);
-    if (!normalized || byId.has(normalized.personId)) return;
-    byId.set(normalized.personId, normalized);
-    roster.push(normalized);
+    const fallback = extraRosterById.get(String(player?.personId || "").trim()) || null;
+    upsertRosterPlayer(null, fallback || player);
+    if (fallback) {
+      upsertRosterPlayer(null, player);
+    }
   });
 
   (extraRosterPlayers || []).forEach((player) => {
-    const normalized = normalizeRosterPlayer(player, null, teamId, staticPositionMap, profileMap);
-    if (!normalized || byId.has(normalized.personId)) return;
-    byId.set(normalized.personId, normalized);
-    roster.push(normalized);
+    upsertRosterPlayer(player, null);
   });
 
   return roster;
