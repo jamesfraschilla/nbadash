@@ -1675,6 +1675,18 @@ export default function MatchUps({
     }));
   };
 
+  const handleResetToDefault = () => {
+    setPickerState(null);
+    setRefreshMenuOpen(false);
+    setPersistedState((current) => ({
+      ...current,
+      slots: {
+        away: [],
+        home: [],
+      },
+    }));
+  };
+
   const updateCollapsed = () => {
     setPickerState(null);
     setRefreshMenuOpen(false);
@@ -2037,6 +2049,9 @@ export default function MatchUps({
       {refreshMenuOpen ? (
         <div ref={refreshMenuRef} className={styles.refreshMenu}>
           <div className={styles.refreshMenuTitle}>Reset Match-Ups</div>
+          <button type="button" className={styles.refreshMenuButton} onClick={handleResetToDefault}>
+            Reset to Default
+          </button>
           <button type="button" className={styles.refreshMenuButton} onClick={() => handleRefreshRow("away")}>
             {`Refresh ${awayTeam?.teamTricode || "Away"}`}
           </button>
