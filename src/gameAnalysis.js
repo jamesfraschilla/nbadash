@@ -143,20 +143,36 @@ function isAnalysisAnchorAction(action, livePeriod) {
 
 function buildLiveDefaultMinPoint(game) {
   const livePeriod = safeNumber(game?.period, 0);
+  const currentPoint = buildCurrentAnalysisPoint(game, true);
+  const currentElapsed = analysisPointToElapsedSeconds(currentPoint);
   const actions = Array.isArray(game?.playByPlayActions) ? game.playByPlayActions : [];
   const anchor = [...actions]
     .filter((action) => isAnalysisAnchorAction(action, livePeriod))
-    .sort((a, b) => safeNumber(b?.orderNumber ?? b?.actionNumber, 0) - safeNumber(a?.orderNumber ?? a?.actionNumber, 0))[0];
+    .map((action) => {
+      const normalizedClock = normalizeClock(action.clock);
+      const [minutesRaw, secondsRaw] = normalizedClock.split(":");
+      const point = normalizeAnalysisPoint({
+        period: safeNumber(action.period, 1),
+        minutes: safeNumber(minutesRaw, analysisPeriodLengthMinutes(safeNumber(action.period, 1))),
+        seconds: safeNumber(secondsRaw, 0),
+      });
+      return {
+        action,
+        point,
+        elapsed: analysisPointToElapsedSeconds(point),
+      };
+    })
+    .filter(({ elapsed }) => elapsed < currentElapsed)
+    .sort((a, b) => {
+      const actionDelta = safeNumber(b.action?.orderNumber ?? b.action?.actionNumber, 0)
+        - safeNumber(a.action?.orderNumber ?? a.action?.actionNumber, 0);
+      if (actionDelta !== 0) return actionDelta;
+      return b.elapsed - a.elapsed;
+    })[0];
 
   if (!anchor) return null;
 
-  const normalizedClock = normalizeClock(anchor.clock);
-  const [minutesRaw, secondsRaw] = normalizedClock.split(":");
-  return normalizeAnalysisPoint({
-    period: safeNumber(anchor.period, 1),
-    minutes: safeNumber(minutesRaw, analysisPeriodLengthMinutes(safeNumber(anchor.period, 1))),
-    seconds: safeNumber(secondsRaw, 0),
-  });
+  return anchor.point;
 }
 
 export function buildInitialAnalysisForm(game, isLive) {
