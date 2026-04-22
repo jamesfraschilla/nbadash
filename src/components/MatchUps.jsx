@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { teamLogoUrl } from "../api.js";
 import { MATCHUP_PLAYER_PROFILES } from "../data/matchupProfiles.js";
-import { buildResolvedMatchupProfileMap, listMatchupProfiles } from "../matchupProfileData.js";
+import { buildMatchupProfileMap, buildResolvedMatchupProfileMap, listMatchupProfiles } from "../matchupProfileData.js";
 import rostersByTeamId from "../data/rosters.json";
 import PlayerHeadshot from "./PlayerHeadshot.jsx";
 import { readLocalStorage, writeLocalStorage } from "../storage.js";
@@ -212,6 +212,50 @@ function sortLineupForMatchups(players, profileMap) {
     .map(({ player }) => player);
 }
 
+function buildHeightSortValue(player, profileMap) {
+  const profile = resolveMatchupPlayerProfile(profileMap, player?.personId);
+  return parseHeightToInches(player?.height) ?? profile?.heightIn ?? null;
+}
+
+function sortLineupByHeight(players, profileMap) {
+  return [...players]
+    .map((player, index) => ({
+      player,
+      index,
+      heightIn: buildHeightSortValue(player, profileMap),
+      rank: getPositionRank(player?.position),
+      jersey: Number.parseInt(String(player?.jerseyNum || ""), 10),
+    }))
+    .sort((a, b) => {
+      const aHeight = a.heightIn ?? Number.NEGATIVE_INFINITY;
+      const bHeight = b.heightIn ?? Number.NEGATIVE_INFINITY;
+      if (aHeight !== bHeight) return bHeight - aHeight;
+      if (a.rank !== b.rank) return a.rank - b.rank;
+      const aJersey = Number.isFinite(a.jersey) ? a.jersey : Number.POSITIVE_INFINITY;
+      const bJersey = Number.isFinite(b.jersey) ? b.jersey : Number.POSITIVE_INFINITY;
+      if (aJersey !== bJersey) return aJersey - bJersey;
+      return a.index - b.index;
+    })
+    .map(({ player }) => player);
+}
+
+function hasExplicitSmartCriteria(profile) {
+  if (!profile || typeof profile !== "object") return false;
+  return Boolean(
+    String(profile.archetype || "").trim()
+    || String(profile.defenderRole || "").trim()
+    || String(profile.offensiveRole || "").trim()
+    || (Array.isArray(profile.preferOffensiveRoles) && profile.preferOffensiveRoles.length)
+    || (Array.isArray(profile.avoidOffensiveRoles) && profile.avoidOffensiveRoles.length)
+    || (Array.isArray(profile.preferOpponentIds) && profile.preferOpponentIds.length)
+    || (Array.isArray(profile.avoidOpponentIds) && profile.avoidOpponentIds.length)
+  );
+}
+
+function hasSmartCriteriaForLineup(players, profileMap) {
+  return players.some((player) => hasExplicitSmartCriteria(profileMap?.[String(player?.personId || "").trim()]));
+}
+
 function scoreMatchup(defender, offensivePlayer, profileMap) {
   const defenderProfile = resolveMatchupPlayerProfile(profileMap, defender?.personId);
   const offensiveProfile = resolveMatchupPlayerProfile(profileMap, offensivePlayer?.personId);
@@ -283,6 +327,24 @@ function scoreMatchup(defender, offensivePlayer, profileMap) {
   return score;
 }
 
+function scoreHeightMatchup(defender, offensivePlayer, profileMap) {
+  const defenderHeight = buildHeightSortValue(defender, profileMap);
+  const offensiveHeight = buildHeightSortValue(offensivePlayer, profileMap);
+  const defenderRank = getPositionRank(defender?.position);
+  const offensiveRank = getPositionRank(offensivePlayer?.position);
+  let score = Math.abs(defenderRank - offensiveRank) * 8;
+
+  if (defenderHeight != null && offensiveHeight != null) {
+    score += Math.abs(defenderHeight - offensiveHeight) * 20;
+  } else if (defenderHeight != null || offensiveHeight != null) {
+    score += 30;
+  } else {
+    score += Math.abs(defenderRank - offensiveRank) * 12;
+  }
+
+  return score;
+}
+
 function buildLineupPermutations(players) {
   const permutations = [];
   const next = [...players];
@@ -323,6 +385,25 @@ function chooseBestOpponentOrdering(anchorPlayers, opponentPlayers, profileMap) 
   return bestPermutation;
 }
 
+function chooseBestOpponentOrderingByHeight(anchorPlayers, opponentPlayers, profileMap) {
+  const permutations = buildLineupPermutations(opponentPlayers);
+  let bestPermutation = opponentPlayers;
+  let bestScore = Number.POSITIVE_INFINITY;
+
+  permutations.forEach((candidate) => {
+    const score = anchorPlayers.reduce((total, defender, index) => {
+      return total + scoreHeightMatchup(defender, candidate[index], profileMap);
+    }, 0);
+
+    if (score < bestScore) {
+      bestScore = score;
+      bestPermutation = candidate;
+    }
+  });
+
+  return bestPermutation;
+}
+
 function reorderRowToSlotIds(row, slotIds) {
   const used = new Set();
   const nextSlotIds = [];
@@ -347,7 +428,7 @@ function reorderRowToSlotIds(row, slotIds) {
   };
 }
 
-function buildSmartMatchupSlotIds(awayRow, homeRow, profileMap) {
+function buildSmartMatchupSlotIds(awayRow, homeRow, profileMap, smartCriteriaProfileMap = null) {
   const awayPlayers = awayRow.players.filter(Boolean);
   const homePlayers = homeRow.players.filter(Boolean);
   if (awayPlayers.length !== ROW_SLOT_COUNT || homePlayers.length !== ROW_SLOT_COUNT) {
@@ -365,8 +446,14 @@ function buildSmartMatchupSlotIds(awayRow, homeRow, profileMap) {
   const anchorRow = anchorSide === "away" ? awayRow : homeRow;
   const opponentRow = anchorSide === "away" ? homeRow : awayRow;
 
-  const sortedAnchorPlayers = sortLineupForMatchups(anchorRow.players.filter(Boolean), profileMap);
-  const sortedOpponentPlayers = chooseBestOpponentOrdering(sortedAnchorPlayers, opponentRow.players.filter(Boolean), profileMap);
+  const allPlayers = [...anchorRow.players.filter(Boolean), ...opponentRow.players.filter(Boolean)];
+  const hasSmartCriteria = hasSmartCriteriaForLineup(allPlayers, smartCriteriaProfileMap);
+  const sortedAnchorPlayers = hasSmartCriteria
+    ? sortLineupForMatchups(anchorRow.players.filter(Boolean), profileMap)
+    : sortLineupByHeight(anchorRow.players.filter(Boolean), profileMap);
+  const sortedOpponentPlayers = hasSmartCriteria
+    ? chooseBestOpponentOrdering(sortedAnchorPlayers, opponentRow.players.filter(Boolean), profileMap)
+    : chooseBestOpponentOrderingByHeight(sortedAnchorPlayers, opponentRow.players.filter(Boolean), profileMap);
 
   return anchorSide === "away"
     ? {
@@ -958,6 +1045,10 @@ export default function MatchUps({
 
   const matchupProfileMap = useMemo(
     () => buildResolvedMatchupProfileMap(remoteMatchupProfiles),
+    [remoteMatchupProfiles]
+  );
+  const remoteMatchupProfileMap = useMemo(
+    () => buildMatchupProfileMap(remoteMatchupProfiles),
     [remoteMatchupProfiles]
   );
 
@@ -1557,7 +1648,7 @@ export default function MatchUps({
     const nextHomeRow = homeRow.currentStintSlotIds.length
       ? reorderRowToSlotIds(homeRow, homeRow.currentStintSlotIds)
       : homeRow;
-    const smartSlotIds = buildSmartMatchupSlotIds(nextAwayRow, nextHomeRow, matchupProfileMap);
+    const smartSlotIds = buildSmartMatchupSlotIds(nextAwayRow, nextHomeRow, matchupProfileMap, remoteMatchupProfileMap);
 
     setPersistedState((current) => ({
       ...current,
@@ -1573,7 +1664,7 @@ export default function MatchUps({
   const handleSmartReorder = () => {
     setPickerState(null);
     setRefreshMenuOpen(false);
-    const smartSlotIds = buildSmartMatchupSlotIds(renderedAwayRow, renderedHomeRow, matchupProfileMap);
+    const smartSlotIds = buildSmartMatchupSlotIds(renderedAwayRow, renderedHomeRow, matchupProfileMap, remoteMatchupProfileMap);
     setPersistedState((current) => ({
       ...current,
       slots: {
@@ -1596,8 +1687,8 @@ export default function MatchUps({
 
   const smartDefaultSlotIds = useMemo(() => {
     if (persistedState.slots.away.length || persistedState.slots.home.length) return null;
-    return buildSmartMatchupSlotIds(awayRow, homeRow, matchupProfileMap);
-  }, [awayRow, homeRow, matchupProfileMap, persistedState.slots.away.length, persistedState.slots.home.length]);
+    return buildSmartMatchupSlotIds(awayRow, homeRow, matchupProfileMap, remoteMatchupProfileMap);
+  }, [awayRow, homeRow, matchupProfileMap, persistedState.slots.away.length, persistedState.slots.home.length, remoteMatchupProfileMap]);
 
   const renderedAwayRow = useMemo(
     () => smartDefaultSlotIds?.away ? reorderRowToSlotIds(awayRow, smartDefaultSlotIds.away) : awayRow,
