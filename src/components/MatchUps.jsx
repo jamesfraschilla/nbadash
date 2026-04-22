@@ -100,6 +100,10 @@ function parseHeightToInches(value) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   const text = String(value || "").trim();
   if (!text) return null;
+  if (/^\d{2,3}$/.test(text)) {
+    const rawInches = Number.parseInt(text, 10);
+    return Number.isFinite(rawInches) ? rawInches : null;
+  }
   const match = text.match(/(\d+)\D+(\d+)/);
   if (!match) return null;
   const feet = Number.parseInt(match[1], 10);
