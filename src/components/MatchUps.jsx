@@ -141,6 +141,15 @@ function getPositionGroup(position) {
   return "big";
 }
 
+function fallbackHeightForPosition(position) {
+  const rank = getPositionRank(position);
+  if (rank <= 1) return 75;
+  if (rank === 2) return 78;
+  if (rank === 3) return 80;
+  if (rank === 4) return 82;
+  return 84;
+}
+
 function inferArchetypeFromPosition(position, heightIn = null) {
   const rank = getPositionRank(position);
   if (rank <= 1) {
@@ -218,7 +227,9 @@ function sortLineupForMatchups(players, profileMap) {
 
 function buildHeightSortValue(player, profileMap) {
   const profile = resolveMatchupPlayerProfile(profileMap, player?.personId);
-  return parseHeightToInches(player?.height) ?? profile?.heightIn ?? null;
+  return parseHeightToInches(player?.height)
+    ?? profile?.heightIn
+    ?? fallbackHeightForPosition(player?.position);
 }
 
 function sortLineupByHeight(players, profileMap) {
