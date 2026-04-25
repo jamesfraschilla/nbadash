@@ -73,6 +73,20 @@ function formatSecondsClock(seconds: number) {
   return `${minutes}:${String(secs).padStart(2, "0")}`;
 }
 
+function elapsedSecondsToPoint(elapsed: number) {
+  let remainingElapsed = Math.max(0, elapsed);
+  let period = 1;
+  while (remainingElapsed > periodLengthSeconds(period)) {
+    remainingElapsed -= periodLengthSeconds(period);
+    period += 1;
+  }
+  const remainingClock = Math.max(0, periodLengthSeconds(period) - remainingElapsed);
+  return {
+    period,
+    clock: formatSecondsClock(remainingClock),
+  };
+}
+
 function formatSignedValue(value: number) {
   return `${value > 0 ? "+" : ""}${value}`;
 }
@@ -561,6 +575,364 @@ function buildRunSummary(scoringEvents: Array<Record<string, unknown>>, homeTeam
   return bestByTeam;
 }
 
+function buildScoreTimeline(
+  scoringEvents: Array<Record<string, unknown>>,
+  rangeStartElapsed: number,
+  startScore: { home: number; away: number },
+  homeTeamId: string,
+  awayTeamId: string,
+) {
+  const startPoint = elapsedSecondsToPoint(rangeStartElapsed);
+  const timeline = [{
+    elapsed: rangeStartElapsed,
+    period: startPoint.period,
+    clock: startPoint.clock,
+    scoreHome: startScore.home,
+    scoreAway: startScore.away,
+  }];
+
+  scoringEvents.forEach((event) => {
+    timeline.push({
+      elapsed: safeNumber(event.elapsed, 0),
+      period: safeNumber(event.period, 0),
+      clock: String(event.clock || "0:00"),
+      scoreHome: safeNumber(event.scoreHome, 0),
+      scoreAway: safeNumber(event.scoreAway, 0),
+    });
+  });
+
+  return timeline.map((entry) => {
+    const margin = entry.scoreHome - entry.scoreAway;
+    return {
+      ...entry,
+      leaderId: margin > 0 ? homeTeamId : margin < 0 ? awayTeamId : "",
+      margin,
+      label: formatPointLabel(entry.period, entry.clock),
+    };
+  });
+}
+
+function buildGameFlowContext(
+  timeline: Array<{
+    elapsed: number;
+    period: number;
+    clock: string;
+    scoreHome: number;
+    scoreAway: number;
+    leaderId: string;
+    margin: number;
+    label: string;
+  }>,
+  homeTeam: Record<string, unknown>,
+  awayTeam: Record<string, unknown>,
+) {
+  const homeTeamId = String(homeTeam.teamId || "");
+  const awayTeamId = String(awayTeam.teamId || "");
+  const largestLead = {
+    [homeTeamId]: { points: 0, label: "" },
+    [awayTeamId]: { points: 0, label: "" },
+  };
+
+  let leadChanges = 0;
+  let tieMoments = 0;
+  let lastNonTieLeader = timeline[0]?.leaderId || "";
+  let previousMargin = timeline[0]?.margin || 0;
+
+  timeline.forEach((entry, index) => {
+    const homeLead = entry.scoreHome - entry.scoreAway;
+    const awayLead = -homeLead;
+    if (homeLead > largestLead[homeTeamId].points) {
+      largestLead[homeTeamId] = { points: homeLead, label: entry.label };
+    }
+    if (awayLead > largestLead[awayTeamId].points) {
+      largestLead[awayTeamId] = { points: awayLead, label: entry.label };
+    }
+
+    if (index === 0) return;
+
+    if (entry.margin === 0 && previousMargin !== 0) {
+      tieMoments += 1;
+    }
+    if (entry.leaderId && lastNonTieLeader && entry.leaderId !== lastNonTieLeader) {
+      leadChanges += 1;
+    }
+    if (entry.leaderId) {
+      lastNonTieLeader = entry.leaderId;
+    }
+    previousMargin = entry.margin;
+  });
+
+  const homeLargest = largestLead[homeTeamId];
+  const awayLargest = largestLead[awayTeamId];
+  let shape = "steady";
+  let items = [
+    `${teamLabel(homeTeam)}'s largest lead was ${homeLargest.points} at ${homeLargest.label || "the start of the span"}; ${teamLabel(awayTeam)}'s largest lead was ${awayLargest.points} at ${awayLargest.label || "the start of the span"}.`,
+  ];
+
+  if (leadChanges >= 3 || (tieMoments >= 2 && homeLargest.points >= 4 && awayLargest.points >= 4)) {
+    shape = "volatile";
+    items = [
+      `The stretch swung repeatedly with ${leadChanges} lead change${leadChanges === 1 ? "" : "s"} and ${tieMoments} tie${tieMoments === 1 ? "" : "s"}.`,
+      `${teamLabel(homeTeam)} led by as many as ${homeLargest.points}; ${teamLabel(awayTeam)} led by as many as ${awayLargest.points}.`,
+    ];
+  } else if (homeLargest.points >= 8 || awayLargest.points >= 8) {
+    shape = "control";
+    const controllingTeam = homeLargest.points >= awayLargest.points ? homeTeam : awayTeam;
+    const controllingLead = Math.max(homeLargest.points, awayLargest.points);
+    items = [
+      `${teamLabel(controllingTeam)} created the clearest separation, building a ${controllingLead}-point cushion in this span.`,
+      `${teamLabel(homeTeam)}'s largest lead was ${homeLargest.points}; ${teamLabel(awayTeam)}'s was ${awayLargest.points}.`,
+    ];
+  }
+
+  return {
+    shape,
+    leadChanges,
+    ties: tieMoments,
+    largestLead,
+    items,
+    strength: leadChanges >= 3 ? leadChanges + tieMoments : Math.max(homeLargest.points, awayLargest.points) * 0.6,
+  };
+}
+
+function buildMomentumBursts(
+  scoringEvents: Array<Record<string, unknown>>,
+  homeTeam: Record<string, unknown>,
+  awayTeam: Record<string, unknown>,
+) {
+  const homeTeamId = String(homeTeam.teamId || "");
+  const awayTeamId = String(awayTeam.teamId || "");
+  const teamIds = [homeTeamId, awayTeamId];
+  const bestByTeam: Record<string, null | {
+    teamId: string;
+    points: number;
+    opponentPoints: number;
+    net: number;
+    startLabel: string;
+    endLabel: string;
+  }> = {
+    [homeTeamId]: null,
+    [awayTeamId]: null,
+  };
+
+  for (const teamId of teamIds) {
+    for (let index = 0; index < scoringEvents.length; index += 1) {
+      const startEvent = scoringEvents[index];
+      const startElapsed = safeNumber(startEvent.elapsed, 0);
+      let teamPoints = 0;
+      let opponentPoints = 0;
+
+      for (let nextIndex = index; nextIndex < scoringEvents.length; nextIndex += 1) {
+        const nextEvent = scoringEvents[nextIndex];
+        const elapsedDelta = safeNumber(nextEvent.elapsed, 0) - startElapsed;
+        if (elapsedDelta > 150) break;
+
+        if (String(nextEvent.teamId || "") === teamId) {
+          teamPoints += safeNumber(nextEvent.points, 0);
+        } else {
+          opponentPoints += safeNumber(nextEvent.points, 0);
+        }
+
+        const net = teamPoints - opponentPoints;
+        if (teamPoints < 6 || net < 5) continue;
+
+        const previousBest = bestByTeam[teamId];
+        if (!previousBest || net > previousBest.net || (net === previousBest.net && teamPoints > previousBest.points)) {
+          bestByTeam[teamId] = {
+            teamId,
+            points: teamPoints,
+            opponentPoints,
+            net,
+            startLabel: formatPointLabel(safeNumber(startEvent.period, 0), startEvent.clock),
+            endLabel: formatPointLabel(safeNumber(nextEvent.period, 0), nextEvent.clock),
+          };
+        }
+      }
+    }
+  }
+
+  return teamIds
+    .map((teamId) => bestByTeam[teamId])
+    .filter(Boolean)
+    .sort((a, b) => b!.net - a!.net)
+    .map((burst) => ({
+      ...burst!,
+      team: burst!.teamId === homeTeamId ? teamLabel(homeTeam) : teamLabel(awayTeam),
+      items: [
+        `${burst!.teamId === homeTeamId ? teamLabel(homeTeam) : teamLabel(awayTeam)}'s best push was ${burst!.points}-${burst!.opponentPoints} from ${burst!.startLabel} to ${burst!.endLabel}.`,
+      ],
+      strength: burst!.net,
+    }));
+}
+
+function scoreForTeam(score: { home: number; away: number }, teamId: string, homeTeamId: string, awayTeamId: string) {
+  if (teamId === homeTeamId) return score.home;
+  if (teamId === awayTeamId) return score.away;
+  return 0;
+}
+
+function opponentTeamId(teamId: string, homeTeamId: string, awayTeamId: string) {
+  return teamId === homeTeamId ? awayTeamId : homeTeamId;
+}
+
+function buildLateSwingInsight(
+  actions: Array<Record<string, unknown>>,
+  scoringEvents: Array<Record<string, unknown>>,
+  rangeStartElapsed: number,
+  rangeEndElapsed: number,
+  maxPeriod: number,
+  maxClock: string,
+  homeTeam: Record<string, unknown>,
+  awayTeam: Record<string, unknown>,
+) {
+  const maxClockSeconds = parseClockToSeconds(maxClock);
+  const nearPeriodEnd = maxClockSeconds <= 2;
+  if (!nearPeriodEnd) return null;
+
+  const homeTeamId = String(homeTeam.teamId || "");
+  const awayTeamId = String(awayTeam.teamId || "");
+  if (!homeTeamId || !awayTeamId) return null;
+
+  const lateWindowSeconds = 120;
+  const lateWindowStart = Math.max(rangeStartElapsed, rangeEndElapsed - lateWindowSeconds);
+  if ((rangeEndElapsed - lateWindowStart) < 20) return null;
+
+  const startScore = findScoreAtOrBefore(actions, lateWindowStart);
+  const endScore = findScoreAtOrBefore(actions, rangeEndElapsed);
+  const endEvents = scoringEvents.filter((event) => event.elapsed >= lateWindowStart && event.elapsed <= rangeEndElapsed);
+  if (!endEvents.length) return null;
+
+  const scoreMoments = [
+    (() => {
+      const point = elapsedSecondsToPoint(lateWindowStart);
+      return {
+        elapsed: lateWindowStart,
+        period: point.period,
+        clock: point.clock,
+        scoreHome: startScore.home,
+        scoreAway: startScore.away,
+      };
+    })(),
+    ...endEvents.map((event) => ({
+      elapsed: safeNumber(event.elapsed, 0),
+      period: safeNumber(event.period, maxPeriod),
+      clock: String(event.clock || "0:00"),
+      scoreHome: safeNumber(event.scoreHome, 0),
+      scoreAway: safeNumber(event.scoreAway, 0),
+    })),
+  ];
+
+  const finalMargins = {
+    [homeTeamId]: endScore.home - endScore.away,
+    [awayTeamId]: endScore.away - endScore.home,
+  };
+  const teamLookup: Record<string, Record<string, unknown>> = {
+    [homeTeamId]: homeTeam,
+    [awayTeamId]: awayTeam,
+  };
+
+  let bestCandidate: null | {
+    type: "collapse" | "comeback";
+    teamId: string;
+    opponentId: string;
+    peakLead: number;
+    peakLabel: string;
+    peakElapsed: number;
+    finalMargin: number;
+    strength: number;
+  } = null;
+
+  const teamIds = [homeTeamId, awayTeamId];
+
+  for (const moment of scoreMoments) {
+    for (const teamId of teamIds) {
+      const opponentId = opponentTeamId(teamId, homeTeamId, awayTeamId);
+      const teamScore = scoreForTeam(
+        { home: moment.scoreHome, away: moment.scoreAway },
+        teamId,
+        homeTeamId,
+        awayTeamId,
+      );
+      const opponentScore = scoreForTeam(
+        { home: moment.scoreHome, away: moment.scoreAway },
+        opponentId,
+        homeTeamId,
+        awayTeamId,
+      );
+      const lead = teamScore - opponentScore;
+      const deficit = opponentScore - teamScore;
+      const finalMargin = finalMargins[teamId];
+      const timeLeft = Math.max(0, rangeEndElapsed - moment.elapsed);
+      const collapse = lead >= 4 && finalMargin <= 0;
+      const comeback = deficit >= 4 && finalMargin >= 0;
+      if (!collapse && !comeback) continue;
+
+      const type = collapse ? "collapse" : "comeback";
+      const peakLead = collapse ? lead : deficit;
+      const urgencyBoost = Math.max(0, 90 - timeLeft) / 15;
+      const reversalBoost = Math.abs(finalMargin) + (finalMargin === 0 ? 1.5 : 0);
+      const strength = (peakLead * 2.5) + urgencyBoost + reversalBoost;
+      if (!bestCandidate || strength > bestCandidate.strength) {
+        bestCandidate = {
+          type,
+          teamId,
+          opponentId,
+          peakLead,
+          peakLabel: formatPointLabel(moment.period, moment.clock),
+          peakElapsed: moment.elapsed,
+          finalMargin,
+          strength,
+        };
+      }
+    }
+  }
+
+  if (!bestCandidate) return null;
+
+  const closingScores = endEvents.filter((event) => event.elapsed >= bestCandidate.peakElapsed);
+  const scoringTeamId = bestCandidate.type === "collapse" ? bestCandidate.opponentId : bestCandidate.teamId;
+  const scoringTeamPoints = closingScores
+    .filter((event) => String(event.teamId || "") === scoringTeamId)
+    .reduce((sum, event) => sum + safeNumber(event.points, 0), 0);
+  const otherTeamPoints = closingScores
+    .filter((event) => String(event.teamId || "") !== scoringTeamId)
+    .reduce((sum, event) => sum + safeNumber(event.points, 0), 0);
+
+  const team = teamLookup[bestCandidate.teamId];
+  const opponent = teamLookup[bestCandidate.opponentId];
+  const finishText = bestCandidate.finalMargin < 0
+    ? `ended the span trailing by ${Math.abs(bestCandidate.finalMargin)}`
+    : bestCandidate.finalMargin === 0
+      ? "only got to the horn tied"
+      : `still finished ahead by ${bestCandidate.finalMargin}`;
+  const title = bestCandidate.type === "collapse" ? "Late Collapse" : "Late Comeback";
+
+  return {
+    title,
+    strength: bestCandidate.strength,
+    type: bestCandidate.type,
+    team: teamLabel(team),
+    opponent: teamLabel(opponent),
+    peakLead: bestCandidate.peakLead,
+    peakLabel: bestCandidate.peakLabel,
+    finalMargin: bestCandidate.finalMargin,
+    closingRun: {
+      team: teamLabel(scoringTeamId === homeTeamId ? homeTeam : awayTeam),
+      points: scoringTeamPoints,
+      opponentPoints: otherTeamPoints,
+    },
+    items: bestCandidate.type === "collapse"
+      ? [
+        `${teamLabel(team)} led by ${bestCandidate.peakLead} at ${bestCandidate.peakLabel} but ${finishText}.`,
+        `${teamLabel(opponent)} closed regulation on a ${scoringTeamPoints}-${otherTeamPoints} run from that point.`,
+      ]
+      : [
+        `${teamLabel(opponent)} erased a ${bestCandidate.peakLead}-point deficit after ${bestCandidate.peakLabel} and ${finishText}.`,
+        `${teamLabel(opponent)} closed regulation on a ${scoringTeamPoints}-${otherTeamPoints} run from that point.`,
+      ],
+  };
+}
+
 function buildLineupInsights(
   minutesData: Record<string, unknown> | null,
   rangeStartElapsed: number,
@@ -755,10 +1127,23 @@ function buildFeaturePayload(
   const awayPoints = endScore.away - startScore.away;
   const homeMargin = homePoints - awayPoints;
   const awayMargin = -homeMargin;
+  const scoreTimeline = buildScoreTimeline(scoringEvents, rangeStartElapsed, startScore, homeTeamId, awayTeamId);
 
   const totals = aggregateRangeStats(rangeActions, scoringEvents, homeTeamId, awayTeamId);
   const playerTotals = buildPlayerRangeStats(rangeActions, scoringEvents);
   const runs = buildRunSummary(scoringEvents, homeTeamId, awayTeamId);
+  const gameFlow = buildGameFlowContext(scoreTimeline, homeTeam, awayTeam);
+  const momentumBursts = buildMomentumBursts(scoringEvents, homeTeam, awayTeam);
+  const lateSwing = buildLateSwingInsight(
+    actions,
+    scoringEvents,
+    rangeStartElapsed,
+    rangeEndElapsed,
+    maxPeriod,
+    maxClock,
+    homeTeam,
+    awayTeam,
+  );
   const lineupInsights = buildLineupInsights(
     minutesData,
     rangeStartElapsed,
@@ -833,6 +1218,9 @@ function buildFeaturePayload(
       },
     },
     playerNotes,
+    gameFlow,
+    momentumBursts,
+    lateSwing,
     lineupNotes: lineupInsights.lineupNotes,
   };
 }
@@ -841,6 +1229,24 @@ function buildInsightSignals(features: ReturnType<typeof buildFeaturePayload>) {
   const { home, away } = features.teams;
   const { leader, trailer, margin } = leaderInfo(features);
   const signals = [
+    {
+      key: "shape",
+      title: "Game Flow",
+      strength: safeNumber(features.gameFlow?.strength, 0),
+      items: Array.isArray(features.gameFlow?.items) ? features.gameFlow.items : [],
+    },
+    {
+      key: "burst",
+      title: "Momentum Swing",
+      strength: safeNumber(features.momentumBursts?.[0]?.strength, 0),
+      items: Array.isArray(features.momentumBursts?.[0]?.items) ? features.momentumBursts[0].items : [],
+    },
+    {
+      key: "lateSwing",
+      title: features.lateSwing?.title || "Late Swing",
+      strength: safeNumber(features.lateSwing?.strength, 0),
+      items: Array.isArray(features.lateSwing?.items) ? features.lateSwing.items : [],
+    },
     {
       key: "run",
       title: "Run",
@@ -913,7 +1319,7 @@ function buildInsightSignals(features: ReturnType<typeof buildFeaturePayload>) {
     {
       key: "gameFlow",
       title: "Game Flow",
-      strength: margin,
+      strength: margin * 0.7,
       items: [
         `${leader.tricode} won the stretch ${leaderPointsLabel(features)} and pushed the score from ${features.score.start.away}-${features.score.start.home} to ${features.score.end.away}-${features.score.end.home}.`,
         `${leader.tricode} controlled this window by ${margin} point${margin === 1 ? "" : "s"} over ${features.range.duration}.`,
@@ -947,6 +1353,16 @@ function buildTemplateSections(features: ReturnType<typeof buildFeaturePayload>)
 function buildSwingFactors(features: ReturnType<typeof buildFeaturePayload>) {
   const { home, away } = features.teams;
   const factors = [
+    ...(Array.isArray(features.lateSwing?.items) ? [features.lateSwing.items[0]].filter(Boolean).map((text) => ({
+      label: "lateSwing",
+      value: safeNumber(features.lateSwing?.strength, 0),
+      text,
+    })) : []),
+    ...(Array.isArray(features.momentumBursts) ? features.momentumBursts.slice(0, 1).map((burst) => ({
+      label: "momentumBurst",
+      value: safeNumber(burst.strength, 0),
+      text: burst.items[0],
+    })) : []),
     {
       label: "turnovers",
       value: away.totals.turnovers - home.totals.turnovers,
@@ -1012,13 +1428,13 @@ function buildTemplateAnalysis(features: ReturnType<typeof buildFeaturePayload>)
   const statOutliers = buildStatOutliers(features);
   const sections = buildTemplateSections(features);
   const dominantTitle = sections[0]?.title || "Game Flow";
-  const headlineLead = dominantTitle === "Run"
-    ? `${leader.tricode} seized the stretch`
-    : dominantTitle === "Lineups"
-      ? `${leader.tricode} got the better stint`
-      : dominantTitle === "Shooting"
-        ? `${leader.tricode} won the shotmaking window`
-        : `${leader.tricode} won the stretch`;
+  let headlineLead = `${leader.tricode} won the stretch`;
+  if (dominantTitle === "Run") headlineLead = `${leader.tricode} seized the stretch`;
+  if (dominantTitle === "Late Collapse") headlineLead = `${trailer.tricode} stormed back late`;
+  if (dominantTitle === "Late Comeback") headlineLead = `${leader.tricode} rallied late`;
+  if (dominantTitle === "Momentum Swing") headlineLead = `${leader.tricode} changed the quarter with one push`;
+  if (dominantTitle === "Lineups") headlineLead = `${leader.tricode} got the better stint`;
+  if (dominantTitle === "Shooting") headlineLead = `${leader.tricode} won the shotmaking window`;
 
   return {
     source: "template",
@@ -1047,6 +1463,8 @@ async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayloa
     "Decide what most shaped this selected stretch instead of forcing equal attention to every category.",
     "Vary sentence structure and avoid repeating the same opening pattern from one answer to the next.",
     "If one theme clearly dominates, center the answer on that theme.",
+    "When the data shows a late-game collapse, comeback, or dramatic final-minute swing, make that central to the analysis even if aggregate quarter stats point elsewhere.",
+    "Use game-flow context such as lead changes, largest leads, and concentrated momentum bursts to describe how the stretch unfolded, not just who won the box-score categories.",
     "Call out notable individual player stretches when the provided data clearly supports it, especially when one player drove a large share of a team's scoring in the selected window.",
     "Only mention lineup notes when they materially matter in the range.",
     "Return compact JSON with keys: headline, summary, sections.",
