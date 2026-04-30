@@ -857,7 +857,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 }
 
 .strategyPanel {
-  max-width: 980px;
+  max-width: calc(var(--pbp-card-width) * 3 + 56px);
   margin: 0 auto 18px;
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -903,17 +903,9 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   gap: 12px;
 }
 
-.strategyEyebrow {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
 .strategyTitle {
-  margin: 4px 0 0;
   font-size: 20px;
+  font-weight: 700;
   color: var(--text);
 }
 

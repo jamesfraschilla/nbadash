@@ -2455,17 +2455,14 @@ export default function Game({ variant = "full" }) {
               className={styles.strategyPanelToggle}
               onClick={toggleStrategyPanel}
             >
-              <span className={styles.strategyPanelToggleLabel}>Late Game Strategy</span>
+              <span className={styles.strategyPanelToggleLabel}>Live Game Situation Matrix</span>
               <span className={styles.strategyPanelToggleIcon}>{strategyPanelCollapsed ? "+" : "−"}</span>
             </button>
 
             {!strategyPanelCollapsed ? (
               <div className={styles.strategyPanelBody}>
                 <div className={styles.strategyPanelHeader}>
-                  <div>
-                    <div className={styles.strategyEyebrow}>Late Game Strategy</div>
-                    <h3 className={styles.strategyTitle}>Live Matrix Panel</h3>
-                  </div>
+                  <div className={styles.strategyTitle}>Live Game Situation Matrix</div>
                   <div className={styles.strategyToggleGroup}>
                     {[awayTeam, homeTeam].filter(Boolean).map((team) => (
                       <button
