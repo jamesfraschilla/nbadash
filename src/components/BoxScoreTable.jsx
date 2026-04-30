@@ -3,6 +3,7 @@ import styles from "./BoxScoreTable.module.css";
 
 const defaultColumns = [
   "MIN",
+  "PF",
   "PTS",
   "REB",
   "OREB",
@@ -10,7 +11,6 @@ const defaultColumns = [
   "STL",
   "BLK",
   "TO",
-  "PF",
   "FG",
   "RIM",
   "MID",
