@@ -39,6 +39,7 @@ import {
   evaluateLateGameStrategy,
   LATE_GAME_FEEDBACK_TAGS,
 } from "../lateGameStrategy.js";
+import { recordClientError } from "../errorDiagnostics.js";
 import { gameStatusLabel, normalizeClock } from "../utils.js";
 import BoxScoreTable from "../components/BoxScoreTable.jsx";
 import StatBars from "../components/StatBars.jsx";
@@ -2053,14 +2054,36 @@ export default function Game({ variant = "full" }) {
   const isGLeagueGame = awayLeague === "gleague" || homeLeague === "gleague";
   const awayResetUsed = hasUsedResetTimeout(game?.playByPlayActions || [], awayTeamId, game?.period);
   const homeResetUsed = hasUsedResetTimeout(game?.playByPlayActions || [], homeTeamId, game?.period);
-  const strategyState = useMemo(() => buildLateGameStrategyState({
-    game,
-    vantageTeamId: strategyVantageTeamId,
-    awayFouls: awayFoulsDisplay,
-    homeFouls: homeFoulsDisplay,
-    awayTimeoutsRemaining,
-    homeTimeoutsRemaining,
-  }), [
+  const strategyResult = useMemo(() => {
+    try {
+      const nextState = buildLateGameStrategyState({
+        game,
+        vantageTeamId: strategyVantageTeamId,
+        awayFouls: awayFoulsDisplay,
+        homeFouls: homeFoulsDisplay,
+        awayTimeoutsRemaining,
+        homeTimeoutsRemaining,
+      });
+      return {
+        strategyState: nextState,
+        strategyEvaluation: evaluateLateGameStrategy(nextState),
+        strategyPanelError: "",
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Late Game Strategy unavailable.";
+      return {
+        strategyState: null,
+        strategyEvaluation: {
+          status: "error",
+          headline: "Late Game Strategy unavailable",
+          summary: "The strategy panel hit a payload edge case and has been disabled for this game.",
+          notes: [],
+          blindSpots: [message],
+        },
+        strategyPanelError: message,
+      };
+    }
+  }, [
     awayFoulsDisplay,
     awayTimeoutsRemaining,
     game,
@@ -2068,10 +2091,17 @@ export default function Game({ variant = "full" }) {
     homeTimeoutsRemaining,
     strategyVantageTeamId,
   ]);
-  const strategyEvaluation = useMemo(
-    () => evaluateLateGameStrategy(strategyState),
-    [strategyState]
-  );
+  const { strategyState, strategyEvaluation, strategyPanelError } = strategyResult;
+
+  useEffect(() => {
+    if (!strategyPanelError) return;
+    recordClientError({
+      source: "late-game-strategy",
+      message: strategyPanelError,
+      route: window.location.hash || window.location.pathname || "",
+      userAgent: window.navigator?.userAgent || "",
+    });
+  }, [strategyPanelError]);
   const strategySnapshotKey = useMemo(() => {
     if (!strategyState) return "";
     return [
