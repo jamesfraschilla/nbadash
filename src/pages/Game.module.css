@@ -1154,6 +1154,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  margin-bottom: 12px;
 }
 
 .strategyVerdictButton,
@@ -1184,7 +1185,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 
 .strategyField {
   display: grid;
-  gap: 6px;
+  gap: 8px;
 }
 
 .strategyField span {
@@ -1210,6 +1211,14 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.strategyField + .strategyTagGrid {
+  margin-top: 12px;
+}
+
+.strategyTagGrid + .strategyField {
+  margin-top: 14px;
 }
 
 .strategyFeedbackActions {
