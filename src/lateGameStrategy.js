@@ -3,20 +3,6 @@ import { normalizeClock } from "./utils.js";
 const FINAL_MINUTE_SECONDS = 60;
 const PLAY_MODE_SECONDS = 6 * 60;
 
-export const LATE_GAME_FEEDBACK_TAGS = [
-  "Possession wrong",
-  "Time boundary",
-  "Score bucket",
-  "Too aggressive",
-  "Too passive",
-  "Timeout logic",
-  "Foul-to-give",
-  "No-3 logic",
-  "Need-2 logic",
-  "Last-shot logic",
-  "Other",
-];
-
 function safeNumber(value, fallback = 0) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : fallback;

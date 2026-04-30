@@ -37,7 +37,6 @@ import {
 import {
   buildLateGameStrategyState,
   evaluateLateGameStrategy,
-  LATE_GAME_FEEDBACK_TAGS,
 } from "../lateGameStrategy.js";
 import { recordClientError } from "../errorDiagnostics.js";
 import { gameStatusLabel, normalizeClock } from "../utils.js";
@@ -2684,7 +2683,6 @@ export default function Game({ variant = "full" }) {
                 aria-modal="true"
               >
                 <h3>Late Game Feedback</h3>
-                <div className={styles.strategyFeedbackSubtitle}>Save corrections to the signed-in account for cross-device review.</div>
 
                 <div className={styles.strategyVerdictRow}>
                   <button
@@ -2712,29 +2710,6 @@ export default function Game({ variant = "full" }) {
                     placeholder="Example: Foul immediately, no trap"
                   />
                 </label>
-
-                <div className={styles.strategyTagGrid}>
-                  {LATE_GAME_FEEDBACK_TAGS.map((tag) => {
-                    const active = strategyFeedback.tags.includes(tag);
-                    return (
-                      <button
-                        key={tag}
-                        type="button"
-                        className={`${styles.strategyTag} ${active ? styles.strategyTagActive : ""}`}
-                        onClick={() => {
-                          setStrategyFeedback((prev) => ({
-                            ...prev,
-                            tags: active
-                              ? prev.tags.filter((value) => value !== tag)
-                              : [...prev.tags, tag],
-                          }));
-                        }}
-                      >
-                        {tag}
-                      </button>
-                    );
-                  })}
-                </div>
 
                 <label className={styles.strategyField}>
                   <span>Why?</span>

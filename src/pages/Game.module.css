@@ -1159,8 +1159,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 
 .strategyVerdictButton,
 .strategySaveButton,
-.strategyVaultLink,
-.strategyTag {
+.strategyVaultLink {
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--panel-strong);
@@ -1171,13 +1170,11 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 
 .strategyVerdictButton,
 .strategySaveButton,
-.strategyVaultLink,
-.strategyTag {
+.strategyVaultLink {
   cursor: pointer;
 }
 
-.strategyVerdictButtonActive,
-.strategyTagActive {
+.strategyVerdictButtonActive {
   background: var(--highlight-text);
   color: var(--bg);
   border-color: var(--highlight-text);
@@ -1207,17 +1204,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   font-size: 14px;
 }
 
-.strategyTagGrid {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.strategyField + .strategyTagGrid {
-  margin-top: 12px;
-}
-
-.strategyTagGrid + .strategyField {
+.strategyField + .strategyField {
   margin-top: 14px;
 }
 
