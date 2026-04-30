@@ -67,6 +67,8 @@ import {
 } from "../segmentStats.js";
 import { supabase } from "../supabaseClient.js";
 import {
+  listSavedToolRecords,
+  listSavedToolRecordsRemote,
   getSavedToolRecord,
   getSavedToolRecordRemote,
   saveToolRecord,
@@ -100,6 +102,7 @@ const CORE_STAT_FIELDS = [
 ];
 
 const HOLD_MOVE_TOLERANCE_PX = 10;
+const LATE_GAME_HISTORY_WINDOW_SECONDS = 6 * 60;
 const SEGMENT_STAT_DEFAULTS = {
   minutes: 0,
   plusMinusPoints: 0,
@@ -252,6 +255,8 @@ const buildDefaultStrategyFeedback = () => ({
   tags: [],
   notes: "",
 });
+
+const sanitizeHistoryKey = (value) => String(value || "").replace(/[^a-zA-Z0-9:_-]/g, "-");
 
 const loadSnapshots = (gameId) => {
   if (typeof window === "undefined") return [];
@@ -578,6 +583,11 @@ export default function Game({ variant = "full" }) {
   const [strategyFeedbackStatus, setStrategyFeedbackStatus] = useState("");
   const [strategyPanelCollapsed, setStrategyPanelCollapsed] = useState(() => loadLateGamePanelCollapsed(gameId));
   const [strategyFeedbackModalOpen, setStrategyFeedbackModalOpen] = useState(false);
+  const [strategyHistoryModalOpen, setStrategyHistoryModalOpen] = useState(false);
+  const [strategyHistoryRecords, setStrategyHistoryRecords] = useState([]);
+  const [strategyHistoryLoading, setStrategyHistoryLoading] = useState(false);
+  const [strategyHistoryStatus, setStrategyHistoryStatus] = useState("");
+  const strategyHistorySaveRef = useRef("");
   const isAtc = variant === "atc";
   const showExtras = !isAtc;
   const notesParams = useMemo(() => {
@@ -2115,6 +2125,42 @@ export default function Game({ variant = "full" }) {
       : strategyEvaluation?.status === "ready"
         ? "Direct matrix match"
         : "Live state monitor";
+  const shouldTrackStrategyHistory = Boolean(
+    gameId &&
+    strategyState?.isLive &&
+    strategyState?.period >= 4 &&
+    strategyState?.secondsRemaining <= LATE_GAME_HISTORY_WINDOW_SECONDS &&
+    strategyState?.secondsRemaining >= 0 &&
+    strategySnapshotKey
+  );
+
+  const hydrateStrategyHistory = async () => {
+    if (!gameId || !user?.id) {
+      setStrategyHistoryRecords([]);
+      return;
+    }
+    try {
+      setStrategyHistoryLoading(true);
+      const records = accountsEnabled
+        ? await listSavedToolRecordsRemote(user.id)
+        : listSavedToolRecords(user.id);
+      const filtered = records.filter((record) => (
+        record.type === TOOL_RECORD_TYPES.LATE_GAME_RECOMMENDATION &&
+        String(record.payload?.gameId || "") === String(gameId)
+      ));
+      setStrategyHistoryRecords(filtered);
+      setStrategyHistoryStatus("");
+    } catch (error) {
+      const fallback = listSavedToolRecords(user.id).filter((record) => (
+        record.type === TOOL_RECORD_TYPES.LATE_GAME_RECOMMENDATION &&
+        String(record.payload?.gameId || "") === String(gameId)
+      ));
+      setStrategyHistoryRecords(fallback);
+      setStrategyHistoryStatus("Showing saved local history.");
+    } finally {
+      setStrategyHistoryLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!strategyPanelError) return;
@@ -2142,6 +2188,91 @@ export default function Game({ variant = "full" }) {
     setStrategyFeedbackStatus("");
   }, [strategySnapshotKey]);
 
+  useEffect(() => {
+    strategyHistorySaveRef.current = "";
+  }, [gameId]);
+
+  useEffect(() => {
+    if (!shouldTrackStrategyHistory || !strategyState || !strategyEvaluation || !user?.id) return;
+    if (strategyHistorySaveRef.current === strategySnapshotKey) return;
+
+    const timestamp = new Date().toISOString();
+    const record = {
+      id: sanitizeHistoryKey(`late-game-recommendation:${gameId}:${strategySnapshotKey}`),
+      type: TOOL_RECORD_TYPES.LATE_GAME_RECOMMENDATION,
+      title: `${strategyState.vantageTeam?.teamTricode || "Team"} ${strategyState.periodLabel} ${strategyState.clock} ${strategyEvaluation.headline || "Strategy"}`,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      payload: {
+        gameId,
+        strategyState: {
+          period: strategyState.period,
+          periodLabel: strategyState.periodLabel,
+          clock: strategyState.clock,
+          secondsRemaining: strategyState.secondsRemaining,
+          scoreDiff: strategyState.scoreDiff,
+          scoreLabel: strategyState.scoreLabel,
+          timeBand: strategyState.timeBand,
+          isOurPossession: strategyState.isOurPossession,
+          possessionTeamId: strategyState.possessionTeamId,
+          foulsToGive: strategyState.foulsToGive,
+          opponentFoulsToGive: strategyState.opponentFoulsToGive,
+          ourTimeouts: strategyState.ourTimeouts,
+          opponentTimeouts: strategyState.opponentTimeouts,
+          vantageTeamId: strategyState.vantageTeam?.teamId,
+          vantageTeamTricode: strategyState.vantageTeam?.teamTricode,
+          opponentTeamId: strategyState.opponentTeam?.teamId,
+          opponentTeamTricode: strategyState.opponentTeam?.teamTricode,
+        },
+        strategyEvaluation: {
+          status: strategyEvaluation.status,
+          headline: strategyEvaluation.headline,
+          summary: strategyEvaluation.summary,
+          rationale: strategyEvaluation.rationale || "",
+          notes: Array.isArray(strategyEvaluation.notes) ? strategyEvaluation.notes : [],
+          matrixContext: strategyEvaluation.matrixContext || null,
+          playMode: strategyEvaluation.playMode || null,
+          recommendation: strategyEvaluation.recommendation || null,
+          freeThrowLookahead: strategyEvaluation.freeThrowLookahead || null,
+        },
+      },
+    };
+
+    strategyHistorySaveRef.current = strategySnapshotKey;
+    let cancelled = false;
+    (async () => {
+      try {
+        const savedRecord = accountsEnabled
+          ? await saveToolRecordRemote(user.id, record)
+          : saveToolRecord(user.id, record);
+        if (!savedRecord || cancelled) return;
+        setStrategyHistoryRecords((prev) => {
+          const next = [savedRecord, ...prev.filter((entry) => entry.id !== savedRecord.id)];
+          return next.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+        });
+      } catch (error) {
+        const savedRecord = saveToolRecord(user.id, record);
+        if (!savedRecord || cancelled) return;
+        setStrategyHistoryRecords((prev) => {
+          const next = [savedRecord, ...prev.filter((entry) => entry.id !== savedRecord.id)];
+          return next.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    accountsEnabled,
+    gameId,
+    shouldTrackStrategyHistory,
+    strategyEvaluation,
+    strategySnapshotKey,
+    strategyState,
+    user?.id,
+  ]);
+
   const toggleStrategyPanel = () => {
     setStrategyPanelCollapsed((prev) => {
       const next = !prev;
@@ -2157,6 +2288,16 @@ export default function Game({ variant = "full" }) {
   const closeStrategyFeedbackModal = () => {
     if (strategyFeedbackSaving) return;
     setStrategyFeedbackModalOpen(false);
+  };
+
+  const openStrategyHistoryModal = async () => {
+    setStrategyHistoryModalOpen(true);
+    await hydrateStrategyHistory();
+  };
+
+  const closeStrategyHistoryModal = () => {
+    if (strategyHistoryLoading) return;
+    setStrategyHistoryModalOpen(false);
   };
 
   if (isLoading) {
@@ -2579,21 +2720,82 @@ export default function Game({ variant = "full" }) {
                     <div className={styles.strategyFeedbackStatus}>{strategyFeedbackStatus}</div>
                   ) : null}
                   <div className={styles.strategyFeedbackActions}>
-                    <Link className={styles.strategyVaultLink} to="/me?tab=late-game">
-                      Open Situation Feedback Notes
-                    </Link>
+                    <button
+                      type="button"
+                      className={styles.strategyVaultLink}
+                      onClick={openStrategyHistoryModal}
+                    >
+                      Recommendation History
+                    </button>
                     <button
                       type="button"
                       className={styles.strategySaveButton}
                       onClick={openStrategyFeedbackModal}
                     >
-                      Feedback
+                      Add Feedback
                     </button>
                   </div>
                 </div>
               </div>
             ) : null}
           </section>
+
+          {strategyHistoryModalOpen ? (
+            <div className={styles.noteOverlay} onClick={closeStrategyHistoryModal}>
+              <div
+                className={`${styles.noteModal} ${styles.noteModalForm} ${styles.strategyHistoryModal}`}
+                onClick={(event) => event.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+              >
+                <h3>Recommendation History</h3>
+                <div className={styles.strategyFeedbackSubtitle}>Saved strategy updates from the final 6:00 of Q4 and overtime.</div>
+                {strategyHistoryStatus ? (
+                  <div className={styles.strategyFeedbackStatus}>{strategyHistoryStatus}</div>
+                ) : null}
+                <div className={styles.strategyHistoryList}>
+                  {strategyHistoryLoading ? (
+                    <div className={styles.strategyHistoryEmpty}>Loading history...</div>
+                  ) : strategyHistoryRecords.length ? (
+                    strategyHistoryRecords.map((record) => {
+                      const payload = record.payload && typeof record.payload === "object" ? record.payload : {};
+                      const state = payload.strategyState && typeof payload.strategyState === "object" ? payload.strategyState : {};
+                      const evaluation = payload.strategyEvaluation && typeof payload.strategyEvaluation === "object" ? payload.strategyEvaluation : {};
+                      const possessionLabel = state.isOurPossession == null
+                        ? "Unknown"
+                        : `${state.isOurPossession ? state.vantageTeamTricode || "Team" : state.opponentTeamTricode || "Team"} ball`;
+                      return (
+                        <article key={record.id} className={styles.strategyHistoryCard}>
+                          <div className={styles.strategyHistoryCardHeader}>
+                            <strong>{evaluation.headline || "Strategy update"}</strong>
+                            <span>{state.periodLabel || "--"} {state.clock || "--"}</span>
+                          </div>
+                          <div className={styles.strategyHistoryCardMeta}>
+                            {state.scoreLabel || "--"} · {possessionLabel}
+                          </div>
+                          <div className={styles.strategyHistoryCardBody}>
+                            {evaluation.summary || "No saved recommendation detail."}
+                          </div>
+                          {evaluation.rationale ? (
+                            <div className={styles.strategyHistoryCardNote}>
+                              Why: {evaluation.rationale}
+                            </div>
+                          ) : null}
+                        </article>
+                      );
+                    })
+                  ) : (
+                    <div className={styles.strategyHistoryEmpty}>No recommendation history saved yet.</div>
+                  )}
+                </div>
+                <div className={styles.noteActions}>
+                  <button type="button" className={styles.noteCancel} onClick={closeStrategyHistoryModal}>
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           {strategyFeedbackModalOpen ? (
             <div className={styles.noteOverlay} onClick={closeStrategyFeedbackModal}>

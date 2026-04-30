@@ -1169,6 +1169,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 
 .strategyVerdictButton,
 .strategySaveButton,
+.strategyVaultLink,
 .strategyTag {
   cursor: pointer;
 }
@@ -1232,6 +1233,51 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 .strategySaveButton:disabled {
   opacity: 0.7;
   cursor: wait;
+}
+
+.strategyHistoryModal {
+  max-width: 760px;
+}
+
+.strategyHistoryList {
+  display: grid;
+  gap: 10px;
+  max-height: min(60vh, 520px);
+  overflow-y: auto;
+}
+
+.strategyHistoryCard {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel-strong);
+}
+
+.strategyHistoryCardHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.strategyHistoryCardHeader strong {
+  font-size: 15px;
+  color: var(--text);
+}
+
+.strategyHistoryCardHeader span,
+.strategyHistoryCardMeta,
+.strategyHistoryCardNote,
+.strategyHistoryEmpty {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.strategyHistoryCardBody {
+  font-size: 14px;
+  color: var(--text);
 }
 
 .navRow {

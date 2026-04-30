@@ -6,6 +6,7 @@ export const TOOL_RECORD_TYPES = {
   MATCHUP_GRAPHIC: "matchup_graphic",
   GAME_ANALYSIS: "game_analysis",
   LATE_GAME_FEEDBACK: "late_game_feedback",
+  LATE_GAME_RECOMMENDATION: "late_game_recommendation",
 };
 
 function toolVaultKey(userId) {
