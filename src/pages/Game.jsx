@@ -755,7 +755,7 @@ export default function Game({ variant = "full" }) {
 
   const { data: minutesData } = useQuery({
     queryKey: ["minutes", gameId],
-    queryFn: () => fetchMinutes(gameId),
+    queryFn: () => fetchMinutes(gameId, { optional: true }),
     enabled: Boolean(gameId),
     refetchInterval: () => (game?.gameStatus === 3 ? false : 15_000),
     refetchIntervalInBackground: true,

@@ -16,7 +16,10 @@ const SUPABASE_FUNCTIONS_BASE = SUPABASE_URL
 async function requestJson(url) {
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) {
-    throw new Error(`Request failed: ${res.status}`);
+    const error = new Error(`Request failed: ${res.status}`);
+    error.status = res.status;
+    error.url = url;
+    throw error;
   }
   return res.json();
 }
@@ -1304,9 +1307,16 @@ export async function fetchGame(gameId, segment = null, options = {}) {
   return requestJson(url);
 }
 
-export function fetchMinutes(gameId) {
+export async function fetchMinutes(gameId, options = {}) {
   const url = `${API_BASE}/games/${gameId}/minutes`;
-  return requestJson(url);
+  try {
+    return await requestJson(url);
+  } catch (error) {
+    if (options.optional && error?.status === 404) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 export function teamLogoUrl(teamId, league = null) {
