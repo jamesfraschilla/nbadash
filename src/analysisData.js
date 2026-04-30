@@ -13,13 +13,15 @@ async function getCurrentAccessToken() {
   return data?.session?.access_token || "";
 }
 
-export async function requestGameAnalysis({ gameId, range }) {
+export async function requestGameAnalysis({ gameId, game, minutesData, range }) {
   requireSupabase();
   const accessToken = await getCurrentAccessToken();
   const { data, error } = await supabase.functions.invoke("game-analysis", {
     body: {
       accessToken,
       gameId,
+      game,
+      minutesData,
       range,
     },
   });

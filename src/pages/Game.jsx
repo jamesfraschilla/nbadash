@@ -1203,6 +1203,8 @@ export default function Game({ variant = "full" }) {
       setAnalysisError("");
       const result = await requestGameAnalysis({
         gameId,
+        game,
+        minutesData,
         range: {
           minPeriod: minPoint.period,
           minClock: toClock(minPoint),
