@@ -129,7 +129,8 @@ function latestPossessionTeamId(game) {
   for (let index = actions.length - 1; index >= 0; index -= 1) {
     const action = actions[index];
     const candidate = action?.possession ?? action?.possessionTeamId ?? null;
-    if (candidate != null && candidate !== "") return String(candidate);
+    if (candidate == null || candidate === "" || String(candidate) === "0") continue;
+    return String(candidate);
   }
   return null;
 }

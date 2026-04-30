@@ -2136,6 +2136,17 @@ export default function Game({ variant = "full" }) {
       : strategyEvaluation?.status === "ready"
         ? "Direct matrix match"
         : "Live state monitor";
+  const strategySnapshotKey = useMemo(() => {
+    if (!strategyState) return "";
+    return [
+      strategyState.vantageTeam?.teamId,
+      strategyState.period,
+      strategyState.clock,
+      strategyState.scoreDiff,
+      strategyState.possessionTeamId || "na",
+      strategyEvaluation?.recommendation?.ruleId || strategyEvaluation?.status || "na",
+    ].join(":");
+  }, [strategyEvaluation?.recommendation?.ruleId, strategyEvaluation?.status, strategyState]);
   const shouldTrackStrategyHistory = Boolean(
     gameId &&
     strategyState?.isLive &&
@@ -2182,17 +2193,6 @@ export default function Game({ variant = "full" }) {
       userAgent: window.navigator?.userAgent || "",
     });
   }, [strategyPanelError]);
-  const strategySnapshotKey = useMemo(() => {
-    if (!strategyState) return "";
-    return [
-      strategyState.vantageTeam?.teamId,
-      strategyState.period,
-      strategyState.clock,
-      strategyState.scoreDiff,
-      strategyState.possessionTeamId || "na",
-      strategyEvaluation?.recommendation?.ruleId || strategyEvaluation?.status || "na",
-    ].join(":");
-  }, [strategyEvaluation?.recommendation?.ruleId, strategyEvaluation?.status, strategyState]);
 
   useEffect(() => {
     setStrategyFeedback(buildDefaultStrategyFeedback());
