@@ -857,7 +857,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 }
 
 .strategyPanel {
-  max-width: calc(var(--pbp-card-width) * 3 + 56px);
+  max-width: var(--stats-card-width);
   margin: 0 auto 18px;
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -899,14 +899,14 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 .strategyPanelHeader {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
 }
 
-.strategyTitle {
-  font-size: 18px;
+.strategyToggleLabel {
+  font-size: 14px;
   font-weight: 700;
-  color: var(--text);
+  color: var(--muted);
 }
 
 .strategyToggleGroup {
@@ -934,7 +934,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 
 .strategyLiveStrip {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -958,7 +958,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 }
 
 .strategyLivePill strong {
-  font-size: 14px;
+  font-size: 15px;
   color: var(--text);
 }
 
@@ -1364,5 +1364,9 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   .strategyFeedbackActions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .strategyLiveStrip {
+    grid-template-columns: 1fr;
   }
 }

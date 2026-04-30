@@ -2479,7 +2479,7 @@ export default function Game({ variant = "full" }) {
             {!strategyPanelCollapsed ? (
               <div className={styles.strategyPanelBody}>
                 <div className={styles.strategyPanelHeader}>
-                  <div className={styles.strategyTitle}>Live Game Situation Matrix</div>
+                  <div className={styles.strategyToggleLabel}>Vantage</div>
                   <div className={styles.strategyToggleGroup}>
                     {[awayTeam, homeTeam].filter(Boolean).map((team) => (
                       <button
@@ -2496,10 +2496,6 @@ export default function Game({ variant = "full" }) {
 
                 <div className={styles.strategyLiveStrip}>
                   <div className={styles.strategyLivePill}>
-                    <span className={styles.strategyLiveLabel}>Vantage</span>
-                    <strong>{strategyVantageLabel}</strong>
-                  </div>
-                  <div className={styles.strategyLivePill}>
                     <span className={styles.strategyLiveLabel}>State</span>
                     <strong>{strategyState ? `${strategyState.periodLabel} ${strategyState.clock}` : "--"}</strong>
                   </div>
@@ -2510,14 +2506,6 @@ export default function Game({ variant = "full" }) {
                   <div className={styles.strategyLivePill}>
                     <span className={styles.strategyLiveLabel}>Possession</span>
                     <strong>{strategyPossessionDisplay}</strong>
-                  </div>
-                  <div className={styles.strategyLivePill}>
-                    <span className={styles.strategyLiveLabel}>Timeouts</span>
-                    <strong>{strategyState ? `${strategyState.ourTimeouts} / ${strategyState.opponentTimeouts}` : "--"}</strong>
-                  </div>
-                  <div className={styles.strategyLivePill}>
-                    <span className={styles.strategyLiveLabel}>Fouls To Give</span>
-                    <strong>{strategyState ? `${strategyState.foulsToGive} / ${strategyState.opponentFoulsToGive}` : "--"}</strong>
                   </div>
                 </div>
 
@@ -2592,7 +2580,7 @@ export default function Game({ variant = "full" }) {
                   ) : null}
                   <div className={styles.strategyFeedbackActions}>
                     <Link className={styles.strategyVaultLink} to="/me?tab=late-game">
-                      Open Late Game Analysis
+                      Open Situation Feedback Notes
                     </Link>
                     <button
                       type="button"
