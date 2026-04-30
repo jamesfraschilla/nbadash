@@ -856,6 +856,265 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   object-fit: contain;
 }
 
+.strategyPanel {
+  max-width: 980px;
+  margin: 0 auto 18px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(99, 102, 241, 0.06), transparent 28%),
+    var(--panel);
+  display: grid;
+  gap: 14px;
+}
+
+.strategyPanelHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.strategyEyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.strategyTitle {
+  margin: 4px 0 0;
+  font-size: 20px;
+  color: var(--text);
+}
+
+.strategyToggleGroup {
+  display: inline-flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.strategyToggle {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.strategyToggleActive {
+  background: var(--highlight-text);
+  color: var(--bg);
+  border-color: var(--highlight-text);
+}
+
+.strategyMetaGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.strategyMetaCard,
+.strategyRecommendation,
+.strategyFeedback {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  padding: 12px;
+}
+
+.strategyMetaLabel {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.strategyMetaCard strong {
+  font-size: 15px;
+  color: var(--text);
+}
+
+.strategyRecommendation {
+  display: grid;
+  gap: 10px;
+}
+
+.strategyRecommendationHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.strategyRecommendationTitle {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.strategyBadgeRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.strategyBadge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--panel-strong);
+  border: 1px solid var(--border);
+  padding: 5px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.strategySummary {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.strategyRationale,
+.strategySecondary,
+.strategyBlindSpots,
+.strategyFeedbackSubtitle,
+.strategyFeedbackStatus {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.strategyNotes {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.strategyBlindSpots {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.strategyFeedback {
+  display: grid;
+  gap: 12px;
+}
+
+.strategyFeedbackHeader {
+  display: grid;
+  gap: 4px;
+}
+
+.strategyFeedbackTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.strategyVerdictRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.strategyVerdictButton,
+.strategySaveButton,
+.strategyVaultLink,
+.strategyTag {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-strong);
+  color: var(--text);
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.strategyVerdictButton,
+.strategySaveButton,
+.strategyTag {
+  cursor: pointer;
+}
+
+.strategyVerdictButtonActive,
+.strategyTagActive {
+  background: var(--highlight-text);
+  color: var(--bg);
+  border-color: var(--highlight-text);
+}
+
+.strategyField {
+  display: grid;
+  gap: 6px;
+}
+
+.strategyField span {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.strategyField input,
+.strategyField textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-strong);
+  color: var(--text);
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.strategyTagGrid {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.strategyFeedbackActions {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.strategyVaultLink {
+  background: var(--bg);
+  white-space: nowrap;
+}
+
+.strategySaveButton {
+  background: var(--highlight-text);
+  color: var(--bg);
+  border-color: var(--highlight-text);
+}
+
+.strategySaveButton:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
 .navRow {
   display: flex;
   justify-content: center;
@@ -979,5 +1238,12 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   .possessionPlaceholder {
     width: 14px;
     height: 14px;
+  }
+
+  .strategyPanelHeader,
+  .strategyRecommendationHeader,
+  .strategyFeedbackActions {
+    flex-direction: column;
+    align-items: stretch;
   }
 }

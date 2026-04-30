@@ -122,6 +122,7 @@ export default function UserContent() {
   const [opponentFilter, setOpponentFilter] = useState("all");
   const [tagFilters, setTagFilters] = useState([]);
   const [deletingKey, setDeletingKey] = useState("");
+  const [toolExportStatus, setToolExportStatus] = useState("");
 
   const { data: notes = [], isLoading: loadingNotes } = useQuery({
     queryKey: ["owned-notes", user?.id],
@@ -250,6 +251,10 @@ export default function UserContent() {
     () => savedTools.filter((record) => record.type === TOOL_RECORD_TYPES.GAME_ANALYSIS),
     [savedTools]
   );
+  const lateGameFeedbackRecords = useMemo(
+    () => savedTools.filter((record) => record.type === TOOL_RECORD_TYPES.LATE_GAME_FEEDBACK),
+    [savedTools]
+  );
 
   const tagSummaryLabel = useMemo(() => {
     if (!tagFilters.length) return "All Tags";
@@ -313,6 +318,51 @@ export default function UserContent() {
     } finally {
       setDeletingKey("");
     }
+  };
+
+  const exportLateGameFeedback = async () => {
+    if (!lateGameFeedbackRecords.length) {
+      setToolExportStatus("No late-game feedback records to export.");
+      return;
+    }
+
+    const payload = lateGameFeedbackRecords.map((record) => {
+      const data = record.payload && typeof record.payload === "object" ? record.payload : {};
+      return {
+        title: record.title,
+        updatedAt: record.updatedAt,
+        gameId: data.gameId || "",
+        verdict: data.verdict || "",
+        suggestedCall: data.suggestedCall || "",
+        notes: data.notes || "",
+        tags: Array.isArray(data.tags) ? data.tags : [],
+        strategyState: data.strategyState || {},
+        strategyEvaluation: data.strategyEvaluation || {},
+      };
+    });
+
+    const text = JSON.stringify(payload, null, 2);
+
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        setToolExportStatus(`Copied ${payload.length} feedback record${payload.length === 1 ? "" : "s"} to clipboard.`);
+        return;
+      }
+    } catch {
+      // Fall through to file download.
+    }
+
+    const blob = new Blob([text], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `late-game-feedback-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+    setToolExportStatus(`Exported ${payload.length} feedback record${payload.length === 1 ? "" : "s"} as JSON.`);
   };
 
   const toggleTagFilter = (tag) => {
@@ -544,10 +594,70 @@ export default function UserContent() {
         </section>
       ) : (
         <section className={styles.section}>
+          {lateGameFeedbackRecords.length ? (
+            <div className={styles.toolToolbar}>
+              <button
+                type="button"
+                className={styles.cardLink}
+                onClick={exportLateGameFeedback}
+              >
+                Export Feedback
+              </button>
+              {toolExportStatus ? (
+                <div className={styles.toolToolbarStatus}>{toolExportStatus}</div>
+              ) : null}
+            </div>
+          ) : null}
           {savedTools.length === 0 ? (
             <div className={styles.emptyState}>You have not saved any tools yet.</div>
           ) : (
             <div className={styles.list}>
+              {lateGameFeedbackRecords.map((toolRecord) => {
+                const isDeleting = deletingKey === `tool:${toolRecord.id}`;
+                const payload = toolRecord.payload && typeof toolRecord.payload === "object" ? toolRecord.payload : {};
+                const strategyState = payload.strategyState && typeof payload.strategyState === "object" ? payload.strategyState : {};
+                const strategyEvaluation = payload.strategyEvaluation && typeof payload.strategyEvaluation === "object" ? payload.strategyEvaluation : {};
+                const savedGameId = String(payload.gameId || "").trim();
+                const verdict = payload.verdict === "correct" ? "Correct" : "Needs Work";
+                const summary = String(payload.suggestedCall || strategyEvaluation.headline || strategyEvaluation.summary || "").trim();
+                return (
+                  <article key={toolRecord.id} className={styles.card}>
+                    <div className={styles.cardHeader}>
+                      <div className={styles.cardTitleGroup}>
+                        <div className={styles.cardTitle}>{toolRecord.title || "Untitled"}</div>
+                        <div className={styles.cardMeta}>
+                          Late Game Feedback · {strategyState.vantageTeamTricode || "Team"} · {strategyState.periodLabel || "--"} {strategyState.clock || "--"} · {verdict}
+                        </div>
+                      </div>
+                      <div className={styles.cardActions}>
+                        <Link className={styles.cardLink} to={savedGameId ? `/g/${savedGameId}` : "/me?tab=tools"}>
+                          Open Game
+                        </Link>
+                        <button
+                          type="button"
+                          className={styles.deleteButton}
+                          onClick={() => handleDeleteTool(toolRecord)}
+                          disabled={isDeleting}
+                        >
+                          {isDeleting ? "Deleting..." : "Delete"}
+                        </button>
+                      </div>
+                    </div>
+                    <div className={styles.cardBody}>
+                      {summary || "Saved late-game feedback."}
+                      {payload.notes ? `\n\n${payload.notes}` : ""}
+                    </div>
+                    {Array.isArray(payload.tags) && payload.tags.length ? (
+                      <div className={styles.tagRow}>
+                        {payload.tags.map((tag) => (
+                          <span key={tag} className={styles.tagChip}>{tag}</span>
+                        ))}
+                      </div>
+                    ) : null}
+                    <div className={styles.cardFooter}>Updated {formatTimestamp(toolRecord.updatedAt)}</div>
+                  </article>
+                );
+              })}
               {analysisToolRecords.map((toolRecord) => {
                 const isDeleting = deletingKey === `tool:${toolRecord.id}`;
                 const payload = toolRecord.payload && typeof toolRecord.payload === "object" ? toolRecord.payload : {};

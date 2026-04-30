@@ -140,11 +140,24 @@
 
 .section {
   display: grid;
+  gap: 12px;
 }
 
 .list {
   display: grid;
   gap: 12px;
+}
+
+.toolToolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.toolToolbarStatus {
+  color: var(--muted);
+  font-size: 0.88rem;
 }
 
 .card,
