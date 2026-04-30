@@ -130,6 +130,186 @@ function latestPossessionTeamId(game) {
   return null;
 }
 
+function isAdministrativeAction(action) {
+  const type = String(action?.actionType || "").toLowerCase();
+  return (
+    type === "timeout" ||
+    type === "substitution" ||
+    type === "violation" ||
+    type === "instantreplay" ||
+    type === "ejection"
+  );
+}
+
+function isTripBreakerAction(action) {
+  const type = String(action?.actionType || "").toLowerCase();
+  return (
+    type === "2pt" ||
+    type === "3pt" ||
+    type === "turnover" ||
+    type === "rebound" ||
+    type === "steal" ||
+    type === "block" ||
+    type === "jumpball" ||
+    type === "goaltending" ||
+    type === "period"
+  );
+}
+
+function parseFreeThrowAttempt(action) {
+  if (String(action?.actionType || "").toLowerCase() !== "freethrow") return null;
+  const description = String(action?.description || "");
+  const match = /Free Throw\s+(\d+)\s+of\s+(\d+)/i.exec(description);
+  if (!match) return null;
+  return {
+    attempt: safeNumber(match[1], 0),
+    total: safeNumber(match[2], 0),
+    made: String(action?.shotResult || "").toLowerCase() === "made",
+    description,
+  };
+}
+
+function isNonTechnicalDefensiveFoulByUs(action, ourTeamId) {
+  if (String(action?.actionType || "").toLowerCase() !== "foul") return false;
+  if (String(action?.teamId || "") !== String(ourTeamId || "")) return false;
+  const subType = String(action?.subType || "").toLowerCase();
+  const descriptor = String(action?.descriptor || action?.description || "").toLowerCase();
+  if (subType === "offensive") return false;
+  if (subType.includes("technical") || descriptor.includes("technical")) return false;
+  return true;
+}
+
+function inferAwardedFreeThrows(actions, foulIndex, opponentTeamId) {
+  const foulAction = actions[foulIndex];
+  const descriptor = String(foulAction?.descriptor || foulAction?.description || "").toLowerCase();
+  if (descriptor.includes("shoot")) {
+    const previous = actions[foulIndex - 1];
+    const previousType = String(previous?.actionType || "").toLowerCase();
+    if (
+      previous &&
+      String(previous?.teamId || "") === String(opponentTeamId || "") &&
+      previous?.clock === foulAction?.clock &&
+      previousType === "3pt"
+    ) {
+      return 3;
+    }
+    return 2;
+  }
+  return null;
+}
+
+function buildFreeThrowLookahead(state, meta) {
+  const totalAwarded = safeNumber(meta?.totalAwarded, 0);
+  if (totalAwarded <= 0) return null;
+
+  const attemptsTaken = safeNumber(meta?.attemptsTaken, 0);
+  const madeSoFar = safeNumber(meta?.madeSoFar, 0);
+  const remainingAttempts = Math.max(0, totalAwarded - attemptsTaken);
+  const scenarios = [];
+
+  for (let extraMakes = 0; extraMakes <= remainingAttempts; extraMakes += 1) {
+    const finalMade = madeSoFar + extraMakes;
+    const projectedScoreDiff = state.scoreDiff - extraMakes;
+    const projectedState = {
+      ...state,
+      isOurPossession: true,
+      scoreDiff: projectedScoreDiff,
+      scoreLabel: scoreLabel(projectedScoreDiff),
+    };
+    const recommendation = offenseRecommendation(projectedState);
+    scenarios.push({
+      key: `${totalAwarded}-${attemptsTaken}-${finalMade}`,
+      finalMade,
+      totalAwarded,
+      additionalMakes: extraMakes,
+      projectedScoreDiff,
+      projectedScoreLabel: scoreLabel(projectedScoreDiff),
+      label: `If they finish ${finalMade} of ${totalAwarded}`,
+      recommendation,
+    });
+  }
+
+  if (!scenarios.length) return null;
+
+  return {
+    headline: "Next possession after free throws",
+    summary: "The opponent is at the line. Project the next offensive decision before the ball comes back to us.",
+    source: meta?.source || "opponent-free-throws",
+    totalAwarded,
+    attemptsTaken,
+    madeSoFar,
+    pendingAttempts: remainingAttempts,
+    scenarios,
+    notes: Array.isArray(meta?.notes) ? meta.notes : [],
+  };
+}
+
+function findOpponentFreeThrowLookahead(state) {
+  const actions = Array.isArray(state?.game?.playByPlayActions) ? state.game.playByPlayActions : [];
+  if (!actions.length || !state?.vantageTeam?.teamId || !state?.opponentTeam?.teamId) return null;
+
+  const ourTeamId = state.vantageTeam.teamId;
+  const opponentTeamId = state.opponentTeam.teamId;
+  const freeThrowAttempts = [];
+
+  for (let index = actions.length - 1; index >= 0; index -= 1) {
+    const action = actions[index];
+    if (state.period && safeNumber(action?.period, 0) && safeNumber(action.period, 0) < state.period) break;
+
+    if (isAdministrativeAction(action)) continue;
+
+    const freeThrowAttempt = parseFreeThrowAttempt(action);
+    if (freeThrowAttempt && String(action?.teamId || "") === String(opponentTeamId)) {
+      freeThrowAttempts.unshift(freeThrowAttempt);
+      continue;
+    }
+
+    if (freeThrowAttempts.length) {
+      if (isNonTechnicalDefensiveFoulByUs(action, ourTeamId)) {
+        const awardedFromAttempts = freeThrowAttempts.reduce(
+          (maxTotal, attempt) => Math.max(maxTotal, attempt.total),
+          0
+        );
+        return buildFreeThrowLookahead(state, {
+          source: "live-free-throw-sequence",
+          totalAwarded: awardedFromAttempts,
+          attemptsTaken: freeThrowAttempts.length,
+          madeSoFar: freeThrowAttempts.filter((attempt) => attempt.made).length,
+        });
+      }
+      if (isTripBreakerAction(action)) break;
+      break;
+    }
+
+    if (isNonTechnicalDefensiveFoulByUs(action, ourTeamId)) {
+      const inferredAward = inferAwardedFreeThrows(actions, index, opponentTeamId);
+      if (inferredAward) {
+        return buildFreeThrowLookahead(state, {
+          source: "shooting-foul-pending",
+          totalAwarded: inferredAward,
+          attemptsTaken: 0,
+          madeSoFar: 0,
+        });
+      }
+      if (state.foulsToGive === 0) {
+        return buildFreeThrowLookahead(state, {
+          source: "penalty-foul-pending",
+          totalAwarded: 2,
+          attemptsTaken: 0,
+          madeSoFar: 0,
+          notes: ["Penalty trip inferred from team-foul state before the first free throw appears in the feed."],
+        });
+      }
+      break;
+    }
+
+    if (isTripBreakerAction(action)) break;
+    break;
+  }
+
+  return null;
+}
+
 export function buildLateGameStrategyState({
   game,
   vantageTeamId,
@@ -160,6 +340,7 @@ export function buildLateGameStrategyState({
   const opponentFouls = isAwayVantage ? safeNumber(homeFouls, 0) : safeNumber(awayFouls, 0);
 
   return {
+    game,
     isLive: game.gameStatus === 2,
     isLateGameWindow: period >= 4,
     period,
@@ -523,6 +704,7 @@ export function evaluateLateGameStrategy(state) {
   const recommendation = state.isOurPossession
     ? offenseRecommendation(state)
     : defenseRecommendation(state);
+  const freeThrowLookahead = state.isOurPossession ? null : findOpponentFreeThrowLookahead(state);
 
   return {
     status: "ready",
@@ -533,6 +715,7 @@ export function evaluateLateGameStrategy(state) {
     notes: recommendation.notes,
     blindSpots: recommendation.blindSpots,
     rationale: recommendation.rationale,
+    freeThrowLookahead,
     matrixContext: {
       side: state.isOurPossession ? "Our possession" : "Opponent possession",
       timeBand: state.timeBand,

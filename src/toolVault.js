@@ -152,7 +152,7 @@ export async function saveToolRecordRemote(userId, record) {
   const payload = {
     id: normalized.id,
     owner_id: userId,
-    type: normalized.type || TOOL_RECORD_TYPE,
+    type: normalized.type || TOOL_RECORD_TYPES.MATCHUP_GRAPHIC,
     title: normalized.title,
     payload: normalized.payload,
     created_at: normalized.createdAt,

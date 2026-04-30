@@ -116,7 +116,13 @@ export default function UserContent() {
   const [params, setParams] = useSearchParams();
   const canUseTools = hasFeature("tools");
   const rawTab = params.get("tab");
-  const tab = rawTab === "drawings" ? "drawings" : rawTab === "tools" && canUseTools ? "tools" : "notes";
+  const tab = rawTab === "drawings"
+    ? "drawings"
+    : rawTab === "late-game" && canUseTools
+      ? "late-game"
+      : rawTab === "tools" && canUseTools
+        ? "tools"
+        : "notes";
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [opponentFilter, setOpponentFilter] = useState("all");
@@ -406,9 +412,18 @@ export default function UserContent() {
             Tools
           </button>
         ) : null}
+        {canUseTools ? (
+          <button
+            type="button"
+            className={`${styles.tabButton} ${tab === "late-game" ? styles.tabButtonActive : ""}`}
+            onClick={() => setTab("late-game")}
+          >
+            Late Game Analysis
+          </button>
+        ) : null}
       </div>
 
-      {tab === "tools" ? null : (
+      {tab === "tools" || tab === "late-game" ? null : (
         <section className={styles.filterPanel}>
         <div className={styles.filterGrid}>
           <label className={styles.filterField}>
@@ -592,72 +607,12 @@ export default function UserContent() {
             </div>
           )}
         </section>
-      ) : (
+      ) : tab === "tools" ? (
         <section className={styles.section}>
-          {lateGameFeedbackRecords.length ? (
-            <div className={styles.toolToolbar}>
-              <button
-                type="button"
-                className={styles.cardLink}
-                onClick={exportLateGameFeedback}
-              >
-                Export Feedback
-              </button>
-              {toolExportStatus ? (
-                <div className={styles.toolToolbarStatus}>{toolExportStatus}</div>
-              ) : null}
-            </div>
-          ) : null}
-          {savedTools.length === 0 ? (
+          {matchupToolRecords.length === 0 && analysisToolRecords.length === 0 ? (
             <div className={styles.emptyState}>You have not saved any tools yet.</div>
           ) : (
             <div className={styles.list}>
-              {lateGameFeedbackRecords.map((toolRecord) => {
-                const isDeleting = deletingKey === `tool:${toolRecord.id}`;
-                const payload = toolRecord.payload && typeof toolRecord.payload === "object" ? toolRecord.payload : {};
-                const strategyState = payload.strategyState && typeof payload.strategyState === "object" ? payload.strategyState : {};
-                const strategyEvaluation = payload.strategyEvaluation && typeof payload.strategyEvaluation === "object" ? payload.strategyEvaluation : {};
-                const savedGameId = String(payload.gameId || "").trim();
-                const verdict = payload.verdict === "correct" ? "Correct" : "Needs Work";
-                const summary = String(payload.suggestedCall || strategyEvaluation.headline || strategyEvaluation.summary || "").trim();
-                return (
-                  <article key={toolRecord.id} className={styles.card}>
-                    <div className={styles.cardHeader}>
-                      <div className={styles.cardTitleGroup}>
-                        <div className={styles.cardTitle}>{toolRecord.title || "Untitled"}</div>
-                        <div className={styles.cardMeta}>
-                          Late Game Feedback · {strategyState.vantageTeamTricode || "Team"} · {strategyState.periodLabel || "--"} {strategyState.clock || "--"} · {verdict}
-                        </div>
-                      </div>
-                      <div className={styles.cardActions}>
-                        <Link className={styles.cardLink} to={savedGameId ? `/g/${savedGameId}` : "/me?tab=tools"}>
-                          Open Game
-                        </Link>
-                        <button
-                          type="button"
-                          className={styles.deleteButton}
-                          onClick={() => handleDeleteTool(toolRecord)}
-                          disabled={isDeleting}
-                        >
-                          {isDeleting ? "Deleting..." : "Delete"}
-                        </button>
-                      </div>
-                    </div>
-                    <div className={styles.cardBody}>
-                      {summary || "Saved late-game feedback."}
-                      {payload.notes ? `\n\n${payload.notes}` : ""}
-                    </div>
-                    {Array.isArray(payload.tags) && payload.tags.length ? (
-                      <div className={styles.tagRow}>
-                        {payload.tags.map((tag) => (
-                          <span key={tag} className={styles.tagChip}>{tag}</span>
-                        ))}
-                      </div>
-                    ) : null}
-                    <div className={styles.cardFooter}>Updated {formatTimestamp(toolRecord.updatedAt)}</div>
-                  </article>
-                );
-              })}
               {analysisToolRecords.map((toolRecord) => {
                 const isDeleting = deletingKey === `tool:${toolRecord.id}`;
                 const payload = toolRecord.payload && typeof toolRecord.payload === "object" ? toolRecord.payload : {};
@@ -729,6 +684,75 @@ export default function UserContent() {
                         ? `${leftTeam?.fullName || "Left side empty"} vs ${rightTeam?.fullName || "Right side empty"}`
                         : "Saved match-up graphic."}
                     </div>
+                    <div className={styles.cardFooter}>Updated {formatTimestamp(toolRecord.updatedAt)}</div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      ) : (
+        <section className={styles.section}>
+          {lateGameFeedbackRecords.length ? (
+            <div className={styles.toolToolbar}>
+              <button
+                type="button"
+                className={styles.cardLink}
+                onClick={exportLateGameFeedback}
+              >
+                Export Feedback
+              </button>
+              {toolExportStatus ? (
+                <div className={styles.toolToolbarStatus}>{toolExportStatus}</div>
+              ) : null}
+            </div>
+          ) : null}
+          {lateGameFeedbackRecords.length === 0 ? (
+            <div className={styles.emptyState}>You have not saved any late-game feedback yet.</div>
+          ) : (
+            <div className={styles.list}>
+              {lateGameFeedbackRecords.map((toolRecord) => {
+                const isDeleting = deletingKey === `tool:${toolRecord.id}`;
+                const payload = toolRecord.payload && typeof toolRecord.payload === "object" ? toolRecord.payload : {};
+                const strategyState = payload.strategyState && typeof payload.strategyState === "object" ? payload.strategyState : {};
+                const strategyEvaluation = payload.strategyEvaluation && typeof payload.strategyEvaluation === "object" ? payload.strategyEvaluation : {};
+                const savedGameId = String(payload.gameId || "").trim();
+                const verdict = payload.verdict === "correct" ? "Correct" : "Needs Work";
+                const summary = String(payload.suggestedCall || strategyEvaluation.headline || strategyEvaluation.summary || "").trim();
+                return (
+                  <article key={toolRecord.id} className={styles.card}>
+                    <div className={styles.cardHeader}>
+                      <div className={styles.cardTitleGroup}>
+                        <div className={styles.cardTitle}>{toolRecord.title || "Untitled"}</div>
+                        <div className={styles.cardMeta}>
+                          Late Game Feedback · {strategyState.vantageTeamTricode || "Team"} · {strategyState.periodLabel || "--"} {strategyState.clock || "--"} · {verdict}
+                        </div>
+                      </div>
+                      <div className={styles.cardActions}>
+                        <Link className={styles.cardLink} to={savedGameId ? `/g/${savedGameId}` : "/me?tab=late-game"}>
+                          Open Game
+                        </Link>
+                        <button
+                          type="button"
+                          className={styles.deleteButton}
+                          onClick={() => handleDeleteTool(toolRecord)}
+                          disabled={isDeleting}
+                        >
+                          {isDeleting ? "Deleting..." : "Delete"}
+                        </button>
+                      </div>
+                    </div>
+                    <div className={styles.cardBody}>
+                      {summary || "Saved late-game feedback."}
+                      {payload.notes ? `\n\n${payload.notes}` : ""}
+                    </div>
+                    {Array.isArray(payload.tags) && payload.tags.length ? (
+                      <div className={styles.tagRow}>
+                        {payload.tags.map((tag) => (
+                          <span key={tag} className={styles.tagChip}>{tag}</span>
+                        ))}
+                      </div>
+                    ) : null}
                     <div className={styles.cardFooter}>Updated {formatTimestamp(toolRecord.updatedAt)}</div>
                   </article>
                 );

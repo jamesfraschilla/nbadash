@@ -77,6 +77,7 @@ import { readLocalStorage, writeLocalStorage } from "../storage.js";
 import styles from "./Game.module.css";
 
 const SNAPSHOT_STORAGE_PREFIX = "nba-dashboard:snapshots:";
+const LATE_GAME_PANEL_STORAGE_PREFIX = "nba-dashboard:late-game-panel:";
 const CORE_STAT_FIELDS = [
   "points",
   "reboundsTotal",
@@ -270,6 +271,18 @@ const saveSnapshots = (gameId, snapshots) => {
     `${SNAPSHOT_STORAGE_PREFIX}${gameId}`,
     JSON.stringify((snapshots || []).map(serializeSnapshotEntry))
   );
+};
+
+const loadLateGamePanelCollapsed = (gameId) => {
+  if (typeof window === "undefined" || !gameId) return true;
+  const raw = readLocalStorage(`${LATE_GAME_PANEL_STORAGE_PREFIX}${gameId}`);
+  if (raw == null) return true;
+  return raw !== "open";
+};
+
+const saveLateGamePanelCollapsed = (gameId, collapsed) => {
+  if (typeof window === "undefined" || !gameId) return;
+  writeLocalStorage(`${LATE_GAME_PANEL_STORAGE_PREFIX}${gameId}`, collapsed ? "collapsed" : "open");
 };
 
 const buildSnapshot = (boxScore) => {
@@ -563,6 +576,8 @@ export default function Game({ variant = "full" }) {
   const [strategyFeedback, setStrategyFeedback] = useState(() => buildDefaultStrategyFeedback());
   const [strategyFeedbackSaving, setStrategyFeedbackSaving] = useState(false);
   const [strategyFeedbackStatus, setStrategyFeedbackStatus] = useState("");
+  const [strategyPanelCollapsed, setStrategyPanelCollapsed] = useState(() => loadLateGamePanelCollapsed(gameId));
+  const [strategyFeedbackModalOpen, setStrategyFeedbackModalOpen] = useState(false);
   const isAtc = variant === "atc";
   const showExtras = !isAtc;
   const notesParams = useMemo(() => {
@@ -955,6 +970,10 @@ export default function Game({ variant = "full" }) {
     }
     setStrategyVantageTeamId(String(homeTeamId));
   }, [awayTeam, awayTeamId, homeTeam, homeTeamId, strategyVantageTeamId]);
+
+  useEffect(() => {
+    setStrategyPanelCollapsed(loadLateGamePanelCollapsed(gameId));
+  }, [gameId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2106,6 +2125,23 @@ export default function Game({ variant = "full" }) {
     setStrategyFeedbackStatus("");
   }, [strategySnapshotKey]);
 
+  const toggleStrategyPanel = () => {
+    setStrategyPanelCollapsed((prev) => {
+      const next = !prev;
+      saveLateGamePanelCollapsed(gameId, next);
+      return next;
+    });
+  };
+
+  const openStrategyFeedbackModal = () => {
+    setStrategyFeedbackModalOpen(true);
+  };
+
+  const closeStrategyFeedbackModal = () => {
+    if (strategyFeedbackSaving) return;
+    setStrategyFeedbackModalOpen(false);
+  };
+
   if (isLoading) {
     return <div className={styles.stateMessage}>Loading game details...</div>;
   }
@@ -2414,179 +2450,238 @@ export default function Game({ variant = "full" }) {
           </div>
 
           <section className={styles.strategyPanel}>
-            <div className={styles.strategyPanelHeader}>
-              <div>
-                <div className={styles.strategyEyebrow}>Late Game Strategy</div>
-                <h3 className={styles.strategyTitle}>Live Matrix Panel</h3>
-              </div>
-              <div className={styles.strategyToggleGroup}>
-                {[awayTeam, homeTeam].filter(Boolean).map((team) => (
-                  <button
-                    key={`strategy-team-${team.teamId}`}
-                    type="button"
-                    className={`${styles.strategyToggle} ${String(strategyVantageTeamId) === String(team.teamId) ? styles.strategyToggleActive : ""}`}
-                    onClick={() => setStrategyVantageTeamId(String(team.teamId))}
-                  >
-                    {team.teamTricode}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <button
+              type="button"
+              className={styles.strategyPanelToggle}
+              onClick={toggleStrategyPanel}
+            >
+              <span className={styles.strategyPanelToggleLabel}>Late Game Strategy</span>
+              <span className={styles.strategyPanelToggleIcon}>{strategyPanelCollapsed ? "+" : "−"}</span>
+            </button>
 
-            <div className={styles.strategyMetaGrid}>
-              <div className={styles.strategyMetaCard}>
-                <span className={styles.strategyMetaLabel}>Vantage</span>
-                <strong>{strategyState?.vantageTeam?.teamName || "Select a team"}</strong>
-              </div>
-              <div className={styles.strategyMetaCard}>
-                <span className={styles.strategyMetaLabel}>State</span>
-                <strong>{strategyState ? `${strategyState.periodLabel} ${strategyState.clock}` : "--"}</strong>
-              </div>
-              <div className={styles.strategyMetaCard}>
-                <span className={styles.strategyMetaLabel}>Margin</span>
-                <strong>{strategyState?.scoreLabel || "--"}</strong>
-              </div>
-              <div className={styles.strategyMetaCard}>
-                <span className={styles.strategyMetaLabel}>Possession</span>
-                <strong>
-                  {strategyState?.isOurPossession == null
-                    ? "Unknown"
-                    : strategyState.isOurPossession
-                      ? "Our possession"
-                      : "Opponent possession"}
-                </strong>
-              </div>
-              <div className={styles.strategyMetaCard}>
-                <span className={styles.strategyMetaLabel}>Timeouts</span>
-                <strong>{strategyState ? `${strategyState.ourTimeouts} / ${strategyState.opponentTimeouts}` : "--"}</strong>
-              </div>
-              <div className={styles.strategyMetaCard}>
-                <span className={styles.strategyMetaLabel}>Fouls To Give</span>
-                <strong>{strategyState ? `${strategyState.foulsToGive} / ${strategyState.opponentFoulsToGive}` : "--"}</strong>
-              </div>
-            </div>
-
-            <div className={styles.strategyRecommendation}>
-              <div className={styles.strategyRecommendationHeader}>
-                <div className={styles.strategyRecommendationTitle}>
-                  {strategyEvaluation?.headline || "Late Game Strategy"}
-                </div>
-                {strategyEvaluation?.matrixContext ? (
-                  <div className={styles.strategyBadgeRow}>
-                    <span className={styles.strategyBadge}>{strategyEvaluation.matrixContext.side}</span>
-                    <span className={styles.strategyBadge}>{strategyEvaluation.matrixContext.timeBand}</span>
-                    <span className={styles.strategyBadge}>{strategyEvaluation.matrixContext.scoreLabel}</span>
+            {!strategyPanelCollapsed ? (
+              <div className={styles.strategyPanelBody}>
+                <div className={styles.strategyPanelHeader}>
+                  <div>
+                    <div className={styles.strategyEyebrow}>Late Game Strategy</div>
+                    <h3 className={styles.strategyTitle}>Live Matrix Panel</h3>
                   </div>
-                ) : null}
-              </div>
-              <p className={styles.strategySummary}>{strategyEvaluation?.summary || "No recommendation yet."}</p>
-              {strategyEvaluation?.rationale ? (
-                <div className={styles.strategyRationale}>{strategyEvaluation.rationale}</div>
-              ) : null}
-              {strategyEvaluation?.playMode ? (
-                <div className={styles.strategySecondary}>
-                  Play Mode: {strategyEvaluation.playMode.mode} · {strategyEvaluation.playMode.instruction}
+                  <div className={styles.strategyToggleGroup}>
+                    {[awayTeam, homeTeam].filter(Boolean).map((team) => (
+                      <button
+                        key={`strategy-team-${team.teamId}`}
+                        type="button"
+                        className={`${styles.strategyToggle} ${String(strategyVantageTeamId) === String(team.teamId) ? styles.strategyToggleActive : ""}`}
+                        onClick={() => setStrategyVantageTeamId(String(team.teamId))}
+                      >
+                        {team.teamTricode}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              ) : null}
-              {Array.isArray(strategyEvaluation?.notes) && strategyEvaluation.notes.length ? (
-                <ul className={styles.strategyNotes}>
-                  {strategyEvaluation.notes.map((note) => (
-                    <li key={note}>{note}</li>
-                  ))}
-                </ul>
-              ) : null}
-              {Array.isArray(strategyEvaluation?.blindSpots) && strategyEvaluation.blindSpots.length ? (
-                <div className={styles.strategyBlindSpots}>
-                  <strong>Needs review:</strong> {strategyEvaluation.blindSpots.join(" ")}
+
+                <div className={styles.strategyMetaGrid}>
+                  <div className={styles.strategyMetaCard}>
+                    <span className={styles.strategyMetaLabel}>Vantage</span>
+                    <strong>{strategyState?.vantageTeam?.teamName || "Select a team"}</strong>
+                  </div>
+                  <div className={styles.strategyMetaCard}>
+                    <span className={styles.strategyMetaLabel}>State</span>
+                    <strong>{strategyState ? `${strategyState.periodLabel} ${strategyState.clock}` : "--"}</strong>
+                  </div>
+                  <div className={styles.strategyMetaCard}>
+                    <span className={styles.strategyMetaLabel}>Margin</span>
+                    <strong>{strategyState?.scoreLabel || "--"}</strong>
+                  </div>
+                  <div className={styles.strategyMetaCard}>
+                    <span className={styles.strategyMetaLabel}>Possession</span>
+                    <strong>
+                      {strategyState?.isOurPossession == null
+                        ? "Unknown"
+                        : strategyState.isOurPossession
+                          ? "Our possession"
+                          : "Opponent possession"}
+                    </strong>
+                  </div>
+                  <div className={styles.strategyMetaCard}>
+                    <span className={styles.strategyMetaLabel}>Timeouts</span>
+                    <strong>{strategyState ? `${strategyState.ourTimeouts} / ${strategyState.opponentTimeouts}` : "--"}</strong>
+                  </div>
+                  <div className={styles.strategyMetaCard}>
+                    <span className={styles.strategyMetaLabel}>Fouls To Give</span>
+                    <strong>{strategyState ? `${strategyState.foulsToGive} / ${strategyState.opponentFoulsToGive}` : "--"}</strong>
+                  </div>
                 </div>
-              ) : null}
-            </div>
 
-            <div className={styles.strategyFeedback}>
-              <div className={styles.strategyFeedbackHeader}>
-                <div className={styles.strategyFeedbackTitle}>Feedback</div>
-                <div className={styles.strategyFeedbackSubtitle}>Save corrections to My Vault while testing the playoff run.</div>
-              </div>
-
-              <div className={styles.strategyVerdictRow}>
-                <button
-                  type="button"
-                  className={`${styles.strategyVerdictButton} ${strategyFeedback.verdict === "correct" ? styles.strategyVerdictButtonActive : ""}`}
-                  onClick={() => setStrategyFeedback((prev) => ({ ...prev, verdict: "correct" }))}
-                >
-                  Correct
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.strategyVerdictButton} ${strategyFeedback.verdict === "needs_work" ? styles.strategyVerdictButtonActive : ""}`}
-                  onClick={() => setStrategyFeedback((prev) => ({ ...prev, verdict: "needs_work" }))}
-                >
-                  Needs Work
-                </button>
-              </div>
-
-              <label className={styles.strategyField}>
-                <span>What should it have said?</span>
-                <input
-                  type="text"
-                  value={strategyFeedback.suggestedCall}
-                  onChange={(event) => setStrategyFeedback((prev) => ({ ...prev, suggestedCall: event.target.value }))}
-                  placeholder="Example: Foul immediately, no trap"
-                />
-              </label>
-
-              <div className={styles.strategyTagGrid}>
-                {LATE_GAME_FEEDBACK_TAGS.map((tag) => {
-                  const active = strategyFeedback.tags.includes(tag);
-                  return (
+                <div className={styles.strategyRecommendation}>
+                  <div className={styles.strategyRecommendationHeader}>
+                    <div className={styles.strategyRecommendationTitle}>
+                      {strategyEvaluation?.headline || "Late Game Strategy"}
+                    </div>
+                    {strategyEvaluation?.matrixContext ? (
+                      <div className={styles.strategyBadgeRow}>
+                        <span className={styles.strategyBadge}>{strategyEvaluation.matrixContext.side}</span>
+                        <span className={styles.strategyBadge}>{strategyEvaluation.matrixContext.timeBand}</span>
+                        <span className={styles.strategyBadge}>{strategyEvaluation.matrixContext.scoreLabel}</span>
+                      </div>
+                    ) : null}
+                  </div>
+                  <p className={styles.strategySummary}>{strategyEvaluation?.summary || "No recommendation yet."}</p>
+                  {strategyEvaluation?.rationale ? (
+                    <div className={styles.strategyRationale}>{strategyEvaluation.rationale}</div>
+                  ) : null}
+                  {strategyEvaluation?.playMode ? (
+                    <div className={styles.strategySecondary}>
+                      Play Mode: {strategyEvaluation.playMode.mode} · {strategyEvaluation.playMode.instruction}
+                    </div>
+                  ) : null}
+                  {Array.isArray(strategyEvaluation?.notes) && strategyEvaluation.notes.length ? (
+                    <ul className={styles.strategyNotes}>
+                      {strategyEvaluation.notes.map((note) => (
+                        <li key={note}>{note}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {strategyEvaluation?.freeThrowLookahead?.scenarios?.length ? (
+                    <div className={styles.strategyScenarioBlock}>
+                      <div className={styles.strategyScenarioHeader}>
+                        <strong>{strategyEvaluation.freeThrowLookahead.headline}</strong>
+                        <span>{strategyEvaluation.freeThrowLookahead.summary}</span>
+                      </div>
+                      <div className={styles.strategyScenarioGrid}>
+                        {strategyEvaluation.freeThrowLookahead.scenarios.map((scenario) => (
+                          <div key={scenario.key} className={styles.strategyScenarioCard}>
+                            <div className={styles.strategyScenarioLabel}>{scenario.label}</div>
+                            <div className={styles.strategyScenarioMargin}>{scenario.projectedScoreLabel}</div>
+                            <div className={styles.strategyScenarioCall}>{scenario.recommendation.call}</div>
+                            <div className={styles.strategyScenarioDetail}>{scenario.recommendation.detail}</div>
+                          </div>
+                        ))}
+                      </div>
+                      {Array.isArray(strategyEvaluation.freeThrowLookahead.notes) && strategyEvaluation.freeThrowLookahead.notes.length ? (
+                        <ul className={styles.strategyScenarioNotes}>
+                          {strategyEvaluation.freeThrowLookahead.notes.map((note) => (
+                            <li key={note}>{note}</li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {Array.isArray(strategyEvaluation?.blindSpots) && strategyEvaluation.blindSpots.length ? (
+                    <div className={styles.strategyBlindSpots}>
+                      <strong>Needs review:</strong> {strategyEvaluation.blindSpots.join(" ")}
+                    </div>
+                  ) : null}
+                  {strategyFeedbackStatus ? (
+                    <div className={styles.strategyFeedbackStatus}>{strategyFeedbackStatus}</div>
+                  ) : null}
+                  <div className={styles.strategyFeedbackActions}>
+                    <Link className={styles.strategyVaultLink} to="/me?tab=late-game">
+                      Open Late Game Analysis
+                    </Link>
                     <button
-                      key={tag}
                       type="button"
-                      className={`${styles.strategyTag} ${active ? styles.strategyTagActive : ""}`}
-                      onClick={() => {
-                        setStrategyFeedback((prev) => ({
-                          ...prev,
-                          tags: active
-                            ? prev.tags.filter((value) => value !== tag)
-                            : [...prev.tags, tag],
-                        }));
-                      }}
+                      className={styles.strategySaveButton}
+                      onClick={openStrategyFeedbackModal}
                     >
-                      {tag}
+                      Feedback
                     </button>
-                  );
-                })}
+                  </div>
+                </div>
               </div>
+            ) : null}
+          </section>
 
-              <label className={styles.strategyField}>
-                <span>Why?</span>
-                <textarea
-                  rows={4}
-                  value={strategyFeedback.notes}
-                  onChange={(event) => setStrategyFeedback((prev) => ({ ...prev, notes: event.target.value }))}
-                  placeholder="Describe the logic miss, blind spot, or boundary issue."
-                />
-              </label>
+          {strategyFeedbackModalOpen ? (
+            <div className={styles.noteOverlay} onClick={closeStrategyFeedbackModal}>
+              <div
+                className={`${styles.noteModal} ${styles.noteModalForm}`}
+                onClick={(event) => event.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+              >
+                <h3>Late Game Feedback</h3>
+                <div className={styles.strategyFeedbackSubtitle}>Save corrections to the signed-in account for cross-device review.</div>
 
-              {strategyFeedbackStatus ? (
-                <div className={styles.strategyFeedbackStatus}>{strategyFeedbackStatus}</div>
-              ) : null}
+                <div className={styles.strategyVerdictRow}>
+                  <button
+                    type="button"
+                    className={`${styles.strategyVerdictButton} ${strategyFeedback.verdict === "correct" ? styles.strategyVerdictButtonActive : ""}`}
+                    onClick={() => setStrategyFeedback((prev) => ({ ...prev, verdict: "correct" }))}
+                  >
+                    Correct
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.strategyVerdictButton} ${strategyFeedback.verdict === "needs_work" ? styles.strategyVerdictButtonActive : ""}`}
+                    onClick={() => setStrategyFeedback((prev) => ({ ...prev, verdict: "needs_work" }))}
+                  >
+                    Needs Work
+                  </button>
+                </div>
 
-              <div className={styles.strategyFeedbackActions}>
-                <Link className={styles.strategyVaultLink} to="/me?tab=tools">
-                  Open My Vault
-                </Link>
-                <button
-                  type="button"
-                  className={styles.strategySaveButton}
-                  onClick={saveStrategyFeedback}
-                  disabled={strategyFeedbackSaving || !user?.id || !strategyState}
-                >
-                  {strategyFeedbackSaving ? "Saving..." : "Save Feedback"}
-                </button>
+                <label className={styles.strategyField}>
+                  <span>What should it have said?</span>
+                  <input
+                    type="text"
+                    value={strategyFeedback.suggestedCall}
+                    onChange={(event) => setStrategyFeedback((prev) => ({ ...prev, suggestedCall: event.target.value }))}
+                    placeholder="Example: Foul immediately, no trap"
+                  />
+                </label>
+
+                <div className={styles.strategyTagGrid}>
+                  {LATE_GAME_FEEDBACK_TAGS.map((tag) => {
+                    const active = strategyFeedback.tags.includes(tag);
+                    return (
+                      <button
+                        key={tag}
+                        type="button"
+                        className={`${styles.strategyTag} ${active ? styles.strategyTagActive : ""}`}
+                        onClick={() => {
+                          setStrategyFeedback((prev) => ({
+                            ...prev,
+                            tags: active
+                              ? prev.tags.filter((value) => value !== tag)
+                              : [...prev.tags, tag],
+                          }));
+                        }}
+                      >
+                        {tag}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <label className={styles.strategyField}>
+                  <span>Why?</span>
+                  <textarea
+                    rows={4}
+                    value={strategyFeedback.notes}
+                    onChange={(event) => setStrategyFeedback((prev) => ({ ...prev, notes: event.target.value }))}
+                    placeholder="Describe the logic miss, blind spot, or boundary issue."
+                  />
+                </label>
+
+                <div className={styles.noteActions}>
+                  <button type="button" className={styles.noteCancel} onClick={closeStrategyFeedbackModal} disabled={strategyFeedbackSaving}>
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.noteSave}
+                    onClick={async () => {
+                      await saveStrategyFeedback();
+                      setStrategyFeedbackModalOpen(false);
+                    }}
+                    disabled={strategyFeedbackSaving || !user?.id || !strategyState}
+                  >
+                    {strategyFeedbackSaving ? "Saving..." : "Save Feedback"}
+                  </button>
+                </div>
               </div>
             </div>
-          </section>
+          ) : null}
 
           <div className={styles.pbpWheel} ref={pbpWheelRef} onScroll={clearHoldTimer}>
             <div className={styles.pbpWheelInner} ref={pbpWheelInnerRef}>

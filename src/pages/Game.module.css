@@ -859,14 +859,41 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 .strategyPanel {
   max-width: 980px;
   margin: 0 auto 18px;
-  padding: 16px;
   border: 1px solid var(--border);
   border-radius: 16px;
   background:
     linear-gradient(180deg, rgba(99, 102, 241, 0.06), transparent 28%),
     var(--panel);
+}
+
+.strategyPanelToggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: 16px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.strategyPanelToggleLabel {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.strategyPanelToggleIcon {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.strategyPanelBody {
   display: grid;
   gap: 14px;
+  padding: 0 16px 16px;
 }
 
 .strategyPanelHeader {
@@ -941,6 +968,76 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 .strategyMetaCard strong {
   font-size: 15px;
   color: var(--text);
+}
+
+.strategyScenarioBlock {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.strategyScenarioHeader {
+  display: grid;
+  gap: 4px;
+}
+
+.strategyScenarioHeader strong {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.strategyScenarioHeader span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.strategyScenarioGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.strategyScenarioCard {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg) 88%, var(--panel) 12%);
+}
+
+.strategyScenarioLabel {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.strategyScenarioMargin {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.strategyScenarioCall {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.strategyScenarioDetail {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.strategyScenarioNotes {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .strategyRecommendation {
