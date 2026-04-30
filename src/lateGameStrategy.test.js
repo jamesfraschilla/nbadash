@@ -183,3 +183,45 @@ test("manual possession override temporarily flips the evaluated recommendation"
   assert.equal(evaluation.recommendation.call, "Draw foul");
   assert.match(evaluation.notes.join(" "), /possession flipped/i);
 });
+
+test("manual situation values override feed state for matrix simulation", () => {
+  const state = buildLateGameStrategyState({
+    game: buildGame({
+      gameClock: "PT0S",
+      gameStatus: 2,
+      playByPlayActions: [
+        {
+          actionType: "turnover",
+          teamId: DET.teamId,
+          possession: DET.teamId,
+          period: 4,
+          clock: "PT0S",
+          description: "DET turnover",
+        },
+      ],
+    }),
+    vantageTeamId: ORL.teamId,
+    awayFouls: 1,
+    homeFouls: 1,
+    awayTimeoutsRemaining: 0,
+    homeTimeoutsRemaining: 0,
+    manualOverrides: {
+      period: "4",
+      clock: "0:29",
+      scoreDiff: "-2",
+      possessionTeamId: ORL.teamId,
+      ourTimeouts: "2",
+      opponentTimeouts: "1",
+      ourFouls: "4",
+      opponentFouls: "3",
+    },
+  });
+  const evaluation = evaluateLateGameStrategy(state);
+
+  assert.equal(state.clock, "0:29");
+  assert.equal(state.scoreDiff, -2);
+  assert.equal(state.possessionTeamId, ORL.teamId);
+  assert.equal(state.ourTimeouts, 2);
+  assert.equal(state.foulsToGive, 0);
+  assert.equal(evaluation.recommendation.call, "Need 2, prefer 3");
+});

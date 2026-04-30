@@ -260,6 +260,32 @@ const buildDefaultStrategyOverrides = () => ({
   freeThrowsPending: false,
   timeoutCalled: false,
   clockAdvanced: false,
+  period: "",
+  clock: "",
+  scoreDiff: "",
+  possessionTeamId: "",
+  ourTimeouts: "",
+  opponentTimeouts: "",
+  ourFouls: "",
+  opponentFouls: "",
+});
+
+const buildStrategyOverrideDraft = (state) => ({
+  period: state?.period ? String(state.period) : "4",
+  clock: state?.clock || "0:30",
+  scoreDiff: state?.scoreDiff != null ? String(state.scoreDiff) : "0",
+  possessionTeamId: state?.possessionTeamId || state?.vantageTeam?.teamId || "",
+  ourTimeouts: state?.ourTimeouts != null ? String(state.ourTimeouts) : "0",
+  opponentTimeouts: state?.opponentTimeouts != null ? String(state.opponentTimeouts) : "0",
+  ourFouls: state?.ourFouls != null ? String(state.ourFouls) : "0",
+  opponentFouls: state?.opponentFouls != null ? String(state.opponentFouls) : "0",
+});
+
+const hasStrategyOverrides = (overrides) => Object.entries(overrides || {}).some(([key, value]) => {
+  if (["possessionFlip", "freeThrowsPending", "timeoutCalled", "clockAdvanced"].includes(key)) {
+    return Boolean(value);
+  }
+  return value !== "" && value != null;
 });
 
 const sanitizeHistoryKey = (value) => String(value || "").replace(/[^a-zA-Z0-9:_-]/g, "-");
@@ -600,6 +626,8 @@ export default function Game({ variant = "full" }) {
   const [strategyVantageTeamId, setStrategyVantageTeamId] = useState("");
   const [strategyFeedback, setStrategyFeedback] = useState(() => buildDefaultStrategyFeedback());
   const [strategyOverrides, setStrategyOverrides] = useState(() => buildDefaultStrategyOverrides());
+  const [strategyManualOpen, setStrategyManualOpen] = useState(false);
+  const [strategyOverrideDraft, setStrategyOverrideDraft] = useState(() => buildStrategyOverrideDraft(null));
   const [strategyFeedbackSaving, setStrategyFeedbackSaving] = useState(false);
   const [strategyFeedbackStatus, setStrategyFeedbackStatus] = useState("");
   const [strategyPanelCollapsed, setStrategyPanelCollapsed] = useState(() => loadLateGamePanelCollapsed(gameId));
@@ -2222,6 +2250,7 @@ export default function Game({ variant = "full" }) {
   useEffect(() => {
     strategyHistorySaveRef.current = "";
     setStrategyOverrides(buildDefaultStrategyOverrides());
+    setStrategyManualOpen(false);
   }, [gameId]);
 
   useEffect(() => {
@@ -2317,6 +2346,31 @@ export default function Game({ variant = "full" }) {
       saveLateGamePanelCollapsed(gameId, next);
       return next;
     });
+  };
+
+  const openManualSituationOverride = () => {
+    setStrategyOverrideDraft(buildStrategyOverrideDraft(strategyState));
+    setStrategyManualOpen((prev) => !prev);
+  };
+
+  const applyManualSituationOverride = () => {
+    setStrategyOverrides((prev) => ({
+      ...prev,
+      possessionFlip: false,
+      period: strategyOverrideDraft.period,
+      clock: strategyOverrideDraft.clock,
+      scoreDiff: strategyOverrideDraft.scoreDiff,
+      possessionTeamId: strategyOverrideDraft.possessionTeamId,
+      ourTimeouts: strategyOverrideDraft.ourTimeouts,
+      opponentTimeouts: strategyOverrideDraft.opponentTimeouts,
+      ourFouls: strategyOverrideDraft.ourFouls,
+      opponentFouls: strategyOverrideDraft.opponentFouls,
+    }));
+  };
+
+  const clearStrategyOverrides = () => {
+    setStrategyOverrides(buildDefaultStrategyOverrides());
+    setStrategyOverrideDraft(buildStrategyOverrideDraft(strategyState));
   };
 
   const openStrategyFeedbackModal = () => {
@@ -2941,15 +2995,116 @@ export default function Game({ variant = "full" }) {
                     >
                       Clock advanced
                     </button>
-                    {Object.values(strategyOverrides).some(Boolean) ? (
+                    <button
+                      type="button"
+                      className={strategyManualOpen ? styles.strategyOverrideActive : ""}
+                      onClick={openManualSituationOverride}
+                    >
+                      Manual override
+                    </button>
+                    {hasStrategyOverrides(strategyOverrides) ? (
                       <button
                         type="button"
-                        onClick={() => setStrategyOverrides(buildDefaultStrategyOverrides())}
+                        onClick={clearStrategyOverrides}
                       >
                         Clear
                       </button>
                     ) : null}
                   </div>
+                  {strategyManualOpen ? (
+                    <div className={styles.strategyManualOverride}>
+                      <label>
+                        <span>Period</span>
+                        <input
+                          type="number"
+                          min="1"
+                          max="10"
+                          value={strategyOverrideDraft.period}
+                          onChange={(event) => setStrategyOverrideDraft((prev) => ({ ...prev, period: event.target.value }))}
+                        />
+                      </label>
+                      <label>
+                        <span>Clock</span>
+                        <input
+                          type="text"
+                          value={strategyOverrideDraft.clock}
+                          onChange={(event) => setStrategyOverrideDraft((prev) => ({ ...prev, clock: event.target.value }))}
+                          placeholder="0:30"
+                        />
+                      </label>
+                      <label>
+                        <span>Margin</span>
+                        <input
+                          type="number"
+                          value={strategyOverrideDraft.scoreDiff}
+                          onChange={(event) => setStrategyOverrideDraft((prev) => ({ ...prev, scoreDiff: event.target.value }))}
+                        />
+                      </label>
+                      <label>
+                        <span>Possession</span>
+                        <select
+                          value={strategyOverrideDraft.possessionTeamId}
+                          onChange={(event) => setStrategyOverrideDraft((prev) => ({ ...prev, possessionTeamId: event.target.value }))}
+                        >
+                          <option value="">Feed</option>
+                          {strategyState?.vantageTeam ? (
+                            <option value={strategyState.vantageTeam.teamId}>{strategyState.vantageTeam.teamTricode}</option>
+                          ) : null}
+                          {strategyState?.opponentTeam ? (
+                            <option value={strategyState.opponentTeam.teamId}>{strategyState.opponentTeam.teamTricode}</option>
+                          ) : null}
+                        </select>
+                      </label>
+                      <label>
+                        <span>Our TO</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="7"
+                          value={strategyOverrideDraft.ourTimeouts}
+                          onChange={(event) => setStrategyOverrideDraft((prev) => ({ ...prev, ourTimeouts: event.target.value }))}
+                        />
+                      </label>
+                      <label>
+                        <span>Opp TO</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="7"
+                          value={strategyOverrideDraft.opponentTimeouts}
+                          onChange={(event) => setStrategyOverrideDraft((prev) => ({ ...prev, opponentTimeouts: event.target.value }))}
+                        />
+                      </label>
+                      <label>
+                        <span>Our fouls</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="5"
+                          value={strategyOverrideDraft.ourFouls}
+                          onChange={(event) => setStrategyOverrideDraft((prev) => ({ ...prev, ourFouls: event.target.value }))}
+                        />
+                      </label>
+                      <label>
+                        <span>Opp fouls</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="5"
+                          value={strategyOverrideDraft.opponentFouls}
+                          onChange={(event) => setStrategyOverrideDraft((prev) => ({ ...prev, opponentFouls: event.target.value }))}
+                        />
+                      </label>
+                      <div className={styles.strategyManualActions}>
+                        <button type="button" onClick={applyManualSituationOverride}>
+                          Apply to Matrix
+                        </button>
+                        <button type="button" onClick={clearStrategyOverrides}>
+                          Clear Overrides
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className={styles.strategyRecommendation}>

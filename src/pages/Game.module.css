@@ -1062,6 +1062,61 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   color: var(--bg);
 }
 
+.strategyManualOverride {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.strategyManualOverride label {
+  display: grid;
+  gap: 5px;
+}
+
+.strategyManualOverride span {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.strategyManualOverride input,
+.strategyManualOverride select {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-strong);
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.strategyManualActions {
+  display: flex;
+  gap: 8px;
+  align-items: end;
+  flex-wrap: wrap;
+}
+
+.strategyManualActions button {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-strong);
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.strategyManualActions button:first-child {
+  background: var(--highlight-text);
+  border-color: var(--highlight-text);
+  color: var(--bg);
+}
+
 .strategyScenarioBlock {
   display: grid;
   gap: 10px;

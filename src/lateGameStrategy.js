@@ -21,6 +21,21 @@ function scoreLabel(diff) {
   return `${diff > 0 ? "+" : ""}${diff}`;
 }
 
+function normalizeOverrideClock(value, fallback) {
+  const raw = String(value || "").trim();
+  const match = /^(\d{1,2}):(\d{1,2})$/.exec(raw);
+  if (!match) return fallback;
+  const minutes = Math.max(0, safeNumber(match[1], 0));
+  const seconds = Math.min(59, Math.max(0, safeNumber(match[2], 0)));
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function overrideNumber(value, fallback, min = -Infinity, max = Infinity) {
+  if (value === "" || value == null) return fallback;
+  const numeric = safeNumber(value, fallback);
+  return Math.min(max, Math.max(min, numeric));
+}
+
 function teamShortLabel(team) {
   return team?.teamTricode || team?.teamName || "Team";
 }
@@ -437,18 +452,26 @@ export function buildLateGameStrategyState({
     return null;
   }
 
-  const period = safeNumber(game.period, 0);
-  const clock = normalizeClock(game.gameClock);
+  const period = overrideNumber(manualOverrides.period, safeNumber(game.period, 0), 1, 10);
+  const clock = normalizeOverrideClock(manualOverrides.clock, normalizeClock(game.gameClock));
   const secondsRemaining = clockToSeconds(clock);
   const feedPossessionTeamId = latestPossessionTeamId(game);
-  const possessionTeamId = manualOverrides.possessionFlip
+  const overridePossessionTeamId = String(manualOverrides.possessionTeamId || "").trim();
+  const possessionTeamId = overridePossessionTeamId
+    ? overridePossessionTeamId
+    : manualOverrides.possessionFlip
     ? flipPossessionTeamId(feedPossessionTeamId, vantageTeam, opponentTeam)
     : feedPossessionTeamId;
-  const scoreDiff = safeNumber(vantageTeam.score, 0) - safeNumber(opponentTeam.score, 0);
-  const ourTimeouts = isAwayVantage ? safeNumber(awayTimeoutsRemaining, 0) : safeNumber(homeTimeoutsRemaining, 0);
-  const opponentTimeouts = isAwayVantage ? safeNumber(homeTimeoutsRemaining, 0) : safeNumber(awayTimeoutsRemaining, 0);
-  const ourFouls = isAwayVantage ? safeNumber(awayFouls, 0) : safeNumber(homeFouls, 0);
-  const opponentFouls = isAwayVantage ? safeNumber(homeFouls, 0) : safeNumber(awayFouls, 0);
+  const feedScoreDiff = safeNumber(vantageTeam.score, 0) - safeNumber(opponentTeam.score, 0);
+  const scoreDiff = overrideNumber(manualOverrides.scoreDiff, feedScoreDiff, -99, 99);
+  const feedOurTimeouts = isAwayVantage ? safeNumber(awayTimeoutsRemaining, 0) : safeNumber(homeTimeoutsRemaining, 0);
+  const feedOpponentTimeouts = isAwayVantage ? safeNumber(homeTimeoutsRemaining, 0) : safeNumber(awayTimeoutsRemaining, 0);
+  const feedOurFouls = isAwayVantage ? safeNumber(awayFouls, 0) : safeNumber(homeFouls, 0);
+  const feedOpponentFouls = isAwayVantage ? safeNumber(homeFouls, 0) : safeNumber(awayFouls, 0);
+  const ourTimeouts = overrideNumber(manualOverrides.ourTimeouts, feedOurTimeouts, 0, 7);
+  const opponentTimeouts = overrideNumber(manualOverrides.opponentTimeouts, feedOpponentTimeouts, 0, 7);
+  const ourFouls = overrideNumber(manualOverrides.ourFouls, feedOurFouls, 0, 5);
+  const opponentFouls = overrideNumber(manualOverrides.opponentFouls, feedOpponentFouls, 0, 5);
 
   return {
     game,
@@ -478,6 +501,14 @@ export function buildLateGameStrategyState({
       freeThrowsPending: Boolean(manualOverrides.freeThrowsPending),
       timeoutCalled: Boolean(manualOverrides.timeoutCalled),
       clockAdvanced: Boolean(manualOverrides.clockAdvanced),
+      period: manualOverrides.period ?? "",
+      clock: manualOverrides.clock ?? "",
+      scoreDiff: manualOverrides.scoreDiff ?? "",
+      possessionTeamId: overridePossessionTeamId,
+      ourTimeouts: manualOverrides.ourTimeouts ?? "",
+      opponentTimeouts: manualOverrides.opponentTimeouts ?? "",
+      ourFouls: manualOverrides.ourFouls ?? "",
+      opponentFouls: manualOverrides.opponentFouls ?? "",
     },
   };
 }
