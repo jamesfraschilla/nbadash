@@ -1607,19 +1607,6 @@ export default function Game({ variant = "full" }) {
     possessionCounts
     && possessionCounts.homePossessions > 0
     && possessionCounts.awayPossessions > 0;
-
-  if (isLoading) {
-    return <div className={styles.stateMessage}>Loading game details...</div>;
-  }
-
-  if (error || !game) {
-    return <div className={styles.stateMessage}>Failed to load game details.</div>;
-  }
-
-  if (!homeTeamId || !awayTeamId || !homeTeam || !awayTeam) {
-    return <div className={styles.stateMessage}>Loading game details...</div>;
-  }
-
   const useOfficialRatings = teamStats?.away?.offensiveRating && teamStats?.home?.offensiveRating;
 
   const ortgAway = useOfficialRatings
@@ -2118,6 +2105,18 @@ export default function Game({ variant = "full" }) {
     setStrategyFeedback(buildDefaultStrategyFeedback());
     setStrategyFeedbackStatus("");
   }, [strategySnapshotKey]);
+
+  if (isLoading) {
+    return <div className={styles.stateMessage}>Loading game details...</div>;
+  }
+
+  if (error || !game) {
+    return <div className={styles.stateMessage}>Failed to load game details.</div>;
+  }
+
+  if (!homeTeamId || !awayTeamId || !homeTeam || !awayTeam) {
+    return <div className={styles.stateMessage}>Loading game details...</div>;
+  }
 
   const renderFouls = (count) => (
     <div className={styles.metaBlock}>
