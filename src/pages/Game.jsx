@@ -258,6 +258,20 @@ const buildDefaultStrategyFeedback = () => ({
 
 const sanitizeHistoryKey = (value) => String(value || "").replace(/[^a-zA-Z0-9:_-]/g, "-");
 
+const resolvePossessionDisplay = (stateLike) => {
+  if (!stateLike) return "Unknown";
+  if (!stateLike.isLive) return "Final";
+  const possessionTeamId = String(stateLike.possessionTeamId || "").trim();
+  if (!possessionTeamId) return "Unknown";
+  const vantageTeamId = String(stateLike.vantageTeamId || stateLike.vantageTeam?.teamId || "").trim();
+  const opponentTeamId = String(stateLike.opponentTeamId || stateLike.opponentTeam?.teamId || "").trim();
+  const vantageLabel = stateLike.vantageTeamTricode || stateLike.vantageTeam?.teamTricode || stateLike.vantageTeam?.teamName || "Team";
+  const opponentLabel = stateLike.opponentTeamTricode || stateLike.opponentTeam?.teamTricode || stateLike.opponentTeam?.teamName || "Team";
+  if (possessionTeamId === vantageTeamId) return `${vantageLabel} ball`;
+  if (possessionTeamId === opponentTeamId) return `${opponentLabel} ball`;
+  return "Unknown";
+};
+
 const loadSnapshots = (gameId) => {
   if (typeof window === "undefined") return [];
   const raw = readLocalStorage(`${SNAPSHOT_STORAGE_PREFIX}${gameId}`);
@@ -2108,16 +2122,13 @@ export default function Game({ variant = "full" }) {
     strategyVantageTeamId,
   ]);
   const { strategyState, strategyEvaluation, strategyPanelError } = strategyResult;
-  const strategyVantageLabel = strategyState?.vantageTeam?.teamTricode || strategyState?.vantageTeam?.teamName || "Team";
-  const strategyOpponentLabel = strategyState?.opponentTeam?.teamTricode || strategyState?.opponentTeam?.teamName || "Team";
-  const strategyPossessionLabel = strategyState?.isOurPossession == null
-    ? "Unknown"
-    : strategyState.isOurPossession
-      ? strategyVantageLabel
-      : strategyOpponentLabel;
-  const strategyPossessionDisplay = strategyState?.isOurPossession == null
-    ? "Unknown"
-    : `${strategyPossessionLabel} ball`;
+  const strategyPossessionDisplay = resolvePossessionDisplay(strategyState ? {
+    ...strategyState,
+    vantageTeamId: strategyState.vantageTeam?.teamId,
+    vantageTeamTricode: strategyState.vantageTeam?.teamTricode,
+    opponentTeamId: strategyState.opponentTeam?.teamId,
+    opponentTeamTricode: strategyState.opponentTeam?.teamTricode,
+  } : null);
   const strategyCertaintyLabel = strategyEvaluation?.freeThrowLookahead?.scenarios?.length
     ? "Projected from FT sequence"
     : Array.isArray(strategyEvaluation?.blindSpots) && strategyEvaluation.blindSpots.length
@@ -2206,6 +2217,7 @@ export default function Game({ variant = "full" }) {
       payload: {
         gameId,
         strategyState: {
+          isLive: strategyState.isLive,
           period: strategyState.period,
           periodLabel: strategyState.periodLabel,
           clock: strategyState.clock,
@@ -2352,6 +2364,7 @@ export default function Game({ variant = "full" }) {
         notes: String(strategyFeedback.notes || "").trim(),
         tags: Array.isArray(strategyFeedback.tags) ? strategyFeedback.tags : [],
         strategyState: {
+          isLive: strategyState.isLive,
           period: strategyState.period,
           periodLabel: strategyState.periodLabel,
           clock: strategyState.clock,
@@ -2761,9 +2774,7 @@ export default function Game({ variant = "full" }) {
                       const payload = record.payload && typeof record.payload === "object" ? record.payload : {};
                       const state = payload.strategyState && typeof payload.strategyState === "object" ? payload.strategyState : {};
                       const evaluation = payload.strategyEvaluation && typeof payload.strategyEvaluation === "object" ? payload.strategyEvaluation : {};
-                      const possessionLabel = state.isOurPossession == null
-                        ? "Unknown"
-                        : `${state.isOurPossession ? state.vantageTeamTricode || "Team" : state.opponentTeamTricode || "Team"} ball`;
+                      const possessionLabel = resolvePossessionDisplay(state);
                       return (
                         <article key={record.id} className={styles.strategyHistoryCard}>
                           <div className={styles.strategyHistoryCardHeader}>
