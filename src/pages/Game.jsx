@@ -1940,7 +1940,7 @@ export default function Game({ variant = "full" }) {
 
   const killStats = segmentSeconds === 0
     ? { homeKills: 0, awayKills: 0 }
-    : computeKills(game.playByPlayActions || [], segment, homeTeam.teamId, awayTeam.teamId);
+    : computeKills(game?.playByPlayActions || [], segment, homeTeamId, awayTeamId);
 
   const paceFrom = (possessionsCount) =>
     segmentSeconds ? (possessionsCount * 2880) / segmentSeconds : 0;
@@ -1952,7 +1952,7 @@ export default function Game({ variant = "full" }) {
   const paceValue = paceFrom(basePace);
   const displayPaceValue = isPregame ? 0 : paceValue;
 
-  const currentPeriod = game.period || 1;
+  const currentPeriod = game?.period || 1;
   const foulLimit = 5;
   const isTeamFoulAction = (action) => {
     if (action.actionType !== "foul") return false;
@@ -1972,7 +1972,7 @@ export default function Game({ variant = "full" }) {
     let sawMarker = false;
     const penaltyThreshold = 5;
     const lastTwoSeconds = 2 * 60;
-    (game.playByPlayActions || []).forEach((action) => {
+    (game?.playByPlayActions || []).forEach((action) => {
       if (action.period !== currentPeriod) return;
       if (!isTeamFoulAction(action)) return;
       if (action.teamId !== teamId) return;
@@ -1994,8 +1994,8 @@ export default function Game({ variant = "full" }) {
     if (displayCount > foulLimit) displayCount = foulLimit;
     return { count: displayCount, inPenalty };
   };
-  const awayFoulInfo = teamFoulInfo(awayTeam.teamId);
-  const homeFoulInfo = teamFoulInfo(homeTeam.teamId);
+  const awayFoulInfo = teamFoulInfo(awayTeamId);
+  const homeFoulInfo = teamFoulInfo(homeTeamId);
   const awayFoulsDisplay = Math.min(
     awayFoulInfo.inPenalty ? foulLimit : awayFoulInfo.count,
     foulLimit
@@ -2006,7 +2006,7 @@ export default function Game({ variant = "full" }) {
   );
   const mandatoryTimeoutTeam = (() => {
     if (!homeTeam?.teamId || !awayTeam?.teamId) return null;
-    const actions = (game.playByPlayActions || [])
+    const actions = (game?.playByPlayActions || [])
       .filter((action) => action.actionType === "timeout" && action.period === currentPeriod)
       .slice()
       .sort((a, b) => (a.actionNumber || 0) - (b.actionNumber || 0));
