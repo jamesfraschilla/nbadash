@@ -857,7 +857,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 }
 
 .strategyPanel {
-  max-width: var(--stats-card-width);
+  width: min(100%, 860px);
   margin: 0 auto 18px;
   border: 1px solid var(--border);
   border-radius: 16px;
