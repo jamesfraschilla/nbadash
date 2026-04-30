@@ -2098,6 +2098,23 @@ export default function Game({ variant = "full" }) {
     strategyVantageTeamId,
   ]);
   const { strategyState, strategyEvaluation, strategyPanelError } = strategyResult;
+  const strategyVantageLabel = strategyState?.vantageTeam?.teamTricode || strategyState?.vantageTeam?.teamName || "Team";
+  const strategyOpponentLabel = strategyState?.opponentTeam?.teamTricode || strategyState?.opponentTeam?.teamName || "Team";
+  const strategyPossessionLabel = strategyState?.isOurPossession == null
+    ? "Unknown"
+    : strategyState.isOurPossession
+      ? strategyVantageLabel
+      : strategyOpponentLabel;
+  const strategyPossessionDisplay = strategyState?.isOurPossession == null
+    ? "Unknown"
+    : `${strategyPossessionLabel} ball`;
+  const strategyCertaintyLabel = strategyEvaluation?.freeThrowLookahead?.scenarios?.length
+    ? "Projected from FT sequence"
+    : Array.isArray(strategyEvaluation?.blindSpots) && strategyEvaluation.blindSpots.length
+      ? "Needs coach judgment"
+      : strategyEvaluation?.status === "ready"
+        ? "Direct matrix match"
+        : "Live state monitor";
 
   useEffect(() => {
     if (!strategyPanelError) return;
@@ -2477,55 +2494,56 @@ export default function Game({ variant = "full" }) {
                   </div>
                 </div>
 
-                <div className={styles.strategyMetaGrid}>
-                  <div className={styles.strategyMetaCard}>
-                    <span className={styles.strategyMetaLabel}>Vantage</span>
-                    <strong>{strategyState?.vantageTeam?.teamName || "Select a team"}</strong>
+                <div className={styles.strategyLiveStrip}>
+                  <div className={styles.strategyLivePill}>
+                    <span className={styles.strategyLiveLabel}>Vantage</span>
+                    <strong>{strategyVantageLabel}</strong>
                   </div>
-                  <div className={styles.strategyMetaCard}>
-                    <span className={styles.strategyMetaLabel}>State</span>
+                  <div className={styles.strategyLivePill}>
+                    <span className={styles.strategyLiveLabel}>State</span>
                     <strong>{strategyState ? `${strategyState.periodLabel} ${strategyState.clock}` : "--"}</strong>
                   </div>
-                  <div className={styles.strategyMetaCard}>
-                    <span className={styles.strategyMetaLabel}>Margin</span>
+                  <div className={styles.strategyLivePill}>
+                    <span className={styles.strategyLiveLabel}>Margin</span>
                     <strong>{strategyState?.scoreLabel || "--"}</strong>
                   </div>
-                  <div className={styles.strategyMetaCard}>
-                    <span className={styles.strategyMetaLabel}>Possession</span>
-                    <strong>
-                      {strategyState?.isOurPossession == null
-                        ? "Unknown"
-                        : strategyState.isOurPossession
-                          ? "Our possession"
-                          : "Opponent possession"}
-                    </strong>
+                  <div className={styles.strategyLivePill}>
+                    <span className={styles.strategyLiveLabel}>Possession</span>
+                    <strong>{strategyPossessionDisplay}</strong>
                   </div>
-                  <div className={styles.strategyMetaCard}>
-                    <span className={styles.strategyMetaLabel}>Timeouts</span>
+                  <div className={styles.strategyLivePill}>
+                    <span className={styles.strategyLiveLabel}>Timeouts</span>
                     <strong>{strategyState ? `${strategyState.ourTimeouts} / ${strategyState.opponentTimeouts}` : "--"}</strong>
                   </div>
-                  <div className={styles.strategyMetaCard}>
-                    <span className={styles.strategyMetaLabel}>Fouls To Give</span>
+                  <div className={styles.strategyLivePill}>
+                    <span className={styles.strategyLiveLabel}>Fouls To Give</span>
                     <strong>{strategyState ? `${strategyState.foulsToGive} / ${strategyState.opponentFoulsToGive}` : "--"}</strong>
                   </div>
                 </div>
 
                 <div className={styles.strategyRecommendation}>
+                  <div className={styles.strategyCurrentLabel}>Current Call</div>
                   <div className={styles.strategyRecommendationHeader}>
                     <div className={styles.strategyRecommendationTitle}>
                       {strategyEvaluation?.headline || "Late Game Strategy"}
                     </div>
-                    {strategyEvaluation?.matrixContext ? (
-                      <div className={styles.strategyBadgeRow}>
-                        <span className={styles.strategyBadge}>{strategyEvaluation.matrixContext.side}</span>
-                        <span className={styles.strategyBadge}>{strategyEvaluation.matrixContext.timeBand}</span>
-                        <span className={styles.strategyBadge}>{strategyEvaluation.matrixContext.scoreLabel}</span>
-                      </div>
-                    ) : null}
+                    <span className={styles.strategyConfidenceBadge}>{strategyCertaintyLabel}</span>
                   </div>
                   <p className={styles.strategySummary}>{strategyEvaluation?.summary || "No recommendation yet."}</p>
+                  <div className={styles.strategySituationLine}>
+                    {strategyState ? `${strategyState.periodLabel} ${strategyState.clock} · ${strategyState.scoreLabel} · ${strategyPossessionDisplay}` : "Waiting for live state."}
+                  </div>
+                  {strategyEvaluation?.matrixContext ? (
+                    <div className={styles.strategyBadgeRow}>
+                      <span className={styles.strategyBadge}>{strategyEvaluation.matrixContext.side}</span>
+                      <span className={styles.strategyBadge}>{strategyEvaluation.matrixContext.timeBand}</span>
+                      <span className={styles.strategyBadge}>{strategyEvaluation.matrixContext.scoreLabel}</span>
+                    </div>
+                  ) : null}
                   {strategyEvaluation?.rationale ? (
-                    <div className={styles.strategyRationale}>{strategyEvaluation.rationale}</div>
+                    <div className={styles.strategyRationale}>
+                      <strong>Why:</strong> {strategyEvaluation.rationale}
+                    </div>
                   ) : null}
                   {strategyEvaluation?.playMode ? (
                     <div className={styles.strategySecondary}>

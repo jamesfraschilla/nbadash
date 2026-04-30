@@ -33,6 +33,10 @@ function scoreLabel(diff) {
   return `${diff > 0 ? "+" : ""}${diff}`;
 }
 
+function teamShortLabel(team) {
+  return team?.teamTricode || team?.teamName || "Team";
+}
+
 function periodLabel(period) {
   const numeric = safeNumber(period, 0);
   if (numeric <= 4) return `Q${numeric}`;
@@ -717,7 +721,7 @@ export function evaluateLateGameStrategy(state) {
     rationale: recommendation.rationale,
     freeThrowLookahead,
     matrixContext: {
-      side: state.isOurPossession ? "Our possession" : "Opponent possession",
+      side: `${state.isOurPossession ? teamShortLabel(state.vantageTeam) : teamShortLabel(state.opponentTeam)} possession`,
       timeBand: state.timeBand,
       scoreLabel: state.scoreLabel,
     },

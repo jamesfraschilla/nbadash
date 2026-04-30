@@ -904,7 +904,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 }
 
 .strategyTitle {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
   color: var(--text);
 }
@@ -932,13 +932,13 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   border-color: var(--highlight-text);
 }
 
-.strategyMetaGrid {
+.strategyLiveStrip {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   gap: 10px;
 }
 
-.strategyMetaCard,
+.strategyLivePill,
 .strategyRecommendation,
 .strategyFeedback {
   border: 1px solid var(--border);
@@ -947,7 +947,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   padding: 12px;
 }
 
-.strategyMetaLabel {
+.strategyLiveLabel {
   display: block;
   margin-bottom: 4px;
   font-size: 11px;
@@ -957,15 +957,15 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   color: var(--muted);
 }
 
-.strategyMetaCard strong {
-  font-size: 15px;
+.strategyLivePill strong {
+  font-size: 14px;
   color: var(--text);
 }
 
 .strategyScenarioBlock {
   display: grid;
   gap: 10px;
-  margin-top: 12px;
+  margin-top: 14px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
 }
@@ -993,8 +993,8 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 
 .strategyScenarioCard {
   display: grid;
-  gap: 4px;
-  padding: 10px;
+  gap: 6px;
+  padding: 12px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: color-mix(in srgb, var(--bg) 88%, var(--panel) 12%);
@@ -1015,7 +1015,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 }
 
 .strategyScenarioCall {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--text);
 }
@@ -1035,6 +1035,15 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 .strategyRecommendation {
   display: grid;
   gap: 10px;
+  padding: 16px;
+}
+
+.strategyCurrentLabel {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .strategyRecommendationHeader {
@@ -1046,9 +1055,24 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 }
 
 .strategyRecommendationTitle {
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 32px;
+  line-height: 1;
+  font-weight: 800;
   color: var(--text);
+}
+
+.strategyConfidenceBadge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: rgba(96, 165, 250, 0.12);
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #93c5fd;
 }
 
 .strategyBadgeRow {
@@ -1074,8 +1098,14 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 .strategySummary {
   margin: 0;
   color: var(--text);
-  font-size: 15px;
+  font-size: 18px;
+  font-weight: 600;
   line-height: 1.45;
+}
+
+.strategySituationLine {
+  font-size: 13px;
+  color: var(--muted);
 }
 
 .strategyRationale,
