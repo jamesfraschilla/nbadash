@@ -963,6 +963,105 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   color: var(--text);
 }
 
+.strategyFeedPanel {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg) 84%, var(--panel) 16%);
+}
+
+.strategyFeedHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.strategyFeedHeader strong {
+  color: var(--text);
+}
+
+.strategyFeedDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--muted);
+}
+
+.strategyFeedDotHigh {
+  background: #22c55e;
+}
+
+.strategyFeedDotMedium {
+  background: #f59e0b;
+}
+
+.strategyFeedDotLow {
+  background: #ef4444;
+}
+
+.strategyFeedDotUnknown {
+  background: var(--muted);
+}
+
+.strategyFeedLatest {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.strategyRecentEvents {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.strategyRecentEvents summary {
+  cursor: pointer;
+  color: var(--text);
+}
+
+.strategyRecentEvents ol {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.strategyOverrideControls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.strategyOverrideControls span {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.strategyOverrideControls button {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-strong);
+  color: var(--text);
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.strategyOverrideControls .strategyOverrideActive {
+  background: var(--highlight-text);
+  border-color: var(--highlight-text);
+  color: var(--bg);
+}
+
 .strategyScenarioBlock {
   display: grid;
   gap: 10px;
@@ -1031,6 +1130,40 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   padding-left: 18px;
   color: var(--muted);
   font-size: 12px;
+}
+
+.strategyProjectionBlock {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--highlight-text) 45%, var(--border) 55%);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--highlight-text) 10%, var(--bg) 90%);
+}
+
+.strategyProjectionCard {
+  display: grid;
+  gap: 4px;
+}
+
+.strategyProjectionCard span {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.strategyProjectionCard strong {
+  font-size: 18px;
+  color: var(--text);
+}
+
+.strategyProjectionCard p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .strategyRecommendation {

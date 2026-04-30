@@ -2,6 +2,8 @@ import { normalizeClock } from "./utils.js";
 
 const FINAL_MINUTE_SECONDS = 60;
 const PLAY_MODE_SECONDS = 6 * 60;
+const FEED_CONFIDENCE_HIGH_SECONDS = 3;
+const FEED_CONFIDENCE_MEDIUM_SECONDS = 8;
 
 function safeNumber(value, fallback = 0) {
   const numeric = Number(value);
@@ -119,6 +121,120 @@ function latestPossessionTeamId(game) {
     return String(candidate);
   }
   return null;
+}
+
+function latestPlayableAction(game) {
+  const actions = Array.isArray(game?.playByPlayActions) ? game.playByPlayActions : [];
+  for (let index = actions.length - 1; index >= 0; index -= 1) {
+    const action = actions[index];
+    if (isAdministrativeAction(action)) continue;
+    return action;
+  }
+  return null;
+}
+
+function actionSummary(action) {
+  if (!action) return "No recent play-by-play action.";
+  return String(action.description || action.actionType || "Unknown action").trim();
+}
+
+function actionSecondsRemaining(action) {
+  return clockToSeconds(action?.clock);
+}
+
+function recentEventQueue(game, limit = 5) {
+  const actions = Array.isArray(game?.playByPlayActions) ? game.playByPlayActions : [];
+  return actions
+    .slice()
+    .reverse()
+    .filter((action) => !isAdministrativeAction(action))
+    .slice(0, limit)
+    .map((action) => ({
+      actionType: String(action?.actionType || ""),
+      period: safeNumber(action?.period, 0),
+      clock: normalizeClock(action?.clock),
+      teamId: action?.teamId ? String(action.teamId) : "",
+      possessionTeamId: action?.possession || action?.possessionTeamId ? String(action.possession || action.possessionTeamId) : "",
+      description: actionSummary(action),
+    }));
+}
+
+function likelyPossessionChangeAction(action) {
+  const type = String(action?.actionType || "").toLowerCase();
+  const result = String(action?.shotResult || "").toLowerCase();
+  const description = String(action?.description || "").toLowerCase();
+  return (
+    type === "turnover" ||
+    type === "steal" ||
+    type === "jumpball" ||
+    (type === "2pt" && result === "made") ||
+    (type === "3pt" && result === "made") ||
+    (type === "freethrow" && /free throw\s+\d+\s+of\s+\d+/i.test(description) && result === "made")
+  );
+}
+
+function buildFeedStatus(game, secondsRemaining) {
+  const latestAction = latestPlayableAction(game);
+  const latestActionSeconds = latestAction ? actionSecondsRemaining(latestAction) : null;
+  const rawSecondsBehind = latestActionSeconds == null ? null : latestActionSeconds - secondsRemaining;
+  const secondsBehind = rawSecondsBehind == null ? null : Math.max(0, rawSecondsBehind);
+  const recentEvents = recentEventQueue(game);
+  const sequenceFlags = [];
+
+  if (!latestAction) {
+    sequenceFlags.push("No playable action found in the feed.");
+  } else if (secondsBehind > FEED_CONFIDENCE_MEDIUM_SECONDS) {
+    sequenceFlags.push("Play-by-play clock is meaningfully behind the game clock.");
+  } else if (secondsBehind > FEED_CONFIDENCE_HIGH_SECONDS) {
+    sequenceFlags.push("Play-by-play clock is slightly behind the game clock.");
+  }
+
+  if (latestAction && likelyPossessionChangeAction(latestAction)) {
+    sequenceFlags.push("Latest action may be part of a possession-change sequence.");
+  }
+
+  const latestType = String(latestAction?.actionType || "").toLowerCase();
+  if (latestType === "foul") {
+    sequenceFlags.push("Latest action is a foul; free throws, replay, or timeout context may arrive next.");
+  }
+  if (latestType === "freethrow") {
+    const parsed = parseFreeThrowAttempt(latestAction);
+    if (parsed && parsed.attempt < parsed.total) {
+      sequenceFlags.push(`Free throw sequence is mid-trip: ${parsed.attempt} of ${parsed.total}.`);
+    }
+  }
+
+  let level = "unknown";
+  let label = "Feed confidence unknown";
+  if (secondsBehind != null) {
+    if (secondsBehind <= FEED_CONFIDENCE_HIGH_SECONDS) {
+      level = "high";
+      label = "Feed confidence high";
+    } else if (secondsBehind <= FEED_CONFIDENCE_MEDIUM_SECONDS) {
+      level = "medium";
+      label = "Feed confidence medium";
+    } else {
+      level = "low";
+      label = "Feed confidence low";
+    }
+  }
+
+  return {
+    level,
+    label,
+    secondsBehind,
+    latestActionClock: latestAction ? normalizeClock(latestAction.clock) : "",
+    latestActionDescription: actionSummary(latestAction),
+    recentEvents,
+    sequenceFlags,
+  };
+}
+
+function flipPossessionTeamId(possessionTeamId, vantageTeam, opponentTeam) {
+  const current = String(possessionTeamId || "");
+  if (current === String(vantageTeam?.teamId || "")) return String(opponentTeam?.teamId || "");
+  if (current === String(opponentTeam?.teamId || "")) return String(vantageTeam?.teamId || "");
+  return String(vantageTeam?.teamId || "");
 }
 
 function isAdministrativeAction(action) {
@@ -308,6 +424,7 @@ export function buildLateGameStrategyState({
   homeFouls,
   awayTimeoutsRemaining,
   homeTimeoutsRemaining,
+  manualOverrides = {},
 }) {
   const awayTeam = game?.awayTeam || null;
   const homeTeam = game?.homeTeam || null;
@@ -323,7 +440,10 @@ export function buildLateGameStrategyState({
   const period = safeNumber(game.period, 0);
   const clock = normalizeClock(game.gameClock);
   const secondsRemaining = clockToSeconds(clock);
-  const possessionTeamId = latestPossessionTeamId(game);
+  const feedPossessionTeamId = latestPossessionTeamId(game);
+  const possessionTeamId = manualOverrides.possessionFlip
+    ? flipPossessionTeamId(feedPossessionTeamId, vantageTeam, opponentTeam)
+    : feedPossessionTeamId;
   const scoreDiff = safeNumber(vantageTeam.score, 0) - safeNumber(opponentTeam.score, 0);
   const ourTimeouts = isAwayVantage ? safeNumber(awayTimeoutsRemaining, 0) : safeNumber(homeTimeoutsRemaining, 0);
   const opponentTimeouts = isAwayVantage ? safeNumber(homeTimeoutsRemaining, 0) : safeNumber(awayTimeoutsRemaining, 0);
@@ -340,6 +460,7 @@ export function buildLateGameStrategyState({
     secondsRemaining,
     timeBand: buildTimeBand(secondsRemaining),
     possessionTeamId,
+    feedPossessionTeamId,
     isOurPossession: possessionTeamId != null ? String(possessionTeamId) === String(vantageTeam.teamId) : null,
     scoreDiff,
     scoreLabel: scoreLabel(scoreDiff),
@@ -351,6 +472,13 @@ export function buildLateGameStrategyState({
     opponentFouls,
     foulsToGive: Math.max(0, 4 - ourFouls),
     opponentFoulsToGive: Math.max(0, 4 - opponentFouls),
+    feedStatus: buildFeedStatus(game, secondsRemaining),
+    manualOverrides: {
+      possessionFlip: Boolean(manualOverrides.possessionFlip),
+      freeThrowsPending: Boolean(manualOverrides.freeThrowsPending),
+      timeoutCalled: Boolean(manualOverrides.timeoutCalled),
+      clockAdvanced: Boolean(manualOverrides.clockAdvanced),
+    },
   };
 }
 
@@ -633,6 +761,44 @@ function defenseRecommendation(state) {
   });
 }
 
+function recommendationForState(state) {
+  if (state.isOurPossession == null) return null;
+  return state.isOurPossession ? offenseRecommendation(state) : defenseRecommendation(state);
+}
+
+function buildProjectedNextRecommendation(state) {
+  if (!state?.isLive || !state?.isLateGameWindow || state.secondsRemaining > FINAL_MINUTE_SECONDS) return null;
+  if (state.isOurPossession == null) return null;
+
+  const shouldProject =
+    state.feedStatus?.level === "low" ||
+    state.feedStatus?.level === "medium" ||
+    Boolean(state.feedStatus?.sequenceFlags?.some((flag) => /possession-change|behind/i.test(flag)));
+
+  if (!shouldProject) return null;
+
+  const projectedPossessionTeamId = flipPossessionTeamId(
+    state.possessionTeamId,
+    state.vantageTeam,
+    state.opponentTeam
+  );
+  const projectedState = {
+    ...state,
+    possessionTeamId: projectedPossessionTeamId,
+    isOurPossession: String(projectedPossessionTeamId) === String(state.vantageTeam?.teamId || ""),
+  };
+  const recommendation = recommendationForState(projectedState);
+  if (!recommendation) return null;
+
+  return {
+    headline: "Likely next if possession flips",
+    summary: "Use this as a preparation view when the feed may be behind or mid-sequence.",
+    possessionTeamId: projectedPossessionTeamId,
+    isOurPossession: projectedState.isOurPossession,
+    recommendation,
+  };
+}
+
 export function evaluateLateGameStrategy(state) {
   if (!state) {
     return {
@@ -692,10 +858,25 @@ export function evaluateLateGameStrategy(state) {
     };
   }
 
-  const recommendation = state.isOurPossession
-    ? offenseRecommendation(state)
-    : defenseRecommendation(state);
-  const freeThrowLookahead = state.isOurPossession ? null : findOpponentFreeThrowLookahead(state);
+  const recommendation = recommendationForState(state);
+  const freeThrowLookahead = state.isOurPossession
+    ? null
+    : state.manualOverrides?.freeThrowsPending
+      ? buildFreeThrowLookahead(state, {
+        source: "manual-free-throws-pending",
+        totalAwarded: 2,
+        attemptsTaken: 0,
+        madeSoFar: 0,
+        notes: ["Manual override: treating the opponent as headed to the line for two free throws until the feed catches up."],
+      })
+      : findOpponentFreeThrowLookahead(state);
+  const projectedNext = buildProjectedNextRecommendation(state);
+  const feedNotes = [
+    ...(state.feedStatus?.sequenceFlags || []),
+    ...(state.manualOverrides?.timeoutCalled ? ["Manual override: timeout context may not be reflected in the feed yet."] : []),
+    ...(state.manualOverrides?.clockAdvanced ? ["Manual override: clock may have advanced beyond the latest feed action."] : []),
+    ...(state.manualOverrides?.possessionFlip ? ["Manual override: possession flipped from the official feed value."] : []),
+  ];
 
   return {
     status: "ready",
@@ -703,10 +884,12 @@ export function evaluateLateGameStrategy(state) {
     summary: recommendation.detail,
     playMode,
     recommendation,
-    notes: recommendation.notes,
+    notes: [...recommendation.notes, ...feedNotes],
     blindSpots: recommendation.blindSpots,
     rationale: recommendation.rationale,
     freeThrowLookahead,
+    projectedNext,
+    feedStatus: state.feedStatus,
     matrixContext: {
       side: `${state.isOurPossession ? teamShortLabel(state.vantageTeam) : teamShortLabel(state.opponentTeam)} possession`,
       timeBand: state.timeBand,

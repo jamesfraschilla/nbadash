@@ -255,6 +255,13 @@ const buildDefaultStrategyFeedback = () => ({
   notes: "",
 });
 
+const buildDefaultStrategyOverrides = () => ({
+  possessionFlip: false,
+  freeThrowsPending: false,
+  timeoutCalled: false,
+  clockAdvanced: false,
+});
+
 const sanitizeHistoryKey = (value) => String(value || "").replace(/[^a-zA-Z0-9:_-]/g, "-");
 
 const resolvePossessionDisplay = (stateLike) => {
@@ -592,6 +599,7 @@ export default function Game({ variant = "full" }) {
   const [analysisForm, setAnalysisForm] = useState(() => buildInitialAnalysisForm(null, false));
   const [strategyVantageTeamId, setStrategyVantageTeamId] = useState("");
   const [strategyFeedback, setStrategyFeedback] = useState(() => buildDefaultStrategyFeedback());
+  const [strategyOverrides, setStrategyOverrides] = useState(() => buildDefaultStrategyOverrides());
   const [strategyFeedbackSaving, setStrategyFeedbackSaving] = useState(false);
   const [strategyFeedbackStatus, setStrategyFeedbackStatus] = useState("");
   const [strategyPanelCollapsed, setStrategyPanelCollapsed] = useState(() => loadLateGamePanelCollapsed(gameId));
@@ -2092,6 +2100,7 @@ export default function Game({ variant = "full" }) {
         homeFouls: homeFoulsDisplay,
         awayTimeoutsRemaining,
         homeTimeoutsRemaining,
+        manualOverrides: strategyOverrides,
       });
       return {
         strategyState: nextState,
@@ -2118,6 +2127,7 @@ export default function Game({ variant = "full" }) {
     game,
     homeFoulsDisplay,
     homeTimeoutsRemaining,
+    strategyOverrides,
     strategyVantageTeamId,
   ]);
   const { strategyState, strategyEvaluation, strategyPanelError } = strategyResult;
@@ -2128,13 +2138,23 @@ export default function Game({ variant = "full" }) {
     opponentTeamId: strategyState.opponentTeam?.teamId,
     opponentTeamTricode: strategyState.opponentTeam?.teamTricode,
   } : null);
-  const strategyCertaintyLabel = strategyEvaluation?.freeThrowLookahead?.scenarios?.length
-    ? "Projected from FT sequence"
-    : Array.isArray(strategyEvaluation?.blindSpots) && strategyEvaluation.blindSpots.length
-      ? "Needs coach judgment"
-      : strategyEvaluation?.status === "ready"
-        ? "Direct matrix match"
-        : "Live state monitor";
+  const strategyCertaintyLabel = (() => {
+    if (strategyEvaluation?.freeThrowLookahead?.scenarios?.length) return "Projected from FT sequence";
+    if (strategyEvaluation?.feedStatus?.level === "low") return "Feed confidence low";
+    if (strategyEvaluation?.feedStatus?.level === "medium") return "Feed confidence medium";
+    if (Array.isArray(strategyEvaluation?.blindSpots) && strategyEvaluation.blindSpots.length) return "Needs coach judgment";
+    if (strategyEvaluation?.status === "ready") return "Direct matrix match";
+    return "Live state monitor";
+  })();
+  const strategyProjectionPossessionDisplay = resolvePossessionDisplay(strategyEvaluation?.projectedNext ? {
+    ...strategyState,
+    possessionTeamId: strategyEvaluation.projectedNext.possessionTeamId,
+    isLive: strategyState?.isLive,
+    vantageTeamId: strategyState?.vantageTeam?.teamId,
+    vantageTeamTricode: strategyState?.vantageTeam?.teamTricode,
+    opponentTeamId: strategyState?.opponentTeam?.teamId,
+    opponentTeamTricode: strategyState?.opponentTeam?.teamTricode,
+  } : null);
   const strategySnapshotKey = useMemo(() => {
     if (!strategyState) return "";
     return [
@@ -2144,6 +2164,7 @@ export default function Game({ variant = "full" }) {
       strategyState.scoreDiff,
       strategyState.possessionTeamId || "na",
       strategyEvaluation?.recommendation?.ruleId || strategyEvaluation?.status || "na",
+      strategyState.manualOverrides ? JSON.stringify(strategyState.manualOverrides) : "no-overrides",
     ].join(":");
   }, [strategyEvaluation?.recommendation?.ruleId, strategyEvaluation?.status, strategyState]);
   const shouldTrackStrategyHistory = Boolean(
@@ -2200,6 +2221,7 @@ export default function Game({ variant = "full" }) {
 
   useEffect(() => {
     strategyHistorySaveRef.current = "";
+    setStrategyOverrides(buildDefaultStrategyOverrides());
   }, [gameId]);
 
   useEffect(() => {
@@ -2234,6 +2256,9 @@ export default function Game({ variant = "full" }) {
           vantageTeamTricode: strategyState.vantageTeam?.teamTricode,
           opponentTeamId: strategyState.opponentTeam?.teamId,
           opponentTeamTricode: strategyState.opponentTeam?.teamTricode,
+          feedPossessionTeamId: strategyState.feedPossessionTeamId,
+          feedStatus: strategyState.feedStatus || null,
+          manualOverrides: strategyState.manualOverrides || {},
         },
         strategyEvaluation: {
           status: strategyEvaluation.status,
@@ -2245,6 +2270,8 @@ export default function Game({ variant = "full" }) {
           playMode: strategyEvaluation.playMode || null,
           recommendation: strategyEvaluation.recommendation || null,
           freeThrowLookahead: strategyEvaluation.freeThrowLookahead || null,
+          projectedNext: strategyEvaluation.projectedNext || null,
+          feedStatus: strategyEvaluation.feedStatus || null,
         },
       },
     };
@@ -2380,6 +2407,9 @@ export default function Game({ variant = "full" }) {
           vantageTeamTricode: strategyState.vantageTeam?.teamTricode,
           opponentTeamId: strategyState.opponentTeam?.teamId,
           opponentTeamTricode: strategyState.opponentTeam?.teamTricode,
+          feedPossessionTeamId: strategyState.feedPossessionTeamId,
+          feedStatus: strategyState.feedStatus || null,
+          manualOverrides: strategyState.manualOverrides || {},
         },
         strategyEvaluation: {
           status: strategyEvaluation.status,
@@ -2389,6 +2419,9 @@ export default function Game({ variant = "full" }) {
           playMode: strategyEvaluation.playMode || null,
           recommendation,
           matrixContext: strategyEvaluation.matrixContext || null,
+          freeThrowLookahead: strategyEvaluation.freeThrowLookahead || null,
+          projectedNext: strategyEvaluation.projectedNext || null,
+          feedStatus: strategyEvaluation.feedStatus || null,
         },
       },
     };
@@ -2855,6 +2888,70 @@ export default function Game({ variant = "full" }) {
                   </div>
                 </div>
 
+                <div className={styles.strategyFeedPanel}>
+                  <div className={styles.strategyFeedHeader}>
+                    <span className={`${styles.strategyFeedDot} ${styles[`strategyFeedDot${(strategyEvaluation?.feedStatus?.level || "unknown").replace(/^./, (char) => char.toUpperCase())}`]}`} />
+                    <strong>{strategyEvaluation?.feedStatus?.label || "Feed confidence unavailable"}</strong>
+                    {strategyEvaluation?.feedStatus?.secondsBehind != null ? (
+                      <span>{strategyEvaluation.feedStatus.secondsBehind}s behind</span>
+                    ) : null}
+                  </div>
+                  <div className={styles.strategyFeedLatest}>
+                    Latest feed action: {strategyEvaluation?.feedStatus?.latestActionClock || "--"} · {strategyEvaluation?.feedStatus?.latestActionDescription || "No action available"}
+                  </div>
+                  {Array.isArray(strategyEvaluation?.feedStatus?.recentEvents) && strategyEvaluation.feedStatus.recentEvents.length ? (
+                    <details className={styles.strategyRecentEvents}>
+                      <summary>Recent feed events</summary>
+                      <ol>
+                        {strategyEvaluation.feedStatus.recentEvents.map((event, index) => (
+                          <li key={`${event.period}-${event.clock}-${event.description}-${index}`}>
+                            {event.clock || "--"} · {event.description}
+                          </li>
+                        ))}
+                      </ol>
+                    </details>
+                  ) : null}
+                  <div className={styles.strategyOverrideControls}>
+                    <span>Emergency correction</span>
+                    <button
+                      type="button"
+                      className={strategyOverrides.possessionFlip ? styles.strategyOverrideActive : ""}
+                      onClick={() => setStrategyOverrides((prev) => ({ ...prev, possessionFlip: !prev.possessionFlip }))}
+                    >
+                      Flip possession
+                    </button>
+                    <button
+                      type="button"
+                      className={strategyOverrides.freeThrowsPending ? styles.strategyOverrideActive : ""}
+                      onClick={() => setStrategyOverrides((prev) => ({ ...prev, freeThrowsPending: !prev.freeThrowsPending }))}
+                    >
+                      FTs pending
+                    </button>
+                    <button
+                      type="button"
+                      className={strategyOverrides.timeoutCalled ? styles.strategyOverrideActive : ""}
+                      onClick={() => setStrategyOverrides((prev) => ({ ...prev, timeoutCalled: !prev.timeoutCalled }))}
+                    >
+                      Timeout called
+                    </button>
+                    <button
+                      type="button"
+                      className={strategyOverrides.clockAdvanced ? styles.strategyOverrideActive : ""}
+                      onClick={() => setStrategyOverrides((prev) => ({ ...prev, clockAdvanced: !prev.clockAdvanced }))}
+                    >
+                      Clock advanced
+                    </button>
+                    {Object.values(strategyOverrides).some(Boolean) ? (
+                      <button
+                        type="button"
+                        onClick={() => setStrategyOverrides(buildDefaultStrategyOverrides())}
+                      >
+                        Clear
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+
                 <div className={styles.strategyRecommendation}>
                   <div className={styles.strategyCurrentLabel}>Current Call</div>
                   <div className={styles.strategyRecommendationHeader}>
@@ -2882,6 +2979,19 @@ export default function Game({ variant = "full" }) {
                   {strategyEvaluation?.playMode ? (
                     <div className={styles.strategySecondary}>
                       Play Mode: {strategyEvaluation.playMode.mode} · {strategyEvaluation.playMode.instruction}
+                    </div>
+                  ) : null}
+                  {strategyEvaluation?.projectedNext?.recommendation ? (
+                    <div className={styles.strategyProjectionBlock}>
+                      <div className={styles.strategyScenarioHeader}>
+                        <strong>{strategyEvaluation.projectedNext.headline}</strong>
+                        <span>{strategyEvaluation.projectedNext.summary}</span>
+                      </div>
+                      <div className={styles.strategyProjectionCard}>
+                        <span>{strategyProjectionPossessionDisplay}</span>
+                        <strong>{strategyEvaluation.projectedNext.recommendation.call}</strong>
+                        <p>{strategyEvaluation.projectedNext.recommendation.detail}</p>
+                      </div>
                     </div>
                   ) : null}
                   {Array.isArray(strategyEvaluation?.notes) && strategyEvaluation.notes.length ? (

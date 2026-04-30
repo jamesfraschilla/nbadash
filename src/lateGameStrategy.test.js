@@ -132,3 +132,54 @@ test("final games keep the strategy engine inactive", () => {
   assert.equal(evaluation.status, "inactive");
   assert.equal(evaluation.headline, "Late Game Strategy is inactive");
 });
+
+test("stale play-by-play feed exposes low confidence and likely next recommendation", () => {
+  const game = buildGame({
+    gameClock: "PT10S",
+    playByPlayActions: [
+      {
+        actionType: "2pt",
+        teamId: DET.teamId,
+        possession: DET.teamId,
+        period: 4,
+        clock: "PT30S",
+        shotResult: "made",
+        description: "Cunningham driving layup made",
+      },
+    ],
+  });
+
+  const state = buildLateGameStrategyState({
+    game,
+    vantageTeamId: ORL.teamId,
+    awayFouls: 2,
+    homeFouls: 3,
+    awayTimeoutsRemaining: 1,
+    homeTimeoutsRemaining: 2,
+  });
+  const evaluation = evaluateLateGameStrategy(state);
+
+  assert.equal(evaluation.feedStatus.level, "low");
+  assert.equal(evaluation.feedStatus.secondsBehind, 20);
+  assert.equal(evaluation.projectedNext.possessionTeamId, ORL.teamId);
+  assert.equal(evaluation.projectedNext.recommendation.call, "Draw foul");
+});
+
+test("manual possession override temporarily flips the evaluated recommendation", () => {
+  const state = buildLateGameStrategyState({
+    game: buildGame({ gameClock: "PT10S" }),
+    vantageTeamId: ORL.teamId,
+    awayFouls: 2,
+    homeFouls: 3,
+    awayTimeoutsRemaining: 1,
+    homeTimeoutsRemaining: 2,
+    manualOverrides: { possessionFlip: true },
+  });
+  const evaluation = evaluateLateGameStrategy(state);
+
+  assert.equal(state.feedPossessionTeamId, DET.teamId);
+  assert.equal(state.possessionTeamId, ORL.teamId);
+  assert.equal(state.isOurPossession, true);
+  assert.equal(evaluation.recommendation.call, "Draw foul");
+  assert.match(evaluation.notes.join(" "), /possession flipped/i);
+});
