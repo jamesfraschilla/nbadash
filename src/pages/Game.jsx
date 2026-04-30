@@ -2620,139 +2620,6 @@ export default function Game({ variant = "full" }) {
             </button>
           </div>
 
-          <section className={styles.strategyPanel}>
-            <button
-              type="button"
-              className={styles.strategyPanelToggle}
-              onClick={toggleStrategyPanel}
-            >
-              <span className={styles.strategyPanelToggleLabel}>Live Game Situation Matrix</span>
-              <span className={styles.strategyPanelToggleIcon}>{strategyPanelCollapsed ? "+" : "−"}</span>
-            </button>
-
-            {!strategyPanelCollapsed ? (
-              <div className={styles.strategyPanelBody}>
-                <div className={styles.strategyPanelHeader}>
-                  <div className={styles.strategyToggleLabel}>Vantage</div>
-                  <div className={styles.strategyToggleGroup}>
-                    {[awayTeam, homeTeam].filter(Boolean).map((team) => (
-                      <button
-                        key={`strategy-team-${team.teamId}`}
-                        type="button"
-                        className={`${styles.strategyToggle} ${String(strategyVantageTeamId) === String(team.teamId) ? styles.strategyToggleActive : ""}`}
-                        onClick={() => setStrategyVantageTeamId(String(team.teamId))}
-                      >
-                        {team.teamTricode}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className={styles.strategyLiveStrip}>
-                  <div className={styles.strategyLivePill}>
-                    <span className={styles.strategyLiveLabel}>State</span>
-                    <strong>{strategyState ? `${strategyState.periodLabel} ${strategyState.clock}` : "--"}</strong>
-                  </div>
-                  <div className={styles.strategyLivePill}>
-                    <span className={styles.strategyLiveLabel}>Margin</span>
-                    <strong>{strategyState?.scoreLabel || "--"}</strong>
-                  </div>
-                  <div className={styles.strategyLivePill}>
-                    <span className={styles.strategyLiveLabel}>Possession</span>
-                    <strong>{strategyPossessionDisplay}</strong>
-                  </div>
-                </div>
-
-                <div className={styles.strategyRecommendation}>
-                  <div className={styles.strategyCurrentLabel}>Current Call</div>
-                  <div className={styles.strategyRecommendationHeader}>
-                    <div className={styles.strategyRecommendationTitle}>
-                      {strategyEvaluation?.headline || "Late Game Strategy"}
-                    </div>
-                    <span className={styles.strategyConfidenceBadge}>{strategyCertaintyLabel}</span>
-                  </div>
-                  <p className={styles.strategySummary}>{strategyEvaluation?.summary || "No recommendation yet."}</p>
-                  <div className={styles.strategySituationLine}>
-                    {strategyState ? `${strategyState.periodLabel} ${strategyState.clock} · ${strategyState.scoreLabel} · ${strategyPossessionDisplay}` : "Waiting for live state."}
-                  </div>
-                  {strategyEvaluation?.matrixContext ? (
-                    <div className={styles.strategyBadgeRow}>
-                      <span className={styles.strategyBadge}>{strategyEvaluation.matrixContext.side}</span>
-                      <span className={styles.strategyBadge}>{strategyEvaluation.matrixContext.timeBand}</span>
-                      <span className={styles.strategyBadge}>{strategyEvaluation.matrixContext.scoreLabel}</span>
-                    </div>
-                  ) : null}
-                  {strategyEvaluation?.rationale ? (
-                    <div className={styles.strategyRationale}>
-                      <strong>Why:</strong> {strategyEvaluation.rationale}
-                    </div>
-                  ) : null}
-                  {strategyEvaluation?.playMode ? (
-                    <div className={styles.strategySecondary}>
-                      Play Mode: {strategyEvaluation.playMode.mode} · {strategyEvaluation.playMode.instruction}
-                    </div>
-                  ) : null}
-                  {Array.isArray(strategyEvaluation?.notes) && strategyEvaluation.notes.length ? (
-                    <ul className={styles.strategyNotes}>
-                      {strategyEvaluation.notes.map((note) => (
-                        <li key={note}>{note}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                  {strategyEvaluation?.freeThrowLookahead?.scenarios?.length ? (
-                    <div className={styles.strategyScenarioBlock}>
-                      <div className={styles.strategyScenarioHeader}>
-                        <strong>{strategyEvaluation.freeThrowLookahead.headline}</strong>
-                        <span>{strategyEvaluation.freeThrowLookahead.summary}</span>
-                      </div>
-                      <div className={styles.strategyScenarioGrid}>
-                        {strategyEvaluation.freeThrowLookahead.scenarios.map((scenario) => (
-                          <div key={scenario.key} className={styles.strategyScenarioCard}>
-                            <div className={styles.strategyScenarioLabel}>{scenario.label}</div>
-                            <div className={styles.strategyScenarioMargin}>{scenario.projectedScoreLabel}</div>
-                            <div className={styles.strategyScenarioCall}>{scenario.recommendation.call}</div>
-                            <div className={styles.strategyScenarioDetail}>{scenario.recommendation.detail}</div>
-                          </div>
-                        ))}
-                      </div>
-                      {Array.isArray(strategyEvaluation.freeThrowLookahead.notes) && strategyEvaluation.freeThrowLookahead.notes.length ? (
-                        <ul className={styles.strategyScenarioNotes}>
-                          {strategyEvaluation.freeThrowLookahead.notes.map((note) => (
-                            <li key={note}>{note}</li>
-                          ))}
-                        </ul>
-                      ) : null}
-                    </div>
-                  ) : null}
-                  {Array.isArray(strategyEvaluation?.blindSpots) && strategyEvaluation.blindSpots.length ? (
-                    <div className={styles.strategyBlindSpots}>
-                      <strong>Needs review:</strong> {strategyEvaluation.blindSpots.join(" ")}
-                    </div>
-                  ) : null}
-                  {strategyFeedbackStatus ? (
-                    <div className={styles.strategyFeedbackStatus}>{strategyFeedbackStatus}</div>
-                  ) : null}
-                  <div className={styles.strategyFeedbackActions}>
-                    <button
-                      type="button"
-                      className={styles.strategyVaultLink}
-                      onClick={openStrategyHistoryModal}
-                    >
-                      Recommendation History
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.strategySaveButton}
-                      onClick={openStrategyFeedbackModal}
-                    >
-                      Add Feedback
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-          </section>
-
           {strategyHistoryModalOpen ? (
             <div className={styles.noteOverlay} onClick={closeStrategyHistoryModal}>
               <div
@@ -2969,6 +2836,139 @@ export default function Game({ variant = "full" }) {
               )}
             </div>
           </div>
+
+          <section className={styles.strategyPanel}>
+            <button
+              type="button"
+              className={styles.strategyPanelToggle}
+              onClick={toggleStrategyPanel}
+            >
+              <span className={styles.strategyPanelToggleLabel}>Live Game Situation Matrix</span>
+              <span className={styles.strategyPanelToggleIcon}>{strategyPanelCollapsed ? "+" : "−"}</span>
+            </button>
+
+            {!strategyPanelCollapsed ? (
+              <div className={styles.strategyPanelBody}>
+                <div className={styles.strategyPanelHeader}>
+                  <div className={styles.strategyToggleGroup}>
+                    <span className={styles.strategyToggleLabel}>Vantage</span>
+                    {[awayTeam, homeTeam].filter(Boolean).map((team) => (
+                      <button
+                        key={`strategy-team-${team.teamId}`}
+                        type="button"
+                        className={`${styles.strategyToggle} ${String(strategyVantageTeamId) === String(team.teamId) ? styles.strategyToggleActive : ""}`}
+                        onClick={() => setStrategyVantageTeamId(String(team.teamId))}
+                      >
+                        {team.teamTricode}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className={styles.strategyLiveStrip}>
+                  <div className={styles.strategyLivePill}>
+                    <span className={styles.strategyLiveLabel}>State</span>
+                    <strong>{strategyState ? `${strategyState.periodLabel} ${strategyState.clock}` : "--"}</strong>
+                  </div>
+                  <div className={styles.strategyLivePill}>
+                    <span className={styles.strategyLiveLabel}>Margin</span>
+                    <strong>{strategyState?.scoreLabel || "--"}</strong>
+                  </div>
+                  <div className={styles.strategyLivePill}>
+                    <span className={styles.strategyLiveLabel}>Possession</span>
+                    <strong>{strategyPossessionDisplay}</strong>
+                  </div>
+                </div>
+
+                <div className={styles.strategyRecommendation}>
+                  <div className={styles.strategyCurrentLabel}>Current Call</div>
+                  <div className={styles.strategyRecommendationHeader}>
+                    <div className={styles.strategyRecommendationTitle}>
+                      {strategyEvaluation?.headline || "Late Game Strategy"}
+                    </div>
+                    <span className={styles.strategyConfidenceBadge}>{strategyCertaintyLabel}</span>
+                  </div>
+                  <p className={styles.strategySummary}>{strategyEvaluation?.summary || "No recommendation yet."}</p>
+                  <div className={styles.strategySituationLine}>
+                    {strategyState ? `${strategyState.periodLabel} ${strategyState.clock} · ${strategyState.scoreLabel} · ${strategyPossessionDisplay}` : "Waiting for live state."}
+                  </div>
+                  {strategyEvaluation?.matrixContext ? (
+                    <div className={styles.strategyBadgeRow}>
+                      <span className={styles.strategyBadge}>{strategyEvaluation.matrixContext.side}</span>
+                      <span className={styles.strategyBadge}>{strategyEvaluation.matrixContext.timeBand}</span>
+                      <span className={styles.strategyBadge}>{strategyEvaluation.matrixContext.scoreLabel}</span>
+                    </div>
+                  ) : null}
+                  {strategyEvaluation?.rationale ? (
+                    <div className={styles.strategyRationale}>
+                      <strong>Why:</strong> {strategyEvaluation.rationale}
+                    </div>
+                  ) : null}
+                  {strategyEvaluation?.playMode ? (
+                    <div className={styles.strategySecondary}>
+                      Play Mode: {strategyEvaluation.playMode.mode} · {strategyEvaluation.playMode.instruction}
+                    </div>
+                  ) : null}
+                  {Array.isArray(strategyEvaluation?.notes) && strategyEvaluation.notes.length ? (
+                    <ul className={styles.strategyNotes}>
+                      {strategyEvaluation.notes.map((note) => (
+                        <li key={note}>{note}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {strategyEvaluation?.freeThrowLookahead?.scenarios?.length ? (
+                    <div className={styles.strategyScenarioBlock}>
+                      <div className={styles.strategyScenarioHeader}>
+                        <strong>{strategyEvaluation.freeThrowLookahead.headline}</strong>
+                        <span>{strategyEvaluation.freeThrowLookahead.summary}</span>
+                      </div>
+                      <div className={styles.strategyScenarioGrid}>
+                        {strategyEvaluation.freeThrowLookahead.scenarios.map((scenario) => (
+                          <div key={scenario.key} className={styles.strategyScenarioCard}>
+                            <div className={styles.strategyScenarioLabel}>{scenario.label}</div>
+                            <div className={styles.strategyScenarioMargin}>{scenario.projectedScoreLabel}</div>
+                            <div className={styles.strategyScenarioCall}>{scenario.recommendation.call}</div>
+                            <div className={styles.strategyScenarioDetail}>{scenario.recommendation.detail}</div>
+                          </div>
+                        ))}
+                      </div>
+                      {Array.isArray(strategyEvaluation.freeThrowLookahead.notes) && strategyEvaluation.freeThrowLookahead.notes.length ? (
+                        <ul className={styles.strategyScenarioNotes}>
+                          {strategyEvaluation.freeThrowLookahead.notes.map((note) => (
+                            <li key={note}>{note}</li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {Array.isArray(strategyEvaluation?.blindSpots) && strategyEvaluation.blindSpots.length ? (
+                    <div className={styles.strategyBlindSpots}>
+                      <strong>Needs review:</strong> {strategyEvaluation.blindSpots.join(" ")}
+                    </div>
+                  ) : null}
+                  {strategyFeedbackStatus ? (
+                    <div className={styles.strategyFeedbackStatus}>{strategyFeedbackStatus}</div>
+                  ) : null}
+                  <div className={styles.strategyFeedbackActions}>
+                    <button
+                      type="button"
+                      className={styles.strategyVaultLink}
+                      onClick={openStrategyHistoryModal}
+                    >
+                      Recommendation History
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.strategySaveButton}
+                      onClick={openStrategyFeedbackModal}
+                    >
+                      Add Feedback
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </section>
 
           {canUseMatchUps ? (
             <MatchUps

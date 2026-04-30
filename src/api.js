@@ -1280,13 +1280,14 @@ export async function fetchGamesByDate(dateStr) {
     requestJson(url).catch(() => []),
     isJulyDate(dateStr) ? fetchSummerLeagueGamesByDate(dateStr).catch(() => []) : Promise.resolve([]),
   ]);
+  const filteredBaseGames = (Array.isArray(baseGames) ? baseGames : []).filter(isNbaDashboardGame);
 
   if (!summerGames.length) {
-    return baseGames;
+    return filteredBaseGames;
   }
 
   const merged = new Map();
-  [...baseGames, ...summerGames].forEach((game) => {
+  [...filteredBaseGames, ...summerGames].forEach((game) => {
     if (game?.gameId) {
       merged.set(String(game.gameId), game);
     }
@@ -1323,7 +1324,16 @@ export function teamLogoUrl(teamId, league = null) {
 }
 
 export function inferLeagueFromTeamId(teamId) {
-  return Number(teamId) >= 1612700000 && Number(teamId) < 1612710000 ? "gleague" : "nba";
+  const numericTeamId = Number(teamId);
+  if (numericTeamId >= 1612700000 && numericTeamId < 1612710000) return "gleague";
+  if (numericTeamId >= 1611661300 && numericTeamId < 1611661400) return "wnba";
+  return "nba";
+}
+
+function isNbaDashboardGame(game) {
+  const homeLeague = inferLeagueFromTeamId(game?.homeTeam?.teamId);
+  const awayLeague = inferLeagueFromTeamId(game?.awayTeam?.teamId);
+  return homeLeague !== "wnba" && awayLeague !== "wnba";
 }
 
 export function playerHeadshotUrls(personId, teamId = null) {
