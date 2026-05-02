@@ -52,8 +52,10 @@ import CreatingDisruption from "../components/CreatingDisruption.jsx";
 import SegmentSelector from "../components/SegmentSelector.jsx";
 import LateGameMatrixPanel from "../components/LateGameMatrixPanel.jsx";
 import {
+  buildMarginRange,
   buildDefaultStrategyOverrides,
   buildStrategyOverrideDraft,
+  getMarginOptionLabel,
 } from "../components/lateGamePanelHelpers.js";
 import { fetchPublishedOrderForOfficials } from "../officialAssignments.js";
 import {
@@ -2117,6 +2119,45 @@ export default function Game({ variant = "full" }) {
     strategyVantageTeamId,
   ]);
   const { strategyState, strategyEvaluation, strategyPanelError } = strategyResult;
+  const strategyRangeRecommendations = useMemo(() => {
+    if (!strategyState?.manualOverrides?.scoreDiffRange) return [];
+    const margins = buildMarginRange(strategyState.manualOverrides.scoreDiff, strategyState.manualOverrides.scoreDiffEnd);
+    if (margins.length <= 1) return [];
+    return margins.map((margin) => {
+      const rangeState = buildLateGameStrategyState({
+        game,
+        vantageTeamId: strategyVantageTeamId,
+        awayFouls: awayFoulsDisplay,
+        homeFouls: homeFoulsDisplay,
+        awayTimeoutsRemaining,
+        homeTimeoutsRemaining,
+        manualOverrides: {
+          ...strategyOverrides,
+          scoreDiff: String(margin),
+          scoreDiffRange: false,
+          scoreDiffEnd: "",
+        },
+      });
+      const recommendation = evaluateLateGameStrategy(rangeState);
+      return {
+        key: `${margin}:${recommendation?.recommendation?.ruleId || recommendation?.status || "na"}`,
+        margin,
+        marginLabel: getMarginOptionLabel(margin),
+        recommendation: recommendation.recommendation || recommendation,
+      };
+    });
+  }, [
+    awayFoulsDisplay,
+    awayTimeoutsRemaining,
+    game,
+    homeFoulsDisplay,
+    homeTimeoutsRemaining,
+    strategyOverrides,
+    strategyState?.manualOverrides?.scoreDiff,
+    strategyState?.manualOverrides?.scoreDiffEnd,
+    strategyState?.manualOverrides?.scoreDiffRange,
+    strategyVantageTeamId,
+  ]);
   const strategySnapshotKey = useMemo(() => {
     if (!strategyState) return "";
     return [
@@ -2285,10 +2326,11 @@ export default function Game({ variant = "full" }) {
   const applyManualSituationOverride = () => {
     setStrategyOverrides((prev) => ({
       ...prev,
-      possessionFlip: false,
       period: strategyOverrideDraft.period,
       clock: strategyOverrideDraft.clock,
       scoreDiff: strategyOverrideDraft.scoreDiff,
+      scoreDiffRange: Boolean(strategyOverrideDraft.scoreDiffRange),
+      scoreDiffEnd: strategyOverrideDraft.scoreDiffRange ? strategyOverrideDraft.scoreDiffEnd : "",
       possessionTeamId: strategyOverrideDraft.possessionTeamId,
       ourTimeouts: strategyOverrideDraft.ourTimeouts,
       opponentTimeouts: strategyOverrideDraft.opponentTimeouts,
@@ -2846,6 +2888,7 @@ export default function Game({ variant = "full" }) {
             setStrategyOverrideDraft={setStrategyOverrideDraft}
             onApplyManualSituationOverride={applyManualSituationOverride}
             onClearStrategyOverrides={clearStrategyOverrides}
+            strategyRangeRecommendations={strategyRangeRecommendations}
             footerActions={
               <>
                 {strategyFeedbackStatus ? (

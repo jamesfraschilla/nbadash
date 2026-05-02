@@ -38,7 +38,7 @@ function overrideNumber(value, fallback, min = -Infinity, max = Infinity) {
 
 function hasManualStrategyOverrides(overrides) {
   return Object.entries(overrides || {}).some(([key, value]) => {
-    if (["possessionFlip", "freeThrowsPending", "timeoutCalled", "clockAdvanced"].includes(key)) {
+    if (["possessionFlip", "freeThrowsPending", "timeoutCalled", "clockAdvanced", "scoreDiffRange"].includes(key)) {
       return Boolean(value);
     }
     return value !== "" && value != null;
@@ -515,6 +515,8 @@ export function buildLateGameStrategyState({
       period: manualOverrides.period ?? "",
       clock: manualOverrides.clock ?? "",
       scoreDiff: manualOverrides.scoreDiff ?? "",
+      scoreDiffRange: Boolean(manualOverrides.scoreDiffRange),
+      scoreDiffEnd: manualOverrides.scoreDiffEnd ?? "",
       possessionTeamId: overridePossessionTeamId,
       ourTimeouts: manualOverrides.ourTimeouts ?? "",
       opponentTimeouts: manualOverrides.opponentTimeouts ?? "",
@@ -532,275 +534,266 @@ function buildRecommendation(rule) {
   };
 }
 
+const WORKBOOK_TIME_BANDS = [
+  "1:00-0:52.1",
+  "0:52-0:40.1",
+  "0:40-0:35.1",
+  "0:35-0:30.1",
+  "0:30-0:28.1",
+  "0:28-0:26.1",
+  "0:26-0:24.1",
+  "0:24-0:20.1",
+  "0:20-0:15.1",
+  "0:15-0:10.1",
+  "0:10-0:08.1",
+  "0:08-0:07.1",
+  "0:07-0:06.1",
+  "0:06-0:05.1",
+  "0:05-0:04.1",
+  "0:04-0:03.1",
+  "0:03-0:02.1",
+  "0:02-0:01.1",
+  "0:01-0:00.5",
+];
+
+const OFFENSE_MATRIX = {
+  "1:00-0:52.1": { "-4": "NORMAL OFFENSE", "-3": "NORMAL OFFENSE", "-2": "NORMAL OFFENSE", "-1": "NORMAL OFFENSE", "0": "NORMAL OFFENSE", "1": "NORMAL OFFENSE", "2": "NORMAL OFFENSE", "3": "NORMAL OFFENSE" },
+  "0:52-0:40.1": { "-4": "2 FOR 1", "-3": "2 FOR 1", "-2": "2 FOR 1", "-1": "2 FOR 1", "0": "2 FOR 1 / (GOOD SHOT ONLY)", "1": "2 FOR 1 / (GOOD SHOT ONLY)", "2": "SHOOT UNDER :08 ON SHOT CLOCK", "3": "SHOOT UNDER :08 ON SHOT CLOCK" },
+  "0:40-0:35.1": { "-4": "2 FOR 1", "-3": "2 FOR 1", "-2": "2 FOR 1", "-1": "2 FOR 1", "0": "2 FOR 1 / (GOOD SHOT ONLY)", "1": "2 FOR 1 / (GOOD SHOT ONLY)", "2": "SHOOT UNDER :08 ON SHOT CLOCK", "3": "SHOOT UNDER :08 ON SHOT CLOCK" },
+  "0:35-0:30.1": { "-4": "QUICK 2 FOR 1 (USE TIMEOUT IF WE HAVE 2)", "-3": "QUICK 2 FOR 1 (USE T/OUT IF HAVE 2)", "-2": "QUICK 2 FOR 1 (USE T/OUT IF HAVE 2)", "-1": "QUICK 2 FOR 1 (USE T/OUT IF HAVE 2)", "0": "QUICK 2 FOR 1 (USE T/OUT IF HAVE 2)", "1": "SHOOT UNDER :08 ON SHOT CLOCK", "2": "SHOOT UNDER :08 ON SHOT CLOCK", "3": "SHOOT UNDER :08 ON SHOT CLOCK" },
+  "0:30-0:28.1": { "-4": "QUICK 2 / OR / GOOD 3", "-3": "QUICK 2 / OR / GOOD 3", "-2": "NEED 2 / BUT PREFER / 3", "-1": "NEED 2", "0": "SHOOT UNDER :08 ON SHOT CLOCK", "1": "SHOOT UNDER :08 ON SHOT CLOCK", "2": "SHOOT UNDER :08 ON SHOT CLOCK", "3": "SHOOT UNDER :08 ON SHOT CLOCK" },
+  "0:28-0:26.1": { "-4": "QUICK 2 / OR / GOOD 3", "-3": "QUICK 2 / OR / GOOD 3", "-2": "NEED 2 / BUT PREFER / 3", "-1": "NEED 2", "0": "SHOOT UNDER :08 ON SHOT CLOCK", "1": "SHOOT UNDER :08 ON SHOT CLOCK", "2": "SHOOT UNDER :05 ON SHOT CLOCK", "3": "SHOOT UNDER :05 ON SHOT CLOCK" },
+  "0:26-0:24.1": { "-4": "QUICK 2 / OR / GOOD 3", "-3": "QUICK 2 / OR / GOOD 3", "-2": "NEED 2 / BUT PREFER / 3", "-1": "NEED 2", "0": "SHOOT UNDER :08 ON SHOT CLOCK", "1": "SHOOT UNDER :05 ON SHOT CLOCK.  BUT IF OPPONENT HAS NO TIMEOUT, SHOOT UNDER :03 ON SHOT CLOCK", "2": "SHOOT UNDER :05 ON SHOT CLOCK.  BUT IF OPPONENT HAS NO TIMEOUT, SHOOT UNDER :03 ON SHOT CLOCK", "3": "SHOOT UNDER :05 ON SHOT CLOCK.  BUT IF OPPONENT HAS NO TIMEOUT, SHOOT UNDER :03 ON SHOT CLOCK" },
+  "0:24-0:20.1": { "-4": "QUICK 2 / OR / GOOD 3", "-3": "QUICK 2 / OR / GOOD 3", "-2": "NEED 2 / BUT PREFER / 3", "-1": "NEED 2", "0": "HOLD BALL FOR LAST / SHOT", "1": "HOLD BALL FOR LAST / SHOT", "2": "HOLD BALL FOR LAST / SHOT", "3": "HOLD BALL FOR LAST / SHOT" },
+  "0:20-0:15.1": { "-4": "QUICK 2 / OR / GOOD 3", "-3": "QUICK 2 / OR / GOOD 3", "-2": "NEED 2 / BUT PREFER / 3", "-1": "NEED 2", "0": "HOLD BALL FOR LAST / SHOT", "1": "HOLD BALL FOR LAST / SHOT", "2": "HOLD BALL FOR LAST / SHOT", "3": "HOLD BALL FOR LAST / SHOT" },
+  "0:15-0:10.1": { "-4": "QUICK 2 / OR / GOOD 3", "-3": "QUICK 2 / OR / GOOD 3", "-2": "NEED 2 / BUT PREFER / 3", "-1": "NEED 2", "0": "HOLD BALL FOR LAST / SHOT", "1": "HOLD BALL FOR LAST / SHOT", "2": "HOLD BALL FOR LAST / SHOT", "3": "HOLD BALL FOR LAST / SHOT" },
+  "0:10-0:08.1": { "-4": "NEED 3 /  / *CRASH 5*", "-3": "NEED 3 /  / *CRASH 5*", "-2": "NEED 2 / BUT PREFER / 3", "-1": "NEED 2", "0": "HOLD BALL FOR LAST / SHOT", "1": "HOLD BALL FOR LAST / SHOT", "2": "HOLD BALL FOR LAST / SHOT", "3": "HOLD BALL FOR LAST / SHOT" },
+  "0:08-0:07.1": { "-4": "NEED 3 /  / *CRASH 5*", "-3": "NEED 3 /  / *CRASH 5*", "-2": "NEED 2 / BUT PREFER / 3", "-1": "NEED 2", "0": "HOLD BALL FOR LAST / SHOT", "1": "HOLD BALL FOR LAST / SHOT", "2": "HOLD BALL FOR LAST / SHOT", "3": "HOLD BALL FOR LAST / SHOT" },
+  "0:07-0:06.1": { "-4": "NEED 3 /  / *CRASH 5*", "-3": "NEED 3 /  / *CRASH 5*", "-2": "NEED 2 / BUT PREFER / 3", "-1": "NEED 2", "0": "HOLD BALL FOR LAST / SHOT", "1": "HOLD BALL FOR LAST / SHOT", "2": "HOLD BALL FOR LAST / SHOT", "3": "HOLD BALL FOR LAST / SHOT" },
+  "0:06-0:05.1": { "-4": "NEED 3 /  / *CRASH 5*", "-3": "NEED 3 /  / *CRASH 5*", "-2": "NEED 2 / BUT PREFER / 3", "-1": "NEED 2", "0": "HOLD BALL FOR LAST / SHOT", "1": "HOLD BALL FOR LAST / SHOT", "2": "HOLD BALL FOR LAST / SHOT", "3": "HOLD BALL FOR LAST / SHOT" },
+  "0:05-0:04.1": { "-4": "NEED 3 /  / *CRASH 5*", "-3": "NEED 3 /  / *CRASH 5*", "-2": "NEED 2 / BUT PREFER / 3", "-1": "NEED 2", "0": "HOLD BALL FOR LAST / SHOT", "1": "HOLD BALL FOR LAST / SHOT", "2": "HOLD BALL FOR LAST / SHOT", "3": "HOLD BALL FOR LAST / SHOT" },
+  "0:04-0:03.1": { "-4": "NEED 3 /  / *CRASH 5*", "-3": "NEED 3 /  / *CRASH 5*", "-2": "LOB OR CATCH AND / SHOOT", "-1": "LOB OR CATCH AND / SHOOT", "0": "HOLD BALL FOR LAST / SHOT", "1": "HOLD BALL FOR LAST / SHOT", "2": "HOLD BALL FOR LAST / SHOT", "3": "HOLD BALL FOR LAST / SHOT" },
+  "0:03-0:02.1": { "-4": "NEED 3 /  / *CRASH 5*", "-3": "NEED 3 /  / *CRASH 5*", "-2": "LOB OR CATCH AND / SHOOT", "-1": "LOB OR CATCH AND / SHOOT", "0": "HOLD BALL FOR LAST / SHOT", "1": "HOLD BALL FOR LAST / SHOT", "2": "HOLD BALL FOR LAST / SHOT", "3": "HOLD BALL FOR LAST / SHOT" },
+  "0:02-0:01.1": { "-4": "DRAW FOUL", "-3": "DRAW FOUL", "-2": "LOB / TIP", "-1": "LOB / TIP", "0": "LOB / TIP", "1": "SAFE INBOUNDS", "2": "SAFE INBOUNDS", "3": "SAFE INBOUNDS" },
+  "0:01-0:00.5": { "-4": "DRAW FOUL", "-3": "DRAW FOUL", "-2": "LOB / TIP", "-1": "LOB / TIP", "0": "LOB / TIP", "1": "SAFE INBOUNDS", "2": "SAFE INBOUNDS", "3": "SAFE INBOUNDS" },
+};
+
+const DEFENSE_MATRIX = {
+  "1:00-0:52.1": { "-5": "DEFEND NORMALLY", "-4": "DEFEND NORMALLY", "-3": "DEFEND NORMALLY", "-2": "DEFEND NORMALLY", "-1": "DEFEND NORMALLY", "0": "DEFEND NORMALLY", "1": "DEFEND NORMALLY", "2": "DEFEND NORMALLY", "3": "DEFEND NORMALLY", "4+": "DEFEND NORMALLY" },
+  "0:52-0:40.1": { "-5": "DEFEND NORMALLY", "-4": "1 TRAP, THEN FOUL", "-3": "DEFEND NORMALLY", "-2": "DEFEND NORMALLY", "-1": "DEFEND NORMALLY", "0": "DEFEND NORMALLY", "1": "DEFEND NORMALLY", "2": "DEFEND NORMALLY", "3": "DEFEND NORMALLY", "4+": "DEFEND NORMALLY" },
+  "0:40-0:35.1": { "-5": "DEFEND NORMALLY", "-4": "1 TRAP, THEN FOUL", "-3": "DEFEND NORMALLY", "-2": "DEFEND NORMALLY", "-1": "DEFEND NORMALLY", "0": "DEFEND NORMALLY", "1": "DEFEND NORMALLY", "2": "DEFEND NORMALLY", "3": "DEFEND NORMALLY", "4+": "DEFEND NORMALLY" },
+  "0:35-0:30.1": { "-5": "DEFEND NORMALLY", "-4": "1 TRAP, THEN FOUL", "-3": "DEFEND NORMALLY", "-2": "DEFEND NORMALLY", "-1": "DEFEND NORMALLY", "0": "DEFEND NORMALLY", "1": "DEFEND NORMALLY", "2": "DEFEND NORMALLY", "3": "NO 3 / DEFENSE", "4+": "NO 3 / DEFENSE" },
+  "0:30-0:28.1": { "-5": "FOUL", "-4": "1 TRAP,  THEN FOUL", "-3": "1 TRAP, THEN FOUL", "-2": "1 TRAP, THEN FOUL", "-1": "1 TRAP, THEN FOUL", "0": "DEFEND NORMALLY", "1": "DEFEND NORMALLY", "2": "DEFEND NORMALLY", "3": "NO 3 / DEFENSE", "4+": "NO 3 / DEFENSE" },
+  "0:28-0:26.1": { "-5": "FOUL", "-4": "1 TRAP,  THEN FOUL", "-3": "1 TRAP, THEN FOUL", "-2": "1 TRAP, THEN FOUL", "-1": "1 TRAP, THEN FOUL", "0": "DEFEND NORMALLY", "1": "DEFEND NORMALLY", "2": "DEFEND NORMALLY", "3": "NO 3 / DEFENSE", "4+": "NO 3 / DEFENSE" },
+  "0:26-0:24.1": { "-5": "FOUL", "-4": "FOUL", "-3": "1 TRAP, THEN FOUL", "-2": "1 TRAP, THEN FOUL", "-1": "1 TRAP, THEN FOUL", "0": "DEFEND NORMALLY", "1": "DEFEND NORMALLY", "2": "DEFEND NORMALLY", "3": "NO 3 / DEFENSE", "4+": "NO 3 / DEFENSE" },
+  "0:24-0:20.1": { "-5": "FOUL", "-4": "FOUL", "-3": "1 TRAP, THEN FOUL", "-2": "1 TRAP, THEN FOUL", "-1": "1 TRAP, THEN FOUL", "0": "DEFEND NORMALLY", "1": "DEFEND NORMALLY", "2": "DEFEND NORMALLY", "3": "NO 3 / DEFENSE", "4+": "NO 3 / DEFENSE" },
+  "0:20-0:15.1": { "-5": "FOUL", "-4": "FOUL", "-3": "1 TRAP, THEN FOUL", "-2": "1 TRAP, THEN FOUL", "-1": "1 TRAP, THEN FOUL", "0": "DEFEND NORMALLY", "1": "DEFEND NORMALLY", "2": "DEFEND NORMALLY", "3": "NO 3 / DEFENSE", "4+": "NO 3 / DEFENSE" },
+  "0:15-0:10.1": { "-5": "FOUL", "-4": "FOUL", "-3": "FOUL", "-2": "FOUL", "-1": "FOUL", "0": "DEFEND NORMALLY", "1": "DEFEND NORMALLY", "2": "DEFEND NORMALLY", "3": "FOUL", "4+": "NO 3 / DEFENSE" },
+  "0:10-0:08.1": { "-5": "FOUL", "-4": "FOUL", "-3": "FOUL", "-2": "FOUL", "-1": "FOUL", "0": "DEFEND NORMALLY", "1": "DEFEND NORMALLY", "2": "DEFEND NORMALLY", "3": "FOUL", "4+": "NO 3 / DEFENSE" },
+  "0:08-0:07.1": { "-5": "FOUL", "-4": "FOUL", "-3": "FOUL", "-2": "FOUL", "-1": "FOUL", "0": "DEFEND NORMALLY", "1": "DEFEND NORMALLY", "2": "DEFEND NORMALLY", "3": "FOUL", "4+": "NO 3 / DEFENSE" },
+  "0:07-0:06.1": { "-5": "FOUL", "-4": "FOUL", "-3": "FOUL", "-2": "FOUL", "-1": "FOUL", "0": "DEFEND NORMALLY", "1": "DEFEND NORMALLY", "2": "DEFEND NORMALLY", "3": "FOUL", "4+": "NO 3 / DEFENSE" },
+  "0:06-0:05.1": { "-5": "FOUL", "-4": "FOUL", "-3": "FOUL", "-2": "FOUL", "-1": "FOUL", "0": "DEFEND NORMALLY", "1": "DEFEND NORMALLY", "2": "DEFEND NORMALLY", "3": "FOUL", "4+": "NO 3 / DEFENSE" },
+  "0:05-0:04.1": { "-5": "FOUL", "-4": "FOUL", "-3": "FOUL", "-2": "FOUL", "-1": "FOUL", "0": "DEFEND NORMALLY", "1": "DEFEND NORMALLY", "2": "DEFEND NORMALLY", "3": "NO 3 / DEFENSE", "4+": "NO 3 / DEFENSE" },
+  "0:04-0:03.1": { "-5": "FOUL", "-4": "FOUL", "-3": "FOUL", "-2": "FOUL", "-1": "FOUL", "0": "NO CATCH & SHOOT", "1": "NO CATCH & SHOOT", "2": "NO CATCH & SHOOT", "3": "NO 3 / DEFENSE", "4+": "NO 3 / DEFENSE" },
+  "0:03-0:02.1": { "-5": "FOUL", "-4": "FOUL", "-3": "FOUL", "-2": "FOUL", "-1": "FOUL", "0": "NO FOULS. / ZONE THE RIM", "1": "NO FOULS. / ZONE THE RIM", "2": "NO FOULS. / ZONE THE RIM", "3": "NO 3 / DEFENSE", "4+": "NO 3 / DEFENSE" },
+  "0:02-0:01.1": { "-5": "FOUL", "-4": "FOUL", "-3": "FOUL", "-2": "FOUL", "-1": "FOUL", "0": "NO FOULS. / ZONE THE RIM", "1": "NO FOULS. / ZONE THE RIM", "2": "NO FOULS. / ZONE THE RIM", "3": "NO FOULS", "4+": "NO FOULS" },
+  "0:01-0:00.5": { "-5": "FOUL", "-4": "FOUL", "-3": "FOUL", "-2": "FOUL", "-1": "FOUL", "0": "NO FOULS. / ZONE THE RIM", "1": "NO FOULS. / ZONE THE RIM", "2": "NO FOULS. / ZONE THE RIM", "3": "NO FOULS", "4+": "NO FOULS" },
+};
+
+function workbookTimeBand(secondsRemaining) {
+  if (secondsRemaining > 52) return "1:00-0:52.1";
+  if (secondsRemaining > 40) return "0:52-0:40.1";
+  if (secondsRemaining > 35) return "0:40-0:35.1";
+  if (secondsRemaining > 30) return "0:35-0:30.1";
+  if (secondsRemaining > 28) return "0:30-0:28.1";
+  if (secondsRemaining > 26) return "0:28-0:26.1";
+  if (secondsRemaining > 24) return "0:26-0:24.1";
+  if (secondsRemaining > 20) return "0:24-0:20.1";
+  if (secondsRemaining > 15) return "0:20-0:15.1";
+  if (secondsRemaining > 10) return "0:15-0:10.1";
+  if (secondsRemaining > 8) return "0:10-0:08.1";
+  if (secondsRemaining > 7) return "0:08-0:07.1";
+  if (secondsRemaining > 6) return "0:07-0:06.1";
+  if (secondsRemaining > 5) return "0:06-0:05.1";
+  if (secondsRemaining > 4) return "0:05-0:04.1";
+  if (secondsRemaining > 3) return "0:04-0:03.1";
+  if (secondsRemaining > 2) return "0:03-0:02.1";
+  if (secondsRemaining > 1) return "0:02-0:01.1";
+  return "0:01-0:00.5";
+}
+
+function offenseScoreBucket(scoreDiff) {
+  if (scoreDiff <= -4) return "-4";
+  if (scoreDiff >= 3) return "3";
+  return String(scoreDiff);
+}
+
+function defenseScoreBucket(scoreDiff) {
+  if (scoreDiff <= -5) return "-5";
+  if (scoreDiff >= 4) return "4+";
+  return String(scoreDiff);
+}
+
+function normalizeWorkbookInstruction(value) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .replace(/\s*\/\s*/g, " / ")
+    .replace(/T\/OUT/g, "TIMEOUT")
+    .replace(/,\s+,/g, ", ")
+    .trim();
+}
+
+function workbookRuleId(side, band, bucket, rawInstruction) {
+  const normalized = normalizeWorkbookInstruction(rawInstruction)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  return `${side}-${band.replace(/[^0-9a-z]+/gi, "-").toLowerCase()}-${bucket.replace(/[^0-9a-z+_-]+/gi, "-")}-${normalized}`;
+}
+
+function recommendationFromWorkbookCell(side, band, bucket, rawInstruction, state) {
+  const instruction = normalizeWorkbookInstruction(rawInstruction);
+  const notes = [];
+  const { ourTimeouts, opponentTimeouts, foulsToGive } = state;
+
+  if (/TIMEOUT IF WE HAVE 2/.test(instruction)) {
+    notes.push(`Timeouts remaining: ${ourTimeouts}.`);
+  }
+  if (/OPPONENT HAS NO TIMEOUT/.test(instruction)) {
+    notes.push(`Opponent timeouts remaining: ${opponentTimeouts}.`);
+  }
+  if (/TRAP, THEN FOUL|^FOUL$|NO FOULS/.test(instruction)) {
+    notes.push(`Fouls to give: ${foulsToGive}.`);
+  }
+
+  const recommendation = {
+    ruleId: workbookRuleId(side, band, bucket, instruction),
+    call: instruction,
+    detail: "",
+    rationale: `Direct lookup from Late Game Cells.xlsx for ${side === "our" ? "our possession" : "opponent possession"}, ${band}, score ${bucket}.`,
+    notes,
+  };
+
+  switch (instruction) {
+    case "NORMAL OFFENSE":
+      recommendation.call = "Normal offense";
+      recommendation.detail = "Run normal late-game offense.";
+      break;
+    case "DEFEND NORMALLY":
+      recommendation.call = "Defend normally";
+      recommendation.detail = "Stay home and finish the possession.";
+      break;
+    case "2 FOR 1":
+      recommendation.call = "2 For 1";
+      recommendation.detail = "Push for the extra possession.";
+      break;
+    case "2 FOR 1 / (GOOD SHOT ONLY)":
+      recommendation.call = "2 For 1";
+      recommendation.detail = "Good shot only.";
+      break;
+    case "QUICK 2 FOR 1 (USE TIMEOUT IF WE HAVE 2)":
+    case "QUICK 2 FOR 1 (USE TIMEOUT IF HAVE 2)":
+      recommendation.call = "Quick 2 For 1";
+      recommendation.detail = "Use timeout if we have 2.";
+      break;
+    case "QUICK 2 / OR / GOOD 3":
+      recommendation.call = "Quick 2 or good 3";
+      recommendation.detail = "Attack immediately.";
+      break;
+    case "NEED 2 / BUT PREFER / 3":
+      recommendation.call = "Need 2, prefer 3";
+      recommendation.detail = "Take 2 unless a clean 3 is there.";
+      break;
+    case "NEED 2":
+      recommendation.call = "Need 2";
+      recommendation.detail = "Attack for a quick 2.";
+      break;
+    case "SHOOT UNDER :08 ON SHOT CLOCK":
+      recommendation.call = "Late clock offense";
+      recommendation.detail = "Shoot under :08 on the shot clock.";
+      break;
+    case "SHOOT UNDER :05 ON SHOT CLOCK":
+      recommendation.call = "Late clock offense";
+      recommendation.detail = "Shoot under :05 on the shot clock.";
+      break;
+    case "SHOOT UNDER :05 ON SHOT CLOCK. BUT IF OPPONENT HAS NO TIMEOUT, SHOOT UNDER :03 ON SHOT CLOCK":
+      recommendation.call = "Late clock offense";
+      recommendation.detail = opponentTimeouts > 0
+        ? "Shoot under :05 on the shot clock."
+        : "If they have no timeout, shoot under :03 on the shot clock.";
+      break;
+    case "HOLD BALL FOR LAST / SHOT":
+      recommendation.call = "Hold for last shot";
+      recommendation.detail = "Use clock to control the final possession.";
+      break;
+    case "NEED 3 /  / *CRASH 5*":
+    case "NEED 3 / / *CRASH 5*":
+      recommendation.call = "Need 3";
+      recommendation.detail = "Crash 5.";
+      break;
+    case "LOB OR CATCH AND / SHOOT":
+      recommendation.call = "Lob or catch-and-shoot";
+      recommendation.detail = "Quick-hitter only.";
+      break;
+    case "DRAW FOUL":
+      recommendation.call = "Draw foul";
+      recommendation.detail = "Attack body contact immediately.";
+      break;
+    case "LOB / TIP":
+      recommendation.call = "Lob / tip";
+      recommendation.detail = "Quick-hitter only.";
+      break;
+    case "SAFE INBOUNDS":
+      recommendation.call = "Safe inbounds";
+      recommendation.detail = "Value possession over advancement risk.";
+      break;
+    case "1 TRAP, THEN FOUL":
+      recommendation.call = "1 trap, then foul";
+      recommendation.detail = "Pressure first, then foul if no turnover.";
+      break;
+    case "FOUL":
+      recommendation.call = "Foul";
+      recommendation.detail = "Stop the clock immediately.";
+      break;
+    case "NO 3 / DEFENSE":
+      recommendation.call = "No 3 defense";
+      recommendation.detail = "Take away the arc first.";
+      break;
+    case "NO CATCH & SHOOT":
+      recommendation.call = "No catch & shoot";
+      recommendation.detail = "Take away the clean perimeter catch.";
+      break;
+    case "NO FOULS. / ZONE THE RIM":
+      recommendation.call = "No fouls, zone the rim";
+      recommendation.detail = "Protect the rim without bailing them out.";
+      break;
+    case "NO FOULS":
+      recommendation.call = "No fouls";
+      recommendation.detail = "Finish the possession without sending them to the line.";
+      break;
+    default:
+      recommendation.call = instruction;
+      recommendation.detail = "Follow the workbook cell literally.";
+      break;
+  }
+
+  return buildRecommendation(recommendation);
+}
+
 function offenseRecommendation(state) {
-  const { scoreDiff, secondsRemaining, ourTimeouts, opponentTimeouts } = state;
-
-  if (secondsRemaining > 52) {
-    return buildRecommendation({
-      ruleId: "offense-normal-under-60",
-      call: "Normal",
-      detail: "Run normal late-game offense.",
-      rationale: "The matrix stays in normal offense above :52.",
-      notes: ["No special end-game shot-clock modification yet."],
-    });
-  }
-  if (secondsRemaining > 40) {
-    if (scoreDiff <= -1 && scoreDiff >= -3) {
-      return buildRecommendation({
-        ruleId: "offense-2for1",
-        call: "2 For 1",
-        detail: "Push for the early clock advantage.",
-        rationale: "This band maps to the 2-for-1 portion of the matrix when trailing 1 to 3.",
-        notes: ["Prioritize a clean early attempt and preserve a second possession."],
-      });
-    }
-    if (scoreDiff >= 0 && scoreDiff <= 1) {
-      return buildRecommendation({
-        ruleId: "offense-2for1-good-shot-only",
-        call: "2 For 1",
-        detail: "Good shot only.",
-        rationale: "The matrix shifts tied or plus-1 possessions into a more selective 2-for-1.",
-        notes: ["Do not force the first look if it compromises last-shot control."],
-      });
-    }
-    if (scoreDiff >= 2) {
-      return buildRecommendation({
-        ruleId: "offense-shot-under-8",
-        call: "Late clock offense",
-        detail: "Shoot under :08 on the shot clock.",
-        rationale: "Protect the lead while still getting a clean shot.",
-      });
-    }
-  }
-  if (secondsRemaining > 30) {
-    return buildRecommendation({
-      ruleId: "offense-quick-2for1",
-      call: "Quick 2 For 1",
-      detail: ourTimeouts >= 2 ? "Use timeout if we have 2." : "Play through unless a clean timeout is available.",
-      rationale: "The :35 to :30 band is the matrix's quick 2-for-1 window.",
-      notes: [`Timeouts remaining: ${ourTimeouts}.`],
-    });
-  }
-  if (secondsRemaining > 24) {
-    if (scoreDiff <= -3) {
-      return buildRecommendation({
-        ruleId: "offense-quick-2-or-good-3",
-        call: "Quick 2 or good 3",
-        detail: "Attack immediately.",
-        rationale: "Down multiple possessions in the late-20s window calls for an early strike.",
-      });
-    }
-    if (scoreDiff === -2) {
-      return buildRecommendation({
-        ruleId: "offense-need-2-prefer-3",
-        call: "Need 2, prefer 3",
-        detail: "Take 2 unless a clean 3 is there.",
-        rationale: "This is one of the matrix's clearest split decisions.",
-      });
-    }
-    if (scoreDiff === -1) {
-      return buildRecommendation({
-        ruleId: "offense-need-2",
-        call: "Need 2",
-        detail: "Attack for a quick score at the rim.",
-        rationale: "The matrix turns one-possession deficits into an immediate 2-point priority.",
-      });
-    }
-    if (scoreDiff === 0) {
-      return buildRecommendation({
-        ruleId: "offense-shoot-under-8",
-        call: "Late clock offense",
-        detail: "Shoot under :08 on the shot clock.",
-        rationale: "The tied-game cell favors clock control without waiting too long.",
-      });
-    }
-    if (scoreDiff >= 1) {
-      return buildRecommendation({
-        ruleId: "offense-shoot-under-5",
-        call: "Late clock offense",
-        detail: opponentTimeouts > 0 ? "Shoot under :05 on the shot clock." : "If they have no timeout, shoot under :03 if clean.",
-        rationale: "Leading cells in this band prioritize draining more clock before the shot.",
-        notes: [`Opponent timeouts remaining: ${opponentTimeouts}.`],
-      });
-    }
-  }
-  if (secondsRemaining > 10) {
-    if (scoreDiff <= -3) {
-      return buildRecommendation({
-        ruleId: "offense-need-3-crash-5",
-        call: "Need 3",
-        detail: "Crash 5.",
-        rationale: "The lower half of the matrix converts big deficits into an automatic 3-point chase.",
-      });
-    }
-    if (scoreDiff === -2) {
-      return buildRecommendation({
-        ruleId: "offense-need-2-prefer-3-late",
-        call: "Need 2, prefer 3",
-        detail: "2 first, 3 if uncontested.",
-        rationale: "Still down two possessions of value, but time pressure is increasing.",
-      });
-    }
-    if (scoreDiff === -1) {
-      return buildRecommendation({
-        ruleId: "offense-need-2-late",
-        call: "Need 2",
-        detail: "Hit the paint fast.",
-        rationale: "One-possession deficits still favor immediate 2-point conversion here.",
-      });
-    }
-    if (scoreDiff >= 0 && scoreDiff <= 2) {
-      return buildRecommendation({
-        ruleId: "offense-hold-last-shot",
-        call: "Hold for last shot",
-        detail: "Use clock to control the final possession.",
-        rationale: "The core blue section of the matrix is last-shot management while tied or protecting a small lead.",
-      });
-    }
-    if (scoreDiff >= 3) {
-      return buildRecommendation({
-        ruleId: "offense-protect-lead",
-        call: "Safe offense",
-        detail: "Secure the ball and force free throws or a clean late look.",
-        rationale: "The matrix becomes conservative when leading by more than one possession.",
-      });
-    }
-  }
-  if (secondsRemaining > 2) {
-    if (scoreDiff <= -3) {
-      return buildRecommendation({
-        ruleId: "offense-draw-foul",
-        call: "Draw foul",
-        detail: "Attack body contact immediately.",
-        rationale: "The bottom-left cells favor foul creation once the clock is nearly gone.",
-      });
-    }
-    if (scoreDiff < 0) {
-      return buildRecommendation({
-        ruleId: "offense-lob-tip",
-        call: "Lob / tip",
-        detail: "Quick-hitter only.",
-        rationale: "The matrix reduces to end-line special situations this late.",
-      });
-    }
-    return buildRecommendation({
-      ruleId: "offense-safe-inbounds",
-      call: "Safe inbounds",
-      detail: "Value possession over advancement risk.",
-      rationale: "Leading or tied at the bottom of the matrix shifts to clean inbound security.",
-    });
-  }
-
-  return buildRecommendation({
-    ruleId: "offense-terminal",
-    call: scoreDiff < 0 ? "Immediate shot" : "Secure ball",
-    detail: "Final emergency possession.",
-    rationale: "This is outside the matrix's fully readable detail and should be refined with feedback.",
-    blindSpots: ["Sub-second inbound and tip rules need more explicit coaching detail."],
-  });
+  const band = workbookTimeBand(state.secondsRemaining);
+  const bucket = offenseScoreBucket(state.scoreDiff);
+  const rawInstruction = OFFENSE_MATRIX[band]?.[bucket];
+  if (!rawInstruction) return null;
+  return recommendationFromWorkbookCell("our", band, bucket, rawInstruction, state);
 }
 
 function defenseRecommendation(state) {
-  const { scoreDiff, secondsRemaining, foulsToGive } = state;
-
-  if (secondsRemaining > 40) {
-    if (scoreDiff <= -4) {
-      return buildRecommendation({
-        ruleId: "defense-trap-then-foul-early",
-        call: "1 trap, then foul",
-        detail: "Use pressure before stopping the clock.",
-        rationale: "The matrix shows trailing teams escalating from normal defense into pressure before the final :40.",
-        notes: [`Fouls to give: ${foulsToGive}.`],
-      });
-    }
-    return buildRecommendation({
-      ruleId: "defense-normal-early",
-      call: "Defend normally",
-      detail: "Stay home, no gambling yet.",
-      rationale: "Most cells in the early portion of the defensive matrix stay normal.",
-    });
-  }
-  if (secondsRemaining > 24) {
-    if (scoreDiff <= -5) {
-      return buildRecommendation({
-        ruleId: "defense-foul-big-deficit",
-        call: "Foul",
-        detail: "Stop the clock immediately.",
-        rationale: "Down multiple possessions with the clock draining forces the foul decision.",
-      });
-    }
-    if (scoreDiff <= -2) {
-      return buildRecommendation({
-        ruleId: "defense-trap-then-foul-mid",
-        call: "1 trap, then foul",
-        detail: "Pressure first, then foul if no turnover.",
-        rationale: "The central yellow block remains active for medium deficits in this band.",
-      });
-    }
-    if (scoreDiff >= 3) {
-      return buildRecommendation({
-        ruleId: "defense-no-3-mid",
-        call: "No 3 defense",
-        detail: "Take away the arc first.",
-        rationale: "Protecting a three-point lead becomes explicit in the matrix by the high-20s.",
-      });
-    }
-    return buildRecommendation({
-      ruleId: "defense-normal-mid",
-      call: "Defend normally",
-      detail: "Contain without fouling.",
-      rationale: "Tight one-possession games stay in normal defense here.",
-    });
-  }
-  if (secondsRemaining > 5) {
-    if (scoreDiff <= -2) {
-      return buildRecommendation({
-        ruleId: "defense-foul-late",
-        call: "Foul",
-        detail: "Do not bleed more clock.",
-        rationale: "Once the clock gets under :24, most trailing cells collapse into foul decisions.",
-      });
-    }
-    if (scoreDiff >= 2) {
-      return buildRecommendation({
-        ruleId: "defense-no-3-late",
-        call: "No 3 defense",
-        detail: "Top-lock shooters and force the 2.",
-        rationale: "Small leads this late are mostly protected by taking away the tying 3.",
-      });
-    }
-    return buildRecommendation({
-      ruleId: "defense-normal-late",
-      call: "Defend normally",
-      detail: "Stay solid and finish the possession.",
-      rationale: "Tied and one-point margin cells remain in standard coverage before the final 5 seconds.",
-    });
-  }
-  if (secondsRemaining > 2) {
-    if (scoreDiff >= 2) {
-      return buildRecommendation({
-        ruleId: "defense-no-3-final",
-        call: "No 3 defense",
-        detail: "Switch everything above the arc.",
-        rationale: "The matrix is explicit about no-3 behavior with a lead in the final seconds.",
-      });
-    }
-    return buildRecommendation({
-      ruleId: "defense-zone-rim",
-      call: "No fouls, zone the rim",
-      detail: "Take away direct catch-and-shoot windows.",
-      rationale: "The lowest center-right defensive cells move into rim protection without fouling.",
-      notes: [`Fouls to give: ${foulsToGive}.`],
-    });
-  }
-
-  return buildRecommendation({
-    ruleId: "defense-no-foul-terminal",
-    call: scoreDiff >= 2 ? "No 3 defense" : "No fouls",
-    detail: "Final emergency defense.",
-    rationale: "The last second of the matrix needs finer special-situation detail.",
-    blindSpots: ["Need explicit guidance for sub-second catch-and-shoot, foul-to-give, and switch rules."],
-  });
+  const band = workbookTimeBand(state.secondsRemaining);
+  const bucket = defenseScoreBucket(state.scoreDiff);
+  const rawInstruction = DEFENSE_MATRIX[band]?.[bucket];
+  if (!rawInstruction) return null;
+  return recommendationFromWorkbookCell("opp", band, bucket, rawInstruction, state);
 }
 
 function recommendationForState(state) {

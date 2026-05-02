@@ -23,8 +23,10 @@ import {
 } from "../lateGameStrategy.js";
 import LateGameMatrixPanel from "../components/LateGameMatrixPanel.jsx";
 import {
+  buildMarginRange,
   buildDefaultStrategyOverrides,
   buildStrategyOverrideDraft,
+  getMarginOptionLabel,
 } from "../components/lateGamePanelHelpers.js";
 import { exportMatchupGraphic } from "./matchupGraphicExport.js";
 import styles from "./Tools.module.css";
@@ -378,6 +380,50 @@ export default function Tools() {
     };
   }, [lateGameAwayTeam, lateGameHomeTeam, lateGameOverrides, lateGameVantageTeamId]);
   const { strategyState: lateGameStrategyState, strategyEvaluation: lateGameStrategyEvaluation } = lateGameStrategyResult;
+  const lateGameStrategyRangeRecommendations = useMemo(() => {
+    if (!lateGameStrategyState?.manualOverrides?.scoreDiffRange) return [];
+    const margins = buildMarginRange(lateGameStrategyState.manualOverrides.scoreDiff, lateGameStrategyState.manualOverrides.scoreDiffEnd);
+    if (margins.length <= 1 || !lateGameAwayTeam || !lateGameHomeTeam) return [];
+    return margins.map((margin) => {
+      const simulationGame = {
+        gameStatus: 3,
+        period: 4,
+        gameClock: "PT30S",
+        awayTeam: lateGameAwayTeam,
+        homeTeam: lateGameHomeTeam,
+        playByPlayActions: [],
+      };
+      const strategyState = buildLateGameStrategyState({
+        game: simulationGame,
+        vantageTeamId: lateGameVantageTeamId || lateGameAwayTeam.teamId,
+        awayFouls: 0,
+        homeFouls: 0,
+        awayTimeoutsRemaining: 0,
+        homeTimeoutsRemaining: 0,
+        manualOverrides: {
+          ...lateGameOverrides,
+          scoreDiff: String(margin),
+          scoreDiffRange: false,
+          scoreDiffEnd: "",
+        },
+      });
+      const recommendation = evaluateLateGameStrategy(strategyState);
+      return {
+        key: `${margin}:${recommendation?.recommendation?.ruleId || recommendation?.status || "na"}`,
+        margin,
+        marginLabel: getMarginOptionLabel(margin),
+        recommendation: recommendation.recommendation || recommendation,
+      };
+    });
+  }, [
+    lateGameAwayTeam,
+    lateGameHomeTeam,
+    lateGameOverrides,
+    lateGameStrategyState?.manualOverrides?.scoreDiff,
+    lateGameStrategyState?.manualOverrides?.scoreDiffEnd,
+    lateGameStrategyState?.manualOverrides?.scoreDiffRange,
+    lateGameVantageTeamId,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -507,10 +553,11 @@ export default function Tools() {
   const applyLateGameManualSituationOverride = () => {
     setLateGameOverrides((prev) => ({
       ...prev,
-      possessionFlip: false,
       period: lateGameOverrideDraft.period,
       clock: lateGameOverrideDraft.clock,
       scoreDiff: lateGameOverrideDraft.scoreDiff,
+      scoreDiffRange: Boolean(lateGameOverrideDraft.scoreDiffRange),
+      scoreDiffEnd: lateGameOverrideDraft.scoreDiffRange ? lateGameOverrideDraft.scoreDiffEnd : "",
       possessionTeamId: lateGameOverrideDraft.possessionTeamId,
       ourTimeouts: lateGameOverrideDraft.ourTimeouts,
       opponentTimeouts: lateGameOverrideDraft.opponentTimeouts,
@@ -818,6 +865,7 @@ export default function Tools() {
             setStrategyOverrideDraft={setLateGameOverrideDraft}
             onApplyManualSituationOverride={applyLateGameManualSituationOverride}
             onClearStrategyOverrides={clearLateGameOverrides}
+            strategyRangeRecommendations={lateGameStrategyRangeRecommendations}
           />
         </section>
       )}

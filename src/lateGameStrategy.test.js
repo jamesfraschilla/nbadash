@@ -113,7 +113,7 @@ test("opponent shooting foul creates next-possession free throw scenarios", () =
   );
   assert.deepEqual(
     evaluation.freeThrowLookahead.scenarios.map((scenario) => scenario.recommendation.call),
-    ["Lob / tip", "Draw foul", "Draw foul"]
+    ["Need 2, prefer 3", "Need 3", "Need 3"]
   );
 });
 
@@ -160,6 +160,130 @@ test("manual overrides allow simulation when the game is final", () => {
   assert.match(evaluation.notes.join(" "), /simulation mode/i);
 });
 
+test("down two on defense with 39 seconds left stays in normal defense", () => {
+  const state = buildLateGameStrategyState({
+    game: buildGame({
+      gameClock: "PT39S",
+      awayTeam: { ...ORL, score: 100 },
+      homeTeam: { ...DET, score: 102 },
+      playByPlayActions: [
+        {
+          actionType: "turnover",
+          teamId: ORL.teamId,
+          possession: DET.teamId,
+          period: 4,
+          clock: "PT39S",
+          description: "ORL turnover",
+        },
+      ],
+    }),
+    vantageTeamId: ORL.teamId,
+    awayFouls: 4,
+    homeFouls: 4,
+    awayTimeoutsRemaining: 2,
+    homeTimeoutsRemaining: 2,
+  });
+
+  const evaluation = evaluateLateGameStrategy(state);
+
+  assert.equal(state.isOurPossession, false);
+  assert.equal(state.scoreDiff, -2);
+  assert.equal(evaluation.recommendation.call, "Defend normally");
+});
+
+test("down two on offense with 39 seconds left stays in 2 for 1", () => {
+  const state = buildLateGameStrategyState({
+    game: buildGame({
+      gameClock: "PT39S",
+      awayTeam: { ...ORL, score: 100 },
+      homeTeam: { ...DET, score: 102 },
+      playByPlayActions: [
+        {
+          actionType: "madebasket",
+          teamId: ORL.teamId,
+          possession: ORL.teamId,
+          period: 4,
+          clock: "PT39S",
+          description: "ORL inbounds",
+        },
+      ],
+    }),
+    vantageTeamId: ORL.teamId,
+    awayFouls: 4,
+    homeFouls: 4,
+    awayTimeoutsRemaining: 2,
+    homeTimeoutsRemaining: 2,
+  });
+
+  const evaluation = evaluateLateGameStrategy(state);
+
+  assert.equal(state.isOurPossession, true);
+  assert.equal(state.scoreDiff, -2);
+  assert.equal(evaluation.recommendation.call, "2 For 1");
+});
+
+test("up three on defense with 31 seconds left goes to no 3 defense", () => {
+  const state = buildLateGameStrategyState({
+    game: buildGame({
+      gameClock: "PT31S",
+      awayTeam: { ...ORL, score: 102 },
+      homeTeam: { ...DET, score: 99 },
+      playByPlayActions: [
+        {
+          actionType: "turnover",
+          teamId: ORL.teamId,
+          possession: DET.teamId,
+          period: 4,
+          clock: "PT31S",
+          description: "ORL turnover",
+        },
+      ],
+    }),
+    vantageTeamId: ORL.teamId,
+    awayFouls: 3,
+    homeFouls: 4,
+    awayTimeoutsRemaining: 2,
+    homeTimeoutsRemaining: 2,
+  });
+
+  const evaluation = evaluateLateGameStrategy(state);
+
+  assert.equal(state.isOurPossession, false);
+  assert.equal(state.scoreDiff, 3);
+  assert.equal(evaluation.recommendation.call, "No 3 defense");
+});
+
+test("tied defense with 3 seconds left goes to no fouls zone the rim", () => {
+  const state = buildLateGameStrategyState({
+    game: buildGame({
+      gameClock: "PT3S",
+      awayTeam: { ...ORL, score: 100 },
+      homeTeam: { ...DET, score: 100 },
+      playByPlayActions: [
+        {
+          actionType: "timeout",
+          teamId: DET.teamId,
+          possession: DET.teamId,
+          period: 4,
+          clock: "PT3S",
+          description: "DET timeout",
+        },
+      ],
+    }),
+    vantageTeamId: ORL.teamId,
+    awayFouls: 4,
+    homeFouls: 4,
+    awayTimeoutsRemaining: 1,
+    homeTimeoutsRemaining: 1,
+  });
+
+  const evaluation = evaluateLateGameStrategy(state);
+
+  assert.equal(state.isOurPossession, false);
+  assert.equal(state.scoreDiff, 0);
+  assert.equal(evaluation.recommendation.call, "No fouls, zone the rim");
+});
+
 test("stale play-by-play feed exposes low confidence and likely next recommendation", () => {
   const game = buildGame({
     gameClock: "PT10S",
@@ -189,7 +313,7 @@ test("stale play-by-play feed exposes low confidence and likely next recommendat
   assert.equal(evaluation.feedStatus.level, "low");
   assert.equal(evaluation.feedStatus.secondsBehind, 20);
   assert.equal(evaluation.projectedNext.possessionTeamId, ORL.teamId);
-  assert.equal(evaluation.projectedNext.recommendation.call, "Draw foul");
+  assert.equal(evaluation.projectedNext.recommendation.call, "Need 3");
 });
 
 test("manual possession override temporarily flips the evaluated recommendation", () => {
@@ -207,7 +331,7 @@ test("manual possession override temporarily flips the evaluated recommendation"
   assert.equal(state.feedPossessionTeamId, DET.teamId);
   assert.equal(state.possessionTeamId, ORL.teamId);
   assert.equal(state.isOurPossession, true);
-  assert.equal(evaluation.recommendation.call, "Draw foul");
+  assert.equal(evaluation.recommendation.call, "Need 3");
   assert.match(evaluation.notes.join(" "), /possession flipped/i);
 });
 

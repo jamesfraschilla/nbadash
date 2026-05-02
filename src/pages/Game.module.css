@@ -1070,6 +1070,10 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   border-top: 1px solid var(--border);
 }
 
+.strategyMarginField {
+  grid-column: span 2;
+}
+
 .strategyManualOverride label {
   display: grid;
   gap: 5px;
@@ -1092,6 +1096,30 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   color: var(--text);
   padding: 8px 10px;
   font-size: 13px;
+}
+
+.strategyMarginPicker {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.strategyRangeToggle {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px !important;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.strategyRangeToggle input {
+  margin: 0;
+}
+
+.strategyRangeToggle span {
+  font-size: 11px;
+  color: var(--text);
 }
 
 .strategyManualActions {
