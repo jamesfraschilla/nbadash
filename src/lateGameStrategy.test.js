@@ -133,6 +133,33 @@ test("final games keep the strategy engine inactive", () => {
   assert.equal(evaluation.headline, "Late Game Strategy is inactive");
 });
 
+test("manual overrides allow simulation when the game is final", () => {
+  const state = buildLateGameStrategyState({
+    game: buildGame({ gameStatus: 3, gameClock: "PT0S" }),
+    vantageTeamId: ORL.teamId,
+    awayFouls: 2,
+    homeFouls: 3,
+    awayTimeoutsRemaining: 1,
+    homeTimeoutsRemaining: 2,
+    manualOverrides: {
+      period: "4",
+      clock: "0:29",
+      scoreDiff: "-2",
+      possessionTeamId: ORL.teamId,
+      ourTimeouts: "2",
+      opponentTimeouts: "1",
+      ourFouls: "4",
+      opponentFouls: "3",
+    },
+  });
+
+  const evaluation = evaluateLateGameStrategy(state);
+
+  assert.equal(state.isSimulation, true);
+  assert.equal(evaluation.status, "ready");
+  assert.match(evaluation.notes.join(" "), /simulation mode/i);
+});
+
 test("stale play-by-play feed exposes low confidence and likely next recommendation", () => {
   const game = buildGame({
     gameClock: "PT10S",

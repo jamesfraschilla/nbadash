@@ -36,6 +36,15 @@ function overrideNumber(value, fallback, min = -Infinity, max = Infinity) {
   return Math.min(max, Math.max(min, numeric));
 }
 
+function hasManualStrategyOverrides(overrides) {
+  return Object.entries(overrides || {}).some(([key, value]) => {
+    if (["possessionFlip", "freeThrowsPending", "timeoutCalled", "clockAdvanced"].includes(key)) {
+      return Boolean(value);
+    }
+    return value !== "" && value != null;
+  });
+}
+
 function teamShortLabel(team) {
   return team?.teamTricode || team?.teamName || "Team";
 }
@@ -472,10 +481,12 @@ export function buildLateGameStrategyState({
   const opponentTimeouts = overrideNumber(manualOverrides.opponentTimeouts, feedOpponentTimeouts, 0, 7);
   const ourFouls = overrideNumber(manualOverrides.ourFouls, feedOurFouls, 0, 5);
   const opponentFouls = overrideNumber(manualOverrides.opponentFouls, feedOpponentFouls, 0, 5);
+  const isSimulation = hasManualStrategyOverrides(manualOverrides);
 
   return {
     game,
     isLive: game.gameStatus === 2,
+    isSimulation,
     isLateGameWindow: period >= 4,
     period,
     periodLabel: periodLabel(period),
@@ -841,11 +852,11 @@ export function evaluateLateGameStrategy(state) {
     };
   }
 
-  if (!state.isLive) {
+  if (!state.isLive && !state.isSimulation) {
     return {
       status: "inactive",
       headline: "Late Game Strategy is inactive",
-      summary: "The live matrix panel only evaluates active game states.",
+      summary: "Use manual overrides to simulate late-game states when the current game is not live.",
       notes: [],
       blindSpots: [],
     };
@@ -854,8 +865,8 @@ export function evaluateLateGameStrategy(state) {
   if (!state.isLateGameWindow) {
     return {
       status: "inactive",
-      headline: "Late Game Strategy activates in Q4/OT",
-      summary: "The current rule set is focused on Q4 and overtime end-game management.",
+      headline: "Late Game Strategy is Q4/OT-only",
+      summary: "The panel stays visible all game, but the current rule set only evaluates Q4 and overtime end-game situations.",
       notes: [],
       blindSpots: [],
     };
@@ -915,7 +926,11 @@ export function evaluateLateGameStrategy(state) {
     summary: recommendation.detail,
     playMode,
     recommendation,
-    notes: [...recommendation.notes, ...feedNotes],
+    notes: [
+      ...(state.isSimulation && !state.isLive ? ["Simulation mode: evaluating manual override inputs outside a live game."] : []),
+      ...recommendation.notes,
+      ...feedNotes,
+    ],
     blindSpots: recommendation.blindSpots,
     rationale: recommendation.rationale,
     freeThrowLookahead,

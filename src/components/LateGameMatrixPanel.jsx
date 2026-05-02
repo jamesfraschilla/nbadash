@@ -1,0 +1,362 @@
+import { buildStrategyOverrideDraft, hasStrategyOverrides, resolvePossessionDisplay } from "./lateGamePanelHelpers.js";
+import styles from "../pages/Game.module.css";
+
+function buildStrategyCertaintyLabel(strategyState, strategyEvaluation) {
+  if (strategyState?.isSimulation && !strategyState?.isLive) return "Manual simulation";
+  if (strategyEvaluation?.freeThrowLookahead?.scenarios?.length) return "Projected from FT sequence";
+  if (strategyEvaluation?.feedStatus?.level === "low") return "Feed confidence low";
+  if (strategyEvaluation?.feedStatus?.level === "medium") return "Feed confidence medium";
+  if (Array.isArray(strategyEvaluation?.blindSpots) && strategyEvaluation.blindSpots.length) return "Needs coach judgment";
+  if (strategyEvaluation?.status === "ready") return "Direct matrix match";
+  return "Live state monitor";
+}
+
+export default function LateGameMatrixPanel({
+  title = "Live Game Situation Matrix",
+  collapsed = false,
+  onToggleCollapsed = null,
+  awayTeam,
+  homeTeam,
+  strategyState,
+  strategyEvaluation,
+  strategyVantageTeamId,
+  setStrategyVantageTeamId,
+  strategyOverrides,
+  setStrategyOverrides,
+  strategyManualOpen,
+  setStrategyManualOpen,
+  strategyOverrideDraft,
+  setStrategyOverrideDraft,
+  onApplyManualSituationOverride,
+  onClearStrategyOverrides,
+  footerActions = null,
+}) {
+  const strategyPossessionDisplay = resolvePossessionDisplay(strategyState ? {
+    ...strategyState,
+    vantageTeamId: strategyState.vantageTeam?.teamId,
+    vantageTeamTricode: strategyState.vantageTeam?.teamTricode,
+    opponentTeamId: strategyState.opponentTeam?.teamId,
+    opponentTeamTricode: strategyState.opponentTeam?.teamTricode,
+  } : null);
+  const strategyProjectionPossessionDisplay = resolvePossessionDisplay(strategyEvaluation?.projectedNext ? {
+    ...strategyState,
+    possessionTeamId: strategyEvaluation.projectedNext.possessionTeamId,
+    isLive: strategyState?.isLive,
+    isSimulation: strategyState?.isSimulation,
+    vantageTeamId: strategyState?.vantageTeam?.teamId,
+    vantageTeamTricode: strategyState?.vantageTeam?.teamTricode,
+    opponentTeamId: strategyState?.opponentTeam?.teamId,
+    opponentTeamTricode: strategyState?.opponentTeam?.teamTricode,
+  } : null);
+  const strategyCertaintyLabel = buildStrategyCertaintyLabel(strategyState, strategyEvaluation);
+
+  const toggleManualSituationOverride = () => {
+    setStrategyOverrideDraft(buildStrategyOverrideDraft(strategyState));
+    setStrategyManualOpen((prev) => !prev);
+  };
+
+  return (
+    <section className={styles.strategyPanel}>
+      {onToggleCollapsed ? (
+        <button
+          type="button"
+          className={styles.strategyPanelToggle}
+          onClick={onToggleCollapsed}
+        >
+          <span className={styles.strategyPanelToggleLabel}>{title}</span>
+          <span className={styles.strategyPanelToggleIcon}>{collapsed ? "+" : "−"}</span>
+        </button>
+      ) : (
+        <div className={styles.strategyPanelToggle}>
+          <span className={styles.strategyPanelToggleLabel}>{title}</span>
+        </div>
+      )}
+
+      {!collapsed ? (
+        <div className={styles.strategyPanelBody}>
+          <div className={styles.strategyPanelHeader}>
+            <div className={styles.strategyToggleGroup}>
+              <span className={styles.strategyToggleLabel}>Vantage</span>
+              {[awayTeam, homeTeam].filter(Boolean).map((team) => (
+                <button
+                  key={`strategy-team-${team.teamId}`}
+                  type="button"
+                  className={`${styles.strategyToggle} ${String(strategyVantageTeamId) === String(team.teamId) ? styles.strategyToggleActive : ""}`}
+                  onClick={() => setStrategyVantageTeamId(String(team.teamId))}
+                >
+                  {team.teamTricode}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className={styles.strategyLiveStrip}>
+            <div className={styles.strategyLivePill}>
+              <span className={styles.strategyLiveLabel}>State</span>
+              <strong>{strategyState ? `${strategyState.periodLabel} ${strategyState.clock}` : "--"}</strong>
+            </div>
+            <div className={styles.strategyLivePill}>
+              <span className={styles.strategyLiveLabel}>Margin</span>
+              <strong>{strategyState?.scoreLabel || "--"}</strong>
+            </div>
+            <div className={styles.strategyLivePill}>
+              <span className={styles.strategyLiveLabel}>Possession</span>
+              <strong>{strategyPossessionDisplay}</strong>
+            </div>
+          </div>
+
+          <div className={styles.strategyFeedPanel}>
+            <div className={styles.strategyFeedHeader}>
+              <span className={`${styles.strategyFeedDot} ${styles[`strategyFeedDot${(strategyEvaluation?.feedStatus?.level || "unknown").replace(/^./, (char) => char.toUpperCase())}`]}`} />
+              <strong>{strategyEvaluation?.feedStatus?.label || "Feed confidence unavailable"}</strong>
+              {strategyEvaluation?.feedStatus?.secondsBehind != null ? (
+                <span>{strategyEvaluation.feedStatus.secondsBehind}s behind</span>
+              ) : null}
+            </div>
+            <div className={styles.strategyFeedLatest}>
+              Latest feed action: {strategyEvaluation?.feedStatus?.latestActionClock || "--"} · {strategyEvaluation?.feedStatus?.latestActionDescription || "No action available"}
+            </div>
+            {Array.isArray(strategyEvaluation?.feedStatus?.recentEvents) && strategyEvaluation.feedStatus.recentEvents.length ? (
+              <details className={styles.strategyRecentEvents}>
+                <summary>Recent feed events</summary>
+                <ol>
+                  {strategyEvaluation.feedStatus.recentEvents.map((event, index) => (
+                    <li key={`${event.period}-${event.clock}-${event.description}-${index}`}>
+                      {event.clock || "--"} · {event.description}
+                    </li>
+                  ))}
+                </ol>
+              </details>
+            ) : null}
+            <div className={styles.strategyOverrideControls}>
+              <span>Emergency correction</span>
+              <button
+                type="button"
+                className={strategyOverrides.possessionFlip ? styles.strategyOverrideActive : ""}
+                onClick={() => setStrategyOverrides((prev) => ({ ...prev, possessionFlip: !prev.possessionFlip }))}
+              >
+                Flip possession
+              </button>
+              <button
+                type="button"
+                className={strategyOverrides.freeThrowsPending ? styles.strategyOverrideActive : ""}
+                onClick={() => setStrategyOverrides((prev) => ({ ...prev, freeThrowsPending: !prev.freeThrowsPending }))}
+              >
+                FTs pending
+              </button>
+              <button
+                type="button"
+                className={strategyOverrides.timeoutCalled ? styles.strategyOverrideActive : ""}
+                onClick={() => setStrategyOverrides((prev) => ({ ...prev, timeoutCalled: !prev.timeoutCalled }))}
+              >
+                Timeout called
+              </button>
+              <button
+                type="button"
+                className={strategyOverrides.clockAdvanced ? styles.strategyOverrideActive : ""}
+                onClick={() => setStrategyOverrides((prev) => ({ ...prev, clockAdvanced: !prev.clockAdvanced }))}
+              >
+                Clock advanced
+              </button>
+              <button
+                type="button"
+                className={strategyManualOpen ? styles.strategyOverrideActive : ""}
+                onClick={toggleManualSituationOverride}
+              >
+                Manual override
+              </button>
+              {hasStrategyOverrides(strategyOverrides) ? (
+                <button
+                  type="button"
+                  onClick={onClearStrategyOverrides}
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+            {strategyManualOpen ? (
+              <div className={styles.strategyManualOverride}>
+                <label>
+                  <span>Period</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={strategyOverrideDraft.period}
+                    onChange={(event) => setStrategyOverrideDraft((prev) => ({ ...prev, period: event.target.value }))}
+                  />
+                </label>
+                <label>
+                  <span>Clock</span>
+                  <input
+                    type="text"
+                    value={strategyOverrideDraft.clock}
+                    onChange={(event) => setStrategyOverrideDraft((prev) => ({ ...prev, clock: event.target.value }))}
+                    placeholder="0:30"
+                  />
+                </label>
+                <label>
+                  <span>Margin</span>
+                  <input
+                    type="number"
+                    value={strategyOverrideDraft.scoreDiff}
+                    onChange={(event) => setStrategyOverrideDraft((prev) => ({ ...prev, scoreDiff: event.target.value }))}
+                  />
+                </label>
+                <label>
+                  <span>Possession</span>
+                  <select
+                    value={strategyOverrideDraft.possessionTeamId}
+                    onChange={(event) => setStrategyOverrideDraft((prev) => ({ ...prev, possessionTeamId: event.target.value }))}
+                  >
+                    <option value="">Feed</option>
+                    {strategyState?.vantageTeam ? (
+                      <option value={strategyState.vantageTeam.teamId}>{strategyState.vantageTeam.teamTricode}</option>
+                    ) : null}
+                    {strategyState?.opponentTeam ? (
+                      <option value={strategyState.opponentTeam.teamId}>{strategyState.opponentTeam.teamTricode}</option>
+                    ) : null}
+                  </select>
+                </label>
+                <label>
+                  <span>Our TO</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="7"
+                    value={strategyOverrideDraft.ourTimeouts}
+                    onChange={(event) => setStrategyOverrideDraft((prev) => ({ ...prev, ourTimeouts: event.target.value }))}
+                  />
+                </label>
+                <label>
+                  <span>Opp TO</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="7"
+                    value={strategyOverrideDraft.opponentTimeouts}
+                    onChange={(event) => setStrategyOverrideDraft((prev) => ({ ...prev, opponentTimeouts: event.target.value }))}
+                  />
+                </label>
+                <label>
+                  <span>Our fouls</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="5"
+                    value={strategyOverrideDraft.ourFouls}
+                    onChange={(event) => setStrategyOverrideDraft((prev) => ({ ...prev, ourFouls: event.target.value }))}
+                  />
+                </label>
+                <label>
+                  <span>Opp fouls</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="5"
+                    value={strategyOverrideDraft.opponentFouls}
+                    onChange={(event) => setStrategyOverrideDraft((prev) => ({ ...prev, opponentFouls: event.target.value }))}
+                  />
+                </label>
+                <div className={styles.strategyManualActions}>
+                  <button type="button" onClick={onApplyManualSituationOverride}>
+                    Apply to Matrix
+                  </button>
+                  <button type="button" onClick={onClearStrategyOverrides}>
+                    Clear Overrides
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <div className={styles.strategyRecommendation}>
+            <div className={styles.strategyCurrentLabel}>Current Call</div>
+            <div className={styles.strategyRecommendationHeader}>
+              <div className={styles.strategyRecommendationTitle}>
+                {strategyEvaluation?.headline || "Late Game Strategy"}
+              </div>
+              <span className={styles.strategyConfidenceBadge}>{strategyCertaintyLabel}</span>
+            </div>
+            <p className={styles.strategySummary}>{strategyEvaluation?.summary || "No recommendation yet."}</p>
+            <div className={styles.strategySituationLine}>
+              {strategyState ? `${strategyState.periodLabel} ${strategyState.clock} · ${strategyState.scoreLabel} · ${strategyPossessionDisplay}` : "Waiting for live state."}
+            </div>
+            {strategyEvaluation?.matrixContext ? (
+              <div className={styles.strategyBadgeRow}>
+                <span className={styles.strategyBadge}>{strategyEvaluation.matrixContext.side}</span>
+                <span className={styles.strategyBadge}>{strategyEvaluation.matrixContext.timeBand}</span>
+                <span className={styles.strategyBadge}>{strategyEvaluation.matrixContext.scoreLabel}</span>
+              </div>
+            ) : null}
+            {strategyEvaluation?.rationale ? (
+              <div className={styles.strategyRationale}>
+                <strong>Why:</strong> {strategyEvaluation.rationale}
+              </div>
+            ) : null}
+            {strategyEvaluation?.playMode ? (
+              <div className={styles.strategySecondary}>
+                Play Mode: {strategyEvaluation.playMode.mode} · {strategyEvaluation.playMode.instruction}
+              </div>
+            ) : null}
+            {strategyEvaluation?.projectedNext?.recommendation ? (
+              <div className={styles.strategyProjectionBlock}>
+                <div className={styles.strategyScenarioHeader}>
+                  <strong>{strategyEvaluation.projectedNext.headline}</strong>
+                  <span>{strategyEvaluation.projectedNext.summary}</span>
+                </div>
+                <div className={styles.strategyProjectionCard}>
+                  <span>{strategyProjectionPossessionDisplay}</span>
+                  <strong>{strategyEvaluation.projectedNext.recommendation.call}</strong>
+                  <p>{strategyEvaluation.projectedNext.recommendation.detail}</p>
+                </div>
+              </div>
+            ) : null}
+            {Array.isArray(strategyEvaluation?.notes) && strategyEvaluation.notes.length ? (
+              <ul className={styles.strategyNotes}>
+                {strategyEvaluation.notes.map((note) => (
+                  <li key={note}>{note}</li>
+                ))}
+              </ul>
+            ) : null}
+            {strategyEvaluation?.freeThrowLookahead?.scenarios?.length ? (
+              <div className={styles.strategyScenarioBlock}>
+                <div className={styles.strategyScenarioHeader}>
+                  <strong>{strategyEvaluation.freeThrowLookahead.headline}</strong>
+                  <span>{strategyEvaluation.freeThrowLookahead.summary}</span>
+                </div>
+                <div className={styles.strategyScenarioGrid}>
+                  {strategyEvaluation.freeThrowLookahead.scenarios.map((scenario) => (
+                    <div key={scenario.key} className={styles.strategyScenarioCard}>
+                      <div className={styles.strategyScenarioLabel}>{scenario.label}</div>
+                      <div className={styles.strategyScenarioMargin}>{scenario.projectedScoreLabel}</div>
+                      <div className={styles.strategyScenarioCall}>{scenario.recommendation.call}</div>
+                      <div className={styles.strategyScenarioDetail}>{scenario.recommendation.detail}</div>
+                    </div>
+                  ))}
+                </div>
+                {Array.isArray(strategyEvaluation.freeThrowLookahead.notes) && strategyEvaluation.freeThrowLookahead.notes.length ? (
+                  <ul className={styles.strategyScenarioNotes}>
+                    {strategyEvaluation.freeThrowLookahead.notes.map((note) => (
+                      <li key={note}>{note}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
+            {Array.isArray(strategyEvaluation?.blindSpots) && strategyEvaluation.blindSpots.length ? (
+              <div className={styles.strategyBlindSpots}>
+                <strong>Needs review:</strong> {strategyEvaluation.blindSpots.join(" ")}
+              </div>
+            ) : null}
+            {footerActions ? (
+              <div className={styles.strategyFeedbackActions}>
+                {footerActions}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}

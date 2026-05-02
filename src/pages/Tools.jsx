@@ -17,12 +17,25 @@ import {
   saveToolRecord,
   saveToolRecordRemote,
 } from "../toolVault.js";
+import {
+  buildLateGameStrategyState,
+  evaluateLateGameStrategy,
+} from "../lateGameStrategy.js";
+import LateGameMatrixPanel from "../components/LateGameMatrixPanel.jsx";
+import {
+  buildDefaultStrategyOverrides,
+  buildStrategyOverrideDraft,
+} from "../components/lateGamePanelHelpers.js";
 import { exportMatchupGraphic } from "./matchupGraphicExport.js";
 import styles from "./Tools.module.css";
 
 const EMPTY_PLAYER_IDS = Array(5).fill("");
 const WIZARDS_TEAM_ID = "1610612764";
 const CAPITAL_CITY_TEAM_ID = "1612709928";
+const TOOL_TABS = {
+  MATCHUP: "matchup",
+  LATE_GAME: "late-game",
+};
 
 function buildEmptyDraft() {
   return {
@@ -73,6 +86,17 @@ function buildDefaultDraftForProfile(profile) {
     return buildDefaultDraftForLeague("gleague", scopes);
   }
   return buildEmptyDraft();
+}
+
+function buildLateGameToolSetup(profile) {
+  const scopes = normalizeTeamScopes(profile?.team_scopes);
+  if (scopes.has("washington")) {
+    return { league: "nba", awayTeamId: WIZARDS_TEAM_ID, homeTeamId: "" };
+  }
+  if (scopes.has("capital_city")) {
+    return { league: "gleague", awayTeamId: CAPITAL_CITY_TEAM_ID, homeTeamId: "" };
+  }
+  return { league: "nba", awayTeamId: "", homeTeamId: "" };
 }
 
 function isDraftBlank(draft) {
@@ -134,6 +158,16 @@ function resolveSelectedPlayers(playerIds, roster) {
     const playerId = String(playerIds?.[index] || "").trim();
     return playersById.get(playerId) || null;
   });
+}
+
+function buildStrategyToolTeam(team) {
+  if (!team) return null;
+  return {
+    teamId: String(team.teamId || "").trim(),
+    teamTricode: String(team.tricode || team.teamTricode || "").trim().toUpperCase(),
+    teamName: String(team.nickname || team.teamName || team.fullName || "").trim(),
+    score: 0,
+  };
 }
 
 function ToolColumn({
@@ -198,9 +232,17 @@ export default function Tools() {
   const [recordId, setRecordId] = useState("");
   const [saveStatus, setSaveStatus] = useState("");
   const [busyAction, setBusyAction] = useState("");
+  const defaultLateGameSetup = useMemo(() => buildLateGameToolSetup(profile), [profile]);
+  const [lateGameSetup, setLateGameSetup] = useState(defaultLateGameSetup);
+  const [lateGameVantageTeamId, setLateGameVantageTeamId] = useState("");
+  const [lateGameOverrides, setLateGameOverrides] = useState(() => buildDefaultStrategyOverrides());
+  const [lateGameManualOpen, setLateGameManualOpen] = useState(false);
+  const [lateGameOverrideDraft, setLateGameOverrideDraft] = useState(() => buildStrategyOverrideDraft(null));
 
   const canUseTools = hasFeature("tools");
   const draftParam = String(params.get("draft") || "").trim();
+  const rawTab = String(params.get("tab") || "").trim();
+  const activeTab = rawTab === TOOL_TABS.LATE_GAME ? TOOL_TABS.LATE_GAME : TOOL_TABS.MATCHUP;
   const { data: remoteNbaRostersPayload } = useQuery({
     queryKey: ["tools-current-nba-rosters"],
     queryFn: fetchCurrentNbaRosters,
@@ -265,6 +307,16 @@ export default function Tools() {
   const rightRoster = useMemo(() => rosterMap[String(draft.rightTeamId || "")] || [], [draft.rightTeamId, rosterMap]);
   const leftTeam = useMemo(() => getLeagueTeam(draft.leftTeamId, league), [draft.leftTeamId, league]);
   const rightTeam = useMemo(() => getLeagueTeam(draft.rightTeamId, league), [draft.rightTeamId, league]);
+  const lateGameLeague = lateGameSetup.league === "gleague" ? "gleague" : "nba";
+  const lateGameTeams = lateGameLeague === "gleague" ? GLEAGUE_TEAMS : NBA_TEAMS;
+  const lateGameAwayTeam = useMemo(
+    () => buildStrategyToolTeam(getLeagueTeam(lateGameSetup.awayTeamId, lateGameLeague)),
+    [lateGameLeague, lateGameSetup.awayTeamId]
+  );
+  const lateGameHomeTeam = useMemo(
+    () => buildStrategyToolTeam(getLeagueTeam(lateGameSetup.homeTeamId, lateGameLeague)),
+    [lateGameLeague, lateGameSetup.homeTeamId]
+  );
   const selectedLeftPlayers = useMemo(
     () => resolveSelectedPlayers(draft.leftPlayerIds, leftRoster),
     [draft.leftPlayerIds, leftRoster]
@@ -280,6 +332,52 @@ export default function Tools() {
     selectedLeftPlayers.every(Boolean) &&
     selectedRightPlayers.every(Boolean)
   );
+
+  useEffect(() => {
+    if (!lateGameAwayTeam?.teamId || !lateGameHomeTeam?.teamId) return;
+    const current = String(lateGameVantageTeamId || "").trim();
+    if (current === String(lateGameAwayTeam.teamId) || current === String(lateGameHomeTeam.teamId)) return;
+    setLateGameVantageTeamId(String(lateGameAwayTeam.teamId));
+  }, [lateGameAwayTeam?.teamId, lateGameHomeTeam?.teamId, lateGameVantageTeamId]);
+
+  const lateGameStrategyResult = useMemo(() => {
+    if (!lateGameAwayTeam || !lateGameHomeTeam) {
+      return {
+        strategyState: null,
+        strategyEvaluation: {
+          status: "inactive",
+          headline: "Late Game Strategy unavailable",
+          summary: "Select both teams to start the Late Game Matrix tool.",
+          notes: [],
+          blindSpots: [],
+        },
+      };
+    }
+
+    const simulationGame = {
+      gameStatus: 3,
+      period: 4,
+      gameClock: "PT30S",
+      awayTeam: lateGameAwayTeam,
+      homeTeam: lateGameHomeTeam,
+      playByPlayActions: [],
+    };
+    const strategyState = buildLateGameStrategyState({
+      game: simulationGame,
+      vantageTeamId: lateGameVantageTeamId || lateGameAwayTeam.teamId,
+      awayFouls: 0,
+      homeFouls: 0,
+      awayTimeoutsRemaining: 0,
+      homeTimeoutsRemaining: 0,
+      manualOverrides: lateGameOverrides,
+    });
+
+    return {
+      strategyState,
+      strategyEvaluation: evaluateLateGameStrategy(strategyState),
+    };
+  }, [lateGameAwayTeam, lateGameHomeTeam, lateGameOverrides, lateGameVantageTeamId]);
+  const { strategyState: lateGameStrategyState, strategyEvaluation: lateGameStrategyEvaluation } = lateGameStrategyResult;
 
   useEffect(() => {
     let cancelled = false;
@@ -329,6 +427,12 @@ export default function Tools() {
     setDraft((current) => (isDraftBlank(current) ? defaultDraft : current));
   }, [defaultDraft, draftParam]);
 
+  useEffect(() => {
+    setLateGameSetup((current) => (
+      current.awayTeamId || current.homeTeamId ? current : defaultLateGameSetup
+    ));
+  }, [defaultLateGameSetup]);
+
   if (accountsEnabled && !canUseTools) {
     return (
       <div className={styles.page}>
@@ -367,6 +471,57 @@ export default function Tools() {
     const normalizedLeague = nextLeague === "gleague" ? "gleague" : "nba";
     setDraft(buildDefaultDraftForLeague(normalizedLeague, profile?.team_scopes));
     setSaveStatus("");
+  };
+
+  const handleToolTabChange = (nextTab) => {
+    const normalized = nextTab === TOOL_TABS.LATE_GAME ? TOOL_TABS.LATE_GAME : TOOL_TABS.MATCHUP;
+    const nextParams = new URLSearchParams(params);
+    if (normalized === TOOL_TABS.MATCHUP) {
+      nextParams.delete("tab");
+    } else {
+      nextParams.set("tab", normalized);
+    }
+    setParams(nextParams, { replace: true });
+  };
+
+  const handleLateGameLeagueChange = (nextLeague) => {
+    const normalizedLeague = nextLeague === "gleague" ? "gleague" : "nba";
+    setLateGameSetup({
+      league: normalizedLeague,
+      awayTeamId: "",
+      homeTeamId: "",
+    });
+    setLateGameVantageTeamId("");
+    setLateGameOverrides(buildDefaultStrategyOverrides());
+    setLateGameManualOpen(false);
+    setLateGameOverrideDraft(buildStrategyOverrideDraft(null));
+  };
+
+  const handleLateGameTeamChange = (side, nextTeamId) => {
+    setLateGameSetup((current) => ({
+      ...current,
+      [`${side}TeamId`]: nextTeamId,
+    }));
+  };
+
+  const applyLateGameManualSituationOverride = () => {
+    setLateGameOverrides((prev) => ({
+      ...prev,
+      possessionFlip: false,
+      period: lateGameOverrideDraft.period,
+      clock: lateGameOverrideDraft.clock,
+      scoreDiff: lateGameOverrideDraft.scoreDiff,
+      possessionTeamId: lateGameOverrideDraft.possessionTeamId,
+      ourTimeouts: lateGameOverrideDraft.ourTimeouts,
+      opponentTimeouts: lateGameOverrideDraft.opponentTimeouts,
+      ourFouls: lateGameOverrideDraft.ourFouls,
+      opponentFouls: lateGameOverrideDraft.opponentFouls,
+    }));
+  };
+
+  const clearLateGameOverrides = () => {
+    setLateGameOverrides(buildDefaultStrategyOverrides());
+    setLateGameOverrideDraft(buildStrategyOverrideDraft(lateGameStrategyState));
   };
 
   const handleSave = async () => {
@@ -478,100 +633,194 @@ export default function Tools() {
   return (
     <div className={styles.page}>
       <section className={styles.hero}>
-        <h1 className={styles.title}>Match-Up Graphic Generator</h1>
-        {!remoteRostersPayload?.teams ? (
-          <p className={styles.statusNote}>
-            {league === "gleague"
-              ? "Live G League rosters will appear here once the `gleague-rosters` Supabase function is deployed."
-              : "Live NBA rosters will appear here once the `nba-rosters` Supabase function is deployed. Until then, this page falls back to the bundled roster snapshot."}
-          </p>
-        ) : null}
+        <div className={styles.kicker}>Tools</div>
+        <h1 className={styles.title}>Coaching Tools</h1>
+        <p className={styles.subtitle}>Use the match-up graphic workspace or the Late Game Matrix simulator from one place.</p>
       </section>
 
-      <section className={styles.workspace}>
-        <label className={`${styles.field} ${styles.leagueField}`}>
-          <select
-            className={styles.select}
-            value={league}
-            onChange={(event) => handleLeagueChange(event.target.value)}
-          >
-            <option value="nba">NBA</option>
-            <option value="gleague">G League</option>
-          </select>
-        </label>
+      <div className={styles.tabBar}>
+        <button
+          type="button"
+          className={`${styles.tabButton} ${activeTab === TOOL_TABS.MATCHUP ? styles.tabButtonActive : ""}`}
+          onClick={() => handleToolTabChange(TOOL_TABS.MATCHUP)}
+        >
+          Match-Up Graphic
+        </button>
+        <button
+          type="button"
+          className={`${styles.tabButton} ${activeTab === TOOL_TABS.LATE_GAME ? styles.tabButtonActive : ""}`}
+          onClick={() => handleToolTabChange(TOOL_TABS.LATE_GAME)}
+        >
+          Late Game Matrix
+        </button>
+      </div>
 
-        <div className={styles.toolGrid}>
-          <ToolColumn
-            columnId="left"
-            teamId={draft.leftTeamId}
-            teams={availableTeams}
-            playerIds={draft.leftPlayerIds}
-            rosterMap={rosterMap}
-            onTeamChange={(nextTeamId) => handleTeamChange("left", nextTeamId)}
-            onPlayerChange={(index, nextPlayerId) => handlePlayerChange("left", index, nextPlayerId)}
-          />
+      {activeTab === TOOL_TABS.MATCHUP ? (
+        <section className={styles.workspace}>
+          {!remoteRostersPayload?.teams ? (
+            <p className={styles.statusNote}>
+              {league === "gleague"
+                ? "Live G League rosters will appear here once the `gleague-rosters` Supabase function is deployed."
+                : "Live NBA rosters will appear here once the `nba-rosters` Supabase function is deployed. Until then, this page falls back to the bundled roster snapshot."}
+            </p>
+          ) : null}
 
-          <ToolColumn
-            columnId="right"
-            teamId={draft.rightTeamId}
-            teams={availableTeams}
-            playerIds={draft.rightPlayerIds}
-            rosterMap={rosterMap}
-            onTeamChange={(nextTeamId) => handleTeamChange("right", nextTeamId)}
-            onPlayerChange={(index, nextPlayerId) => handlePlayerChange("right", index, nextPlayerId)}
-          />
-        </div>
-
-        <div className={styles.footerRow}>
-          <label className={`${styles.field} ${styles.logoField}`}>
-            <span className={styles.fieldLabel}>Logo</span>
+          <label className={`${styles.field} ${styles.leagueField}`}>
             <select
               className={styles.select}
-              value={draft.logoTeamId}
-              onChange={(event) => {
-                setDraft((current) => ({ ...current, logoTeamId: event.target.value }));
-                setSaveStatus("");
-              }}
+              value={league}
+              onChange={(event) => handleLeagueChange(event.target.value)}
             >
-              <option value="">Logo</option>
-              {availableTeams.map((team) => (
-                <option key={`logo-${team.teamId}`} value={team.teamId}>{team.fullName}</option>
-              ))}
+              <option value="nba">NBA</option>
+              <option value="gleague">G League</option>
             </select>
           </label>
 
-          {logoPreviewUrl ? (
-            <div className={styles.logoPreview}>
-              <img src={logoPreviewUrl} alt="" />
-            </div>
-          ) : null}
+          <div className={styles.toolGrid}>
+            <ToolColumn
+              columnId="left"
+              teamId={draft.leftTeamId}
+              teams={availableTeams}
+              playerIds={draft.leftPlayerIds}
+              rosterMap={rosterMap}
+              onTeamChange={(nextTeamId) => handleTeamChange("left", nextTeamId)}
+              onPlayerChange={(index, nextPlayerId) => handlePlayerChange("left", index, nextPlayerId)}
+            />
 
-          <div className={styles.actionCluster}>
-            {recordId ? (
-              <button type="button" className={styles.secondaryButton} onClick={handleDelete} disabled={Boolean(busyAction)}>
-                Delete
-              </button>
-            ) : null}
-            <button type="button" className={styles.secondaryButton} onClick={handleReset} disabled={Boolean(busyAction)}>
-              Reset
-            </button>
-            <button type="button" className={styles.primaryButton} onClick={handleSave} disabled={Boolean(busyAction)}>
-              Save
-            </button>
-            <button
-              type="button"
-              className={styles.secondaryButton}
-              onClick={handleExport}
-              disabled={!exportReady || Boolean(busyAction)}
-              title={exportReady ? "Export the matchup graphic as a PNG" : "Select both teams, all ten players, and a logo first"}
-            >
-              {busyAction === "export" ? "Exporting..." : "Export"}
-            </button>
+            <ToolColumn
+              columnId="right"
+              teamId={draft.rightTeamId}
+              teams={availableTeams}
+              playerIds={draft.rightPlayerIds}
+              rosterMap={rosterMap}
+              onTeamChange={(nextTeamId) => handleTeamChange("right", nextTeamId)}
+              onPlayerChange={(index, nextPlayerId) => handlePlayerChange("right", index, nextPlayerId)}
+            />
           </div>
-        </div>
 
-        {saveStatus ? <div className={styles.statusNote}>{saveStatus}</div> : null}
-      </section>
+          <div className={styles.footerRow}>
+            <label className={`${styles.field} ${styles.logoField}`}>
+              <span className={styles.fieldLabel}>Logo</span>
+              <select
+                className={styles.select}
+                value={draft.logoTeamId}
+                onChange={(event) => {
+                  setDraft((current) => ({ ...current, logoTeamId: event.target.value }));
+                  setSaveStatus("");
+                }}
+              >
+                <option value="">Logo</option>
+                {availableTeams.map((team) => (
+                  <option key={`logo-${team.teamId}`} value={team.teamId}>{team.fullName}</option>
+                ))}
+              </select>
+            </label>
+
+            {logoPreviewUrl ? (
+              <div className={styles.logoPreview}>
+                <img src={logoPreviewUrl} alt="" />
+              </div>
+            ) : null}
+
+            <div className={styles.actionCluster}>
+              {recordId ? (
+                <button type="button" className={styles.secondaryButton} onClick={handleDelete} disabled={Boolean(busyAction)}>
+                  Delete
+                </button>
+              ) : null}
+              <button type="button" className={styles.secondaryButton} onClick={handleReset} disabled={Boolean(busyAction)}>
+                Reset
+              </button>
+              <button type="button" className={styles.primaryButton} onClick={handleSave} disabled={Boolean(busyAction)}>
+                Save
+              </button>
+              <button
+                type="button"
+                className={styles.secondaryButton}
+                onClick={handleExport}
+                disabled={!exportReady || Boolean(busyAction)}
+                title={exportReady ? "Export the matchup graphic as a PNG" : "Select both teams, all ten players, and a logo first"}
+              >
+                {busyAction === "export" ? "Exporting..." : "Export"}
+              </button>
+            </div>
+          </div>
+
+          {saveStatus ? <div className={styles.statusNote}>{saveStatus}</div> : null}
+        </section>
+      ) : (
+        <section className={styles.workspace}>
+          <p className={styles.statusNote}>
+            This uses the same Late Game Matrix engine as the game page, but runs in manual simulation mode so you can test scenarios without a live game.
+          </p>
+
+          <div className={styles.matrixSetupGrid}>
+            <label className={`${styles.field} ${styles.leagueField}`}>
+              <span className={styles.fieldLabel}>League</span>
+              <select
+                className={styles.select}
+                value={lateGameLeague}
+                onChange={(event) => handleLateGameLeagueChange(event.target.value)}
+              >
+                <option value="nba">NBA</option>
+                <option value="gleague">G League</option>
+              </select>
+            </label>
+
+            <label className={styles.field}>
+              <span className={styles.fieldLabel}>Away Team</span>
+              <select
+                className={styles.select}
+                value={lateGameSetup.awayTeamId}
+                onChange={(event) => handleLateGameTeamChange("away", event.target.value)}
+              >
+                <option value="">Select away team</option>
+                {lateGameTeams.map((team) => (
+                  <option key={`late-away-${team.teamId}`} value={team.teamId}>{team.fullName}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className={styles.field}>
+              <span className={styles.fieldLabel}>Home Team</span>
+              <select
+                className={styles.select}
+                value={lateGameSetup.homeTeamId}
+                onChange={(event) => handleLateGameTeamChange("home", event.target.value)}
+              >
+                <option value="">Select home team</option>
+                {lateGameTeams.map((team) => (
+                  <option
+                    key={`late-home-${team.teamId}`}
+                    value={team.teamId}
+                    disabled={team.teamId === lateGameSetup.awayTeamId}
+                  >
+                    {team.fullName}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <LateGameMatrixPanel
+            title="Late Game Matrix Simulator"
+            awayTeam={lateGameAwayTeam}
+            homeTeam={lateGameHomeTeam}
+            strategyState={lateGameStrategyState}
+            strategyEvaluation={lateGameStrategyEvaluation}
+            strategyVantageTeamId={lateGameVantageTeamId}
+            setStrategyVantageTeamId={setLateGameVantageTeamId}
+            strategyOverrides={lateGameOverrides}
+            setStrategyOverrides={setLateGameOverrides}
+            strategyManualOpen={lateGameManualOpen}
+            setStrategyManualOpen={setLateGameManualOpen}
+            strategyOverrideDraft={lateGameOverrideDraft}
+            setStrategyOverrideDraft={setLateGameOverrideDraft}
+            onApplyManualSituationOverride={applyLateGameManualSituationOverride}
+            onClearStrategyOverrides={clearLateGameOverrides}
+          />
+        </section>
+      )}
     </div>
   );
 }

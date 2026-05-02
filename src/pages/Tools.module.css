@@ -43,10 +43,40 @@
   background: linear-gradient(180deg, var(--panel), color-mix(in srgb, var(--panel) 82%, var(--bg)));
 }
 
+.tabBar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tabButton {
+  min-height: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  padding: 0 18px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tabButtonActive {
+  border-color: var(--highlight-text);
+  background: var(--highlight-text);
+  color: var(--bg);
+}
+
 .toolGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 28px;
+}
+
+.matrixSetupGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
 }
 
 .toolColumn {
@@ -158,6 +188,10 @@
 
 @media (max-width: 900px) {
   .toolGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .matrixSetupGrid {
     grid-template-columns: 1fr;
   }
 
