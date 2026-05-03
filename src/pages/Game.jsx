@@ -269,6 +269,42 @@ const safeDisplayText = (value, fallback = "") => {
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   return fallback;
 };
+const buildStrategyHistoryDisplayRecord = (record) => {
+  try {
+    const payload = record?.payload && typeof record.payload === "object" ? record.payload : {};
+    const state = payload.strategyState && typeof payload.strategyState === "object" ? payload.strategyState : {};
+    const evaluation = payload.strategyEvaluation && typeof payload.strategyEvaluation === "object" ? payload.strategyEvaluation : {};
+    return {
+      id: safeDisplayText(record?.id, crypto.randomUUID()),
+      headline: safeDisplayText(evaluation.headline, "Strategy update"),
+      periodLabel: safeDisplayText(state.periodLabel, "--"),
+      clockLabel: safeDisplayText(state.clock, "--"),
+      scoreLabel: safeDisplayText(state.scoreLabel, "--"),
+      possessionLabel: resolvePossessionDisplay({
+        isLive: Boolean(state.isLive),
+        isSimulation: Boolean(state.isSimulation),
+        possessionTeamId: state.possessionTeamId,
+        vantageTeamId: state.vantageTeamId,
+        vantageTeamTricode: state.vantageTeamTricode,
+        opponentTeamId: state.opponentTeamId,
+        opponentTeamTricode: state.opponentTeamTricode,
+      }),
+      summary: safeDisplayText(evaluation.summary, "No saved recommendation detail."),
+      rationale: safeDisplayText(evaluation.rationale, ""),
+    };
+  } catch {
+    return {
+      id: crypto.randomUUID(),
+      headline: "Strategy update",
+      periodLabel: "--",
+      clockLabel: "--",
+      scoreLabel: "--",
+      possessionLabel: "Unknown",
+      summary: "This saved history entry could not be fully rendered.",
+      rationale: "",
+    };
+  }
+};
 
 const loadSnapshots = (gameId) => {
   if (typeof window === "undefined") return [];
@@ -2369,6 +2405,10 @@ export default function Game({ variant = "full" }) {
     setStrategyHistoryModalOpen(false);
   };
 
+  const strategyHistoryDisplayRecords = Array.isArray(strategyHistoryRecords)
+    ? strategyHistoryRecords.map(buildStrategyHistoryDisplayRecord)
+    : [];
+
   if (isLoading) {
     return <div className={styles.stateMessage}>Loading game details...</div>;
   }
@@ -2699,41 +2739,23 @@ export default function Game({ variant = "full" }) {
                 <div className={styles.strategyHistoryList}>
                   {strategyHistoryLoading ? (
                     <div className={styles.strategyHistoryEmpty}>Loading history...</div>
-                  ) : strategyHistoryRecords.length ? (
-                    strategyHistoryRecords.map((record) => {
-                      const payload = record.payload && typeof record.payload === "object" ? record.payload : {};
-                      const state = payload.strategyState && typeof payload.strategyState === "object" ? payload.strategyState : {};
-                      const evaluation = payload.strategyEvaluation && typeof payload.strategyEvaluation === "object" ? payload.strategyEvaluation : {};
-                      const possessionLabel = resolvePossessionDisplay({
-                        isLive: Boolean(state.isLive),
-                        isSimulation: Boolean(state.isSimulation),
-                        possessionTeamId: state.possessionTeamId,
-                        vantageTeamId: state.vantageTeamId,
-                        vantageTeamTricode: state.vantageTeamTricode,
-                        opponentTeamId: state.opponentTeamId,
-                        opponentTeamTricode: state.opponentTeamTricode,
-                      });
-                      const headline = safeDisplayText(evaluation.headline, "Strategy update");
-                      const periodLabel = safeDisplayText(state.periodLabel, "--");
-                      const clockLabel = safeDisplayText(state.clock, "--");
-                      const scoreLabel = safeDisplayText(state.scoreLabel, "--");
-                      const summary = safeDisplayText(evaluation.summary, "No saved recommendation detail.");
-                      const rationale = safeDisplayText(evaluation.rationale, "");
+                  ) : strategyHistoryDisplayRecords.length ? (
+                    strategyHistoryDisplayRecords.map((record) => {
                       return (
                         <article key={record.id} className={styles.strategyHistoryCard}>
                           <div className={styles.strategyHistoryCardHeader}>
-                            <strong>{headline}</strong>
-                            <span>{periodLabel} {clockLabel}</span>
+                            <strong>{record.headline}</strong>
+                            <span>{record.periodLabel} {record.clockLabel}</span>
                           </div>
                           <div className={styles.strategyHistoryCardMeta}>
-                            {scoreLabel} · {possessionLabel}
+                            {record.scoreLabel} · {record.possessionLabel}
                           </div>
                           <div className={styles.strategyHistoryCardBody}>
-                            {summary}
+                            {record.summary}
                           </div>
-                          {rationale ? (
+                          {record.rationale ? (
                             <div className={styles.strategyHistoryCardNote}>
-                              Why: {rationale}
+                              Why: {record.rationale}
                             </div>
                           ) : null}
                         </article>

@@ -253,7 +253,7 @@ test("up three on defense with 31 seconds left goes to no 3 defense", () => {
   assert.equal(evaluation.recommendation.call, "No 3 defense");
 });
 
-test("up two on offense with 18 seconds left shifts to take care of ball", () => {
+test("up two on offense with 18 seconds left shifts to ball security", () => {
   const state = buildLateGameStrategyState({
     game: buildGame({
       gameClock: "PT18S",
@@ -281,10 +281,10 @@ test("up two on offense with 18 seconds left shifts to take care of ball", () =>
 
   assert.equal(state.isOurPossession, true);
   assert.equal(state.scoreDiff, 2);
-  assert.equal(evaluation.recommendation.call, "Take care of ball");
+  assert.equal(evaluation.recommendation.call, "Ball security");
 });
 
-test("tied defense with 3 seconds left goes to no fouls zone the rim", () => {
+test("tied defense with 3 seconds left goes to no catch and shoot", () => {
   const state = buildLateGameStrategyState({
     game: buildGame({
       gameClock: "PT3S",
@@ -312,7 +312,38 @@ test("tied defense with 3 seconds left goes to no fouls zone the rim", () => {
 
   assert.equal(state.isOurPossession, false);
   assert.equal(state.scoreDiff, 0);
-  assert.equal(evaluation.recommendation.call, "No fouls, zone the rim");
+  assert.equal(evaluation.recommendation.call, "No catch & shoot");
+});
+
+test("up three on defense with 4 seconds left now fouls", () => {
+  const state = buildLateGameStrategyState({
+    game: buildGame({
+      gameClock: "PT4S",
+      awayTeam: { ...ORL, score: 100 },
+      homeTeam: { ...DET, score: 97 },
+      playByPlayActions: [
+        {
+          actionType: "turnover",
+          teamId: ORL.teamId,
+          possession: DET.teamId,
+          period: 4,
+          clock: "PT4S",
+          description: "ORL turnover",
+        },
+      ],
+    }),
+    vantageTeamId: ORL.teamId,
+    awayFouls: 4,
+    homeFouls: 4,
+    awayTimeoutsRemaining: 1,
+    homeTimeoutsRemaining: 1,
+  });
+
+  const evaluation = evaluateLateGameStrategy(state);
+
+  assert.equal(state.isOurPossession, false);
+  assert.equal(state.scoreDiff, 3);
+  assert.equal(evaluation.recommendation.call, "Foul");
 });
 
 test("stale play-by-play feed exposes low confidence and likely next recommendation", () => {
