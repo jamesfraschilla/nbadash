@@ -253,6 +253,37 @@ test("up three on defense with 31 seconds left goes to no 3 defense", () => {
   assert.equal(evaluation.recommendation.call, "No 3 defense");
 });
 
+test("up two on offense with 18 seconds left shifts to take care of ball", () => {
+  const state = buildLateGameStrategyState({
+    game: buildGame({
+      gameClock: "PT18S",
+      awayTeam: { ...ORL, score: 102 },
+      homeTeam: { ...DET, score: 100 },
+      playByPlayActions: [
+        {
+          actionType: "madebasket",
+          teamId: ORL.teamId,
+          possession: ORL.teamId,
+          period: 4,
+          clock: "PT18S",
+          description: "ORL inbounds",
+        },
+      ],
+    }),
+    vantageTeamId: ORL.teamId,
+    awayFouls: 4,
+    homeFouls: 4,
+    awayTimeoutsRemaining: 2,
+    homeTimeoutsRemaining: 2,
+  });
+
+  const evaluation = evaluateLateGameStrategy(state);
+
+  assert.equal(state.isOurPossession, true);
+  assert.equal(state.scoreDiff, 2);
+  assert.equal(evaluation.recommendation.call, "Take care of ball");
+});
+
 test("tied defense with 3 seconds left goes to no fouls zone the rim", () => {
   const state = buildLateGameStrategyState({
     game: buildGame({

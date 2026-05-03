@@ -263,6 +263,12 @@ const buildDefaultStrategyFeedback = () => ({
 });
 
 const sanitizeHistoryKey = (value) => String(value || "").replace(/[^a-zA-Z0-9:_-]/g, "-");
+const safeDisplayText = (value, fallback = "") => {
+  if (value == null) return fallback;
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return fallback;
+};
 
 const loadSnapshots = (gameId) => {
   if (typeof window === "undefined") return [];
@@ -2698,22 +2704,36 @@ export default function Game({ variant = "full" }) {
                       const payload = record.payload && typeof record.payload === "object" ? record.payload : {};
                       const state = payload.strategyState && typeof payload.strategyState === "object" ? payload.strategyState : {};
                       const evaluation = payload.strategyEvaluation && typeof payload.strategyEvaluation === "object" ? payload.strategyEvaluation : {};
-                      const possessionLabel = resolvePossessionDisplay(state);
+                      const possessionLabel = resolvePossessionDisplay({
+                        isLive: Boolean(state.isLive),
+                        isSimulation: Boolean(state.isSimulation),
+                        possessionTeamId: state.possessionTeamId,
+                        vantageTeamId: state.vantageTeamId,
+                        vantageTeamTricode: state.vantageTeamTricode,
+                        opponentTeamId: state.opponentTeamId,
+                        opponentTeamTricode: state.opponentTeamTricode,
+                      });
+                      const headline = safeDisplayText(evaluation.headline, "Strategy update");
+                      const periodLabel = safeDisplayText(state.periodLabel, "--");
+                      const clockLabel = safeDisplayText(state.clock, "--");
+                      const scoreLabel = safeDisplayText(state.scoreLabel, "--");
+                      const summary = safeDisplayText(evaluation.summary, "No saved recommendation detail.");
+                      const rationale = safeDisplayText(evaluation.rationale, "");
                       return (
                         <article key={record.id} className={styles.strategyHistoryCard}>
                           <div className={styles.strategyHistoryCardHeader}>
-                            <strong>{evaluation.headline || "Strategy update"}</strong>
-                            <span>{state.periodLabel || "--"} {state.clock || "--"}</span>
+                            <strong>{headline}</strong>
+                            <span>{periodLabel} {clockLabel}</span>
                           </div>
                           <div className={styles.strategyHistoryCardMeta}>
-                            {state.scoreLabel || "--"} · {possessionLabel}
+                            {scoreLabel} · {possessionLabel}
                           </div>
                           <div className={styles.strategyHistoryCardBody}>
-                            {evaluation.summary || "No saved recommendation detail."}
+                            {summary}
                           </div>
-                          {evaluation.rationale ? (
+                          {rationale ? (
                             <div className={styles.strategyHistoryCardNote}>
-                              Why: {evaluation.rationale}
+                              Why: {rationale}
                             </div>
                           ) : null}
                         </article>

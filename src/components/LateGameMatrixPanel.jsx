@@ -178,45 +178,6 @@ export default function LateGameMatrixPanel({
                     ))}
                   </select>
                 </label>
-                <label className={styles.strategyMarginField}>
-                  <span>Margin</span>
-                  <div className={styles.strategyMarginPicker}>
-                    <select
-                      value={strategyOverrideDraft.scoreDiff}
-                      onChange={(event) => setStrategyOverrideDraft((prev) => ({
-                        ...prev,
-                        scoreDiff: event.target.value,
-                        scoreDiffEnd: prev.scoreDiffRange ? prev.scoreDiffEnd : event.target.value,
-                      }))}
-                    >
-                      {MARGIN_OPTION_VALUES.map((value) => (
-                        <option key={`margin-${value}`} value={String(value)}>{getMarginOptionLabel(value)}</option>
-                      ))}
-                    </select>
-                    <label className={styles.strategyRangeToggle}>
-                      <input
-                        type="checkbox"
-                        checked={Boolean(strategyOverrideDraft.scoreDiffRange)}
-                        onChange={(event) => setStrategyOverrideDraft((prev) => ({
-                          ...prev,
-                          scoreDiffRange: event.target.checked,
-                          scoreDiffEnd: event.target.checked ? (prev.scoreDiffEnd || prev.scoreDiff) : prev.scoreDiff,
-                        }))}
-                      />
-                      <span>Range</span>
-                    </label>
-                    {strategyOverrideDraft.scoreDiffRange ? (
-                      <select
-                        value={strategyOverrideDraft.scoreDiffEnd}
-                        onChange={(event) => setStrategyOverrideDraft((prev) => ({ ...prev, scoreDiffEnd: event.target.value }))}
-                      >
-                        {MARGIN_OPTION_VALUES.map((value) => (
-                          <option key={`margin-end-${value}`} value={String(value)}>{getMarginOptionLabel(value)}</option>
-                        ))}
-                      </select>
-                    ) : null}
-                  </div>
-                </label>
                 <label>
                   <span>Possession</span>
                   <select
@@ -232,50 +193,97 @@ export default function LateGameMatrixPanel({
                     ) : null}
                   </select>
                 </label>
-                <label>
-                  <span>{vantageLabel} TO</span>
-                  <select
-                    value={strategyOverrideDraft.ourTimeouts}
-                    onChange={(event) => setStrategyOverrideDraft((prev) => ({ ...prev, ourTimeouts: event.target.value }))}
-                  >
-                    {TIMEOUT_OPTIONS.map((value) => (
-                      <option key={`our-to-${value}`} value={value}>{value}</option>
-                    ))}
-                  </select>
+                <label className={styles.strategyMarginField}>
+                  <span>Margin</span>
+                  <div className={styles.strategyMarginPicker}>
+                    <select
+                      value={strategyOverrideDraft.scoreDiff}
+                      onChange={(event) => setStrategyOverrideDraft((prev) => ({
+                        ...prev,
+                        scoreDiff: event.target.value,
+                        scoreDiffEnd: prev.scoreDiffRange ? prev.scoreDiffEnd : event.target.value,
+                      }))}
+                    >
+                      {MARGIN_OPTION_VALUES.map((value) => (
+                        <option key={`margin-${value}`} value={String(value)}>{getMarginOptionLabel(value)}</option>
+                      ))}
+                    </select>
+                    {strategyOverrideDraft.scoreDiffRange ? (
+                      <select
+                        value={strategyOverrideDraft.scoreDiffEnd}
+                        onChange={(event) => setStrategyOverrideDraft((prev) => ({ ...prev, scoreDiffEnd: event.target.value }))}
+                      >
+                        {MARGIN_OPTION_VALUES.map((value) => (
+                          <option key={`margin-end-${value}`} value={String(value)}>{getMarginOptionLabel(value)}</option>
+                        ))}
+                      </select>
+                    ) : null}
+                    <label className={styles.strategyRangeToggle}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(strategyOverrideDraft.scoreDiffRange)}
+                        onChange={(event) => setStrategyOverrideDraft((prev) => ({
+                          ...prev,
+                          scoreDiffRange: event.target.checked,
+                          scoreDiffEnd: event.target.checked ? (prev.scoreDiffEnd || prev.scoreDiff) : prev.scoreDiff,
+                        }))}
+                      />
+                      <span>Range</span>
+                    </label>
+                  </div>
                 </label>
-                <label>
-                  <span>{opponentLabel} TO</span>
-                  <select
-                    value={strategyOverrideDraft.opponentTimeouts}
-                    onChange={(event) => setStrategyOverrideDraft((prev) => ({ ...prev, opponentTimeouts: event.target.value }))}
-                  >
-                    {TIMEOUT_OPTIONS.map((value) => (
-                      <option key={`opp-to-${value}`} value={value}>{value}</option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>{vantageLabel} fouls</span>
-                  <select
-                    value={strategyOverrideDraft.ourFouls}
-                    onChange={(event) => setStrategyOverrideDraft((prev) => ({ ...prev, ourFouls: event.target.value }))}
-                  >
-                    {FOUL_OPTIONS.map((value) => (
-                      <option key={`our-fouls-${value}`} value={value}>{value}</option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>{opponentLabel} fouls</span>
-                  <select
-                    value={strategyOverrideDraft.opponentFouls}
-                    onChange={(event) => setStrategyOverrideDraft((prev) => ({ ...prev, opponentFouls: event.target.value }))}
-                  >
-                    {FOUL_OPTIONS.map((value) => (
-                      <option key={`opp-fouls-${value}`} value={value}>{value}</option>
-                    ))}
-                  </select>
-                </label>
+                <div className={styles.strategyTeamGrid}>
+                  <div className={styles.strategyTeamCard}>
+                    <div className={styles.strategyTeamCardTitle}>{vantageLabel}</div>
+                    <label>
+                      <span>Timeouts</span>
+                      <select
+                        value={strategyOverrideDraft.ourTimeouts}
+                        onChange={(event) => setStrategyOverrideDraft((prev) => ({ ...prev, ourTimeouts: event.target.value }))}
+                      >
+                        {TIMEOUT_OPTIONS.map((value) => (
+                          <option key={`our-to-${value}`} value={value}>{value}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>Fouls</span>
+                      <select
+                        value={strategyOverrideDraft.ourFouls}
+                        onChange={(event) => setStrategyOverrideDraft((prev) => ({ ...prev, ourFouls: event.target.value }))}
+                      >
+                        {FOUL_OPTIONS.map((value) => (
+                          <option key={`our-fouls-${value}`} value={value}>{value}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  <div className={styles.strategyTeamCard}>
+                    <div className={styles.strategyTeamCardTitle}>{opponentLabel}</div>
+                    <label>
+                      <span>Timeouts</span>
+                      <select
+                        value={strategyOverrideDraft.opponentTimeouts}
+                        onChange={(event) => setStrategyOverrideDraft((prev) => ({ ...prev, opponentTimeouts: event.target.value }))}
+                      >
+                        {TIMEOUT_OPTIONS.map((value) => (
+                          <option key={`opp-to-${value}`} value={value}>{value}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>Fouls</span>
+                      <select
+                        value={strategyOverrideDraft.opponentFouls}
+                        onChange={(event) => setStrategyOverrideDraft((prev) => ({ ...prev, opponentFouls: event.target.value }))}
+                      >
+                        {FOUL_OPTIONS.map((value) => (
+                          <option key={`opp-fouls-${value}`} value={value}>{value}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                </div>
                 <div className={styles.strategyManualActions}>
                   <button type="button" onClick={onApplyManualSituationOverride}>
                     Apply to Matrix
