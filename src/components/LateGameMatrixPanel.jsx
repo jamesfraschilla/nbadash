@@ -16,6 +16,7 @@ const CLOCK_OPTIONS = Array.from({ length: 61 }, (_, index) => {
 
 function buildStrategyCertaintyLabel(strategyState, strategyEvaluation) {
   if (strategyState?.isSimulation && !strategyState?.isLive) return "Manual simulation";
+  if (strategyEvaluation?.jumpBallLookahead?.scenarios?.length) return "Jump ball branch prep";
   if (strategyEvaluation?.freeThrowLookahead?.scenarios?.length) return "Projected from FT sequence";
   if (strategyEvaluation?.feedStatus?.level === "low") return "Feed confidence low";
   if (strategyEvaluation?.feedStatus?.level === "medium") return "Feed confidence medium";
@@ -361,6 +362,24 @@ export default function LateGameMatrixPanel({
                   <li key={note}>{note}</li>
                 ))}
               </ul>
+            ) : null}
+            {strategyEvaluation?.freeThrowLookahead?.scenarios?.length ? (
+              <div className={styles.strategyScenarioBlock}>
+                <div className={styles.strategyScenarioHeader}>
+                  <strong>{strategyEvaluation.jumpBallLookahead.headline}</strong>
+                  <span>{strategyEvaluation.jumpBallLookahead.summary}</span>
+                </div>
+                <div className={styles.strategyScenarioGrid}>
+                  {strategyEvaluation.jumpBallLookahead.scenarios.map((scenario) => (
+                    <div key={scenario.key} className={styles.strategyScenarioCard}>
+                      <div className={styles.strategyScenarioLabel}>{scenario.label}</div>
+                      <div className={styles.strategyScenarioMargin}>{scenario.projectedScoreLabel}</div>
+                      <div className={styles.strategyScenarioCall}>{scenario.recommendation.call}</div>
+                      <div className={styles.strategyScenarioDetail}>{scenario.recommendation.detail}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             ) : null}
             {strategyEvaluation?.freeThrowLookahead?.scenarios?.length ? (
               <div className={styles.strategyScenarioBlock}>

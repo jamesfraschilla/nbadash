@@ -247,6 +247,7 @@ function buildFeedStatus(game, secondsRemaining) {
     level,
     label,
     secondsBehind,
+    latestActionType: latestType,
     latestActionClock: latestAction ? normalizeClock(latestAction.clock) : "",
     latestActionDescription: actionSummary(latestAction),
     recentEvents,
@@ -838,6 +839,49 @@ function buildProjectedNextRecommendation(state) {
   };
 }
 
+function buildJumpBallLookahead(state) {
+  if (!state?.vantageTeam?.teamId || !state?.opponentTeam?.teamId) return null;
+  const winState = {
+    ...state,
+    possessionTeamId: state.vantageTeam.teamId,
+    isOurPossession: true,
+  };
+  const loseState = {
+    ...state,
+    possessionTeamId: state.opponentTeam.teamId,
+    isOurPossession: false,
+  };
+  const winRecommendation = recommendationForState(winState);
+  const loseRecommendation = recommendationForState(loseState);
+  if (!winRecommendation && !loseRecommendation) return null;
+
+  return {
+    headline: "Jump ball branches",
+    summary: "Run both branches now: one if we win the tip, one if we defend.",
+    scenarios: [
+      {
+        key: "jump-ball-win",
+        label: "If we win jump ball",
+        projectedScoreLabel: state.scoreLabel,
+        recommendation: winRecommendation || buildRecommendation({
+          call: "Normal offense",
+          detail: "Run normal offense.",
+        }),
+      },
+      {
+        key: "jump-ball-lose",
+        label: "If we lose jump ball",
+        projectedScoreLabel: state.scoreLabel,
+        recommendation: loseRecommendation || buildRecommendation({
+          call: "Defend normally",
+          detail: "Stay home and finish the possession.",
+        }),
+      },
+    ],
+    notes: [],
+  };
+}
+
 export function evaluateLateGameStrategy(state) {
   if (!state) {
     return {
@@ -886,7 +930,32 @@ export function evaluateLateGameStrategy(state) {
     };
   }
 
+  const jumpBallLookahead = state.feedStatus?.latestActionType === "jumpball"
+    ? buildJumpBallLookahead(state)
+    : null;
+
   if (state.isOurPossession == null) {
+    if (jumpBallLookahead) {
+      return {
+        status: "ready",
+        headline: "Jump ball branches",
+        summary: "Latest play is a jump ball. Use both offense and defense branches until possession resolves.",
+        playMode,
+        recommendation: jumpBallLookahead.scenarios[0]?.recommendation || null,
+        notes: [],
+        blindSpots: [],
+        rationale: "Jump ball possession is unresolved in the feed.",
+        jumpBallLookahead,
+        freeThrowLookahead: null,
+        projectedNext: null,
+        feedStatus: state.feedStatus,
+        matrixContext: {
+          side: "Jump ball pending",
+          timeBand: state.timeBand,
+          scoreLabel: state.scoreLabel,
+        },
+      };
+    }
     return {
       status: "review",
       headline: "Possession is unclear",
@@ -931,6 +1000,7 @@ export function evaluateLateGameStrategy(state) {
     blindSpots: recommendation.blindSpots,
     rationale: recommendation.rationale,
     freeThrowLookahead,
+    jumpBallLookahead,
     projectedNext,
     feedStatus: state.feedStatus,
     matrixContext: {

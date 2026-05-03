@@ -117,6 +117,42 @@ test("opponent shooting foul creates next-possession free throw scenarios", () =
   );
 });
 
+test("latest jump ball shows both win/lose strategy branches", () => {
+  const game = buildGame({
+    gameClock: "PT16S",
+    awayTeam: { ...ORL, score: 97 },
+    homeTeam: { ...DET, score: 95 },
+    playByPlayActions: [
+      {
+        actionType: "jumpball",
+        teamId: "",
+        possession: "",
+        period: 4,
+        clock: "PT16S",
+        description: "Jump Ball Cunningham vs Banchero",
+      },
+    ],
+  });
+
+  const state = buildLateGameStrategyState({
+    game,
+    vantageTeamId: ORL.teamId,
+    awayFouls: 4,
+    homeFouls: 5,
+    awayTimeoutsRemaining: 1,
+    homeTimeoutsRemaining: 2,
+  });
+  const evaluation = evaluateLateGameStrategy(state);
+
+  assert.equal(evaluation.status, "ready");
+  assert.equal(evaluation.jumpBallLookahead.headline, "Jump ball branches");
+  assert.equal(evaluation.jumpBallLookahead.scenarios.length, 2);
+  assert.deepEqual(
+    evaluation.jumpBallLookahead.scenarios.map((scenario) => scenario.label),
+    ["If we win jump ball", "If we lose jump ball"]
+  );
+});
+
 test("final games keep the strategy engine inactive", () => {
   const state = buildLateGameStrategyState({
     game: buildGame({ gameStatus: 3, gameClock: "PT0S" }),
