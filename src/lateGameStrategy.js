@@ -729,7 +729,7 @@ function recommendationFromWorkbookCell(side, band, bucket, rawInstruction, stat
       break;
     case "BALL SECURITY & PREPARE FOR FOUL":
       recommendation.call = "Ball security";
-      recommendation.detail = "Secure the possession and prepare for the foul game.";
+      recommendation.detail = "Protect the ball and prepare for the foul game.";
       break;
     case "NEED 3 /  / *CRASH 5*":
     case "NEED 3 / / *CRASH 5*":

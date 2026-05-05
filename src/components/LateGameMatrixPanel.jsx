@@ -107,21 +107,6 @@ export default function LateGameMatrixPanel({
             </div>
           </div>
 
-          <div className={styles.strategyLiveStrip}>
-            <div className={styles.strategyLivePill}>
-              <span className={styles.strategyLiveLabel}>State</span>
-              <strong>{strategyState ? `${strategyState.periodLabel} ${strategyState.clock}` : "--"}</strong>
-            </div>
-            <div className={styles.strategyLivePill}>
-              <span className={styles.strategyLiveLabel}>Margin</span>
-              <strong>{strategyState?.scoreLabel || "--"}</strong>
-            </div>
-            <div className={styles.strategyLivePill}>
-              <span className={styles.strategyLiveLabel}>Possession</span>
-              <strong>{strategyPossessionDisplay}</strong>
-            </div>
-          </div>
-
           <div className={styles.strategyFeedPanel}>
             <div className={styles.strategyFeedHeader}>
               <span className={`${styles.strategyFeedDot} ${styles[`strategyFeedDot${(strategyEvaluation?.feedStatus?.level || "unknown").replace(/^./, (char) => char.toUpperCase())}`]}`} />
@@ -323,16 +308,6 @@ export default function LateGameMatrixPanel({
               <span className={styles.strategyConfidenceBadge}>{strategyCertaintyLabel}</span>
             </div>
             <p className={styles.strategySummary}>{strategyEvaluation?.summary || "No recommendation yet."}</p>
-            <div className={styles.strategySituationLine}>
-              {strategyState ? `${strategyState.periodLabel} ${strategyState.clock} · ${strategyState.scoreLabel} · ${strategyPossessionDisplay}` : "Waiting for live state."}
-            </div>
-            {strategyEvaluation?.matrixContext ? (
-              <div className={styles.strategyBadgeRow}>
-                <span className={styles.strategyBadge}>{strategyEvaluation.matrixContext.side}</span>
-                <span className={styles.strategyBadge}>{strategyEvaluation.matrixContext.timeBand}</span>
-                <span className={styles.strategyBadge}>{strategyEvaluation.matrixContext.scoreLabel}</span>
-              </div>
-            ) : null}
             {strategyEvaluation?.rationale ? (
               <div className={styles.strategyRationale}>
                 <strong>Why:</strong> {strategyEvaluation.rationale}
