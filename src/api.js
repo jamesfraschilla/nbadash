@@ -977,6 +977,14 @@ async function fetchSummerLeagueGamesByDate(dateStr) {
     .map(normalizeSummerScheduleCard);
 }
 
+function buildSummerLeagueShareUrlFromGame(game) {
+  const awayTricode = String(game?.awayTeam?.teamTricode || "").trim().toLowerCase();
+  const homeTricode = String(game?.homeTeam?.teamTricode || "").trim().toLowerCase();
+  const gameId = String(game?.gameId || "").trim();
+  if (!awayTricode || !homeTricode || !gameId) return "";
+  return `https://www.nba.com/game/${awayTricode}-vs-${homeTricode}-${gameId}`;
+}
+
 async function findSummerLeagueGameUrlById(gameId, dateStr = null) {
   const safeGameId = String(gameId || "").trim();
   if (!safeGameId) {
@@ -988,6 +996,14 @@ async function findSummerLeagueGameUrlById(gameId, dateStr = null) {
 
   const datesToCheck = [];
   if (dateStr && isJulyDate(dateStr)) {
+    const sameDateGames = await requestJson(`${API_BASE}/games/byDate?date=${dateStr}`).catch(() => []);
+    const sameDateMatch = (Array.isArray(sameDateGames) ? sameDateGames : [])
+      .find((game) => String(game?.gameId || "") === safeGameId);
+    const directShareUrl = buildSummerLeagueShareUrlFromGame(sameDateMatch);
+    if (directShareUrl) {
+      SUMMER_LEAGUE_GAME_URL_CACHE.set(safeGameId, directShareUrl);
+      return directShareUrl;
+    }
     datesToCheck.push(dateStr);
   } else {
     const seasonYearSuffix = String(safeGameId).slice(3, 5);
