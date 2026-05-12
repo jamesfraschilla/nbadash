@@ -24,17 +24,57 @@ async function requestJson(url) {
   return res.json();
 }
 
-async function requestText(url, accept = "text/html") {
+async function fetchWithTimeout(url, options = {}, timeoutMs = 2500) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const proxiedResponse = await fetch(`${ALL_ORIGINS_RAW_URL}${encodeURIComponent(url)}`, {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function requestText(url, accept = "text/html", options = {}) {
+  const {
+    preferDirect = false,
+    allowProxy = true,
+    proxyTimeoutMs = 2500,
+  } = options;
+
+  const fetchDirect = async () => {
+    const directResponse = await fetch(url, {
       headers: { Accept: accept },
     });
-    if (proxiedResponse.ok) {
-      return proxiedResponse.text();
+    if (!directResponse.ok) {
+      throw new Error(`Request failed: ${directResponse.status}`);
     }
-  } catch {
-    // Fall through to a direct fetch when the proxy is unavailable.
+    return directResponse.text();
+  };
+
+  if (preferDirect) {
+    try {
+      return await fetchDirect();
+    } catch {
+      // Fall through to the proxy when direct fetches are blocked or unavailable.
+    }
   }
+
+  if (allowProxy) {
+    try {
+      const proxiedResponse = await fetchWithTimeout(`${ALL_ORIGINS_RAW_URL}${encodeURIComponent(url)}`, {
+        headers: { Accept: accept },
+      }, proxyTimeoutMs);
+      if (proxiedResponse.ok) {
+        return proxiedResponse.text();
+      }
+    } catch {
+      // Fall through to a direct fetch when the proxy is unavailable.
+    }
+  }
+
   const directResponse = await fetch(url, {
     headers: { Accept: accept },
   });
@@ -140,12 +180,8 @@ function extractMarkdownPlayerLabel(cell = "") {
   };
 }
 
-function parseSummerBoxScoreTable(markdown, heading, teamMeta) {
-  const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const sectionMatch = new RegExp(
-    `## ${escapedHeading}\\n\\n\\| PLAYER \\| MIN \\|[\\s\\S]*?\\n\\| ---[\\s\\S]*?\\n([\\s\\S]*?)(?=\\n## |\\nNBA Organization|$)`
-  ).exec(markdown);
-  if (!sectionMatch) {
+function parseSummerBoxScoreBlock(blockText, teamMeta) {
+  if (!blockText) {
     return {
       teamId: safeNumber(teamMeta?.teamId, 0),
       teamName: teamMeta?.teamName || "",
@@ -156,7 +192,7 @@ function parseSummerBoxScoreTable(markdown, heading, teamMeta) {
     };
   }
 
-  const lines = sectionMatch[1]
+  const lines = String(blockText || "")
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.startsWith("|"));
@@ -237,6 +273,36 @@ function parseSummerBoxScoreTable(markdown, heading, teamMeta) {
   };
 }
 
+function parseSummerBoxScoreTable(markdown, heading, teamMeta) {
+  const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const sectionMatch = new RegExp(
+    `## ${escapedHeading}\\n\\n\\| PLAYER \\| MIN \\|[\\s\\S]*?\\n\\| ---[\\s\\S]*?\\n([\\s\\S]*?)(?=\\n## |\\nNBA Organization|$)`
+  ).exec(markdown);
+  return parseSummerBoxScoreBlock(sectionMatch?.[1] || "", teamMeta);
+}
+
+function extractSummerBoxScoreBlocks(markdown) {
+  return [...String(markdown || "").matchAll(
+    /\| PLAYER \| MIN \|[^\n]*\n\| ---[^\n]*\n([\s\S]*?)(?=\n\| PLAYER \| MIN \||\nNBA Organization|$)/g
+  )]
+    .map((match) => match[1] || "")
+    .filter(Boolean);
+}
+
+function parseSummerScoreboard(markdown, awayTricode, homeTricode) {
+  const pattern = new RegExp(
+    `${awayTricode}[\\s\\S]{0,120}?(\\d+)[\\s\\S]{0,120}?((?:Final(?:\\/OT\\d*)?|Final\\/OT|Halftime|Q\\d\\s+\\d+:\\d+|\\d+:\\d+\\s*(?:am|pm)\\s*ET))[\\s\\S]{0,120}?(\\d+)[\\s\\S]{0,240}?${homeTricode}`,
+    "i"
+  );
+  const match = pattern.exec(String(markdown || ""));
+  if (!match) return null;
+  return {
+    awayScore: parseMarkdownNumeric(match[1], 0),
+    statusText: String(match[2] || "").trim(),
+    homeScore: parseMarkdownNumeric(match[3], 0),
+  };
+}
+
 function parseSummerLeagueBoxScoreMarkdown(markdown, shareUrl) {
   const slugMatch = /\/game\/([a-z]{2,4})-vs-([a-z]{2,4})-\d+/i.exec(String(shareUrl || ""));
   const awayTricode = String(slugMatch?.[1] || "").toUpperCase();
@@ -247,24 +313,37 @@ function parseSummerLeagueBoxScoreMarkdown(markdown, shareUrl) {
   const homeHeadingMatch = /## ([^\n]+)\n\n\| PLAYER \| MIN \|[\s\S]*?\n## ([^\n]+)\n\n\| PLAYER \| MIN \|/m.exec(markdown);
   const awayHeading = awayHeadingMatch?.[1] || awayMeta.fullName || awayTricode;
   const homeHeading = homeHeadingMatch?.[2] || homeMeta.fullName || homeTricode;
-  const awayTeam = parseSummerBoxScoreTable(markdown, awayHeading, {
+  let awayTeam = parseSummerBoxScoreTable(markdown, awayHeading, {
     teamId: awayMeta.teamId,
     teamName: awayMeta.nickname || awayMeta.fullName?.split(" ").slice(-1)[0] || awayHeading,
     teamCity: awayMeta.city || awayMeta.fullName?.replace(/\s+[^ ]+$/, "") || "",
     teamTricode: awayTricode,
   });
-  const homeTeam = parseSummerBoxScoreTable(markdown, homeHeading, {
+  let homeTeam = parseSummerBoxScoreTable(markdown, homeHeading, {
     teamId: homeMeta.teamId,
     teamName: homeMeta.nickname || homeMeta.fullName?.split(" ").slice(-1)[0] || homeHeading,
     teamCity: homeMeta.city || homeMeta.fullName?.replace(/\s+[^ ]+$/, "") || "",
     teamTricode: homeTricode,
   });
 
-  const scoreMatch = new RegExp(
-    `${awayTricode}\\n\\n(\\d+)\\n\\n([^\\n]+)\\n\\n(\\d+)\\n\\n${homeTricode}`,
-    "i"
-  ).exec(markdown);
-  const statusText = String(scoreMatch?.[2] || "").trim();
+  if (!awayTeam.players.length || !homeTeam.players.length) {
+    const tableBlocks = extractSummerBoxScoreBlocks(markdown);
+    awayTeam = awayTeam.players.length ? awayTeam : parseSummerBoxScoreBlock(tableBlocks[0] || "", {
+      teamId: awayMeta.teamId,
+      teamName: awayMeta.nickname || awayMeta.fullName?.split(" ").slice(-1)[0] || awayHeading,
+      teamCity: awayMeta.city || awayMeta.fullName?.replace(/\s+[^ ]+$/, "") || "",
+      teamTricode: awayTricode,
+    });
+    homeTeam = homeTeam.players.length ? homeTeam : parseSummerBoxScoreBlock(tableBlocks[1] || "", {
+      teamId: homeMeta.teamId,
+      teamName: homeMeta.nickname || homeMeta.fullName?.split(" ").slice(-1)[0] || homeHeading,
+      teamCity: homeMeta.city || homeMeta.fullName?.replace(/\s+[^ ]+$/, "") || "",
+      teamTricode: homeTricode,
+    });
+  }
+
+  const scoreboard = parseSummerScoreboard(markdown, awayTricode, homeTricode);
+  const statusText = String(scoreboard?.statusText || "").trim();
   const dateMatch = /\n([A-Za-z]+,\s+[A-Za-z]+\s+\d{1,2}(?:st|nd|rd|th),\s+\d{4})\n/.exec(markdown);
   const arenaMatch = /\n([^\n]+,\s+[A-Za-z .'-]+,\s+[A-Z]{2})\n/.exec(markdown);
   const periodMatch = /^Q(\d+)/i.exec(statusText);
@@ -283,8 +362,8 @@ function parseSummerLeagueBoxScoreMarkdown(markdown, shareUrl) {
       arenaCity: arenaMatch?.[1]?.split(",")[1]?.trim() || "",
       arenaState: arenaMatch?.[1]?.split(",")[2]?.trim() || "",
     },
-    awayScore: parseMarkdownNumeric(scoreMatch?.[1], awayTeam.totals?.points || 0),
-    homeScore: parseMarkdownNumeric(scoreMatch?.[3], homeTeam.totals?.points || 0),
+    awayScore: safeNumber(scoreboard?.awayScore, awayTeam.totals?.points || 0),
+    homeScore: safeNumber(scoreboard?.homeScore, homeTeam.totals?.points || 0),
     awayTeam,
     homeTeam,
   };
@@ -880,19 +959,22 @@ async function fetchSummerGamesPage(dateStr) {
 
 async function fetchSummerLeagueGamesByDate(dateStr) {
   try {
-    const data = await fetchSummerGamesPage(dateStr);
-    const cards = data?.props?.pageProps?.gameCardFeed?.modules?.flatMap((module) => module?.cards || []) || [];
-    const games = cards
-      .map((card) => card?.cardData)
-      .filter((card) => card && SUMMER_LEAGUE_IDS.has(String(card.leagueId || "")))
-      .map(normalizeSummerScheduleCard);
+    const markdown = await requestText(`https://r.jina.ai/http://https://www.nba.com/games?date=${dateStr}`, "text/plain", {
+      preferDirect: true,
+      allowProxy: false,
+    });
+    const games = parseSummerLeagueGamesMarkdown(markdown, dateStr);
     if (games.length) return games;
   } catch {
-    // Fall through to the mirror parser below.
+    // Fall through to the HTML parser below.
   }
 
-  const markdown = await requestText(`https://r.jina.ai/http://https://www.nba.com/games?date=${dateStr}`, "text/plain");
-  return parseSummerLeagueGamesMarkdown(markdown, dateStr);
+  const data = await fetchSummerGamesPage(dateStr);
+  const cards = data?.props?.pageProps?.gameCardFeed?.modules?.flatMap((module) => module?.cards || []) || [];
+  return cards
+    .map((card) => card?.cardData)
+    .filter((card) => card && SUMMER_LEAGUE_IDS.has(String(card.leagueId || "")))
+    .map(normalizeSummerScheduleCard);
 }
 
 async function findSummerLeagueGameUrlById(gameId, dateStr = null) {
@@ -1182,8 +1264,14 @@ function normalizeSummerAction(action = {}) {
 async function fetchSummerLeagueGame(gameId, dateStr = null) {
   const shareUrl = await findSummerLeagueGameUrlById(gameId, dateStr);
   const [boxMarkdown, playByPlayMarkdown] = await Promise.all([
-    requestText(`https://r.jina.ai/http://${shareUrl}/box-score`, "text/plain"),
-    requestText(`https://r.jina.ai/http://${shareUrl}/play-by-play`, "text/plain"),
+    requestText(`https://r.jina.ai/http://${shareUrl}/box-score`, "text/plain", {
+      preferDirect: true,
+      allowProxy: false,
+    }),
+    requestText(`https://r.jina.ai/http://${shareUrl}/play-by-play`, "text/plain", {
+      preferDirect: true,
+      allowProxy: false,
+    }),
   ]);
   const parsedBox = parseSummerLeagueBoxScoreMarkdown(boxMarkdown, shareUrl);
   const playByPlayActions = parseSummerPlayByPlayMarkdown(
