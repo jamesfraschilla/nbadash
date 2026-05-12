@@ -30,8 +30,20 @@ function parseClockValue(clock) {
   return parseClock(value);
 }
 
-function periodLengthSeconds(period) {
-  return period <= 4 ? 12 * 60 : 5 * 60;
+function isSummerLeagueGameId(gameId) {
+  return /^1(?:3|4|5|6)\d{8}$/.test(String(gameId || "").trim());
+}
+
+function regulationPeriodLengthSeconds(gameId) {
+  return isSummerLeagueGameId(gameId) ? 10 * 60 : 12 * 60;
+}
+
+function periodLengthSeconds(period, gameId = null) {
+  return period <= 4 ? regulationPeriodLengthSeconds(gameId) : 5 * 60;
+}
+
+function normalizeStintClockSeconds(clock, period, gameId = null) {
+  return Math.min(parseClock(clock), periodLengthSeconds(period, gameId));
 }
 
 export function segmentPeriods(segment) {
@@ -123,6 +135,7 @@ function isPersonalFoul(action) {
 }
 
 export function aggregateSegmentStats({
+  gameId = null,
   actions,
   segment,
   minutesData,
@@ -143,7 +156,10 @@ export function aggregateSegmentStats({
       return (
         sum +
         stints.reduce(
-          (stintSum, stint) => stintSum + (parseClock(stint.startClock) - parseClock(stint.endClock)),
+          (stintSum, stint) => stintSum + (
+            normalizeStintClockSeconds(stint.startClock, period.period, gameId)
+            - normalizeStintClockSeconds(stint.endClock, period.period, gameId)
+          ),
           0
         )
       );
@@ -493,7 +509,10 @@ export function aggregateSegmentStats({
       const stints = period.stints || [];
       if (!stints.length) return;
       const firstStint = [...stints].sort(
-        (a, b) => parseClock(b.startClock) - parseClock(a.startClock)
+        (a, b) => (
+          normalizeStintClockSeconds(b.startClock, period.period, gameId)
+          - normalizeStintClockSeconds(a.startClock, period.period, gameId)
+        )
       )[0];
       if (!firstStint) return;
       startersByPeriod.set(period.period, {
@@ -531,7 +550,7 @@ export function aggregateSegmentStats({
 
       const homeLineup = new Set(starters.home.map((player) => player.personId));
       const awayLineup = new Set(starters.away.map((player) => player.personId));
-      let currentStartSec = periodLengthSeconds(period);
+      let currentStartSec = periodLengthSeconds(period, gameId);
       let stintPointsHome = 0;
       let stintPointsAway = 0;
       let stintPossHome = 0;

@@ -111,6 +111,10 @@ function isSummerLeagueGameId(gameId) {
   return /^1(?:3|4|5|6)\d{8}$/.test(String(gameId || "").trim());
 }
 
+export function isSummerLeagueGame(gameId) {
+  return isSummerLeagueGameId(gameId);
+}
+
 function safeNumber(value, fallback = 0) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : fallback;
@@ -1297,6 +1301,7 @@ async function fetchSummerLeagueGame(gameId, dateStr = null) {
   );
   const basePlayers = [...parsedBox.awayTeam.players, ...parsedBox.homeTeam.players];
   const aggregated = aggregateSegmentStats({
+    gameId,
     actions: playByPlayActions,
     segment: "all",
     minutesData: null,
@@ -1404,6 +1409,16 @@ export async function fetchGamesByDate(dateStr) {
 
 export async function fetchGame(gameId, segment = null, options = {}) {
   if (isSummerLeagueGameId(gameId)) {
+    const segmentParam = segment ? `?segment=${segment}` : "";
+    const directUrl = `${API_BASE}/games/${gameId}${segmentParam}`;
+    try {
+      const directGame = await requestJson(directUrl);
+      if (directGame?.boxScore && directGame?.teamStats && directGame?.playByPlayActions?.length) {
+        return directGame;
+      }
+    } catch {
+      // Fall back to the Summer League markdown parser when the direct API payload is unavailable.
+    }
     return fetchSummerLeagueGame(gameId, options?.dateStr || null);
   }
   const segmentParam = segment ? `?segment=${segment}` : "";

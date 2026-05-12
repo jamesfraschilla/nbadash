@@ -9,6 +9,7 @@ import {
   fetchGame,
   fetchMinutes,
   inferLeagueFromTeamId,
+  isSummerLeagueGame,
   teamLogoUrl,
 } from "../api.js";
 import { useAuth } from "../auth/useAuth.js";
@@ -1074,6 +1075,7 @@ export default function Game({ variant = "full" }) {
 
   const segmentStats = homeTeam?.teamId && awayTeam?.teamId
     ? aggregateSegmentStats({
+      gameId,
       actions: game?.playByPlayActions || [],
       segment,
       minutesData,
@@ -1953,11 +1955,14 @@ export default function Game({ variant = "full" }) {
     return (minutes * 60) + seconds;
   };
 
+  const regulationPeriodSeconds = isSummerLeagueGame(gameId) ? 10 * 60 : 12 * 60;
+  const periodLength = (period) => (period <= 4 ? regulationPeriodSeconds : 5 * 60);
+  const normalizeStintClock = (clock, period) => Math.min(parseClock(clock), periodLength(period));
+
   const estimateElapsedSegmentSeconds = () => {
     if (!isLive || !game?.period || !game?.gameClock) return null;
     const predicate = segmentPeriods(segment);
     const currentPeriod = Number(game.period) || 1;
-    const periodLength = (period) => (period <= 4 ? 12 * 60 : 5 * 60);
     const remaining = parseIsoClock(game.gameClock);
     const elapsedCurrent = Math.max(0, periodLength(currentPeriod) - remaining);
     let total = 0;
@@ -1971,12 +1976,12 @@ export default function Game({ variant = "full" }) {
   const estimateElapsedAllSeconds = () => {
     if (!game?.period || !game?.gameClock) return null;
     const period = Number(game.period) || 1;
-    const currentLength = period <= 4 ? 12 * 60 : 5 * 60;
+    const currentLength = periodLength(period);
     const remaining = parseIsoClock(game.gameClock);
     const elapsedCurrent = Math.max(0, currentLength - remaining);
     let completed = 0;
     for (let p = 1; p < period; p += 1) {
-      completed += p <= 4 ? 12 * 60 : 5 * 60;
+      completed += periodLength(p);
     }
     return completed + elapsedCurrent;
   };
@@ -1989,21 +1994,27 @@ export default function Game({ variant = "full" }) {
       const predicate = segmentPeriods(segment);
       const total = minutesData.periods
         .filter((p) => predicate(p.period))
-        .flatMap((p) => p.stints || [])
-        .reduce((sum, stint) => sum + (parseClock(stint.startClock) - parseClock(stint.endClock)), 0);
+        .flatMap((p) => (p.stints || []).map((stint) => ({ ...stint, __period: p.period })))
+        .reduce(
+          (sum, stint) => sum + (
+            normalizeStintClock(stint.startClock, stint.__period)
+            - normalizeStintClock(stint.endClock, stint.__period)
+          ),
+          0
+        );
       if (total > 0) return total;
     }
     const defaultSeconds = {
-      "q1": 12 * 60,
-      "q2": 12 * 60,
-      "q3": 12 * 60,
-      "q4": 12 * 60,
-      "q1-q3": 36 * 60,
-      "first-half": 24 * 60,
-      "second-half": 24 * 60,
-      "all": 48 * 60,
+      "q1": regulationPeriodSeconds,
+      "q2": regulationPeriodSeconds,
+      "q3": regulationPeriodSeconds,
+      "q4": regulationPeriodSeconds,
+      "q1-q3": regulationPeriodSeconds * 3,
+      "first-half": regulationPeriodSeconds * 2,
+      "second-half": regulationPeriodSeconds * 2,
+      "all": regulationPeriodSeconds * 4,
     };
-    return defaultSeconds[segment] || 48 * 60;
+    return defaultSeconds[segment] || regulationPeriodSeconds * 4;
   })();
 
   const killStats = segmentSeconds === 0
