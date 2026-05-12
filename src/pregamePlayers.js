@@ -6,6 +6,11 @@ const PLAYERS_STORAGE_KEY_PREFIX = "pregame:players:v2:";
 const SHARED_ROSTER_TABLE = "rotations_shared_state";
 const SHARED_ROSTER_SCOPE_TYPE = "shared_roster";
 
+function isSummerLeagueGame(game) {
+  const gameId = String(game?.gameId || "").trim();
+  return /^1(?:3|4|5|6)\d{8}$/.test(gameId);
+}
+
 export function isWashingtonTeam(team) {
   const tricode = String(team?.teamTricode || "").toUpperCase();
   const name = `${team?.teamCity || ""} ${team?.teamName || ""}`.toLowerCase();
@@ -19,12 +24,16 @@ export function isCapitalCityTeam(team) {
 }
 
 export function getPregameTeamScope(game) {
+  if (isSummerLeagueGame(game) && (isWashingtonTeam(game?.homeTeam) || isWashingtonTeam(game?.awayTeam))) {
+    return "washington_summer";
+  }
   if (isWashingtonTeam(game?.homeTeam) || isWashingtonTeam(game?.awayTeam)) return "washington";
   if (isCapitalCityTeam(game?.homeTeam) || isCapitalCityTeam(game?.awayTeam)) return "capital_city";
   return null;
 }
 
-export function getPregameTeamScopeForTeam(team) {
+export function getPregameTeamScopeForTeam(team, game = null) {
+  if (isSummerLeagueGame(game) && isWashingtonTeam(team)) return "washington_summer";
   if (isWashingtonTeam(team)) return "washington";
   if (isCapitalCityTeam(team)) return "capital_city";
   return null;

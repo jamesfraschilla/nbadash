@@ -518,10 +518,10 @@ const getSegmentSnapshotBounds = (segment, snapshots, currentSnapshot, currentPe
   }
 };
 
-const foulsClass = (fouls, stylesRef) => {
+const foulsClass = (fouls, stylesRef, warningCount = 4, limitCount = 5) => {
   const safeFouls = fouls || 0;
-  if (safeFouls <= 3) return stylesRef.pfBlack;
-  if (safeFouls === 4) return stylesRef.pfYellow;
+  if (safeFouls < warningCount) return stylesRef.pfBlack;
+  if (safeFouls < limitCount) return stylesRef.pfYellow;
   return stylesRef.pfRed;
 };
 
@@ -799,8 +799,8 @@ export default function Game({ variant = "full" }) {
     refetchIntervalInBackground: true,
   });
 
-  const awayTeamScope = getPregameTeamScopeForTeam(game?.awayTeam);
-  const homeTeamScope = getPregameTeamScopeForTeam(game?.homeTeam);
+  const awayTeamScope = getPregameTeamScopeForTeam(game?.awayTeam, game);
+  const homeTeamScope = getPregameTeamScopeForTeam(game?.homeTeam, game);
   const awayLeague = inferLeagueFromTeamId(game?.awayTeam?.teamId);
   const homeLeague = inferLeagueFromTeamId(game?.homeTeam?.teamId);
 
@@ -2032,7 +2032,10 @@ export default function Game({ variant = "full" }) {
   const displayPaceValue = isPregame ? 0 : paceValue;
 
   const currentPeriod = game?.period || 1;
-  const foulLimit = 5;
+  const isSummerLeagueMatch = isSummerLeagueGame(gameId);
+  const foulLimit = isSummerLeagueMatch ? 10 : 5;
+  const foulWarningCount = foulLimit - 1;
+  const currentHalf = currentPeriod <= 2 ? 1 : 2;
   const isTeamFoulAction = (action) => {
     if (action.actionType !== "foul") return false;
     const subType = String(action.subType || "").toLowerCase();
@@ -2049,7 +2052,7 @@ export default function Game({ variant = "full" }) {
     let lastTwoCount = 0;
     let inPenalty = false;
     let sawMarker = false;
-    const penaltyThreshold = 5;
+    const penaltyThreshold = foulLimit;
     const lastTwoSeconds = 2 * 60;
     (game?.playByPlayActions || []).forEach((action) => {
       if (action.period !== currentPeriod) return;
@@ -2068,7 +2071,7 @@ export default function Game({ variant = "full" }) {
     if (!inPenalty && count >= penaltyThreshold) inPenalty = true;
     if (!inPenalty && lastTwoCount >= 2) inPenalty = true;
     let displayCount = count;
-    if (lastTwoCount >= 1 && displayCount < 4) displayCount = 4;
+    if (lastTwoCount >= 1 && displayCount < foulWarningCount) displayCount = foulWarningCount;
     if (lastTwoCount >= 2) displayCount = foulLimit;
     if (displayCount > foulLimit) displayCount = foulLimit;
     return { count: displayCount, inPenalty };
@@ -2084,6 +2087,7 @@ export default function Game({ variant = "full" }) {
     foulLimit
   );
   const mandatoryTimeoutTeam = (() => {
+    if (isSummerLeagueMatch) return null;
     if (!homeTeam?.teamId || !awayTeam?.teamId) return null;
     const actions = (game?.playByPlayActions || [])
       .filter((action) => action.actionType === "timeout" && action.period === currentPeriod)
@@ -2097,11 +2101,11 @@ export default function Game({ variant = "full" }) {
     return "home";
   })();
   const lockIcon = isLocked ? "🔒" : "🔓";
-  const renderTimeouts = (remaining, showMandatory, showReset, resetUsed) => (
+  const renderTimeouts = (remaining, showMandatory, showReset, resetUsed, totalTimeouts = 7) => (
     <div className={styles.metaBlock}>
       <div className={styles.metaLabel}>Timeouts</div>
       <div className={styles.timeoutsNumbers}>
-        {Array.from({ length: 7 }, (_, index) => {
+        {Array.from({ length: totalTimeouts }, (_, index) => {
           const value = index + 1;
           const inactive = remaining != null && value > remaining;
           return (
@@ -2127,11 +2131,25 @@ export default function Game({ variant = "full" }) {
       <div className={styles.metaSpacer} />
     </div>
   );
-  const awayTimeoutsRemaining = isPregame ? 7 : timeouts?.away;
-  const homeTimeoutsRemaining = isPregame ? 7 : timeouts?.home;
+  const summerLeagueTimeoutsRemaining = (teamId) => {
+    if (!teamId) return 2;
+    const timeoutsUsed = (game?.playByPlayActions || []).filter((action) => (
+      action.actionType === "timeout"
+      && action.teamId === teamId
+      && action.subType !== "officials"
+      && ((currentHalf === 1 && action.period <= 2) || (currentHalf === 2 && action.period >= 3 && action.period <= 4))
+    )).length;
+    return Math.max(0, 2 - timeoutsUsed);
+  };
+  const awayTimeoutsRemaining = isSummerLeagueMatch
+    ? (isPregame ? 2 : summerLeagueTimeoutsRemaining(awayTeamId))
+    : (isPregame ? 7 : timeouts?.away);
+  const homeTimeoutsRemaining = isSummerLeagueMatch
+    ? (isPregame ? 2 : summerLeagueTimeoutsRemaining(homeTeamId))
+    : (isPregame ? 7 : timeouts?.home);
   const isGLeagueGame = awayLeague === "gleague" || homeLeague === "gleague";
-  const awayResetUsed = hasUsedResetTimeout(game?.playByPlayActions || [], awayTeamId, game?.period);
-  const homeResetUsed = hasUsedResetTimeout(game?.playByPlayActions || [], homeTeamId, game?.period);
+  const awayResetUsed = isSummerLeagueMatch ? false : hasUsedResetTimeout(game?.playByPlayActions || [], awayTeamId, game?.period);
+  const homeResetUsed = isSummerLeagueMatch ? false : hasUsedResetTimeout(game?.playByPlayActions || [], homeTeamId, game?.period);
   const strategyResult = useMemo(() => {
     try {
       const nextState = buildLateGameStrategyState({
@@ -2436,7 +2454,7 @@ export default function Game({ variant = "full" }) {
     <div className={styles.metaBlock}>
       <div className={styles.metaLabel}>Fouls</div>
       <div className={styles.metaValue}>
-        <span className={foulsClass(count, styles)}>{count}</span>
+        <span className={foulsClass(count, styles, foulWarningCount, foulLimit)}>{count}</span>
       </div>
     </div>
   );
@@ -2595,8 +2613,9 @@ export default function Game({ variant = "full" }) {
                 {renderTimeouts(
                   awayTimeoutsRemaining,
                   mandatoryTimeoutTeam === "away",
-                  isGLeagueGame,
-                  awayResetUsed
+                  isGLeagueGame && !isSummerLeagueMatch,
+                  awayResetUsed,
+                  isSummerLeagueMatch ? 2 : 7
                 )}
               </div>
           )}
@@ -2686,8 +2705,9 @@ export default function Game({ variant = "full" }) {
                 {renderTimeouts(
                   homeTimeoutsRemaining,
                   mandatoryTimeoutTeam === "home",
-                  isGLeagueGame,
-                  homeResetUsed
+                  isGLeagueGame && !isSummerLeagueMatch,
+                  homeResetUsed,
+                  isSummerLeagueMatch ? 2 : 7
                 )}
               </div>
           )}
