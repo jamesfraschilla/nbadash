@@ -6,7 +6,7 @@ import {
   buildCanvasAvatarPlacement,
   buildRefereeHeadshotTransform,
   getRefereeHeadshotOverride,
-  normalizeNameKey,
+  getRefereeHeadshotUrl,
 } from "../refereeHeadshots.js";
 import styles from "./OfficialsExportPanel.module.css";
 
@@ -35,23 +35,6 @@ const EXPORT_SPECS = {
     boxHeight: 1300,
   },
 };
-
-const IMAGE_MODULES = import.meta.glob(
-  [
-    "../assets/referees/*.jpg",
-    "../assets/referees/*.jpeg",
-    "../assets/referees/*.JPG",
-    "../assets/referees/*.JPEG",
-  ],
-  { eager: true, import: "default" }
-);
-
-const refereeHeadshotMap = Object.entries(IMAGE_MODULES).reduce((map, [path, url]) => {
-  const fileName = path.split("/").pop() || "";
-  const baseName = fileName.replace(/\.(jpe?g)$/i, "");
-  map.set(normalizeNameKey(baseName), url);
-  return map;
-}, new Map());
 
 const loadedImageCache = new Map();
 let exportFontsPromise = null;
@@ -122,7 +105,7 @@ function normalizeOfficial(official, index) {
     ).trim(),
     roleKey: sortMeta.role,
     isAlternate: sortMeta.isAlternate,
-    headshotUrl: refereeHeadshotMap.get(normalizeNameKey(fullName)) || null,
+    headshotUrl: getRefereeHeadshotUrl(fullName),
   };
 }
 

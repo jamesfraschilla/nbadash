@@ -45,6 +45,10 @@
   background: var(--panel);
 }
 
+.hiddenInput {
+  display: none;
+}
+
 .search {
   min-width: min(320px, 100%);
   min-height: 42px;
@@ -89,6 +93,11 @@
   font-size: 0.9rem;
 }
 
+.uploadMessage {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 .workspace {
   display: grid;
   grid-template-columns: 340px minmax(0, 1fr);
@@ -120,6 +129,12 @@
 .selectedPreview {
   display: grid;
   gap: 12px;
+}
+
+.previewLabel {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--muted);
 }
 
 .selectedCropFrame,
@@ -163,6 +178,20 @@
   gap: 12px;
 }
 
+.assignmentField {
+  display: grid;
+  gap: 8px;
+}
+
+.assignmentField input {
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  padding: 0 10px;
+}
+
 .control {
   display: grid;
   grid-template-columns: 72px minmax(0, 1fr) 72px;
@@ -183,7 +212,58 @@
 
 .panelActions {
   display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   justify-content: flex-end;
+}
+
+.groupPanel {
+  display: grid;
+  gap: 10px;
+}
+
+.groupTitle {
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.groupList {
+  display: grid;
+  gap: 8px;
+}
+
+.groupItem {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.groupItemSelected {
+  border-color: var(--highlight-text);
+}
+
+.groupThumb {
+  width: 54px;
+  height: 54px;
+  border-radius: 10px;
+  object-fit: cover;
+  object-position: center top;
+  background: #e8e8e8;
+}
+
+.groupMeta {
+  display: grid;
+  gap: 3px;
+  font-size: 0.78rem;
+  color: var(--muted);
 }
 
 .grid {

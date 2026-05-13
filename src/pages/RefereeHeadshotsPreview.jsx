@@ -1,10 +1,19 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  buildRefereeHeadshotGroups,
+  buildRefereeHeadshotImageItems,
   buildRefereeHeadshotTransform,
+  choosePreferredRefereeHeadshot,
   DEFAULT_REFEREE_HEADSHOT_OVERRIDES,
+  DEFAULT_REFEREE_HEADSHOT_PREFERENCES,
+  getAssignedRefereeName,
+  getAssignedRefereeNameKey,
   normalizeNameKey,
   REFEREE_HEADSHOT_OVERRIDE_STORAGE_KEY,
+  REFEREE_HEADSHOT_PREFERENCES_STORAGE_KEY,
+  sanitizeRefereeHeadshotPreferences,
   sanitizeRefereeHeadshotOverrides,
+  serializeRefereeHeadshotPreferences,
   serializeRefereeHeadshotOverrides,
 } from "../refereeHeadshots.js";
 import styles from "./RefereeHeadshotsPreview.module.css";
@@ -14,20 +23,6 @@ const DUPLICATE_FILE_NAMES = new Set([
   "Marcy Williams.jpg",
   "Tyler Mirkovich.jpg",
 ]);
-
-const IMAGE_MODULES = import.meta.glob(
-  [
-    "../assets/referees/*.jpg",
-    "../assets/referees/*.jpeg",
-    "../assets/referees/*.JPG",
-    "../assets/referees/*.JPEG",
-    "../assets/referees_review_duplicates/*.jpg",
-    "../assets/referees_review_duplicates/*.jpeg",
-    "../assets/referees_review_duplicates/*.JPG",
-    "../assets/referees_review_duplicates/*.JPEG",
-  ],
-  { eager: true, import: "default" }
-);
 
 function readInitialOverrides() {
   if (typeof window === "undefined") return DEFAULT_REFEREE_HEADSHOT_OVERRIDES;
@@ -43,27 +38,15 @@ function readInitialOverrides() {
   }
 }
 
-function buildImageItems() {
-  return Object.entries(IMAGE_MODULES)
-    .map(([path, url]) => {
-      const fileName = path.split("/").pop() || "";
-      const displayName = fileName.replace(/\.(jpe?g)$/i, "");
-      const isDuplicate = path.includes("/referees_review_duplicates/");
-      return {
-        id: `${isDuplicate ? "duplicate" : "primary"}:${fileName}`,
-        fullName: displayName,
-        fileName,
-        nameKey: normalizeNameKey(displayName),
-        url,
-        source: isDuplicate ? "duplicate review" : "production",
-        isDuplicate,
-        isIncomingWnba: DUPLICATE_FILE_NAMES.has(fileName) || !path.includes("/referees_review_duplicates/"),
-      };
-    })
-    .sort((a, b) => {
-      if (a.isDuplicate !== b.isDuplicate) return a.isDuplicate ? 1 : -1;
-      return a.fullName.localeCompare(b.fullName);
-    });
+function readInitialPreferences() {
+  if (typeof window === "undefined") return DEFAULT_REFEREE_HEADSHOT_PREFERENCES;
+  try {
+    const raw = window.localStorage.getItem(REFEREE_HEADSHOT_PREFERENCES_STORAGE_KEY);
+    if (!raw) return DEFAULT_REFEREE_HEADSHOT_PREFERENCES;
+    return sanitizeRefereeHeadshotPreferences(JSON.parse(raw));
+  } catch {
+    return DEFAULT_REFEREE_HEADSHOT_PREFERENCES;
+  }
 }
 
 function buildOverrideDraft(overrides, key) {
@@ -86,30 +69,72 @@ function parseNumber(value, fallback) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-export default function RefereeHeadshotsPreview() {
+async function loadImageFileAsDataUrl(file) {
+  const rawDataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Unable to read image file."));
+    reader.readAsDataURL(file);
+  });
+
+  const image = await new Promise((resolve, reject) => {
+    const nextImage = new Image();
+    nextImage.onload = () => resolve(nextImage);
+    nextImage.onerror = () => reject(new Error("Unable to decode image file."));
+    nextImage.src = rawDataUrl;
+  });
+
+  const maxEdge = 1400;
+  const sourceWidth = image.naturalWidth || image.width;
+  const sourceHeight = image.naturalHeight || image.height;
+  const scale = Math.min(1, maxEdge / Math.max(sourceWidth, sourceHeight));
+  const width = Math.max(1, Math.round(sourceWidth * scale));
+  const height = Math.max(1, Math.round(sourceHeight * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(image, 0, 0, width, height);
+  return canvas.toDataURL("image/jpeg", 0.9);
+}
+
+export default function RefereeHeadshotsPreview({ embedded = false }) {
   const [overrides, setOverrides] = useState(readInitialOverrides);
+  const [preferences, setPreferences] = useState(readInitialPreferences);
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState("");
+  const [assignmentDraft, setAssignmentDraft] = useState("");
   const [showOnlyEdited, setShowOnlyEdited] = useState(false);
   const [showOnlyDuplicates, setShowOnlyDuplicates] = useState(false);
+  const [showHidden, setShowHidden] = useState(false);
   const [copyMessage, setCopyMessage] = useState("");
+  const [uploadMessage, setUploadMessage] = useState("");
+  const fileInputRef = useRef(null);
 
-  const allItems = useMemo(buildImageItems, []);
+  const allItems = useMemo(buildRefereeHeadshotImageItems, []);
 
   useEffect(() => {
     const serialized = JSON.stringify(sanitizeRefereeHeadshotOverrides(overrides));
     window.localStorage.setItem(REFEREE_HEADSHOT_OVERRIDE_STORAGE_KEY, serialized);
   }, [overrides]);
 
+  useEffect(() => {
+    const serialized = JSON.stringify(sanitizeRefereeHeadshotPreferences(preferences));
+    window.localStorage.setItem(REFEREE_HEADSHOT_PREFERENCES_STORAGE_KEY, serialized);
+  }, [preferences]);
+
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase();
     return allItems.filter((item) => {
       if (showOnlyDuplicates && !item.isDuplicate) return false;
       if (showOnlyEdited && !overrides[item.nameKey]) return false;
+      if (!showHidden && preferences.hiddenImageIds.includes(item.id)) return false;
       if (!query) return true;
       return item.fullName.toLowerCase().includes(query) || item.fileName.toLowerCase().includes(query);
     });
-  }, [allItems, overrides, search, showOnlyDuplicates, showOnlyEdited]);
+  }, [allItems, overrides, preferences.hiddenImageIds, search, showHidden, showOnlyDuplicates, showOnlyEdited]);
 
   useEffect(() => {
     if (!filteredItems.length) {
@@ -125,6 +150,21 @@ export default function RefereeHeadshotsPreview() {
   const selectedKey = selectedItem?.nameKey || "";
   const selectedDraft = buildOverrideDraft(overrides, selectedKey);
   const editedCount = Object.keys(sanitizeRefereeHeadshotOverrides(overrides)).length;
+  const selectedAssignedName = selectedItem ? getAssignedRefereeName(selectedItem, preferences) : "";
+  const selectedAssignedNameKey = selectedItem ? getAssignedRefereeNameKey(selectedItem, preferences) : "";
+  const groups = useMemo(() => buildRefereeHeadshotGroups(allItems, preferences), [allItems, preferences]);
+  const selectedGroup = selectedAssignedNameKey ? groups.get(selectedAssignedNameKey) || null : null;
+  const selectedPreferredItem = selectedGroup
+    ? choosePreferredRefereeHeadshot(selectedGroup.items, selectedAssignedNameKey, preferences)
+    : null;
+  const selectedIsHidden = selectedItem ? preferences.hiddenImageIds.includes(selectedItem.id) : false;
+  const selectedUploadedImage = selectedAssignedNameKey
+    ? preferences.uploadedImagesByNameKey?.[selectedAssignedNameKey] || null
+    : null;
+
+  useEffect(() => {
+    setAssignmentDraft(selectedAssignedName);
+  }, [selectedAssignedName, selectedId]);
 
   const updateSelectedOverride = (field, rawValue) => {
     if (!selectedKey) return;
@@ -162,11 +202,64 @@ export default function RefereeHeadshotsPreview() {
     setOverrides(DEFAULT_REFEREE_HEADSHOT_OVERRIDES);
   };
 
-  const handleCopy = async () => {
+  const updateAssignment = () => {
+    if (!selectedItem) return;
+    const nextAlias = String(assignmentDraft || "").trim();
+    setPreferences((current) => {
+      const next = {
+        ...current,
+        aliasesByImageId: { ...(current.aliasesByImageId || {}) },
+      };
+      if (nextAlias && normalizeNameKey(nextAlias) !== selectedItem.nameKey) {
+        next.aliasesByImageId[selectedItem.id] = nextAlias;
+      } else {
+        delete next.aliasesByImageId[selectedItem.id];
+      }
+      return sanitizeRefereeHeadshotPreferences(next);
+    });
+  };
+
+  const toggleHidden = () => {
+    if (!selectedItem) return;
+    setPreferences((current) => {
+      const hiddenSet = new Set(current.hiddenImageIds || []);
+      if (hiddenSet.has(selectedItem.id)) hiddenSet.delete(selectedItem.id);
+      else hiddenSet.add(selectedItem.id);
+      return sanitizeRefereeHeadshotPreferences({
+        ...current,
+        hiddenImageIds: Array.from(hiddenSet),
+      });
+    });
+  };
+
+  const chooseSelectedPhoto = () => {
+    if (!selectedItem) return;
+    const nameKey = getAssignedRefereeNameKey(selectedItem, preferences);
+    if (!nameKey) return;
+    setPreferences((current) => sanitizeRefereeHeadshotPreferences({
+      ...current,
+      preferredImageIdsByNameKey: {
+        ...(current.preferredImageIdsByNameKey || {}),
+        [nameKey]: selectedItem.id,
+      },
+    }));
+  };
+
+  const handleCopyOverrides = async () => {
     const payload = serializeRefereeHeadshotOverrides(overrides);
     try {
       await navigator.clipboard.writeText(payload);
       setCopyMessage("Copied overrides JSON.");
+    } catch {
+      setCopyMessage("Clipboard copy failed.");
+    }
+  };
+
+  const handleCopyPreferences = async () => {
+    const payload = serializeRefereeHeadshotPreferences(preferences);
+    try {
+      await navigator.clipboard.writeText(payload);
+      setCopyMessage("Copied image preferences JSON.");
     } catch {
       setCopyMessage("Clipboard copy failed.");
     }
@@ -178,24 +271,79 @@ export default function RefereeHeadshotsPreview() {
     return () => window.clearTimeout(timeoutId);
   }, [copyMessage]);
 
+  useEffect(() => {
+    if (!uploadMessage) return undefined;
+    const timeoutId = window.setTimeout(() => setUploadMessage(""), 2200);
+    return () => window.clearTimeout(timeoutId);
+  }, [uploadMessage]);
+
+  const handleUploadButtonClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleUploadFile = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file || !selectedAssignedNameKey) return;
+    try {
+      const dataUrl = await loadImageFileAsDataUrl(file);
+      setPreferences((current) => sanitizeRefereeHeadshotPreferences({
+        ...current,
+        uploadedImagesByNameKey: {
+          ...(current.uploadedImagesByNameKey || {}),
+          [selectedAssignedNameKey]: {
+            fileName: file.name,
+            dataUrl,
+          },
+        },
+      }));
+      setUploadMessage("Replacement image saved.");
+    } catch (error) {
+      setUploadMessage(error?.message || "Upload failed.");
+    } finally {
+      event.target.value = "";
+    }
+  };
+
+  const removeUploadedReplacement = () => {
+    if (!selectedAssignedNameKey) return;
+    setPreferences((current) => {
+      const nextUploads = { ...(current.uploadedImagesByNameKey || {}) };
+      delete nextUploads[selectedAssignedNameKey];
+      return sanitizeRefereeHeadshotPreferences({
+        ...current,
+        uploadedImagesByNameKey: nextUploads,
+      });
+    });
+    setUploadMessage("Uploaded replacement removed.");
+  };
+
   return (
     <div className={styles.page}>
-      <div className={styles.hero}>
-        <div>
-          <h1 className={styles.title}>Referee Headshot Crop Tool</h1>
-          <p className={styles.subtitle}>
-            This page includes all current referee assets plus duplicate review files.
-            Adjustments persist locally and use the same transform path as the officials panel.
-          </p>
+      {!embedded ? (
+        <div className={styles.hero}>
+          <div>
+            <h1 className={styles.title}>Referee Headshot Crop Tool</h1>
+            <p className={styles.subtitle}>
+              This page includes all current referee assets plus duplicate review files.
+              Adjustments persist locally and use the same transform path as the officials panel.
+            </p>
+          </div>
+          <div className={styles.summary}>
+            <span>{allItems.length} total headshots</span>
+            <span>{editedCount} edited override entries</span>
+            <span>{DUPLICATE_FILE_NAMES.size} duplicate review names</span>
+          </div>
         </div>
-        <div className={styles.summary}>
-          <span>{allItems.length} total headshots</span>
-          <span>{editedCount} edited override entries</span>
-          <span>{DUPLICATE_FILE_NAMES.size} duplicate review names</span>
-        </div>
-      </div>
+      ) : null}
 
       <div className={styles.toolbar}>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className={styles.hiddenInput}
+          onChange={handleUploadFile}
+        />
         <input
           className={styles.search}
           type="search"
@@ -219,8 +367,17 @@ export default function RefereeHeadshotsPreview() {
           />
           <span>Duplicate review only</span>
         </label>
+        <label className={styles.toggle}>
+          <input
+            type="checkbox"
+            checked={showHidden}
+            onChange={(event) => setShowHidden(event.target.checked)}
+          />
+          <span>Show hidden</span>
+        </label>
         <button type="button" className={styles.secondaryButton} onClick={resetAll}>Reset All</button>
-        <button type="button" className={styles.primaryButton} onClick={handleCopy}>Copy Overrides JSON</button>
+        <button type="button" className={styles.secondaryButton} onClick={handleCopyPreferences}>Copy Image Preferences</button>
+        <button type="button" className={styles.primaryButton} onClick={handleCopyOverrides}>Copy Overrides JSON</button>
         {copyMessage ? <span className={styles.copyMessage}>{copyMessage}</span> : null}
       </div>
 
@@ -233,6 +390,8 @@ export default function RefereeHeadshotsPreview() {
                 <div className={styles.badges}>
                   <span className={styles.badge}>{selectedItem.source}</span>
                   {DUPLICATE_FILE_NAMES.has(selectedItem.fileName) ? <span className={styles.badgeWarn}>duplicate name</span> : null}
+                  {selectedPreferredItem?.id === selectedItem.id ? <span className={styles.badgeEdited}>chosen</span> : null}
+                  {selectedIsHidden ? <span className={styles.badgeWarn}>hidden</span> : null}
                 </div>
               </div>
 
@@ -245,12 +404,37 @@ export default function RefereeHeadshotsPreview() {
                     style={{ transform: buildRefereeHeadshotTransform(selectedDraft) }}
                   />
                 </div>
+                <div className={styles.previewLabel}>Cropped Preview: {selectedAssignedName || selectedItem.fullName}</div>
                 <div className={styles.selectedRawFrame}>
                   <img src={selectedItem.url} alt={`${selectedItem.fullName} raw`} className={styles.rawImage} />
                 </div>
+                <div className={styles.previewLabel}>Source File: {selectedItem.fileName}</div>
+                {selectedUploadedImage ? (
+                  <>
+                    <div className={styles.selectedRawFrame}>
+                      <img
+                        src={selectedUploadedImage.dataUrl}
+                        alt={`${selectedAssignedName || selectedItem.fullName} uploaded replacement`}
+                        className={styles.rawImage}
+                      />
+                    </div>
+                    <div className={styles.previewLabel}>Uploaded Replacement: {selectedUploadedImage.fileName}</div>
+                  </>
+                ) : null}
               </div>
 
               <div className={styles.controlList}>
+                <label className={styles.assignmentField}>
+                  <span>Referee group</span>
+                  <input
+                    type="text"
+                    value={assignmentDraft}
+                    onChange={(event) => setAssignmentDraft(event.target.value)}
+                    onBlur={updateAssignment}
+                    placeholder="Assign to referee name"
+                  />
+                </label>
+
                 <label className={styles.control}>
                   <span>Scale</span>
                   <input
@@ -353,8 +537,53 @@ export default function RefereeHeadshotsPreview() {
               </div>
 
               <div className={styles.panelActions}>
+                <button type="button" className={styles.secondaryButton} onClick={handleUploadButtonClick}>
+                  Upload Replacement
+                </button>
+                {selectedUploadedImage ? (
+                  <button type="button" className={styles.secondaryButton} onClick={removeUploadedReplacement}>
+                    Remove Upload
+                  </button>
+                ) : null}
+                <button type="button" className={styles.secondaryButton} onClick={chooseSelectedPhoto}>
+                  Use This Photo
+                </button>
+                <button type="button" className={styles.secondaryButton} onClick={toggleHidden}>
+                  {selectedIsHidden ? "Restore Photo" : "Hide Photo"}
+                </button>
                 <button type="button" className={styles.secondaryButton} onClick={resetSelected}>Reset Selected</button>
               </div>
+              {uploadMessage ? <div className={styles.uploadMessage}>{uploadMessage}</div> : null}
+
+              {selectedGroup ? (
+                <div className={styles.groupPanel}>
+                  <div className={styles.groupTitle}>
+                    Matched Photos for {selectedGroup.displayName} ({selectedGroup.items.length})
+                  </div>
+                  <div className={styles.groupList}>
+                    {selectedGroup.items.map((item) => {
+                      const isPreferred = selectedPreferredItem?.id === item.id;
+                      const isHidden = preferences.hiddenImageIds.includes(item.id);
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          className={`${styles.groupItem} ${item.id === selectedItem.id ? styles.groupItemSelected : ""}`.trim()}
+                          onClick={() => setSelectedId(item.id)}
+                        >
+                          <img src={item.url} alt={item.fullName} className={styles.groupThumb} />
+                          <div className={styles.groupMeta}>
+                            <span>{item.fileName}</span>
+                            <span>{item.source}</span>
+                            {isPreferred ? <span>chosen</span> : null}
+                            {isHidden ? <span>hidden</span> : null}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
             </>
           ) : (
             <div className={styles.emptyPanel}>No headshots match the current filter.</div>
@@ -385,6 +614,13 @@ export default function RefereeHeadshotsPreview() {
                     <span className={styles.badge}>{item.source}</span>
                     {overrides[item.nameKey] ? <span className={styles.badgeEdited}>edited</span> : null}
                     {DUPLICATE_FILE_NAMES.has(item.fileName) ? <span className={styles.badgeWarn}>duplicate name</span> : null}
+                    {preferences.hiddenImageIds.includes(item.id) ? <span className={styles.badgeWarn}>hidden</span> : null}
+                    {(() => {
+                      const nameKey = getAssignedRefereeNameKey(item, preferences);
+                      const group = groups.get(nameKey);
+                      const preferred = group ? choosePreferredRefereeHeadshot(group.items, nameKey, preferences) : null;
+                      return preferred?.id === item.id ? <span className={styles.badgeEdited}>chosen</span> : null;
+                    })()}
                   </div>
                 </div>
               </button>
