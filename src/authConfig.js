@@ -4,7 +4,11 @@ export const ALLOWED_EMAIL_DOMAIN = (import.meta.env.VITE_ALLOWED_EMAIL_DOMAIN |
   .toLowerCase();
 
 export const ACCOUNT_ROLES = ["admin", "coach"];
-export const ACCOUNT_TEAM_SCOPES = ["Washington", "Capital City"];
+export const ACCOUNT_TEAM_SCOPES = [
+  { value: "washington", label: "Washington" },
+  { value: "capital_city", label: "Capital City" },
+  { value: "washington_summer", label: "Summer League" },
+];
 export const ACCOUNT_FEATURE_FLAGS = [
   { key: "match_ups", label: "Match-Ups" },
   { key: "tools", label: "Tools" },

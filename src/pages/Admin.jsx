@@ -80,6 +80,8 @@ function formatHeightLabel(heightIn) {
   return `${feet}'${inches}"`;
 }
 
+const DEFAULT_TEAM_SCOPES = ACCOUNT_TEAM_SCOPES.map((scope) => scope.value);
+
 const ADMIN_SECTIONS = [
   {
     key: "accounts",
@@ -179,13 +181,13 @@ function ProfileCard({ profile, actorId, onSave }) {
         <div className={styles.scopeLabel}>Team scopes</div>
         <div className={styles.scopeOptions}>
           {ACCOUNT_TEAM_SCOPES.map((scope) => (
-            <label key={scope} className={styles.scopeOption}>
+            <label key={scope.value} className={styles.scopeOption}>
               <input
                 type="checkbox"
-                checked={draftScopes.includes(scope)}
-                onChange={() => toggleScope(scope)}
+                checked={draftScopes.includes(scope.value)}
+                onChange={() => toggleScope(scope.value)}
               />
-              <span>{scope}</span>
+              <span>{scope.label}</span>
             </label>
           ))}
         </div>
@@ -731,7 +733,7 @@ export default function Admin() {
     displayName: "",
     password: "",
     role: "coach",
-    teamScopes: [...ACCOUNT_TEAM_SCOPES],
+    teamScopes: [...DEFAULT_TEAM_SCOPES],
   });
   const [inviteMessage, setInviteMessage] = useState("");
 
@@ -868,7 +870,7 @@ export default function Admin() {
         displayName: "",
         password: "",
         role: "coach",
-        teamScopes: [...ACCOUNT_TEAM_SCOPES],
+        teamScopes: [...DEFAULT_TEAM_SCOPES],
       });
       queryClient.invalidateQueries({ queryKey: ["account-invites"] });
     } catch (error) {
@@ -893,7 +895,7 @@ export default function Admin() {
         displayName: "",
         password: "",
         role: "coach",
-        teamScopes: [...ACCOUNT_TEAM_SCOPES],
+        teamScopes: [...DEFAULT_TEAM_SCOPES],
       });
       queryClient.invalidateQueries({ queryKey: ["visible-profiles"] });
       queryClient.invalidateQueries({ queryKey: ["account-invites"] });
@@ -980,13 +982,13 @@ export default function Admin() {
                 <div className={styles.scopeLabel}>Team scopes</div>
                 <div className={styles.scopeOptions}>
                   {ACCOUNT_TEAM_SCOPES.map((scope) => (
-                    <label key={scope} className={styles.scopeOption}>
+                    <label key={scope.value} className={styles.scopeOption}>
                       <input
                         type="checkbox"
-                        checked={inviteForm.teamScopes.includes(scope)}
-                        onChange={() => toggleInviteScope(scope)}
+                        checked={inviteForm.teamScopes.includes(scope.value)}
+                        onChange={() => toggleInviteScope(scope.value)}
                       />
-                      <span>{scope}</span>
+                      <span>{scope.label}</span>
                     </label>
                   ))}
                 </div>
@@ -1063,6 +1065,7 @@ export default function Admin() {
             <div className={styles.list}>
               <TeamRosterCard teamScope="washington" title="Washington" />
               <TeamRosterCard teamScope="capital_city" title="Capital City" />
+              <TeamRosterCard teamScope="washington_summer" title="Summer League" />
             </div>
           </div>
         ) : null}
