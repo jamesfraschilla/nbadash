@@ -21,6 +21,11 @@ export const DEFAULT_REFEREE_HEADSHOT_PREFERENCES = {
   uploadedImagesByNameKey: {},
 };
 
+export function buildUploadedRefereeImageId(nameKey) {
+  const normalizedKey = normalizeNameKey(nameKey);
+  return normalizedKey ? `uploaded:${normalizedKey}` : "";
+}
+
 const IMAGE_MODULES = import.meta.glob(
   [
     "./assets/referees/*.jpg",
@@ -259,9 +264,36 @@ export function buildRefereeHeadshotGroups(items, preferences = DEFAULT_REFEREE_
 }
 
 export function choosePreferredRefereeHeadshot(groupItems, nameKey, preferences = DEFAULT_REFEREE_HEADSHOT_PREFERENCES) {
+  const uploaded = preferences.uploadedImagesByNameKey?.[nameKey];
   const visibleItems = groupItems.filter((item) => !preferences.hiddenImageIds.includes(item.id));
-  if (!visibleItems.length) return null;
   const preferredId = preferences.preferredImageIdsByNameKey?.[nameKey];
+  if (preferredId === buildUploadedRefereeImageId(nameKey) && uploaded?.dataUrl) {
+    return {
+      id: preferredId,
+      fileName: uploaded.fileName,
+      fullName: nameKey,
+      nameKey,
+      url: uploaded.dataUrl,
+      source: "uploaded replacement",
+      isDuplicate: false,
+      isUploaded: true,
+    };
+  }
+  if (!visibleItems.length) {
+    if (uploaded?.dataUrl) {
+      return {
+        id: buildUploadedRefereeImageId(nameKey),
+        fileName: uploaded.fileName,
+        fullName: nameKey,
+        nameKey,
+        url: uploaded.dataUrl,
+        source: "uploaded replacement",
+        isDuplicate: false,
+        isUploaded: true,
+      };
+    }
+    return null;
+  }
   const preferred = visibleItems.find((item) => item.id === preferredId);
   if (preferred) return preferred;
   return visibleItems.find((item) => item.source === "production") || visibleItems[0];

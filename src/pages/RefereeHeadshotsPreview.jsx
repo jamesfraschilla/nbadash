@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  buildUploadedRefereeImageId,
   buildRefereeHeadshotGroups,
   buildRefereeHeadshotImageItems,
   buildRefereeHeadshotTransform,
@@ -127,13 +128,24 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
 
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return allItems.filter((item) => {
-      if (showOnlyDuplicates && !item.isDuplicate) return false;
-      if (showOnlyEdited && !overrides[item.nameKey]) return false;
-      if (!showHidden && preferences.hiddenImageIds.includes(item.id)) return false;
-      if (!query) return true;
-      return item.fullName.toLowerCase().includes(query) || item.fileName.toLowerCase().includes(query);
-    });
+    return allItems
+      .filter((item) => {
+        if (showOnlyDuplicates && !item.isDuplicate) return false;
+        if (showOnlyEdited && !overrides[item.nameKey]) return false;
+        if (!showHidden && preferences.hiddenImageIds.includes(item.id)) return false;
+        if (!query) return true;
+        const assignedName = getAssignedRefereeName(item, preferences).toLowerCase();
+        return assignedName.includes(query) || item.fullName.toLowerCase().includes(query) || item.fileName.toLowerCase().includes(query);
+      })
+      .sort((a, b) => {
+        const assignedA = getAssignedRefereeName(a, preferences);
+        const assignedB = getAssignedRefereeName(b, preferences);
+        const assignedCompare = assignedA.localeCompare(assignedB);
+        if (assignedCompare !== 0) return assignedCompare;
+        const duplicateCompare = Number(a.isDuplicate) - Number(b.isDuplicate);
+        if (duplicateCompare !== 0) return duplicateCompare;
+        return a.fileName.localeCompare(b.fileName);
+      });
   }, [allItems, overrides, preferences.hiddenImageIds, search, showHidden, showOnlyDuplicates, showOnlyEdited]);
 
   useEffect(() => {
@@ -161,6 +173,8 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
   const selectedUploadedImage = selectedAssignedNameKey
     ? preferences.uploadedImagesByNameKey?.[selectedAssignedNameKey] || null
     : null;
+  const selectedUploadedImageId = selectedAssignedNameKey ? buildUploadedRefereeImageId(selectedAssignedNameKey) : "";
+  const selectedUsesUploadedImage = selectedPreferredItem?.id === selectedUploadedImageId;
 
   useEffect(() => {
     setAssignmentDraft(selectedAssignedName);
@@ -308,13 +322,29 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
     if (!selectedAssignedNameKey) return;
     setPreferences((current) => {
       const nextUploads = { ...(current.uploadedImagesByNameKey || {}) };
+      const nextPreferred = { ...(current.preferredImageIdsByNameKey || {}) };
       delete nextUploads[selectedAssignedNameKey];
+      if (nextPreferred[selectedAssignedNameKey] === buildUploadedRefereeImageId(selectedAssignedNameKey)) {
+        delete nextPreferred[selectedAssignedNameKey];
+      }
       return sanitizeRefereeHeadshotPreferences({
         ...current,
+        preferredImageIdsByNameKey: nextPreferred,
         uploadedImagesByNameKey: nextUploads,
       });
     });
     setUploadMessage("Uploaded replacement removed.");
+  };
+
+  const chooseUploadedPhoto = () => {
+    if (!selectedAssignedNameKey || !selectedUploadedImageId) return;
+    setPreferences((current) => sanitizeRefereeHeadshotPreferences({
+      ...current,
+      preferredImageIdsByNameKey: {
+        ...(current.preferredImageIdsByNameKey || {}),
+        [selectedAssignedNameKey]: selectedUploadedImageId,
+      },
+    }));
   };
 
   return (
@@ -398,7 +428,7 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
               <div className={styles.selectedPreview}>
                 <div className={styles.selectedCropFrame}>
                   <img
-                    src={selectedItem.url}
+                    src={selectedUsesUploadedImage && selectedUploadedImage ? selectedUploadedImage.dataUrl : selectedItem.url}
                     alt={selectedItem.fullName}
                     className={styles.cropImage}
                     style={{ transform: buildRefereeHeadshotTransform(selectedDraft) }}
@@ -406,9 +436,15 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
                 </div>
                 <div className={styles.previewLabel}>Cropped Preview: {selectedAssignedName || selectedItem.fullName}</div>
                 <div className={styles.selectedRawFrame}>
-                  <img src={selectedItem.url} alt={`${selectedItem.fullName} raw`} className={styles.rawImage} />
+                  <img
+                    src={selectedUsesUploadedImage && selectedUploadedImage ? selectedUploadedImage.dataUrl : selectedItem.url}
+                    alt={`${selectedItem.fullName} raw`}
+                    className={styles.rawImage}
+                  />
                 </div>
-                <div className={styles.previewLabel}>Source File: {selectedItem.fileName}</div>
+                <div className={styles.previewLabel}>
+                  Source File: {selectedUsesUploadedImage && selectedUploadedImage ? selectedUploadedImage.fileName : selectedItem.fileName}
+                </div>
                 {selectedUploadedImage ? (
                   <>
                     <div className={styles.selectedRawFrame}>
@@ -545,6 +581,11 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
                     Remove Upload
                   </button>
                 ) : null}
+                {selectedUploadedImage ? (
+                  <button type="button" className={styles.secondaryButton} onClick={chooseUploadedPhoto}>
+                    Use Uploaded Photo
+                  </button>
+                ) : null}
                 <button type="button" className={styles.secondaryButton} onClick={chooseSelectedPhoto}>
                   Use This Photo
                 </button>
@@ -561,6 +602,20 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
                     Matched Photos for {selectedGroup.displayName} ({selectedGroup.items.length})
                   </div>
                   <div className={styles.groupList}>
+                    {selectedUploadedImage ? (
+                      <button
+                        type="button"
+                        className={styles.groupItem}
+                        onClick={chooseUploadedPhoto}
+                      >
+                        <img src={selectedUploadedImage.dataUrl} alt={selectedUploadedImage.fileName} className={styles.groupThumb} />
+                        <div className={styles.groupMeta}>
+                          <span>{selectedUploadedImage.fileName}</span>
+                          <span>uploaded replacement</span>
+                          {selectedUsesUploadedImage ? <span>chosen</span> : null}
+                        </div>
+                      </button>
+                    ) : null}
                     {selectedGroup.items.map((item) => {
                       const isPreferred = selectedPreferredItem?.id === item.id;
                       const isHidden = preferences.hiddenImageIds.includes(item.id);

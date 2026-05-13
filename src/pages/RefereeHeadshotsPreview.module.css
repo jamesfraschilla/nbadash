@@ -134,7 +134,7 @@
 .previewLabel {
   font-size: 0.86rem;
   font-weight: 700;
-  color: var(--muted);
+  color: var(--text);
 }
 
 .selectedCropFrame,
