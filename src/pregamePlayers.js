@@ -11,6 +11,21 @@ function isSummerLeagueGame(game) {
   return /^1(?:3|4|5|6)\d{8}$/.test(gameId);
 }
 
+function isJulyDateValue(value) {
+  const text = String(value || "").trim();
+  if (!text) return false;
+  const parsed = new Date(text);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.getUTCMonth() === 6;
+  }
+  const monthMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(text);
+  return monthMatch?.[2] === "07";
+}
+
+export function isSummerLeagueRosterGame(game) {
+  return isSummerLeagueGame(game) || isJulyDateValue(game?.gameTimeUTC) || isJulyDateValue(game?.gameEt);
+}
+
 export function isWashingtonTeam(team) {
   const tricode = String(team?.teamTricode || "").toUpperCase();
   const name = `${team?.teamCity || ""} ${team?.teamName || ""}`.toLowerCase();
@@ -24,7 +39,7 @@ export function isCapitalCityTeam(team) {
 }
 
 export function getPregameTeamScope(game) {
-  if (isSummerLeagueGame(game) && (isWashingtonTeam(game?.homeTeam) || isWashingtonTeam(game?.awayTeam))) {
+  if (isSummerLeagueRosterGame(game) && (isWashingtonTeam(game?.homeTeam) || isWashingtonTeam(game?.awayTeam))) {
     return "washington_summer";
   }
   if (isWashingtonTeam(game?.homeTeam) || isWashingtonTeam(game?.awayTeam)) return "washington";
@@ -33,7 +48,7 @@ export function getPregameTeamScope(game) {
 }
 
 export function getPregameTeamScopeForTeam(team, game = null) {
-  if (isSummerLeagueGame(game) && isWashingtonTeam(team)) return "washington_summer";
+  if (isSummerLeagueRosterGame(game) && isWashingtonTeam(team)) return "washington_summer";
   if (isWashingtonTeam(team)) return "washington";
   if (isCapitalCityTeam(team)) return "capital_city";
   return null;
@@ -97,10 +112,11 @@ export function normalizePregamePlayers(rawPlayers) {
 
 export function getTeamBoxScorePlayers(game, teamScope) {
   if (!game || !teamScope) return [];
-  const homeMatches = teamScope === "washington"
+  const isWashingtonScope = teamScope === "washington" || teamScope === "washington_summer";
+  const homeMatches = isWashingtonScope
     ? isWashingtonTeam(game.homeTeam)
     : isCapitalCityTeam(game.homeTeam);
-  const awayMatches = teamScope === "washington"
+  const awayMatches = isWashingtonScope
     ? isWashingtonTeam(game.awayTeam)
     : isCapitalCityTeam(game.awayTeam);
   if (homeMatches) return Array.isArray(game?.boxScore?.home?.players) ? game.boxScore.home.players : [];

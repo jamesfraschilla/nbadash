@@ -5,6 +5,7 @@ import { fetchGame } from "../api.js";
 import {
   fetchRemotePregamePlayers,
   getTeamBoxScorePlayers,
+  isSummerLeagueRosterGame,
   linkPregamePlayersToApiPlayers,
   loadPregamePlayersPayload,
   normalizePregamePlayers,
@@ -73,6 +74,38 @@ const TEAM_ROTATIONS_CONFIG = {
       ["", "", "", "", ""],
     ],
   },
+  washington_summer: {
+    key: "washington_summer",
+    label: "SUMMER LEAGUE",
+    matches() {
+      return false;
+    },
+    defaultPlayers: [
+      { id: "p1", name: "BUB", cap: 48 },
+      { id: "p2", name: "BC", cap: 48 },
+      { id: "p3", name: "TRE", cap: 48 },
+      { id: "p4", name: "KG", cap: 48 },
+      { id: "p5", name: "JC", cap: 48 },
+      { id: "p6", name: "ALEX", cap: 48 },
+      { id: "p7", name: "TV", cap: 48 },
+      { id: "p8", name: "SC", cap: 48 },
+      { id: "p9", name: "WR", cap: 48 },
+      { id: "p10", name: "JW", cap: 48 },
+      { id: "p11", name: "AG", cap: 48 },
+      { id: "p12", name: "JH", cap: 48 },
+      { id: "p13", name: "JR", cap: 48 },
+      { id: "p14", name: "LB", cap: 48 },
+      { id: "p15", name: "", cap: 48 },
+      { id: "p16", name: "", cap: 48 },
+      { id: "p17", name: "", cap: 48 },
+    ],
+    defaultDepthRows: [
+      ["TRAE", "TRE", "BC", "LB", "JR"],
+      ["SC", "BUB", "JH", "WR", "AG"],
+      ["", "", "", "", ""],
+      ["", "", "", "", ""],
+    ],
+  },
   capital_city: {
     key: "capital_city",
     label: "CAPITAL CITY",
@@ -97,6 +130,13 @@ function getRotationsTeamConfig(team) {
 }
 
 function getRotationsScopeForGame(game) {
+  if (isSummerLeagueRosterGame(game)) {
+    const washingtonTeam = TEAM_ROTATIONS_CONFIG.washington.matches(game?.homeTeam)
+      || TEAM_ROTATIONS_CONFIG.washington.matches(game?.awayTeam);
+    if (washingtonTeam) {
+      return TEAM_ROTATIONS_CONFIG.washington_summer;
+    }
+  }
   return getRotationsTeamConfig(game?.homeTeam) || getRotationsTeamConfig(game?.awayTeam);
 }
 
