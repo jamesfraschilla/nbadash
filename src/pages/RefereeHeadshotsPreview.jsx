@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useAuth } from "../auth/useAuth.js";
 import {
+  broadcastRefereeHeadshotChange,
+  buildManualRefereeItemId,
   buildUploadedRefereeImageId,
   buildRefereeHeadshotGroups,
   buildRefereeHeadshotImageItems,
@@ -10,14 +13,17 @@ import {
   getAssignedRefereeName,
   getAssignedRefereeNameKey,
   getRefereeAlternateNames,
+  loadRemoteRefereeHeadshotState,
   normalizeNameKey,
   REFEREE_HEADSHOT_OVERRIDE_STORAGE_KEY,
   REFEREE_HEADSHOT_PREFERENCES_STORAGE_KEY,
   resolveRefereeHeadshotOverrideKey,
+  saveRemoteRefereeHeadshotState,
   sanitizeRefereeHeadshotPreferences,
   sanitizeRefereeHeadshotOverrides,
   serializeRefereeHeadshotPreferences,
   serializeRefereeHeadshotOverrides,
+  writeStoredRefereeHeadshotState,
 } from "../refereeHeadshots.js";
 import styles from "./RefereeHeadshotsPreview.module.css";
 
@@ -85,6 +91,13 @@ function parseAlternateNames(value, canonicalName = "") {
   );
 }
 
+function getInitials(value) {
+  const parts = String(value || "").trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0].slice(0, 1)}${parts[parts.length - 1].slice(0, 1)}`.toUpperCase();
+}
+
 async function loadImageFileAsDataUrl(file) {
   const rawDataUrl = await new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -117,29 +130,36 @@ async function loadImageFileAsDataUrl(file) {
 }
 
 export default function RefereeHeadshotsPreview({ embedded = false }) {
+  const { user } = useAuth();
   const [overrides, setOverrides] = useState(readInitialOverrides);
   const [preferences, setPreferences] = useState(readInitialPreferences);
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [assignmentDraft, setAssignmentDraft] = useState("");
   const [alternateNamesDraft, setAlternateNamesDraft] = useState("");
+  const [manualRefereeDraft, setManualRefereeDraft] = useState("");
   const [showOnlyEdited, setShowOnlyEdited] = useState(false);
   const [showOnlyDuplicates, setShowOnlyDuplicates] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
   const [copyMessage, setCopyMessage] = useState("");
+  const [saveMessage, setSaveMessage] = useState("");
   const [uploadMessage, setUploadMessage] = useState("");
   const fileInputRef = useRef(null);
 
-  const allItems = useMemo(buildRefereeHeadshotImageItems, []);
+  const allItems = useMemo(() => buildRefereeHeadshotImageItems(preferences), [preferences]);
+  const savedOverridesSignatureRef = useRef(serializeRefereeHeadshotOverrides(readInitialOverrides()));
+  const savedPreferencesSignatureRef = useRef(serializeRefereeHeadshotPreferences(readInitialPreferences()));
 
   useEffect(() => {
     const serialized = JSON.stringify(sanitizeRefereeHeadshotOverrides(overrides));
     window.localStorage.setItem(REFEREE_HEADSHOT_OVERRIDE_STORAGE_KEY, serialized);
+    broadcastRefereeHeadshotChange();
   }, [overrides]);
 
   useEffect(() => {
     const serialized = JSON.stringify(sanitizeRefereeHeadshotPreferences(preferences));
     window.localStorage.setItem(REFEREE_HEADSHOT_PREFERENCES_STORAGE_KEY, serialized);
+    broadcastRefereeHeadshotChange();
   }, [preferences]);
 
   const filteredItems = useMemo(() => {
@@ -203,6 +223,43 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
   const selectedPreviewSrc = selectedUsesUploadedImage && selectedUploadedImage
     ? selectedUploadedImage.dataUrl
     : selectedItem?.url || "";
+  const currentOverridesSignature = useMemo(() => serializeRefereeHeadshotOverrides(overrides), [overrides]);
+  const currentPreferencesSignature = useMemo(() => serializeRefereeHeadshotPreferences(preferences), [preferences]);
+  const hasUnsavedChanges =
+    currentOverridesSignature !== savedOverridesSignatureRef.current
+    || currentPreferencesSignature !== savedPreferencesSignatureRef.current;
+
+  const addManualReferee = () => {
+    const displayName = String(manualRefereeDraft || "").trim();
+    const nameKey = normalizeNameKey(displayName);
+    if (!displayName || !nameKey) return;
+    setPreferences((current) => sanitizeRefereeHeadshotPreferences({
+      ...current,
+      manualRefereesByNameKey: {
+        ...(current.manualRefereesByNameKey || {}),
+        [nameKey]: displayName,
+      },
+    }));
+    setSelectedId(buildManualRefereeItemId(nameKey));
+    setManualRefereeDraft("");
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!user?.id) return undefined;
+    loadRemoteRefereeHeadshotState(user.id)
+      .then((remoteState) => {
+        if (cancelled || !remoteState) return;
+        setOverrides(remoteState.overrides);
+        setPreferences(remoteState.preferences);
+        savedOverridesSignatureRef.current = serializeRefereeHeadshotOverrides(remoteState.overrides);
+        savedPreferencesSignatureRef.current = serializeRefereeHeadshotPreferences(remoteState.preferences);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     setAssignmentDraft(selectedAssignedName);
@@ -371,10 +428,37 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
   }, [copyMessage]);
 
   useEffect(() => {
+    if (!saveMessage) return undefined;
+    const timeoutId = window.setTimeout(() => setSaveMessage(""), 2200);
+    return () => window.clearTimeout(timeoutId);
+  }, [saveMessage]);
+
+  useEffect(() => {
     if (!uploadMessage) return undefined;
     const timeoutId = window.setTimeout(() => setUploadMessage(""), 2200);
     return () => window.clearTimeout(timeoutId);
   }, [uploadMessage]);
+
+  const handleSaveChanges = async () => {
+    const nextOverridesSignature = serializeRefereeHeadshotOverrides(overrides);
+    const nextPreferencesSignature = serializeRefereeHeadshotPreferences(preferences);
+    try {
+      writeStoredRefereeHeadshotState(overrides, preferences);
+      if (user?.id) {
+        try {
+          await saveRemoteRefereeHeadshotState(user.id, { overrides, preferences });
+        } catch (remoteError) {
+          console.warn("Remote save failed, but local save succeeded:", remoteError);
+        }
+      }
+      savedOverridesSignatureRef.current = nextOverridesSignature;
+      savedPreferencesSignatureRef.current = nextPreferencesSignature;
+      broadcastRefereeHeadshotChange();
+      setSaveMessage("Saved changes.");
+    } catch (error) {
+      setSaveMessage(error?.message || "Unable to save changes.");
+    }
+  };
 
   const handleUploadButtonClick = () => {
     fileInputRef.current?.click();
@@ -440,7 +524,7 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
             <h1 className={styles.title}>Referee Headshot Crop Tool</h1>
             <p className={styles.subtitle}>
               This page includes all current referee assets plus duplicate review files.
-              Adjustments persist locally and use the same transform path as the officials panel.
+              Adjustments apply everywhere after you save changes.
             </p>
           </div>
           <div className={styles.summary}>
@@ -459,6 +543,16 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
           className={styles.hiddenInput}
           onChange={handleUploadFile}
         />
+        <input
+          className={styles.search}
+          type="text"
+          value={manualRefereeDraft}
+          onChange={(event) => setManualRefereeDraft(event.target.value)}
+          placeholder="Add new referee"
+        />
+        <button type="button" className={styles.secondaryButton} onClick={addManualReferee} disabled={!manualRefereeDraft.trim()}>
+          Add Referee
+        </button>
         <input
           className={styles.search}
           type="search"
@@ -494,6 +588,10 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
         <button type="button" className={styles.secondaryButton} onClick={handleCopyPreferences}>Copy Image Preferences</button>
         <button type="button" className={styles.primaryButton} onClick={handleCopyOverrides}>Copy Overrides JSON</button>
         {copyMessage ? <span className={styles.copyMessage}>{copyMessage}</span> : null}
+        <button type="button" className={styles.primaryButton} onClick={handleSaveChanges} disabled={!hasUnsavedChanges}>
+          Save Changes
+        </button>
+        {saveMessage ? <span className={styles.copyMessage}>{saveMessage}</span> : null}
       </div>
 
       <div className={styles.workspace}>
@@ -512,12 +610,16 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
 
               <div className={styles.selectedPreview}>
                 <div className={styles.selectedCropFrame}>
-                  <img
-                    src={selectedPreviewSrc}
-                    alt={selectedItem.fullName}
-                    className={styles.cropImage}
-                    style={{ transform: buildRefereeHeadshotTransform(selectedDraft) }}
-                  />
+                  {selectedPreviewSrc ? (
+                    <img
+                      src={selectedPreviewSrc}
+                      alt={selectedItem.fullName}
+                      className={styles.cropImage}
+                      style={{ transform: buildRefereeHeadshotTransform(selectedDraft, 84) }}
+                    />
+                  ) : (
+                    <div className={styles.emptyAvatar}>{getInitials(selectedAssignedName || selectedItem.fullName)}</div>
+                  )}
                 </div>
                 <div className={styles.previewLabel}>{selectedAssignedName || selectedItem.fullName}</div>
               </div>
@@ -528,14 +630,18 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
                   <span className={styles.fieldHint}>Shows the uncropped uploaded source.</span>
                 </div>
                 <div className={styles.fullPreviewFrame}>
-                  <img
-                    src={selectedPreviewSrc}
-                    alt={`${selectedItem.fullName} full preview`}
-                    className={styles.fullPreviewImage}
-                  />
+                  {selectedPreviewSrc ? (
+                    <img
+                      src={selectedPreviewSrc}
+                      alt={`${selectedItem.fullName} full preview`}
+                      className={styles.fullPreviewImage}
+                    />
+                  ) : (
+                    <div className={styles.emptyAvatarLarge}>{getInitials(selectedAssignedName || selectedItem.fullName)}</div>
+                  )}
                 </div>
                 <div className={styles.previewLabel}>
-                  Source File: {selectedUsesUploadedImage && selectedUploadedImage ? selectedUploadedImage.fileName : selectedItem.fileName}
+                  Source File: {selectedUsesUploadedImage && selectedUploadedImage ? selectedUploadedImage.fileName : (selectedItem.fileName || "No photo uploaded")}
                 </div>
               </div>
 
@@ -718,7 +824,11 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
                           className={`${styles.groupItem} ${item.id === selectedItem.id ? styles.groupItemSelected : ""}`.trim()}
                           onClick={() => setSelectedId(item.id)}
                         >
-                          <img src={item.url} alt={item.fullName} className={styles.groupThumb} />
+                          {item.url ? (
+                            <img src={item.url} alt={item.fullName} className={styles.groupThumb} />
+                          ) : (
+                            <div className={`${styles.groupThumb} ${styles.emptyThumb}`}>{getInitials(getAssignedRefereeName(item, preferences))}</div>
+                          )}
                           <div className={styles.groupMeta}>
                             <span>{item.fileName}</span>
                             <span>{item.source}</span>
@@ -750,12 +860,16 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
                 onClick={() => setSelectedId(item.id)}
               >
                 <div className={styles.cropFrame}>
-                  <img
-                    src={item.url}
-                    alt={item.fullName}
-                    className={styles.cropImage}
-                    style={{ transform: buildRefereeHeadshotTransform(draft) }}
-                  />
+                  {item.url ? (
+                    <img
+                      src={item.url}
+                      alt={item.fullName}
+                      className={styles.cropImage}
+                      style={{ transform: buildRefereeHeadshotTransform(draft, 84) }}
+                    />
+                  ) : (
+                    <div className={styles.emptyAvatar}>{getInitials(getAssignedRefereeName(item, preferences))}</div>
+                  )}
                 </div>
                 <div className={styles.meta}>
                   <div className={styles.name}>{item.fullName}</div>

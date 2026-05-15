@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { fetchCurrentGLeagueRosters, fetchCurrentNbaRosters, teamLogoUrl } from "../api.js";
 import { useAuth } from "../auth/useAuth.js";
@@ -683,11 +683,6 @@ export default function Tools() {
         <div className={styles.kicker}>Tools</div>
         <h1 className={styles.title}>Coaching Tools</h1>
         <p className={styles.subtitle}>Use the match-up graphic workspace or the Late Game Matrix simulator from one place.</p>
-        <div className={styles.toolLinks}>
-          <Link className={styles.toolLink} to="/tools/referee-headshots">
-            Referee Headshot Preview
-          </Link>
-        </div>
       </section>
 
       <div className={styles.tabBar}>

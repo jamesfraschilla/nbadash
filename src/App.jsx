@@ -5,6 +5,7 @@ import AuthGate from "./components/AuthGate.jsx";
 import LegacyNotesImportPrompt from "./components/LegacyNotesImportPrompt.jsx";
 import PasswordResetGate from "./components/PasswordResetGate.jsx";
 import { useAuth } from "./auth/useAuth.js";
+import { syncRemoteRefereeHeadshotState } from "./refereeHeadshots.js";
 import { readLocalStorage, writeLocalStorage } from "./storage.js";
 
 const UPDATE_CHECK_INTERVAL_MS = 2 * 60 * 1000;
@@ -19,7 +20,6 @@ const Rotations = lazy(() => import("./pages/Rotations.jsx"));
 const Admin = lazy(() => import("./pages/Admin.jsx"));
 const UserContent = lazy(() => import("./pages/UserContent.jsx"));
 const Tools = lazy(() => import("./pages/Tools.jsx"));
-const RefereeHeadshotsPreview = lazy(() => import("./pages/RefereeHeadshotsPreview.jsx"));
 
 function getCurrentBundleFingerprint() {
   if (typeof document === "undefined" || typeof window === "undefined") return "";
@@ -65,6 +65,12 @@ export default function App() {
     document.documentElement.dataset.theme = theme;
     writeLocalStorage("theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    if (user?.id) {
+      syncRemoteRefereeHeadshotState(user.id).catch(() => {});
+    }
+  }, [user?.id]);
 
   useEffect(() => {
     if (!import.meta.env.PROD || typeof window === "undefined") return undefined;
@@ -248,7 +254,6 @@ export default function App() {
             <Route path="/me" element={<UserContent />} />
             <Route path="/admin" element={<Admin />} />
             <Route path="/tools" element={<Tools />} />
-            <Route path="/tools/referee-headshots" element={<RefereeHeadshotsPreview />} />
             <Route path="/g/:gameId" element={<Game />} />
             <Route path="/g/:gameId/atc" element={<Game variant="atc" />} />
             <Route path="/g/:gameId/events" element={<PlayByPlay />} />
