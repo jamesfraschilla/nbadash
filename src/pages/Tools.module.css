@@ -104,6 +104,12 @@
   gap: 14px;
 }
 
+.scoutingSetupGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
 .toolColumn {
   display: grid;
   gap: 16px;
@@ -140,6 +146,102 @@
   color: var(--text);
   padding: 0 14px;
   font-size: 1rem;
+}
+
+.statusError {
+  font-size: 0.92rem;
+  color: #ef4444;
+}
+
+.scoutingResult {
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 90%, var(--bg)), var(--panel));
+}
+
+.scoutingResultHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.scoutingEyebrow {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.scoutingHeadline {
+  margin: 6px 0 0;
+  font-size: clamp(1.4rem, 2.4vw, 2rem);
+}
+
+.scoutingMeta {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.scoutingSummary {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.scoutingSections {
+  display: grid;
+  gap: 14px;
+}
+
+.scoutingSection {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg);
+}
+
+.scoutingSectionTitle,
+.scoutingDetailTitle {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.scoutingList {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+}
+
+.scoutingDetailGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.scoutingDetailCard {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--panel);
 }
 
 .footerRow {
@@ -217,6 +319,14 @@
   }
 
   .matrixSetupGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .scoutingSetupGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .scoutingDetailGrid {
     grid-template-columns: 1fr;
   }
 

@@ -257,6 +257,10 @@ export default function UserContent() {
     () => savedTools.filter((record) => record.type === TOOL_RECORD_TYPES.GAME_ANALYSIS),
     [savedTools]
   );
+  const scoutingToolRecords = useMemo(
+    () => savedTools.filter((record) => record.type === TOOL_RECORD_TYPES.PREGAME_SCOUTING_PACKET),
+    [savedTools]
+  );
   const lateGameFeedbackRecords = useMemo(
     () => savedTools.filter((record) => record.type === TOOL_RECORD_TYPES.LATE_GAME_FEEDBACK),
     [savedTools]
@@ -609,10 +613,46 @@ export default function UserContent() {
         </section>
       ) : tab === "tools" ? (
         <section className={styles.section}>
-          {matchupToolRecords.length === 0 && analysisToolRecords.length === 0 ? (
+          {matchupToolRecords.length === 0 && analysisToolRecords.length === 0 && scoutingToolRecords.length === 0 ? (
             <div className={styles.emptyState}>You have not saved any tools yet.</div>
           ) : (
             <div className={styles.list}>
+              {scoutingToolRecords.map((toolRecord) => {
+                const isDeleting = deletingKey === `tool:${toolRecord.id}`;
+                const payload = toolRecord.payload && typeof toolRecord.payload === "object" ? toolRecord.payload : {};
+                const teamLabel = String(payload.scoutingResult?.team?.name || payload.scoutingResult?.team?.tricode || "").trim();
+                const headline = String(payload.scoutingResult?.headline || "").trim();
+                const rangeLabel = String(payload.scoutingResult?.rangeLabel || payload.scoutingResult?.selection?.rangeLabel || "").trim();
+                return (
+                  <article key={toolRecord.id} className={styles.card}>
+                    <div className={styles.cardHeader}>
+                      <div className={styles.cardTitleGroup}>
+                        <div className={styles.cardTitle}>{toolRecord.title || "Untitled"}</div>
+                        <div className={styles.cardMeta}>
+                          Pre-Game Scouting Packet
+                        </div>
+                      </div>
+                      <div className={styles.cardActions}>
+                        <Link className={styles.cardLink} to={`/tools?tab=scouting&packet=${encodeURIComponent(toolRecord.id)}`}>
+                          Open Tool
+                        </Link>
+                        <button
+                          type="button"
+                          className={styles.deleteButton}
+                          onClick={() => handleDeleteTool(toolRecord)}
+                          disabled={isDeleting}
+                        >
+                          {isDeleting ? "Deleting..." : "Delete"}
+                        </button>
+                      </div>
+                    </div>
+                    <div className={styles.cardBody}>
+                      {headline || rangeLabel || teamLabel || "Saved scouting packet."}
+                    </div>
+                    <div className={styles.cardFooter}>Updated {formatTimestamp(toolRecord.updatedAt)}</div>
+                  </article>
+                );
+              })}
               {analysisToolRecords.map((toolRecord) => {
                 const isDeleting = deletingKey === `tool:${toolRecord.id}`;
                 const payload = toolRecord.payload && typeof toolRecord.payload === "object" ? toolRecord.payload : {};

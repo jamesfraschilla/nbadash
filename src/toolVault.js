@@ -5,6 +5,7 @@ const TOOL_VAULT_STORAGE_PREFIX = "nba-dashboard:tool-vault:v1:";
 export const TOOL_RECORD_TYPES = {
   MATCHUP_GRAPHIC: "matchup_graphic",
   GAME_ANALYSIS: "game_analysis",
+  PREGAME_SCOUTING_PACKET: "pregame_scouting_packet",
   LATE_GAME_FEEDBACK: "late_game_feedback",
   LATE_GAME_RECOMMENDATION: "late_game_recommendation",
 };

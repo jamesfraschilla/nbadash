@@ -16,11 +16,13 @@ import {
   getSavedToolRecordRemote,
   saveToolRecord,
   saveToolRecordRemote,
+  TOOL_RECORD_TYPES,
 } from "../toolVault.js";
 import {
   buildLateGameStrategyState,
   evaluateLateGameStrategy,
 } from "../lateGameStrategy.js";
+import { requestPregameScoutingPacket } from "../pregameScoutingData.js";
 import LateGameMatrixPanel from "../components/LateGameMatrixPanel.jsx";
 import {
   buildMarginRange,
@@ -36,8 +38,10 @@ const WIZARDS_TEAM_ID = "1610612764";
 const CAPITAL_CITY_TEAM_ID = "1612709928";
 const TOOL_TABS = {
   MATCHUP: "matchup",
+  SCOUTING: "scouting",
   LATE_GAME: "late-game",
 };
+const PREVIOUS_GAME_OPTIONS = Array.from({ length: 20 }, (_, index) => index + 1);
 
 function buildEmptyDraft() {
   return {
@@ -88,6 +92,52 @@ function buildDefaultDraftForProfile(profile) {
     return buildDefaultDraftForLeague("gleague", scopes);
   }
   return buildEmptyDraft();
+}
+
+function buildDefaultScoutingDraftForProfile(profile) {
+  const scopes = normalizeTeamScopes(profile?.team_scopes);
+  const league = scopes.has("capital_city") && !scopes.has("washington") ? "gleague" : "nba";
+  return {
+    league,
+    teamId: "",
+    rangeMode: "games",
+    previousGames: "5",
+    startDate: "",
+    endDate: "",
+  };
+}
+
+function hydrateScoutingPayload(payload, fallbackDraft) {
+  const draftSource = payload?.scoutingDraft && typeof payload.scoutingDraft === "object"
+    ? payload.scoutingDraft
+    : payload;
+  return {
+    league: String(draftSource?.league || fallbackDraft?.league || "nba").trim() === "gleague" ? "gleague" : "nba",
+    teamId: String(draftSource?.teamId || "").trim(),
+    rangeMode: String(draftSource?.rangeMode || fallbackDraft?.rangeMode || "games").trim() === "dates" ? "dates" : "games",
+    previousGames: String(draftSource?.previousGames || fallbackDraft?.previousGames || "5").trim() || "5",
+    startDate: String(draftSource?.startDate || "").trim(),
+    endDate: String(draftSource?.endDate || "").trim(),
+  };
+}
+
+function buildScoutingRangeLabel(draft) {
+  const mode = String(draft?.rangeMode || "games").trim() === "dates" ? "dates" : "games";
+  if (mode === "dates") {
+    const startDate = String(draft?.startDate || "").trim();
+    const endDate = String(draft?.endDate || "").trim();
+    if (startDate && endDate) return `${startDate} to ${endDate}`;
+    return "Custom Date Range";
+  }
+  const previousGames = Math.min(20, Math.max(1, Number.parseInt(String(draft?.previousGames || "5"), 10) || 5));
+  return `Previous ${previousGames} Game${previousGames === 1 ? "" : "s"}`;
+}
+
+function buildScoutingRecordTitle(draft) {
+  const league = String(draft?.league || "nba").trim() === "gleague" ? "gleague" : "nba";
+  const team = getLeagueTeam(draft?.teamId, league);
+  const teamLabel = team?.fullName || "Team";
+  return `${teamLabel} Scouting Packet · ${buildScoutingRangeLabel(draft)}`;
 }
 
 function buildLateGameToolSetup(profile) {
@@ -230,10 +280,18 @@ export default function Tools() {
   const { accountsEnabled, user, profile, hasFeature } = useAuth();
   const [params, setParams] = useSearchParams();
   const defaultDraft = useMemo(() => buildDefaultDraftForProfile(profile), [profile]);
+  const defaultScoutingDraft = useMemo(() => buildDefaultScoutingDraftForProfile(profile), [profile]);
   const [draft, setDraft] = useState(defaultDraft);
   const [recordId, setRecordId] = useState("");
   const [saveStatus, setSaveStatus] = useState("");
   const [busyAction, setBusyAction] = useState("");
+  const [scoutingDraft, setScoutingDraft] = useState(defaultScoutingDraft);
+  const [scoutingRecordId, setScoutingRecordId] = useState("");
+  const [scoutingSaveStatus, setScoutingSaveStatus] = useState("");
+  const [scoutingBusyAction, setScoutingBusyAction] = useState("");
+  const [scoutingLoading, setScoutingLoading] = useState(false);
+  const [scoutingError, setScoutingError] = useState("");
+  const [scoutingResult, setScoutingResult] = useState(null);
   const defaultLateGameSetup = useMemo(() => buildLateGameToolSetup(profile), [profile]);
   const [lateGameSetup, setLateGameSetup] = useState(defaultLateGameSetup);
   const [lateGameVantageTeamId, setLateGameVantageTeamId] = useState("");
@@ -243,8 +301,13 @@ export default function Tools() {
 
   const canUseTools = hasFeature("tools");
   const draftParam = String(params.get("draft") || "").trim();
+  const packetParam = String(params.get("packet") || "").trim();
   const rawTab = String(params.get("tab") || "").trim();
-  const activeTab = rawTab === TOOL_TABS.LATE_GAME ? TOOL_TABS.LATE_GAME : TOOL_TABS.MATCHUP;
+  const activeTab = rawTab === TOOL_TABS.LATE_GAME
+    ? TOOL_TABS.LATE_GAME
+    : rawTab === TOOL_TABS.SCOUTING
+      ? TOOL_TABS.SCOUTING
+      : TOOL_TABS.MATCHUP;
   const { data: remoteNbaRostersPayload } = useQuery({
     queryKey: ["tools-current-nba-rosters"],
     queryFn: fetchCurrentNbaRosters,
@@ -303,6 +366,12 @@ export default function Tools() {
 
   const league = draft.league === "gleague" ? "gleague" : "nba";
   const availableTeams = league === "gleague" ? GLEAGUE_TEAMS : NBA_TEAMS;
+  const scoutingLeague = scoutingDraft.league === "gleague" ? "gleague" : "nba";
+  const scoutingTeams = scoutingLeague === "gleague" ? GLEAGUE_TEAMS : NBA_TEAMS;
+  const selectedScoutingTeam = useMemo(
+    () => getLeagueTeam(scoutingDraft.teamId, scoutingLeague),
+    [scoutingDraft.teamId, scoutingLeague]
+  );
   const rosterMap = league === "gleague" ? gLeagueRosterMap : nbaRosterMap;
   const remoteRostersPayload = league === "gleague" ? remoteGLeagueRostersPayload : remoteNbaRostersPayload;
   const leftRoster = useMemo(() => rosterMap[String(draft.leftTeamId || "")] || [], [draft.leftTeamId, rosterMap]);
@@ -474,6 +543,60 @@ export default function Tools() {
   }, [defaultDraft, draftParam]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadPacket() {
+      if (!packetParam || !user?.id) {
+        if (cancelled) return;
+        setScoutingRecordId("");
+        setScoutingDraft(defaultScoutingDraft);
+        setScoutingResult(null);
+        setScoutingSaveStatus("");
+        setScoutingError("");
+        return;
+      }
+
+      let savedRecord = null;
+      try {
+        savedRecord = accountsEnabled
+          ? await getSavedToolRecordRemote(user.id, packetParam)
+          : getSavedToolRecord(user.id, packetParam);
+      } catch (error) {
+        console.error("Failed to load remote scouting packet, falling back to local storage.", error);
+        savedRecord = getSavedToolRecord(user.id, packetParam);
+      }
+
+      if (cancelled) return;
+
+      if (!savedRecord?.payload) {
+        setScoutingRecordId("");
+        setScoutingDraft(defaultScoutingDraft);
+        setScoutingResult(null);
+        setScoutingSaveStatus("");
+        setScoutingError("");
+        return;
+      }
+
+      setScoutingRecordId(savedRecord.id);
+      setScoutingDraft(hydrateScoutingPayload(savedRecord.payload, defaultScoutingDraft));
+      setScoutingResult(savedRecord.payload?.scoutingResult || savedRecord.payload?.packetResult || null);
+      setScoutingSaveStatus(`Loaded ${savedRecord.title}`);
+      setScoutingError("");
+    }
+
+    loadPacket();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accountsEnabled, defaultScoutingDraft, packetParam, user?.id]);
+
+  useEffect(() => {
+    if (packetParam) return;
+    setScoutingDraft((current) => (current?.teamId || scoutingResult ? current : defaultScoutingDraft));
+  }, [defaultScoutingDraft, packetParam, scoutingResult]);
+
+  useEffect(() => {
     setLateGameSetup((current) => (
       current.awayTeamId || current.homeTeamId ? current : defaultLateGameSetup
     ));
@@ -519,8 +642,22 @@ export default function Tools() {
     setSaveStatus("");
   };
 
+  const updateScoutingDraft = (patch) => {
+    setScoutingDraft((current) => ({
+      ...current,
+      ...patch,
+    }));
+    setScoutingResult(null);
+    setScoutingError("");
+    setScoutingSaveStatus("");
+  };
+
   const handleToolTabChange = (nextTab) => {
-    const normalized = nextTab === TOOL_TABS.LATE_GAME ? TOOL_TABS.LATE_GAME : TOOL_TABS.MATCHUP;
+    const normalized = nextTab === TOOL_TABS.LATE_GAME
+      ? TOOL_TABS.LATE_GAME
+      : nextTab === TOOL_TABS.SCOUTING
+        ? TOOL_TABS.SCOUTING
+        : TOOL_TABS.MATCHUP;
     const nextParams = new URLSearchParams(params);
     if (normalized === TOOL_TABS.MATCHUP) {
       nextParams.delete("tab");
@@ -569,6 +706,30 @@ export default function Tools() {
   const clearLateGameOverrides = () => {
     setLateGameOverrides(buildDefaultStrategyOverrides());
     setLateGameOverrideDraft(buildStrategyOverrideDraft(lateGameStrategyState));
+  };
+
+  const handleGenerateScoutingPacket = async () => {
+    if (!scoutingDraft.teamId || scoutingLoading || scoutingBusyAction) return;
+    if (scoutingDraft.rangeMode === "dates" && (!scoutingDraft.startDate || !scoutingDraft.endDate)) return;
+
+    setScoutingLoading(true);
+    setScoutingError("");
+    setScoutingSaveStatus("");
+    try {
+      const result = await requestPregameScoutingPacket({
+        teamId: scoutingDraft.teamId,
+        mode: scoutingDraft.rangeMode,
+        gameCount: Number.parseInt(scoutingDraft.previousGames, 10) || 5,
+        startDate: scoutingDraft.startDate,
+        endDate: scoutingDraft.endDate,
+      });
+      setScoutingResult(result);
+    } catch (error) {
+      console.error("Failed to generate pre-game scouting packet.", error);
+      setScoutingError(error?.message || "Unable to generate the scouting packet.");
+    } finally {
+      setScoutingLoading(false);
+    }
   };
 
   const handleSave = async () => {
@@ -675,14 +836,117 @@ export default function Tools() {
     }
   };
 
+  const handleSaveScoutingPacket = async () => {
+    if (!user?.id || !scoutingResult || scoutingBusyAction || scoutingLoading) return;
+    setScoutingBusyAction("save");
+    const id = scoutingRecordId || crypto.randomUUID();
+    const timestamp = new Date().toISOString();
+    const record = {
+      id,
+      type: TOOL_RECORD_TYPES.PREGAME_SCOUTING_PACKET,
+      title: buildScoutingRecordTitle(scoutingDraft),
+      updatedAt: timestamp,
+      createdAt: timestamp,
+      payload: {
+        scoutingDraft,
+        scoutingResult,
+      },
+    };
+
+    try {
+      const savedRecord = accountsEnabled
+        ? await saveToolRecordRemote(user.id, record)
+        : saveToolRecord(user.id, record);
+      if (!savedRecord) return;
+      setScoutingRecordId(savedRecord.id);
+      const nextParams = new URLSearchParams(params);
+      nextParams.set("tab", TOOL_TABS.SCOUTING);
+      nextParams.set("packet", savedRecord.id);
+      setParams(nextParams, { replace: true });
+      setScoutingSaveStatus(`Saved to My Vault as ${savedRecord.title}`);
+    } catch (error) {
+      console.error("Failed to save scouting packet remotely, falling back to local storage.", error);
+      const savedRecord = saveToolRecord(user.id, record);
+      if (!savedRecord) return;
+      setScoutingRecordId(savedRecord.id);
+      const nextParams = new URLSearchParams(params);
+      nextParams.set("tab", TOOL_TABS.SCOUTING);
+      nextParams.set("packet", savedRecord.id);
+      setParams(nextParams, { replace: true });
+      setScoutingSaveStatus(`Saved locally as ${savedRecord.title}`);
+    } finally {
+      setScoutingBusyAction("");
+    }
+  };
+
+  const handleDeleteScoutingPacket = async () => {
+    if (!user?.id || !scoutingRecordId || scoutingBusyAction) return;
+    const confirmed = window.confirm("Delete this saved scouting packet?");
+    if (!confirmed) return;
+    setScoutingBusyAction("delete");
+    try {
+      if (accountsEnabled) {
+        await deleteSavedToolRecordRemote(user.id, scoutingRecordId);
+      } else {
+        deleteSavedToolRecord(user.id, scoutingRecordId);
+      }
+      setScoutingRecordId("");
+      setScoutingDraft(defaultScoutingDraft);
+      setScoutingResult(null);
+      const nextParams = new URLSearchParams(params);
+      nextParams.delete("packet");
+      if (activeTab === TOOL_TABS.SCOUTING) {
+        nextParams.set("tab", TOOL_TABS.SCOUTING);
+      }
+      setParams(nextParams, { replace: true });
+      setScoutingSaveStatus("Deleted saved scouting packet.");
+      setScoutingError("");
+    } catch (error) {
+      console.error("Failed to delete remote scouting packet, falling back to local storage.", error);
+      deleteSavedToolRecord(user.id, scoutingRecordId);
+      setScoutingRecordId("");
+      setScoutingDraft(defaultScoutingDraft);
+      setScoutingResult(null);
+      const nextParams = new URLSearchParams(params);
+      nextParams.delete("packet");
+      if (activeTab === TOOL_TABS.SCOUTING) {
+        nextParams.set("tab", TOOL_TABS.SCOUTING);
+      }
+      setParams(nextParams, { replace: true });
+      setScoutingSaveStatus("Deleted saved scouting packet locally.");
+      setScoutingError("");
+    } finally {
+      setScoutingBusyAction("");
+    }
+  };
+
+  const handleResetScoutingPacket = () => {
+    const confirmed = window.confirm("Are you sure you want to reset this scouting packet?");
+    if (!confirmed) return;
+    setScoutingDraft(defaultScoutingDraft);
+    setScoutingRecordId("");
+    setScoutingResult(null);
+    setScoutingError("");
+    setScoutingSaveStatus("Reset scouting packet.");
+    const nextParams = new URLSearchParams(params);
+    nextParams.delete("packet");
+    nextParams.set("tab", TOOL_TABS.SCOUTING);
+    setParams(nextParams, { replace: true });
+  };
+
   const logoPreviewUrl = draft.logoTeamId ? teamLogoUrl(draft.logoTeamId, league) : "";
+  const scoutingRangeMode = scoutingDraft.rangeMode === "dates" ? "dates" : "games";
+  const scoutingGenerateDisabled = !scoutingDraft.teamId ||
+    scoutingLoading ||
+    Boolean(scoutingBusyAction) ||
+    (scoutingRangeMode === "dates" && (!scoutingDraft.startDate || !scoutingDraft.endDate));
 
   return (
     <div className={styles.page}>
       <section className={styles.hero}>
         <div className={styles.kicker}>Tools</div>
         <h1 className={styles.title}>Coaching Tools</h1>
-        <p className={styles.subtitle}>Use the match-up graphic workspace or the Late Game Matrix simulator from one place.</p>
+        <p className={styles.subtitle}>Use the match-up workspace, the pre-game scouting packet generator, or the Late Game Matrix simulator from one place.</p>
       </section>
 
       <div className={styles.tabBar}>
@@ -692,6 +956,13 @@ export default function Tools() {
           onClick={() => handleToolTabChange(TOOL_TABS.MATCHUP)}
         >
           Match-Up Graphic
+        </button>
+        <button
+          type="button"
+          className={`${styles.tabButton} ${activeTab === TOOL_TABS.SCOUTING ? styles.tabButtonActive : ""}`}
+          onClick={() => handleToolTabChange(TOOL_TABS.SCOUTING)}
+        >
+          Pre-Game Scouting Packet
         </button>
         <button
           type="button"
@@ -794,6 +1065,192 @@ export default function Tools() {
           </div>
 
           {saveStatus ? <div className={styles.statusNote}>{saveStatus}</div> : null}
+        </section>
+      ) : activeTab === TOOL_TABS.SCOUTING ? (
+        <section className={styles.workspace}>
+          <p className={styles.statusNote}>
+            Generate an opponent packet from a recent game sample or a custom date window. This first pass focuses on team trends, key players, lineup usage, and recent results.
+          </p>
+
+          <div className={styles.scoutingSetupGrid}>
+            <label className={`${styles.field} ${styles.leagueField}`}>
+              <span className={styles.fieldLabel}>League</span>
+              <select
+                className={styles.select}
+                value={scoutingLeague}
+                onChange={(event) => updateScoutingDraft({
+                  league: event.target.value === "gleague" ? "gleague" : "nba",
+                  teamId: "",
+                })}
+              >
+                <option value="nba">NBA</option>
+                <option value="gleague">G League</option>
+              </select>
+            </label>
+
+            <label className={styles.field}>
+              <span className={styles.fieldLabel}>Target Team</span>
+              <select
+                className={styles.select}
+                value={scoutingDraft.teamId}
+                onChange={(event) => updateScoutingDraft({ teamId: event.target.value })}
+              >
+                <option value="">Select team</option>
+                {scoutingTeams.map((team) => (
+                  <option key={`scouting-${team.teamId}`} value={team.teamId}>{team.fullName}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className={styles.field}>
+              <span className={styles.fieldLabel}>Range Mode</span>
+              <select
+                className={styles.select}
+                value={scoutingRangeMode}
+                onChange={(event) => updateScoutingDraft({ rangeMode: event.target.value === "dates" ? "dates" : "games" })}
+              >
+                <option value="games">By Game</option>
+                <option value="dates">By Date</option>
+              </select>
+            </label>
+
+            {scoutingRangeMode === "games" ? (
+              <label className={styles.field}>
+                <span className={styles.fieldLabel}>Window</span>
+                <select
+                  className={styles.select}
+                  value={scoutingDraft.previousGames}
+                  onChange={(event) => updateScoutingDraft({ previousGames: event.target.value })}
+                >
+                  {PREVIOUS_GAME_OPTIONS.map((count) => (
+                    <option key={`previous-${count}`} value={String(count)}>
+                      {count === 1 ? "Previous Game" : `Previous ${count} Games`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <>
+                <label className={styles.field}>
+                  <span className={styles.fieldLabel}>Start Date</span>
+                  <input
+                    className={styles.select}
+                    type="date"
+                    value={scoutingDraft.startDate}
+                    onChange={(event) => updateScoutingDraft({ startDate: event.target.value })}
+                  />
+                </label>
+                <label className={styles.field}>
+                  <span className={styles.fieldLabel}>End Date</span>
+                  <input
+                    className={styles.select}
+                    type="date"
+                    value={scoutingDraft.endDate}
+                    onChange={(event) => updateScoutingDraft({ endDate: event.target.value })}
+                  />
+                </label>
+              </>
+            )}
+          </div>
+
+          <div className={styles.actionCluster}>
+            {scoutingRecordId ? (
+              <button
+                type="button"
+                className={styles.secondaryButton}
+                onClick={handleDeleteScoutingPacket}
+                disabled={scoutingLoading || Boolean(scoutingBusyAction)}
+              >
+                {scoutingBusyAction === "delete" ? "Deleting..." : "Delete"}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              onClick={handleResetScoutingPacket}
+              disabled={scoutingLoading || Boolean(scoutingBusyAction)}
+            >
+              Reset
+            </button>
+            <button
+              type="button"
+              className={styles.primaryButton}
+              onClick={handleSaveScoutingPacket}
+              disabled={!scoutingResult || scoutingLoading || Boolean(scoutingBusyAction)}
+            >
+              {scoutingBusyAction === "save" ? "Saving..." : "Save"}
+            </button>
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              onClick={handleGenerateScoutingPacket}
+              disabled={scoutingGenerateDisabled}
+            >
+              {scoutingLoading ? "Generating..." : "Generate"}
+            </button>
+          </div>
+
+          {scoutingError ? <div className={styles.statusError}>{scoutingError}</div> : null}
+          {scoutingSaveStatus ? <div className={styles.statusNote}>{scoutingSaveStatus}</div> : null}
+
+          {scoutingResult ? (
+            <div className={styles.scoutingResult}>
+              <div className={styles.scoutingResultHeader}>
+                <div>
+                  <div className={styles.scoutingEyebrow}>
+                    {selectedScoutingTeam?.fullName || scoutingResult.team?.name || "Scouting Packet"}
+                  </div>
+                  <h2 className={styles.scoutingHeadline}>{scoutingResult.headline || buildScoutingRecordTitle(scoutingDraft)}</h2>
+                </div>
+                <div className={styles.scoutingMeta}>
+                  {scoutingResult.rangeLabel || scoutingResult.selection?.rangeLabel || buildScoutingRangeLabel(scoutingDraft)}
+                </div>
+              </div>
+
+              {scoutingResult.summary ? (
+                <p className={styles.scoutingSummary}>{scoutingResult.summary}</p>
+              ) : null}
+
+              {Array.isArray(scoutingResult.sections) && scoutingResult.sections.length ? (
+                <div className={styles.scoutingSections}>
+                  {scoutingResult.sections.map((section) => (
+                    <section key={section.title} className={styles.scoutingSection}>
+                      <div className={styles.scoutingSectionTitle}>{section.title}</div>
+                      <ul className={styles.scoutingList}>
+                        {(Array.isArray(section.items) ? section.items : []).map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    </section>
+                  ))}
+                </div>
+              ) : null}
+
+              {scoutingResult.packetDetails ? (
+                <div className={styles.scoutingDetailGrid}>
+                  {[
+                    ["Sample Window", scoutingResult.packetDetails.sampleNotes],
+                    ["Offensive Profile", scoutingResult.packetDetails.offensiveProfile],
+                    ["Defensive Profile", scoutingResult.packetDetails.defensiveProfile],
+                    ["Key Players", scoutingResult.packetDetails.playerNotes],
+                    ["Lineup Notes", scoutingResult.packetDetails.lineupNotes],
+                    ["Recent Games", scoutingResult.packetDetails.recentGames],
+                  ].map(([title, items]) => (
+                    Array.isArray(items) && items.length ? (
+                      <section key={title} className={styles.scoutingDetailCard}>
+                        <div className={styles.scoutingDetailTitle}>{title}</div>
+                        <ul className={styles.scoutingList}>
+                          {items.map((item) => (
+                            <li key={item}>{item}</li>
+                          ))}
+                        </ul>
+                      </section>
+                    ) : null
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </section>
       ) : (
         <section className={styles.workspace}>
