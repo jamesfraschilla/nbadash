@@ -1233,6 +1233,7 @@ export default function Tools() {
                     ["Offensive Profile", scoutingResult.packetDetails.offensiveProfile],
                     ["Defensive Profile", scoutingResult.packetDetails.defensiveProfile],
                     ["Key Players", scoutingResult.packetDetails.playerNotes],
+                    ["Notable Stats", scoutingResult.packetDetails.notableStats],
                     ["Lineup Notes", scoutingResult.packetDetails.lineupNotes],
                     ["Recent Games", scoutingResult.packetDetails.recentGames],
                   ].map(([title, items]) => (

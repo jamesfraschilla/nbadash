@@ -152,6 +152,28 @@ function meanLabel(value: number, digits = 1) {
   return Number(value.toFixed(digits));
 }
 
+function median(values: number[]) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 1) return sorted[middle];
+  return (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function roundThreshold(value: number, step: number, mode: "up" | "down" = "up") {
+  if (!Number.isFinite(value)) return 0;
+  if (mode === "down") return Math.floor(value / step) * step;
+  return Math.ceil(value / step) * step;
+}
+
+function formatRecord(wins: number, losses: number) {
+  return `${wins}-${losses}`;
+}
+
+function splitAverage(values: number[]) {
+  return values.length ? meanLabel(values.reduce((sum, value) => sum + value, 0) / values.length, 1) : 0;
+}
+
 function gameSortValue(game: Record<string, unknown>) {
   const rawUtc = String(game?.gameTimeUTC || "").trim();
   if (rawUtc) {
@@ -282,10 +304,21 @@ function buildGameSnapshot(bundle: {
   const teamScore = safeNumber(perspective.team?.score, safeNumber(teamTotals.points, 0));
   const opponentScore = safeNumber(perspective.opponent?.score, safeNumber(opponentTotals.points, 0));
   const margin = teamScore - opponentScore;
+  const teamTransitionStats = (perspective.teamStats?.transitionStats || {}) as Record<string, unknown>;
+  const opponentTransitionStats = (perspective.opponentStats?.transitionStats || {}) as Record<string, unknown>;
   const teamPlayers = Array.isArray(perspective.teamBox?.players) ? perspective.teamBox.players as Record<string, unknown>[] : [];
   const topScorer = [...teamPlayers]
     .sort((left, right) => safeNumber(right.points, 0) - safeNumber(left.points, 0))
     .find((player) => safeNumber(player.points, 0) > 0) || null;
+  const playerStats = teamPlayers.map((player) => ({
+    name: playerLabel(player),
+    points: safeNumber(player.points, 0),
+    assists: safeNumber(player.assists, 0),
+    rebounds: safeNumber(player.reboundsTotal, 0),
+    turnovers: safeNumber(player.turnovers, 0),
+    freeThrowsAttempted: safeNumber(player.freeThrowsAttempted, 0),
+    threePointersAttempted: safeNumber(player.threePointersAttempted, 0),
+  }));
 
   return {
     gameId: bundle.gameId,
@@ -307,6 +340,19 @@ function buildGameSnapshot(bundle: {
       ),
       1,
     ),
+    metrics: {
+      turnovers: safeNumber(teamTotals.turnovers, 0),
+      threePointersAttempted: safeNumber(teamTotals.threePointersAttempted, 0),
+      freeThrowsAttempted: safeNumber(teamTotals.freeThrowsAttempted, 0),
+      paintPoints: safeNumber(teamTransitionStats.paintPoints, safeNumber(teamTotals.rimFieldGoalsMade, 0) * 2),
+      pointsOffTurnovers: safeNumber(teamTransitionStats.pointsOffTurnovers, 0),
+      secondChancePoints: safeNumber(teamTransitionStats.secondChancePoints, 0),
+      transitionPoints: safeNumber(teamTransitionStats.transitionPoints, 0),
+      opponentPaintPoints: safeNumber(opponentTransitionStats.paintPoints, safeNumber(opponentTotals.rimFieldGoalsMade, 0) * 2),
+      opponentTransitionPoints: safeNumber(opponentTransitionStats.transitionPoints, 0),
+      opponentSecondChancePoints: safeNumber(opponentTransitionStats.secondChancePoints, 0),
+    },
+    playerStats,
     topScorer: topScorer
       ? {
         name: playerLabel(topScorer),
@@ -402,6 +448,161 @@ function addLineupAggregation(
 function buildRangeLabel(mode: string, gameCount: number, startDate: string, endDate: string) {
   if (mode === "dates") return `${startDate} to ${endDate}`;
   return `Previous ${gameCount} Game${gameCount === 1 ? "" : "s"}`;
+}
+
+function buildSplitOutlierNotes(
+  teamTricode: string,
+  gameSnapshots: Array<Record<string, unknown>>,
+) {
+  const wins = gameSnapshots.filter((game) => String(game.result || "") === "W");
+  const losses = gameSnapshots.filter((game) => String(game.result || "") === "L");
+  if (wins.length < 2 || losses.length < 2) return [];
+
+  const candidates = [
+    {
+      key: "turnovers",
+      label: "turnovers",
+      winValues: wins.map((game) => safeNumber((game.metrics as Record<string, unknown>)?.turnovers, 0)),
+      lossValues: losses.map((game) => safeNumber((game.metrics as Record<string, unknown>)?.turnovers, 0)),
+      better: "lower",
+      minDiff: 2.5,
+    },
+    {
+      key: "threePointersAttempted",
+      label: "3-point attempts",
+      winValues: wins.map((game) => safeNumber((game.metrics as Record<string, unknown>)?.threePointersAttempted, 0)),
+      lossValues: losses.map((game) => safeNumber((game.metrics as Record<string, unknown>)?.threePointersAttempted, 0)),
+      better: "higher",
+      minDiff: 4,
+    },
+    {
+      key: "freeThrowsAttempted",
+      label: "free-throw attempts",
+      winValues: wins.map((game) => safeNumber((game.metrics as Record<string, unknown>)?.freeThrowsAttempted, 0)),
+      lossValues: losses.map((game) => safeNumber((game.metrics as Record<string, unknown>)?.freeThrowsAttempted, 0)),
+      better: "higher",
+      minDiff: 3,
+    },
+    {
+      key: "paintPoints",
+      label: "paint points",
+      winValues: wins.map((game) => safeNumber((game.metrics as Record<string, unknown>)?.paintPoints, 0)),
+      lossValues: losses.map((game) => safeNumber((game.metrics as Record<string, unknown>)?.paintPoints, 0)),
+      better: "higher",
+      minDiff: 4,
+    },
+    {
+      key: "opponentTransitionPoints",
+      label: "transition points allowed",
+      winValues: wins.map((game) => safeNumber((game.metrics as Record<string, unknown>)?.opponentTransitionPoints, 0)),
+      lossValues: losses.map((game) => safeNumber((game.metrics as Record<string, unknown>)?.opponentTransitionPoints, 0)),
+      better: "lower",
+      minDiff: 3,
+    },
+  ];
+
+  return candidates
+    .map((candidate) => {
+      const winAverage = splitAverage(candidate.winValues);
+      const lossAverage = splitAverage(candidate.lossValues);
+      const gap = Math.abs(winAverage - lossAverage);
+      const strongerInWins = candidate.better === "lower" ? winAverage < lossAverage : winAverage > lossAverage;
+      if (!strongerInWins || gap < candidate.minDiff) return null;
+      const relativeGap = gap / Math.max(1, Math.min(winAverage, lossAverage));
+      if (relativeGap < 0.15) return null;
+      return {
+        score: gap + (relativeGap * 10),
+        text: `${teamTricode} averaged ${lossAverage} ${candidate.label} in losses versus ${winAverage} in wins.`,
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => right!.score - left!.score)
+    .slice(0, 3)
+    .map((entry) => entry!.text);
+}
+
+function buildThresholdRecordNotes(
+  teamTricode: string,
+  gameSnapshots: Array<Record<string, unknown>>,
+  featuredPlayers: Array<{ name: string }>,
+) {
+  if (gameSnapshots.length < 5) return [];
+  const notes: Array<{ score: number; text: string }> = [];
+
+  const metricCandidates = [
+    {
+      key: "threePointersAttempted",
+      label: "attempting",
+      noun: "3-point attempts",
+      step: 5,
+      comparator: "atLeast",
+    },
+    {
+      key: "paintPoints",
+      label: "scoring",
+      noun: "points in the paint",
+      step: 5,
+      comparator: "atLeast",
+    },
+  ];
+
+  metricCandidates.forEach((candidate) => {
+    const values = gameSnapshots.map((game) => safeNumber((game.metrics as Record<string, unknown>)?.[candidate.key], 0));
+    if (new Set(values).size < 3) return;
+    const threshold = candidate.comparator === "atLeast"
+      ? roundThreshold(median(values), candidate.step, "up")
+      : roundThreshold(median(values), candidate.step, "down");
+    const matches = gameSnapshots.filter((game) => {
+      const value = safeNumber((game.metrics as Record<string, unknown>)?.[candidate.key], 0);
+      return candidate.comparator === "atLeast" ? value >= threshold : value <= threshold;
+    });
+    const others = gameSnapshots.filter((game) => !matches.includes(game));
+    if (matches.length < 2 || others.length < 2) return;
+    const matchWins = matches.filter((game) => String(game.result || "") === "W").length;
+    const otherWins = others.filter((game) => String(game.result || "") === "W").length;
+    const matchWinPct = matchWins / matches.length;
+    const otherWinPct = otherWins / others.length;
+    if ((matchWinPct - otherWinPct) < 0.4) return;
+    if (matchWinPct < 0.75 || otherWinPct > 0.5) return;
+    notes.push({
+      score: (matchWinPct - otherWinPct) * 10 + matches.length,
+      text: `${teamTricode} is ${formatRecord(matchWins, matches.length - matchWins)} when ${candidate.label} ${threshold}+ ${candidate.noun}.`,
+    });
+  });
+
+  featuredPlayers.slice(0, 2).forEach((player) => {
+    const statKey = "freeThrowsAttempted";
+    const values = gameSnapshots.map((game) => {
+      const playerRow = Array.isArray(game.playerStats)
+        ? (game.playerStats as Record<string, unknown>[]).find((entry) => String(entry.name || "").trim() === player.name)
+        : null;
+      return safeNumber(playerRow?.[statKey], 0);
+    });
+    if (new Set(values).size < 3) return;
+    const threshold = Math.max(1, roundThreshold(median(values), 1, "down"));
+    const matches = gameSnapshots.filter((game) => {
+      const playerRow = Array.isArray(game.playerStats)
+        ? (game.playerStats as Record<string, unknown>[]).find((entry) => String(entry.name || "").trim() === player.name)
+        : null;
+      return safeNumber(playerRow?.[statKey], 0) <= threshold;
+    });
+    const others = gameSnapshots.filter((game) => !matches.includes(game));
+    if (matches.length < 2 || others.length < 2) return;
+    const matchWins = matches.filter((game) => String(game.result || "") === "W").length;
+    const otherWins = others.filter((game) => String(game.result || "") === "W").length;
+    const matchWinPct = matchWins / matches.length;
+    const otherWinPct = otherWins / others.length;
+    if ((otherWinPct - matchWinPct) < 0.45) return;
+    notes.push({
+      score: (otherWinPct - matchWinPct) * 10 + matches.length,
+      text: `${teamTricode} is ${formatRecord(matchWins, matches.length - matchWins)} when ${player.name} attempts ${threshold} or fewer free throws.`,
+    });
+  });
+
+  return notes
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 3)
+    .map((entry) => entry.text);
 }
 
 function buildFeaturePayload(
@@ -639,6 +840,10 @@ function buildFeaturePayload(
       const scorerText = game.topScorer ? `${game.topScorer.name} ${game.topScorer.points}` : "Balanced scoring";
       return `${game.date}: ${game.result} vs ${game.opponent.tricode} (${game.score}, ${game.margin > 0 ? "+" : ""}${game.margin}) · top scorer ${scorerText}`;
     });
+  const notableStats = [
+    ...buildSplitOutlierNotes(String(team?.teamTricode || team?.teamName || "TEAM").trim(), gameSnapshots),
+    ...buildThresholdRecordNotes(String(team?.teamTricode || team?.teamName || "TEAM").trim(), gameSnapshots, topScorers),
+  ].slice(0, 4);
 
   return {
     team: {
@@ -671,13 +876,14 @@ function buildFeaturePayload(
       topRebounders,
     },
     lineupNotes,
+    notableStats,
     recentGames,
     gameSnapshots,
   };
 }
 
 function buildTemplatePacket(features: ReturnType<typeof buildFeaturePayload>) {
-  const { team, sample, offense, defense, players, lineupNotes, recentGames, selection } = features;
+  const { team, sample, offense, defense, players, lineupNotes, notableStats, recentGames, selection } = features;
   const windowLabel = selection.gamesScanned === 1 ? "game" : "games";
   const sections = [
     {
@@ -723,6 +929,13 @@ function buildTemplatePacket(features: ReturnType<typeof buildFeaturePayload>) {
     });
   }
 
+  if (notableStats.length) {
+    sections.push({
+      title: "Outliers",
+      items: notableStats.slice(0, 2),
+    });
+  }
+
   return {
     source: "template",
     headline: `${team.tricode} pre-game scout from ${selection.rangeLabel}.`,
@@ -746,6 +959,7 @@ function buildTemplatePacket(features: ReturnType<typeof buildFeaturePayload>) {
         ...players.topScorers.slice(0, 3).map((player) => `${player.name}: ${player.pointsPerGame} PPG in ${player.minutesPerGame}.`),
         ...players.topCreators.slice(0, 2).map((player) => `${player.name}: ${player.assistsPerGame} APG.`),
       ].slice(0, 5),
+      notableStats,
       lineupNotes: lineupNotes.map((lineup) => (
         `${lineup.label} · ${lineup.minutes} · ${lineup.plusMinus > 0 ? "+" : ""}${lineup.plusMinus}`
       )),
@@ -765,6 +979,7 @@ async function generateAiPacket(features: ReturnType<typeof buildFeaturePayload>
     "Prioritize repeatable tendencies over one-game noise.",
     "Anchor every claim to the sample size and the date/game window.",
     "When a team has a clear offensive or defensive identity in the sample, center the packet on that identity.",
+    "If the sample includes notable win-loss split outliers or strong threshold-based records, use them, but only when they are clearly supported by the provided data.",
     "Return compact JSON with keys: headline, summary, sections.",
     "sections must be an array of 3 to 5 objects with keys: title and items.",
     "Each section should have 1 to 3 concise bullet strings.",
