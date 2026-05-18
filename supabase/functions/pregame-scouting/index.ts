@@ -458,65 +458,50 @@ function buildSplitOutlierNotes(
   const losses = gameSnapshots.filter((game) => String(game.result || "") === "L");
   if (wins.length < 2 || losses.length < 2) return [];
 
-  const candidates = [
-    {
-      key: "turnovers",
-      label: "turnovers",
-      winValues: wins.map((game) => safeNumber((game.metrics as Record<string, unknown>)?.turnovers, 0)),
-      lossValues: losses.map((game) => safeNumber((game.metrics as Record<string, unknown>)?.turnovers, 0)),
-      better: "lower",
-      minDiff: 2.5,
-    },
-    {
-      key: "threePointersAttempted",
-      label: "3-point attempts",
-      winValues: wins.map((game) => safeNumber((game.metrics as Record<string, unknown>)?.threePointersAttempted, 0)),
-      lossValues: losses.map((game) => safeNumber((game.metrics as Record<string, unknown>)?.threePointersAttempted, 0)),
-      better: "higher",
-      minDiff: 4,
-    },
-    {
-      key: "freeThrowsAttempted",
-      label: "free-throw attempts",
-      winValues: wins.map((game) => safeNumber((game.metrics as Record<string, unknown>)?.freeThrowsAttempted, 0)),
-      lossValues: losses.map((game) => safeNumber((game.metrics as Record<string, unknown>)?.freeThrowsAttempted, 0)),
-      better: "higher",
-      minDiff: 3,
-    },
-    {
-      key: "paintPoints",
-      label: "paint points",
-      winValues: wins.map((game) => safeNumber((game.metrics as Record<string, unknown>)?.paintPoints, 0)),
-      lossValues: losses.map((game) => safeNumber((game.metrics as Record<string, unknown>)?.paintPoints, 0)),
-      better: "higher",
-      minDiff: 4,
-    },
-    {
-      key: "opponentTransitionPoints",
-      label: "transition points allowed",
-      winValues: wins.map((game) => safeNumber((game.metrics as Record<string, unknown>)?.opponentTransitionPoints, 0)),
-      lossValues: losses.map((game) => safeNumber((game.metrics as Record<string, unknown>)?.opponentTransitionPoints, 0)),
-      better: "lower",
-      minDiff: 3,
-    },
+  const candidateDefs = [
+    { label: "offensive rating", getValue: (game: Record<string, unknown>) => safeNumber(game.offensiveRating, 0), better: "higher", decimals: 1 },
+    { label: "defensive rating", getValue: (game: Record<string, unknown>) => safeNumber(game.defensiveRating, 0), better: "lower", decimals: 1 },
+    { label: "turnovers", getValue: (game: Record<string, unknown>) => safeNumber((game.metrics as Record<string, unknown>)?.turnovers, 0), better: "lower", decimals: 1 },
+    { label: "3-point attempts", getValue: (game: Record<string, unknown>) => safeNumber((game.metrics as Record<string, unknown>)?.threePointersAttempted, 0), better: "higher", decimals: 1 },
+    { label: "free-throw attempts", getValue: (game: Record<string, unknown>) => safeNumber((game.metrics as Record<string, unknown>)?.freeThrowsAttempted, 0), better: "higher", decimals: 1 },
+    { label: "paint points", getValue: (game: Record<string, unknown>) => safeNumber((game.metrics as Record<string, unknown>)?.paintPoints, 0), better: "higher", decimals: 1 },
+    { label: "second-chance points", getValue: (game: Record<string, unknown>) => safeNumber((game.metrics as Record<string, unknown>)?.secondChancePoints, 0), better: "higher", decimals: 1 },
+    { label: "transition points", getValue: (game: Record<string, unknown>) => safeNumber((game.metrics as Record<string, unknown>)?.transitionPoints, 0), better: "higher", decimals: 1 },
+    { label: "paint points allowed", getValue: (game: Record<string, unknown>) => safeNumber((game.metrics as Record<string, unknown>)?.opponentPaintPoints, 0), better: "lower", decimals: 1 },
+    { label: "transition points allowed", getValue: (game: Record<string, unknown>) => safeNumber((game.metrics as Record<string, unknown>)?.opponentTransitionPoints, 0), better: "lower", decimals: 1 },
+    { label: "second-chance points allowed", getValue: (game: Record<string, unknown>) => safeNumber((game.metrics as Record<string, unknown>)?.opponentSecondChancePoints, 0), better: "lower", decimals: 1 },
+    { label: "top-scorer points", getValue: (game: Record<string, unknown>) => safeNumber((game.topScorer as Record<string, unknown>)?.points, 0), better: "higher", decimals: 1 },
   ];
 
-  return candidates
+  const notes = candidateDefs
     .map((candidate) => {
-      const winAverage = splitAverage(candidate.winValues);
-      const lossAverage = splitAverage(candidate.lossValues);
+      const winValues = wins.map(candidate.getValue).filter((value) => Number.isFinite(value));
+      const lossValues = losses.map(candidate.getValue).filter((value) => Number.isFinite(value));
+      if (winValues.length < 2 || lossValues.length < 2) return null;
+      const winAverage = splitAverage(winValues);
+      const lossAverage = splitAverage(lossValues);
       const gap = Math.abs(winAverage - lossAverage);
+      const baseline = Math.max(1, Math.min(Math.abs(winAverage), Math.abs(lossAverage)));
+      const relativeGap = gap / baseline;
       const strongerInWins = candidate.better === "lower" ? winAverage < lossAverage : winAverage > lossAverage;
-      if (!strongerInWins || gap < candidate.minDiff) return null;
-      const relativeGap = gap / Math.max(1, Math.min(winAverage, lossAverage));
-      if (relativeGap < 0.15) return null;
+      if (!strongerInWins || gap < 1 || relativeGap < 0.15) return null;
       return {
-        score: gap + (relativeGap * 10),
-        text: `${teamTricode} averaged ${lossAverage} ${candidate.label} in losses versus ${winAverage} in wins.`,
+        score: gap + (relativeGap * 12),
+        text: `${teamTricode} averaged ${meanLabel(lossAverage, candidate.decimals)} ${candidate.label} in losses versus ${meanLabel(winAverage, candidate.decimals)} in wins.`,
       };
     })
     .filter(Boolean)
-    .sort((left, right) => right!.score - left!.score)
+    .sort((left, right) => right!.score - left!.score);
+
+  const seenLabels = new Set<string>();
+  return notes
+    .filter((entry) => {
+      const labelMatch = /averaged .*? (.+?) in losses/.exec(entry!.text);
+      const key = labelMatch?.[1] || entry!.text;
+      if (seenLabels.has(key)) return false;
+      seenLabels.add(key);
+      return true;
+    })
     .slice(0, 3)
     .map((entry) => entry!.text);
 }
@@ -530,72 +515,105 @@ function buildThresholdRecordNotes(
   const notes: Array<{ score: number; text: string }> = [];
 
   const metricCandidates = [
-    {
-      key: "threePointersAttempted",
-      label: "attempting",
-      noun: "3-point attempts",
-      step: 5,
-      comparator: "atLeast",
-    },
-    {
-      key: "paintPoints",
-      label: "scoring",
-      noun: "points in the paint",
-      step: 5,
-      comparator: "atLeast",
-    },
+    { label: "offensive rating", getValue: (game: Record<string, unknown>) => safeNumber(game.offensiveRating, 0), step: 5, preferredDirection: "higher" },
+    { label: "defensive rating", getValue: (game: Record<string, unknown>) => safeNumber(game.defensiveRating, 0), step: 5, preferredDirection: "lower" },
+    { label: "3-point attempts", getValue: (game: Record<string, unknown>) => safeNumber((game.metrics as Record<string, unknown>)?.threePointersAttempted, 0), step: 5, preferredDirection: "higher" },
+    { label: "free-throw attempts", getValue: (game: Record<string, unknown>) => safeNumber((game.metrics as Record<string, unknown>)?.freeThrowsAttempted, 0), step: 2, preferredDirection: "higher" },
+    { label: "paint points", getValue: (game: Record<string, unknown>) => safeNumber((game.metrics as Record<string, unknown>)?.paintPoints, 0), step: 5, preferredDirection: "higher" },
+    { label: "turnovers", getValue: (game: Record<string, unknown>) => safeNumber((game.metrics as Record<string, unknown>)?.turnovers, 0), step: 2, preferredDirection: "lower" },
+    { label: "transition points allowed", getValue: (game: Record<string, unknown>) => safeNumber((game.metrics as Record<string, unknown>)?.opponentTransitionPoints, 0), step: 2, preferredDirection: "lower" },
   ];
 
   metricCandidates.forEach((candidate) => {
-    const values = gameSnapshots.map((game) => safeNumber((game.metrics as Record<string, unknown>)?.[candidate.key], 0));
-    if (new Set(values).size < 3) return;
-    const threshold = candidate.comparator === "atLeast"
-      ? roundThreshold(median(values), candidate.step, "up")
-      : roundThreshold(median(values), candidate.step, "down");
-    const matches = gameSnapshots.filter((game) => {
-      const value = safeNumber((game.metrics as Record<string, unknown>)?.[candidate.key], 0);
-      return candidate.comparator === "atLeast" ? value >= threshold : value <= threshold;
-    });
-    const others = gameSnapshots.filter((game) => !matches.includes(game));
-    if (matches.length < 2 || others.length < 2) return;
-    const matchWins = matches.filter((game) => String(game.result || "") === "W").length;
-    const otherWins = others.filter((game) => String(game.result || "") === "W").length;
-    const matchWinPct = matchWins / matches.length;
-    const otherWinPct = otherWins / others.length;
-    if ((matchWinPct - otherWinPct) < 0.4) return;
-    if (matchWinPct < 0.75 || otherWinPct > 0.5) return;
-    notes.push({
-      score: (matchWinPct - otherWinPct) * 10 + matches.length,
-      text: `${teamTricode} is ${formatRecord(matchWins, matches.length - matchWins)} when ${candidate.label} ${threshold}+ ${candidate.noun}.`,
+    const values = gameSnapshots.map(candidate.getValue).filter((value) => Number.isFinite(value));
+    if (values.length < 5 || new Set(values).size < 3) return;
+    const medianValue = median(values);
+    const thresholds = candidate.preferredDirection === "higher"
+      ? [
+        { comparator: "atLeast", threshold: roundThreshold(medianValue, candidate.step, "up") },
+        { comparator: "atMost", threshold: roundThreshold(medianValue, candidate.step, "down") },
+      ]
+      : [
+        { comparator: "atMost", threshold: roundThreshold(medianValue, candidate.step, "down") },
+        { comparator: "atLeast", threshold: roundThreshold(medianValue, candidate.step, "up") },
+      ];
+
+    thresholds.forEach((rule) => {
+      const matches = gameSnapshots.filter((game) => {
+        const value = candidate.getValue(game);
+        return rule.comparator === "atLeast" ? value >= rule.threshold : value <= rule.threshold;
+      });
+      const others = gameSnapshots.filter((game) => !matches.includes(game));
+      if (matches.length < 2 || others.length < 2) return;
+      const matchWins = matches.filter((game) => String(game.result || "") === "W").length;
+      const otherWins = others.filter((game) => String(game.result || "") === "W").length;
+      const matchWinPct = matchWins / matches.length;
+      const otherWinPct = otherWins / others.length;
+      const edge = matchWinPct - otherWinPct;
+      if (edge < 0.4 || matchWinPct < 0.7) return;
+      const phrasing = rule.comparator === "atLeast"
+        ? `${candidate.label} reaches ${rule.threshold}+`
+        : `${candidate.label} stays at ${rule.threshold} or lower`;
+      notes.push({
+        score: (edge * 10) + matches.length,
+        text: `${teamTricode} is ${formatRecord(matchWins, matches.length - matchWins)} when ${phrasing}.`,
+      });
     });
   });
 
-  featuredPlayers.slice(0, 2).forEach((player) => {
-    const statKey = "freeThrowsAttempted";
-    const values = gameSnapshots.map((game) => {
-      const playerRow = Array.isArray(game.playerStats)
-        ? (game.playerStats as Record<string, unknown>[]).find((entry) => String(entry.name || "").trim() === player.name)
-        : null;
-      return safeNumber(playerRow?.[statKey], 0);
-    });
-    if (new Set(values).size < 3) return;
-    const threshold = Math.max(1, roundThreshold(median(values), 1, "down"));
-    const matches = gameSnapshots.filter((game) => {
-      const playerRow = Array.isArray(game.playerStats)
-        ? (game.playerStats as Record<string, unknown>[]).find((entry) => String(entry.name || "").trim() === player.name)
-        : null;
-      return safeNumber(playerRow?.[statKey], 0) <= threshold;
-    });
-    const others = gameSnapshots.filter((game) => !matches.includes(game));
-    if (matches.length < 2 || others.length < 2) return;
-    const matchWins = matches.filter((game) => String(game.result || "") === "W").length;
-    const otherWins = others.filter((game) => String(game.result || "") === "W").length;
-    const matchWinPct = matchWins / matches.length;
-    const otherWinPct = otherWins / others.length;
-    if ((otherWinPct - matchWinPct) < 0.45) return;
-    notes.push({
-      score: (otherWinPct - matchWinPct) * 10 + matches.length,
-      text: `${teamTricode} is ${formatRecord(matchWins, matches.length - matchWins)} when ${player.name} attempts ${threshold} or fewer free throws.`,
+  featuredPlayers.slice(0, 3).forEach((player) => {
+    const playerMetricCandidates = [
+      { label: "points", statKey: "points", step: 5, preferredDirection: "higher" },
+      { label: "assists", statKey: "assists", step: 2, preferredDirection: "higher" },
+      { label: "rebounds", statKey: "rebounds", step: 2, preferredDirection: "higher" },
+      { label: "free throws", statKey: "freeThrowsAttempted", step: 2, preferredDirection: "higher" },
+      { label: "turnovers", statKey: "turnovers", step: 1, preferredDirection: "lower" },
+      { label: "3-point attempts", statKey: "threePointersAttempted", step: 2, preferredDirection: "higher" },
+    ];
+
+    playerMetricCandidates.forEach((candidate) => {
+      const values = gameSnapshots.map((game) => {
+        const playerRow = Array.isArray(game.playerStats)
+          ? (game.playerStats as Record<string, unknown>[]).find((entry) => String(entry.name || "").trim() === player.name)
+          : null;
+        return safeNumber(playerRow?.[candidate.statKey], 0);
+      });
+      if (values.length < 5 || new Set(values).size < 3) return;
+      const medianValue = median(values);
+      const thresholds = candidate.preferredDirection === "higher"
+        ? [
+          { comparator: "atLeast", threshold: roundThreshold(medianValue, candidate.step, "up") },
+          { comparator: "atMost", threshold: roundThreshold(medianValue, candidate.step, "down") },
+        ]
+        : [
+          { comparator: "atMost", threshold: roundThreshold(medianValue, candidate.step, "down") },
+          { comparator: "atLeast", threshold: roundThreshold(medianValue, candidate.step, "up") },
+        ];
+
+      thresholds.forEach((rule) => {
+        const matches = gameSnapshots.filter((game) => {
+          const playerRow = Array.isArray(game.playerStats)
+            ? (game.playerStats as Record<string, unknown>[]).find((entry) => String(entry.name || "").trim() === player.name)
+            : null;
+          const value = safeNumber(playerRow?.[candidate.statKey], 0);
+          return rule.comparator === "atLeast" ? value >= rule.threshold : value <= rule.threshold;
+        });
+        const others = gameSnapshots.filter((game) => !matches.includes(game));
+        if (matches.length < 2 || others.length < 2) return;
+        const matchWins = matches.filter((game) => String(game.result || "") === "W").length;
+        const otherWins = others.filter((game) => String(game.result || "") === "W").length;
+        const matchWinPct = matchWins / matches.length;
+        const otherWinPct = otherWins / others.length;
+        const edge = matchWinPct - otherWinPct;
+        if (edge < 0.45 || matchWinPct < 0.7) return;
+        const phrasing = rule.comparator === "atLeast"
+          ? `${player.name} gets to ${rule.threshold}+ ${candidate.label}`
+          : `${player.name} stays at ${rule.threshold} or fewer ${candidate.label}`;
+        notes.push({
+          score: (edge * 10) + matches.length,
+          text: `${teamTricode} is ${formatRecord(matchWins, matches.length - matchWins)} when ${phrasing}.`,
+        });
+      });
     });
   });
 
