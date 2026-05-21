@@ -6,6 +6,7 @@
 .dateNav {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   margin: 8px 0 16px;
 }
@@ -28,6 +29,28 @@
 
 .dateButton:hover {
   border-color: var(--muted);
+}
+
+.teamFilter {
+  display: inline-flex;
+  align-items: center;
+}
+
+.teamSelect {
+  min-width: 190px;
+  padding: 6px 32px 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background-color: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.teamSelect:hover,
+.teamSelect:focus {
+  border-color: var(--muted);
+  outline: none;
 }
 
 .gameList {
@@ -167,6 +190,18 @@
 }
 
 @media (max-width: 768px) {
+  .dateNav {
+    align-items: stretch;
+  }
+
+  .teamFilter {
+    width: 100%;
+  }
+
+  .teamSelect {
+    width: 100%;
+  }
+
   .gameList {
     grid-template-columns: repeat(2, 1fr);
     gap: 8px;

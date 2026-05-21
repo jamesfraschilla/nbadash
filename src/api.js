@@ -1407,6 +1407,19 @@ export async function fetchGamesByDate(dateStr) {
   return [...merged.values()];
 }
 
+function currentSeasonString(date = new Date()) {
+  const month = date.getMonth() + 1;
+  const year = date.getFullYear();
+  const startYear = month >= 7 ? year : year - 1;
+  return `${startYear}-${String(startYear + 1).slice(-2)}`;
+}
+
+export async function fetchTeamSeasonGames(teamId, season = currentSeasonString()) {
+  const url = `/api/team-games?teamId=${encodeURIComponent(String(teamId || ""))}&season=${encodeURIComponent(season)}`;
+  const payload = await requestJson(url);
+  return Array.isArray(payload?.games) ? payload.games : [];
+}
+
 export async function fetchGame(gameId, segment = null, options = {}) {
   if (isSummerLeagueGameId(gameId)) {
     const segmentParam = segment ? `?segment=${segment}` : "";

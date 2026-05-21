@@ -17,6 +17,20 @@ export function formatDateLabel(date) {
   return format(date, "M/d/yy");
 }
 
+export function formatGameDateLabel(value) {
+  if (!value) return "";
+  try {
+    const parts = String(value).split("-");
+    if (parts.length === 3) {
+      const [year, month, day] = parts.map((part) => Number(part));
+      return format(new Date(year, month - 1, day), "M/d/yy");
+    }
+    return format(new Date(value), "M/d/yy");
+  } catch {
+    return String(value || "");
+  }
+}
+
 export function formatTipTime(gameTimeUtc, fallback) {
   try {
     return format(new Date(gameTimeUtc), "h:mm a");
