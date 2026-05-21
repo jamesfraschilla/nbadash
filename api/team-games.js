@@ -57,12 +57,13 @@ function parseRowSet(payload) {
   }, {}));
 }
 
-async function fetchSeasonTypeRows(season, seasonType) {
+async function fetchSeasonTypeRows(season, seasonType, teamId) {
   const url = new URL(STATS_API_URL);
   url.searchParams.set("LeagueID", "00");
   url.searchParams.set("PlayerOrTeam", "T");
   url.searchParams.set("Season", season);
   url.searchParams.set("SeasonType", seasonType);
+  url.searchParams.set("TeamID", teamId);
 
   const response = await fetch(url.toString(), {
     headers: {
@@ -128,17 +129,18 @@ function annotateRowsWithRecords(rows) {
   });
 }
 
-function buildTeamPayload(row, fallbackTricode = "") {
+function buildTeamPayload(row, fallbackTricode = "", recordOverride = null) {
   const teamId = String(row?.TEAM_ID || "");
   const fallbackMeta = TEAM_BY_TRICODE.get(String(fallbackTricode || "").trim().toUpperCase()) || null;
   const meta = TEAM_BY_ID.get(teamId) || fallbackMeta;
+  const record = recordOverride || row?.recordAfter || null;
   return {
     teamId: toNumber(teamId, 0),
     teamName: meta?.teamName || String(row?.TEAM_NAME || "").trim(),
     teamCity: meta?.teamCity || "",
     teamTricode: String(row?.TEAM_ABBREVIATION || fallbackTricode || meta?.teamTricode || "").trim(),
-    wins: row?.recordAfter ? toNumber(row.recordAfter.wins, 0) : null,
-    losses: row?.recordAfter ? toNumber(row.recordAfter.losses, 0) : null,
+    wins: record ? toNumber(record.wins, 0) : null,
+    losses: record ? toNumber(record.losses, 0) : null,
     score: toNumber(row?.PTS, 0),
     timeoutsRemaining: 0,
   };
@@ -162,31 +164,25 @@ function buildSyntheticOpponentRow(selectedRow, opponentTricode) {
   };
 }
 
-function groupRowsIntoGames(rows, selectedTeamId, season) {
+function groupRowsIntoGames(rows, season) {
   const rowsWithRecords = annotateRowsWithRecords(rows);
-  const rowsByGameId = new Map();
-
-  rowsWithRecords.forEach((row) => {
-    const gameId = String(row.GAME_ID || "").trim();
-    if (!gameId) return;
-    const existing = rowsByGameId.get(gameId) || [];
-    existing.push(row);
-    rowsByGameId.set(gameId, existing);
-  });
-
-  return [...rowsByGameId.values()]
-    .filter((pair) => pair.some((row) => String(row.TEAM_ID || "") === selectedTeamId))
-    .map((pair) => {
-      const selectedRow = pair.find((row) => String(row.TEAM_ID || "") === selectedTeamId) || pair[0];
+  return rowsWithRecords
+    .map((selectedRow) => {
       const opponentTricodeMatch = /(?:vs\.|@)\s+([A-Z]{2,4})$/.exec(String(selectedRow.MATCHUP || ""));
       const opponentTricode = opponentTricodeMatch?.[1] || "";
       const syntheticOpponentRow = buildSyntheticOpponentRow(selectedRow, opponentTricode);
-      const awayRow = pair.find((row) => String(row.MATCHUP || "").includes("@"))
-        || (String(selectedRow.MATCHUP || "").includes("@") ? selectedRow : syntheticOpponentRow);
-      const homeRow = pair.find((row) => String(row.MATCHUP || "").includes("vs."))
-        || (String(selectedRow.MATCHUP || "").includes("vs.") ? selectedRow : syntheticOpponentRow);
-      const awayTeam = buildTeamPayload(awayRow, awayRow === selectedRow ? opponentTricode : "");
-      const homeTeam = buildTeamPayload(homeRow, homeRow === selectedRow ? opponentTricode : "");
+      const awayRow = String(selectedRow.MATCHUP || "").includes("@") ? selectedRow : syntheticOpponentRow;
+      const homeRow = String(selectedRow.MATCHUP || "").includes("vs.") ? selectedRow : syntheticOpponentRow;
+      const awayTeam = buildTeamPayload(
+        awayRow,
+        awayRow === selectedRow ? opponentTricode : "",
+        awayRow === selectedRow ? selectedRow.recordAfter : null
+      );
+      const homeTeam = buildTeamPayload(
+        homeRow,
+        homeRow === selectedRow ? opponentTricode : "",
+        homeRow === selectedRow ? selectedRow.recordAfter : null
+      );
 
       return {
         gameId: String(selectedRow.GAME_ID || ""),
@@ -234,12 +230,12 @@ export default async function handler(req, res) {
   try {
     const rowsBySeasonType = await Promise.all(
       SEASON_TYPES.map(async (seasonType) => {
-        const rows = await fetchSeasonTypeRows(season, seasonType);
+        const rows = await fetchSeasonTypeRows(season, seasonType, teamId);
         return rows.map((row) => ({ ...row, seasonType }));
       })
     );
 
-    const games = groupRowsIntoGames(rowsBySeasonType.flat(), teamId, season);
+    const games = groupRowsIntoGames(rowsBySeasonType.flat(), season);
 
     res.setHeader("Cache-Control", "public, s-maxage=1800, stale-while-revalidate=1800");
     return res.status(200).json({
