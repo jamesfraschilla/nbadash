@@ -54,6 +54,19 @@ export default function Home() {
     setParams(nextParams);
   }
 
+  function clearTeamFilter() {
+    const nextParams = new URLSearchParams(params);
+    nextParams.delete("team");
+    nextParams.delete("opponent");
+    setParams(nextParams);
+  }
+
+  function clearOpponentFilter() {
+    const nextParams = new URLSearchParams(params);
+    nextParams.delete("opponent");
+    setParams(nextParams);
+  }
+
   const { data: games = [], isLoading, error } = useQuery({
     queryKey: selectedTeamId ? ["teamSeasonGames", selectedTeamId, selectedOpponentTeamId] : ["games", dateInput],
     queryFn: () => (selectedTeamId
@@ -80,33 +93,57 @@ export default function Home() {
 
   const renderFilters = () => (
     <>
-      <label className={styles.teamFilter}>
-        <select
-          className={styles.teamSelect}
-          value={selectedTeamId}
-          onChange={handleTeamChange}
-          aria-label="Select team"
-        >
-          <option value="">Team (Select)</option>
-          {NBA_TEAMS.map((team) => (
-            <option key={team.teamId} value={team.teamId}>{team.fullName}</option>
-          ))}
-        </select>
-      </label>
-      {selectedTeamId ? (
+      <div className={styles.filterControl}>
         <label className={styles.teamFilter}>
           <select
             className={styles.teamSelect}
-            value={selectedOpponentTeamId}
-            onChange={handleOpponentChange}
-            aria-label="Select opponent"
+            value={selectedTeamId}
+            onChange={handleTeamChange}
+            aria-label="Select team"
           >
-            <option value="">Opponent</option>
-            {NBA_TEAMS.filter((team) => team.teamId !== selectedTeamId).map((team) => (
-              <option key={`opponent-${team.teamId}`} value={team.teamId}>{team.fullName}</option>
+            <option value="">Team (Select)</option>
+            {NBA_TEAMS.map((team) => (
+              <option key={team.teamId} value={team.teamId}>{team.fullName}</option>
             ))}
           </select>
         </label>
+        {selectedTeamId ? (
+          <button
+            type="button"
+            className={styles.clearFilterButton}
+            onClick={clearTeamFilter}
+            aria-label="Clear team filter"
+          >
+            X
+          </button>
+        ) : null}
+      </div>
+      {selectedTeamId ? (
+        <div className={styles.filterControl}>
+          <label className={styles.teamFilter}>
+            <select
+              className={styles.teamSelect}
+              value={selectedOpponentTeamId}
+              onChange={handleOpponentChange}
+              aria-label="Select opponent"
+            >
+              <option value="">Opponent</option>
+              {NBA_TEAMS.filter((team) => team.teamId !== selectedTeamId).map((team) => (
+                <option key={`opponent-${team.teamId}`} value={team.teamId}>{team.fullName}</option>
+              ))}
+            </select>
+          </label>
+          {selectedOpponentTeamId ? (
+            <button
+              type="button"
+              className={styles.clearFilterButton}
+              onClick={clearOpponentFilter}
+              aria-label="Clear opponent filter"
+            >
+              X
+            </button>
+          ) : null}
+        </div>
       ) : null}
     </>
   );
