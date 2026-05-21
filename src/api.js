@@ -1414,10 +1414,125 @@ function currentSeasonString(date = new Date()) {
   return `${startYear}-${String(startYear + 1).slice(-2)}`;
 }
 
-export async function fetchTeamSeasonGames(teamId, season = currentSeasonString()) {
-  const url = `/api/team-games?teamId=${encodeURIComponent(String(teamId || ""))}&season=${encodeURIComponent(season)}`;
-  const payload = await requestJson(url);
-  return Array.isArray(payload?.games) ? payload.games : [];
+const SEASON_GAMES_CACHE = new Map();
+const SEASON_GAMES_STORAGE_PREFIX = "nba-dashboard-season-games:";
+
+function currentSeasonBounds(date = new Date()) {
+  const month = date.getMonth() + 1;
+  const year = date.getFullYear();
+  const startYear = month >= 7 ? year : year - 1;
+  const seasonStart = new Date(startYear, 9, 1);
+  const seasonEnd = new Date(startYear + 1, 5, 30);
+  return {
+    start: seasonStart,
+    end: date < seasonEnd ? date : seasonEnd,
+  };
+}
+
+function enumerateDateInputs(start, end) {
+  const dates = [];
+  const cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const last = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+  while (cursor <= last) {
+    dates.push(formatDateInput(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return dates;
+}
+
+function isPlayedGame(game) {
+  return Number(game?.gameStatus) === 2 || Number(game?.gameStatus) === 3;
+}
+
+function annotateSeasonGame(game, gameDate) {
+  return {
+    ...game,
+    gameDate,
+  };
+}
+
+function seasonGamesStorageKey(season) {
+  return `${SEASON_GAMES_STORAGE_PREFIX}${season}`;
+}
+
+function loadSeasonGamesFromStorage(season) {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(seasonGamesStorageKey(season));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed?.games) ? parsed.games : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSeasonGamesToStorage(season, games) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(seasonGamesStorageKey(season), JSON.stringify({
+      updatedAt: Date.now(),
+      games,
+    }));
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+async function fetchAllSeasonGames(season = currentSeasonString()) {
+  const cachedInMemory = SEASON_GAMES_CACHE.get(season);
+  if (cachedInMemory) return cachedInMemory;
+
+  const cachedInStorage = loadSeasonGamesFromStorage(season);
+  if (cachedInStorage) {
+    SEASON_GAMES_CACHE.set(season, cachedInStorage);
+    return cachedInStorage;
+  }
+
+  const { start, end } = currentSeasonBounds(new Date());
+  const dateInputs = enumerateDateInputs(start, end);
+  const concurrency = 8;
+  const aggregated = [];
+
+  for (let index = 0; index < dateInputs.length; index += concurrency) {
+    const slice = dateInputs.slice(index, index + concurrency);
+    const batchResults = await Promise.all(
+      slice.map(async (dateInput) => {
+        const games = await fetchGamesByDate(dateInput).catch(() => []);
+        return (Array.isArray(games) ? games : [])
+          .filter((game) => !String(game?.gameId || "").startsWith("202"))
+          .filter(isPlayedGame)
+          .map((game) => annotateSeasonGame(game, dateInput));
+      })
+    );
+    aggregated.push(...batchResults.flat());
+  }
+
+  const deduped = [...new Map(
+    aggregated.map((game) => [String(game.gameId || ""), game])
+  ).values()].sort((left, right) => {
+    const dateCompare = String(right.gameDate || "").localeCompare(String(left.gameDate || ""));
+    if (dateCompare !== 0) return dateCompare;
+    return String(right.gameId || "").localeCompare(String(left.gameId || ""));
+  });
+
+  SEASON_GAMES_CACHE.set(season, deduped);
+  saveSeasonGamesToStorage(season, deduped);
+  return deduped;
+}
+
+export async function fetchTeamSeasonGames(teamId, opponentTeamId = "", season = currentSeasonString()) {
+  const safeTeamId = String(teamId || "").trim();
+  const safeOpponentTeamId = String(opponentTeamId || "").trim();
+  const seasonGames = await fetchAllSeasonGames(season);
+  return seasonGames.filter((game) => {
+    const homeTeamId = String(game?.homeTeam?.teamId || "");
+    const awayTeamId = String(game?.awayTeam?.teamId || "");
+    const teamMatches = homeTeamId === safeTeamId || awayTeamId === safeTeamId;
+    if (!teamMatches) return false;
+    if (!safeOpponentTeamId) return true;
+    return homeTeamId === safeOpponentTeamId || awayTeamId === safeOpponentTeamId;
+  });
 }
 
 export async function fetchGame(gameId, segment = null, options = {}) {

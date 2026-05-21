@@ -17,14 +17,48 @@ export default function Home() {
   const [params, setParams] = useSearchParams();
   const dateParam = params.get("d");
   const selectedTeamId = params.get("team") || "";
+  const selectedOpponentTeamId = params.get("opponent") || "";
   const date = dateParam ? parseDateInput(dateParam) : new Date();
   const dateInput = formatDateInput(date);
   const dateLabel = formatDateLabel(date);
   const selectedTeam = NBA_TEAMS.find((team) => team.teamId === selectedTeamId) || null;
+  const selectedOpponentTeam = NBA_TEAMS.find((team) => team.teamId === selectedOpponentTeamId) || null;
+
+  function changeDateBy(deltaDays) {
+    const next = new Date(date.getFullYear(), date.getMonth(), date.getDate() + deltaDays);
+    const nextParams = new URLSearchParams(params);
+    nextParams.set("d", formatDateInput(next));
+    setParams(nextParams);
+  }
+
+  function handleTeamChange(event) {
+    const nextTeamId = event.target.value;
+    const nextParams = new URLSearchParams(params);
+    if (nextTeamId) {
+      nextParams.set("team", nextTeamId);
+    } else {
+      nextParams.delete("team");
+    }
+    nextParams.delete("opponent");
+    setParams(nextParams);
+  }
+
+  function handleOpponentChange(event) {
+    const nextOpponentTeamId = event.target.value;
+    const nextParams = new URLSearchParams(params);
+    if (nextOpponentTeamId) {
+      nextParams.set("opponent", nextOpponentTeamId);
+    } else {
+      nextParams.delete("opponent");
+    }
+    setParams(nextParams);
+  }
 
   const { data: games = [], isLoading, error } = useQuery({
-    queryKey: selectedTeamId ? ["teamSeasonGames", selectedTeamId] : ["games", dateInput],
-    queryFn: () => (selectedTeamId ? fetchTeamSeasonGames(selectedTeamId) : fetchGamesByDate(dateInput)),
+    queryKey: selectedTeamId ? ["teamSeasonGames", selectedTeamId, selectedOpponentTeamId] : ["games", dateInput],
+    queryFn: () => (selectedTeamId
+      ? fetchTeamSeasonGames(selectedTeamId, selectedOpponentTeamId)
+      : fetchGamesByDate(dateInput)),
   });
 
   const { nbaGames, gLeagueGames } = useMemo(() => {
@@ -44,18 +78,75 @@ export default function Home() {
     return { nbaGames: nba, gLeagueGames: gLeague };
   }, [games, selectedTeamId]);
 
+  const renderFilters = () => (
+    <>
+      <label className={styles.teamFilter}>
+        <select
+          className={styles.teamSelect}
+          value={selectedTeamId}
+          onChange={handleTeamChange}
+          aria-label="Select team"
+        >
+          <option value="">Team (Select)</option>
+          {NBA_TEAMS.map((team) => (
+            <option key={team.teamId} value={team.teamId}>{team.fullName}</option>
+          ))}
+        </select>
+      </label>
+      {selectedTeamId ? (
+        <label className={styles.teamFilter}>
+          <select
+            className={styles.teamSelect}
+            value={selectedOpponentTeamId}
+            onChange={handleOpponentChange}
+            aria-label="Select opponent"
+          >
+            <option value="">Opponent</option>
+            {NBA_TEAMS.filter((team) => team.teamId !== selectedTeamId).map((team) => (
+              <option key={`opponent-${team.teamId}`} value={team.teamId}>{team.fullName}</option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+    </>
+  );
+
   if (isLoading) {
     return (
-      <div className={styles.stateMessage}>
-        {selectedTeamId ? "Loading team games..." : "Loading games..."}
+      <div className={styles.container}>
+        <div className={styles.dateNav}>
+          <button type="button" className={styles.dateButton} onClick={() => changeDateBy(-1)}>
+            Prev
+          </button>
+          <div className={styles.dateLabel}>{dateLabel}</div>
+          <button type="button" className={styles.dateButton} onClick={() => changeDateBy(1)}>
+            Next
+          </button>
+          {renderFilters()}
+        </div>
+        <div className={styles.stateMessage}>
+          {selectedTeamId ? "Loading team games..." : "Loading games..."}
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className={styles.stateMessage}>
-        {selectedTeamId ? "Failed to load team games." : "Failed to load games."}
+      <div className={styles.container}>
+        <div className={styles.dateNav}>
+          <button type="button" className={styles.dateButton} onClick={() => changeDateBy(-1)}>
+            Prev
+          </button>
+          <div className={styles.dateLabel}>{dateLabel}</div>
+          <button type="button" className={styles.dateButton} onClick={() => changeDateBy(1)}>
+            Next
+          </button>
+          {renderFilters()}
+        </div>
+        <div className={styles.stateMessage}>
+          {selectedTeamId ? "Failed to load team games." : "Failed to load games."}
+        </div>
       </div>
     );
   }
@@ -71,43 +162,17 @@ export default function Home() {
           <button type="button" className={styles.dateButton} onClick={() => changeDateBy(1)}>
             Next
           </button>
-          <label className={styles.teamFilter}>
-            <select
-              className={styles.teamSelect}
-              value={selectedTeamId}
-              onChange={handleTeamChange}
-              aria-label="Select team"
-            >
-              <option value="">Team (Select)</option>
-              {NBA_TEAMS.map((team) => (
-                <option key={team.teamId} value={team.teamId}>{team.fullName}</option>
-              ))}
-            </select>
-          </label>
+          {renderFilters()}
         </div>
         <div className={styles.stateMessage}>
-          {selectedTeamId ? "No games found for this team in the current season." : "No games scheduled for this date."}
+          {selectedTeamId
+            ? (selectedOpponentTeamId
+              ? "No games found between these teams in the current season."
+              : "No games found for this team in the current season.")
+            : "No games scheduled for this date."}
         </div>
       </div>
     );
-  }
-
-  const changeDateBy = (deltaDays) => {
-    const next = new Date(date.getFullYear(), date.getMonth(), date.getDate() + deltaDays);
-    const nextParams = new URLSearchParams(params);
-    nextParams.set("d", formatDateInput(next));
-    setParams(nextParams);
-  };
-
-  function handleTeamChange(event) {
-    const nextTeamId = event.target.value;
-    const nextParams = new URLSearchParams(params);
-    if (nextTeamId) {
-      nextParams.set("team", nextTeamId);
-    } else {
-      nextParams.delete("team");
-    }
-    setParams(nextParams);
   }
 
   const renderGames = (list) =>
@@ -127,11 +192,13 @@ export default function Home() {
         metadata.push(game.arena.arenaName);
       }
 
+      const linkDateParam = selectedTeamId ? game.gameDate : dateParam;
+
       return (
         <Link
           key={game.gameId}
           className={styles.gameCard}
-          to={`/g/${game.gameId}${dateParam ? `?d=${dateParam}` : ""}`}
+          to={`/g/${game.gameId}${linkDateParam ? `?d=${linkDateParam}` : ""}`}
         >
           <div className={styles.mainContent}>
             <div className={styles.teams}>
@@ -186,23 +253,15 @@ export default function Home() {
         <button type="button" className={styles.dateButton} onClick={() => changeDateBy(1)}>
           Next
         </button>
-        <label className={styles.teamFilter}>
-          <select
-            className={styles.teamSelect}
-            value={selectedTeamId}
-            onChange={handleTeamChange}
-            aria-label="Select team"
-          >
-            <option value="">Team (Select)</option>
-            {NBA_TEAMS.map((team) => (
-              <option key={team.teamId} value={team.teamId}>{team.fullName}</option>
-            ))}
-          </select>
-        </label>
+        {renderFilters()}
       </div>
       {nbaGames.length > 0 && (
         <>
-          <h2 className={styles.sectionTitle}>{selectedTeam ? selectedTeam.fullName : "NBA"}</h2>
+          <h2 className={styles.sectionTitle}>
+            {selectedTeam
+              ? `${selectedTeam.fullName}${selectedOpponentTeam ? ` vs ${selectedOpponentTeam.fullName}` : ""}`
+              : "NBA"}
+          </h2>
           <div className={styles.gameList}>{renderGames(nbaGames)}</div>
         </>
       )}
