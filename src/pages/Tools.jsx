@@ -31,6 +31,7 @@ import {
   getMarginOptionLabel,
 } from "../components/lateGamePanelHelpers.js";
 import { exportMatchupGraphic } from "./matchupGraphicExport.js";
+import { requestCustomDashboardRequest } from "../customRequestsData.js";
 import styles from "./Tools.module.css";
 
 const EMPTY_PLAYER_IDS = Array(5).fill("");
@@ -40,6 +41,7 @@ const TOOL_TABS = {
   MATCHUP: "matchup",
   SCOUTING: "scouting",
   LATE_GAME: "late-game",
+  CUSTOM_REQUESTS: "custom-requests",
 };
 const PREVIOUS_GAME_OPTIONS = Array.from({ length: 20 }, (_, index) => index + 1);
 
@@ -298,6 +300,10 @@ export default function Tools() {
   const [lateGameOverrides, setLateGameOverrides] = useState(() => buildDefaultStrategyOverrides());
   const [lateGameManualOpen, setLateGameManualOpen] = useState(false);
   const [lateGameOverrideDraft, setLateGameOverrideDraft] = useState(() => buildStrategyOverrideDraft(null));
+  const [customPrompt, setCustomPrompt] = useState("");
+  const [customRequestLoading, setCustomRequestLoading] = useState(false);
+  const [customRequestError, setCustomRequestError] = useState("");
+  const [customRequestResult, setCustomRequestResult] = useState(null);
 
   const canUseTools = hasFeature("tools");
   const draftParam = String(params.get("draft") || "").trim();
@@ -305,6 +311,8 @@ export default function Tools() {
   const rawTab = String(params.get("tab") || "").trim();
   const activeTab = rawTab === TOOL_TABS.LATE_GAME
     ? TOOL_TABS.LATE_GAME
+    : rawTab === TOOL_TABS.CUSTOM_REQUESTS
+      ? TOOL_TABS.CUSTOM_REQUESTS
     : rawTab === TOOL_TABS.SCOUTING
       ? TOOL_TABS.SCOUTING
       : TOOL_TABS.MATCHUP;
@@ -655,6 +663,8 @@ export default function Tools() {
   const handleToolTabChange = (nextTab) => {
     const normalized = nextTab === TOOL_TABS.LATE_GAME
       ? TOOL_TABS.LATE_GAME
+      : nextTab === TOOL_TABS.CUSTOM_REQUESTS
+        ? TOOL_TABS.CUSTOM_REQUESTS
       : nextTab === TOOL_TABS.SCOUTING
         ? TOOL_TABS.SCOUTING
         : TOOL_TABS.MATCHUP;
@@ -730,6 +740,29 @@ export default function Tools() {
     } finally {
       setScoutingLoading(false);
     }
+  };
+
+  const handleRunCustomRequest = async () => {
+    const prompt = String(customPrompt || "").trim();
+    if (!prompt || customRequestLoading) return;
+
+    setCustomRequestLoading(true);
+    setCustomRequestError("");
+    try {
+      const result = await requestCustomDashboardRequest({ prompt });
+      setCustomRequestResult(result);
+    } catch (error) {
+      console.error("Failed to run custom dashboard request.", error);
+      setCustomRequestError(error?.message || "Unable to complete the custom request.");
+    } finally {
+      setCustomRequestLoading(false);
+    }
+  };
+
+  const handleResetCustomRequest = () => {
+    setCustomPrompt("");
+    setCustomRequestError("");
+    setCustomRequestResult(null);
   };
 
   const handleSave = async () => {
@@ -970,6 +1003,13 @@ export default function Tools() {
           onClick={() => handleToolTabChange(TOOL_TABS.LATE_GAME)}
         >
           Late Game Matrix
+        </button>
+        <button
+          type="button"
+          className={`${styles.tabButton} ${activeTab === TOOL_TABS.CUSTOM_REQUESTS ? styles.tabButtonActive : ""}`}
+          onClick={() => handleToolTabChange(TOOL_TABS.CUSTOM_REQUESTS)}
+        >
+          Custom Requests
         </button>
       </div>
 
@@ -1251,6 +1291,134 @@ export default function Tools() {
                 </div>
               ) : null}
             </div>
+          ) : null}
+        </section>
+      ) : activeTab === TOOL_TABS.CUSTOM_REQUESTS ? (
+        <section className={styles.workspace}>
+          <p className={styles.statusNote}>
+            Query the current NBA season using the same team stat model used in the dashboard. This first pass supports team-level dashboard stats, including kills, disruptions, transition, creating, ratings, and shot-profile metrics.
+          </p>
+
+          <section className={styles.requestPanel}>
+            <label className={styles.field}>
+              <span className={styles.fieldLabel}>Prompt</span>
+              <textarea
+                className={styles.requestTextarea}
+                value={customPrompt}
+                onChange={(event) => {
+                  setCustomPrompt(event.target.value);
+                  setCustomRequestError("");
+                }}
+                placeholder="How many games this season has Cleveland had 5 or more kills recorded in a single game?"
+                rows={5}
+              />
+            </label>
+
+            <div className={styles.requestExamples}>
+              <button
+                type="button"
+                className={styles.toolLink}
+                onClick={() => setCustomPrompt("How many games this season has Cleveland had 5 or more kills recorded in a single game?")}
+              >
+                Cleveland 5+ kills games
+              </button>
+              <button
+                type="button"
+                className={styles.toolLink}
+                onClick={() => setCustomPrompt("What is Washington's season total for Dynamite 3s?")}
+              >
+                Washington dynamite 3s
+              </button>
+              <button
+                type="button"
+                className={styles.toolLink}
+                onClick={() => setCustomPrompt("What is New York's average transition points this season?")}
+              >
+                New York transition average
+              </button>
+            </div>
+
+            <div className={styles.actionCluster}>
+              <button
+                type="button"
+                className={styles.secondaryButton}
+                onClick={handleResetCustomRequest}
+                disabled={customRequestLoading}
+              >
+                Reset
+              </button>
+              <button
+                type="button"
+                className={styles.primaryButton}
+                onClick={handleRunCustomRequest}
+                disabled={!String(customPrompt || "").trim() || customRequestLoading}
+              >
+                {customRequestLoading ? "Running..." : "Run Request"}
+              </button>
+            </div>
+
+            {customRequestError ? <div className={styles.statusError}>{customRequestError}</div> : null}
+          </section>
+
+          {customRequestResult ? (
+            <section className={styles.requestResult}>
+              <div className={styles.requestResultHeader}>
+                <div>
+                  <div className={styles.scoutingEyebrow}>Custom Request</div>
+                  <h2 className={styles.requestHeadline}>{customRequestResult?.result?.answer || "Result"}</h2>
+                </div>
+                <div className={styles.scoutingMeta}>
+                  {customRequestResult?.team?.tricode || "NBA"} · {customRequestResult?.season || ""}
+                </div>
+              </div>
+
+              <div className={styles.requestMetaGrid}>
+                <div className={styles.requestMetaCard}>
+                  <div className={styles.scoutingDetailTitle}>Parsed Stat</div>
+                  <div>{customRequestResult?.stat?.label || "Unknown"}</div>
+                </div>
+                <div className={styles.requestMetaCard}>
+                  <div className={styles.scoutingDetailTitle}>Aggregation</div>
+                  <div>{String(customRequestResult?.result?.aggregation || "").replaceAll("_", " ")}</div>
+                </div>
+                <div className={styles.requestMetaCard}>
+                  <div className={styles.scoutingDetailTitle}>Sample Size</div>
+                  <div>{customRequestResult?.result?.sampleSize || 0} games</div>
+                </div>
+                <div className={styles.requestMetaCard}>
+                  <div className={styles.scoutingDetailTitle}>Value</div>
+                  <div>{customRequestResult?.result?.displayValue || "0"}</div>
+                </div>
+              </div>
+
+              {Array.isArray(customRequestResult?.result?.games) && customRequestResult.result.games.length ? (
+                <div className={styles.requestGamesWrap}>
+                  <div className={styles.scoutingDetailTitle}>Game Log</div>
+                  <div className={styles.requestTableWrap}>
+                    <table className={styles.requestTable}>
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Opponent</th>
+                          <th>Value</th>
+                          <th>Game ID</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {customRequestResult.result.games.map((game) => (
+                          <tr key={`${game.gameId}-${game.gameDate}`}>
+                            <td>{game.gameDate}</td>
+                            <td>{game?.opponent?.tricode || game?.opponent?.fullName || "-"}</td>
+                            <td>{Number.isFinite(Number(game.value)) ? Number(game.value).toFixed(Math.abs(Number(game.value) % 1) > 0 ? 1 : 0) : game.value}</td>
+                            <td>{game.gameId}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : null}
+            </section>
           ) : null}
         </section>
       ) : (

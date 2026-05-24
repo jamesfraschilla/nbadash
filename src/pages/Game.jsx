@@ -1773,18 +1773,6 @@ export default function Game({ variant = "full" }) {
       : 0,
   });
 
-  const mergeOfficialTransitionStats = (derived, official) => {
-    if (!official) return derived;
-    return {
-      ...derived,
-      transitionRate: Number.isFinite(official.transitionRate) ? official.transitionRate : derived.transitionRate,
-      transitionPoints: Number.isFinite(official.transitionPoints) ? official.transitionPoints : derived.transitionPoints,
-      transitionTurnovers: Number.isFinite(official.transitionTurnovers) ? official.transitionTurnovers : derived.transitionTurnovers,
-      secondChancePoints: Number.isFinite(official.secondChancePoints) ? official.secondChancePoints : derived.secondChancePoints,
-      threePointORebPercent: Number.isFinite(official.threePointORebPercent) ? official.threePointORebPercent : derived.threePointORebPercent,
-    };
-  };
-
   const mergeTransitionSource = (snapshotTotals, computedTotals, fallbackTotals = {}) => {
     const base = snapshotTotals || computedTotals || fallbackTotals || {};
     if (!computedTotals) return base;
@@ -1817,12 +1805,8 @@ export default function Game({ variant = "full" }) {
     : advancedHomeTotals;
   const awayTransitionDerived = transitionStatsDerived(awayTransitionSource, awayPossessions);
   const homeTransitionDerived = transitionStatsDerived(homeTransitionSource, homePossessions);
-  const awayTransition = segment === "all"
-    ? mergeOfficialTransitionStats(awayTransitionDerived, teamStats?.away?.transitionStats)
-    : awayTransitionDerived;
-  const homeTransition = segment === "all"
-    ? mergeOfficialTransitionStats(homeTransitionDerived, teamStats?.home?.transitionStats)
-    : homeTransitionDerived;
+  const awayTransition = awayTransitionDerived;
+  const homeTransition = homeTransitionDerived;
 
   const awayDefReb = (advancedAwayTotals.reboundsTotal || 0) - (advancedAwayTotals.reboundsOffensive || 0);
   const homeDefReb = (advancedHomeTotals.reboundsTotal || 0) - (advancedHomeTotals.reboundsOffensive || 0);

@@ -184,6 +184,8 @@ export function aggregateSegmentStats({
   basePlayers.forEach((player) => baseMap.set(player.personId, player));
   const creditedBlocks = new Set();
   const creditedTransitionTurnovers = new Set();
+  let currentTransitionPossessionTeamId = null;
+  let currentTransitionPossessionIsFastbreak = false;
 
   const blockKey = (playerId, period, clock) =>
     `${playerId}:${period || "na"}:${clock || "na"}`;
@@ -195,6 +197,17 @@ export function aggregateSegmentStats({
     const blocker = ensurePlayer(playerMap, playerId, baseMap.get(playerId));
     blocker.blocks += 1;
     if (teamTotals[teamId]) teamTotals[teamId].blocks += 1;
+  };
+
+  const finalizeTransitionPossession = () => {
+    if (
+      currentTransitionPossessionTeamId != null &&
+      currentTransitionPossessionIsFastbreak &&
+      teamTotals[currentTransitionPossessionTeamId]
+    ) {
+      teamTotals[currentTransitionPossessionTeamId].transitionPossessions += 1;
+    }
+    currentTransitionPossessionIsFastbreak = false;
   };
 
   const teamTotals = {
@@ -299,6 +312,14 @@ export function aggregateSegmentStats({
       }
     }
 
+    const possessionTeamId = action.possession != null && action.possession !== ""
+      ? String(action.possession)
+      : null;
+    if (possessionTeamId && possessionTeamId !== currentTransitionPossessionTeamId) {
+      finalizeTransitionPossession();
+      currentTransitionPossessionTeamId = possessionTeamId;
+    }
+
     const teamId = action.teamId;
     const isHome = teamId === homeTeam.teamId;
     const isAway = teamId === awayTeam.teamId;
@@ -327,6 +348,8 @@ export function aggregateSegmentStats({
       const isSecondChance = qualifiers.includes("2ndchance") || qualifiers.includes("secondchance");
       const isFromTurnover = qualifiers.includes("fromturnover");
 
+      if (isFastBreak) currentTransitionPossessionIsFastbreak = true;
+
       if (isFromTurnover) {
         const opponentId = isHome ? awayTeam.teamId : isAway ? homeTeam.teamId : null;
         if (opponentId && teamTotals[opponentId]) {
@@ -341,7 +364,6 @@ export function aggregateSegmentStats({
 
       if (teamStats) {
         teamStats.fieldGoalsAttempted += 1;
-        if (isFastBreak) teamStats.transitionPossessions += 1;
         const shotType = classifyShot(action);
         if (shotType === "three") teamStats.threePointersAttempted += 1;
         if (shotType === "rim") teamStats.rimFieldGoalsAttempted += 1;
@@ -415,6 +437,9 @@ export function aggregateSegmentStats({
     }
 
     if (action.actionType === "freethrow") {
+      const qualifiers = action.qualifiers || [];
+      const isFastBreak = qualifiers.includes("fastbreak");
+      if (isFastBreak) currentTransitionPossessionIsFastbreak = true;
       if (teamStats) teamStats.freeThrowsAttempted += 1;
       if (action.personId) {
         const player = ensurePlayer(playerMap, action.personId, baseMap.get(action.personId));
@@ -427,6 +452,7 @@ export function aggregateSegmentStats({
       if (action.shotResult === "Made" && teamStats) {
         teamStats.freeThrowsMade += 1;
         teamStats.points += 1;
+        if (isFastBreak) teamStats.transitionPoints += 1;
       }
     }
 
@@ -476,18 +502,20 @@ export function aggregateSegmentStats({
 
     if (action.actionType === "turnover" && action.personId) {
       const qualifiers = action.qualifiers || [];
+      if (qualifiers.includes("fastbreak")) currentTransitionPossessionIsFastbreak = true;
       const player = ensurePlayer(playerMap, action.personId, baseMap.get(action.personId));
       player.turnovers += 1;
       if (teamStats) {
         teamStats.turnovers += 1;
         if (qualifiers.includes("fromturnover") || qualifiers.includes("fastbreak")) {
           teamStats.transitionTurnovers += 1;
-          teamStats.transitionPossessions += 1;
         }
       }
     }
 
     if (action.actionType === "foul" && action.personId) {
+      const qualifiers = action.qualifiers || [];
+      if (qualifiers.includes("fastbreak")) currentTransitionPossessionIsFastbreak = true;
       if (isPersonalFoul(action)) {
         const player = ensurePlayer(playerMap, action.personId, baseMap.get(action.personId));
         player.foulsPersonal += 1;
@@ -502,6 +530,8 @@ export function aggregateSegmentStats({
       }
     }
   });
+
+  finalizeTransitionPossession();
 
   const startersByPeriod = new Map();
   if (minutesData?.periods) {
