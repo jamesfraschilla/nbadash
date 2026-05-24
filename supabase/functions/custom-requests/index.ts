@@ -179,6 +179,11 @@ function isNbaDashboardGame(game: Record<string, unknown>) {
   return !String(game?.gameId || "").startsWith("202");
 }
 
+function isSupportedSeasonGame(game: Record<string, unknown>) {
+  const gameId = String(game?.gameId || "");
+  return gameId.startsWith("002") || gameId.startsWith("004");
+}
+
 async function fetchGamesByDate(dateStr: string) {
   return requestJson(`${API_BASE}/games/byDate?date=${dateStr}`).catch(() => []);
 }
@@ -198,6 +203,7 @@ async function fetchSeasonGames(season = currentSeasonString()) {
             const games = await fetchGamesByDate(dateInput).catch(() => []);
             return (Array.isArray(games) ? games : [])
               .filter((game) => isNbaDashboardGame(game as Record<string, unknown>))
+              .filter((game) => isSupportedSeasonGame(game as Record<string, unknown>))
               .filter((game) => isPlayedGame(game as Record<string, unknown>))
               .map((game) => ({ ...(game as Record<string, unknown>), gameDate: dateInput }));
           }),
