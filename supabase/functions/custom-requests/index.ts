@@ -219,6 +219,19 @@ async function fetchGameDetails(gameId: string) {
   return GAME_DETAILS_CACHE.get(gameId)!;
 }
 
+async function fetchGameDetailsSafe(gameId: string) {
+  try {
+    const game = await fetchGameDetails(gameId);
+    return { game, error: null };
+  } catch (error) {
+    console.error(`Skipping game ${gameId} after upstream failure.`, error);
+    return {
+      game: null,
+      error: error instanceof Error ? error.message : "Unknown error.",
+    };
+  }
+}
+
 function classifyShot(action: Record<string, unknown>) {
   if (String(action.actionType || "") === "3pt") return "three";
   const distance = safeNumber(action.shotDistance, 0);
@@ -959,8 +972,38 @@ Deno.serve(async (request) => {
       String((game as Record<string, unknown>)?.homeTeam?.teamId || "") === team.teamId ||
       String((game as Record<string, unknown>)?.awayTeam?.teamId || "") === team.teamId
     ));
-    const detailedGames = await Promise.all(teamGames.map((game) => fetchGameDetails(String((game as Record<string, unknown>).gameId || ""))));
-    const enrichedGames = detailedGames.map((game, index) => ({ ...game, gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || "") }));
+    const detailedGames = await Promise.all(
+      teamGames.map((game) => fetchGameDetailsSafe(String((game as Record<string, unknown>).gameId || ""))),
+    );
+    const enrichedGames = detailedGames
+      .map((entry, index) => (
+        entry.game
+          ? {
+            ...entry.game,
+            gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
+          }
+          : null
+      ))
+      .filter(Boolean) as Array<Record<string, unknown>>;
+    const skippedGames = detailedGames
+      .map((entry, index) => (
+        entry.error
+          ? {
+            gameId: String((teamGames[index] as Record<string, unknown>).gameId || ""),
+            gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
+            error: entry.error,
+          }
+          : null
+      ))
+      .filter(Boolean);
+
+    if (!enrichedGames.length) {
+      return jsonResponse(502, {
+        error: "Unable to load any completed game details for this request.",
+        skippedGames,
+      });
+    }
+
     const result = executeQuery(enrichedGames, metric, parsed as unknown as Record<string, unknown>, team);
 
     return jsonResponse(200, {
@@ -979,8 +1022,9 @@ Deno.serve(async (request) => {
       result: {
         ...result,
         games: (result.games as Array<Record<string, unknown>>).slice(0, 25),
-        sampleSize: teamGames.length,
+        sampleSize: enrichedGames.length,
       },
+      skippedGames,
       supportedStats: METRICS.map((entry) => ({ key: entry.key, label: entry.label })),
     });
   } catch (error) {
