@@ -808,6 +808,30 @@ async function parsePromptWithOpenAI(prompt: string) {
   }
 }
 
+function isSupportedAggregation(value: unknown) {
+  return [
+    "count_games_gte",
+    "season_total",
+    "season_average",
+    "max_game",
+  ].includes(String(value || "").trim());
+}
+
+function normalizeParsedQuery(value: unknown) {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Record<string, unknown>;
+  const teamId = String(candidate.teamId || "").trim();
+  const statKey = String(candidate.statKey || "").trim();
+  const aggregation = String(candidate.aggregation || "").trim();
+  if (!teamId || !statKey || !isSupportedAggregation(aggregation)) return null;
+  return {
+    teamId,
+    statKey,
+    aggregation,
+    threshold: candidate.threshold != null ? safeNumber(candidate.threshold, 0) : undefined,
+  };
+}
+
 function formatValue(value: number, metric: MetricDefinition) {
   if (metric.formatter === "percent") return `${value.toFixed(1)}%`;
   if (metric.formatter === "decimal") return value.toFixed(1);
@@ -891,15 +915,40 @@ Deno.serve(async (request) => {
     const prompt = String(body?.prompt || "").trim();
     if (!prompt) return jsonResponse(400, { error: "Prompt is required." });
 
-    const parsed = await parsePromptWithOpenAI(prompt).catch(() => null) || buildFallbackParse(prompt);
-    const teamId = String(parsed?.teamId || "").trim();
-    const statKey = String(parsed?.statKey || "").trim();
-    const team = NBA_TEAMS.find((entry) => entry.teamId === teamId) || null;
-    const metric = METRICS.find((entry) => entry.key === statKey) || null;
+    const fallbackParsed = normalizeParsedQuery(buildFallbackParse(prompt));
+    const openAiParsed = normalizeParsedQuery(await parsePromptWithOpenAI(prompt).catch(() => null));
+    const candidateParses = [fallbackParsed, openAiParsed].filter(Boolean) as Array<{
+      teamId: string;
+      statKey: string;
+      aggregation: string;
+      threshold?: number;
+    }>;
 
-    if (!team || !metric) {
+    let parsed: null | {
+      teamId: string;
+      statKey: string;
+      aggregation: string;
+      threshold?: number;
+    } = null;
+    let team: (typeof NBA_TEAMS)[number] | null = null;
+    let metric: MetricDefinition | null = null;
+
+    for (const candidate of candidateParses) {
+      const matchedTeam = NBA_TEAMS.find((entry) => entry.teamId === candidate.teamId) || null;
+      const matchedMetric = METRICS.find((entry) => entry.key === candidate.statKey) || null;
+      if (matchedTeam && matchedMetric) {
+        parsed = candidate;
+        team = matchedTeam;
+        metric = matchedMetric;
+        break;
+      }
+    }
+
+    if (!parsed || !team || !metric) {
       return jsonResponse(400, {
         error: "I could not match that request to a single NBA team and a supported dashboard stat.",
+        fallbackParsed,
+        openAiParsed,
         supportedStats: METRICS.map((entry) => entry.label),
       });
     }
@@ -912,7 +961,7 @@ Deno.serve(async (request) => {
     ));
     const detailedGames = await Promise.all(teamGames.map((game) => fetchGameDetails(String((game as Record<string, unknown>).gameId || ""))));
     const enrichedGames = detailedGames.map((game, index) => ({ ...game, gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || "") }));
-    const result = executeQuery(enrichedGames, metric, parsed as Record<string, unknown>, team);
+    const result = executeQuery(enrichedGames, metric, parsed as unknown as Record<string, unknown>, team);
 
     return jsonResponse(200, {
       prompt,
