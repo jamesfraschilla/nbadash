@@ -54,6 +54,12 @@ type MetricDefinition = {
 
 const METRICS: MetricDefinition[] = [
   { key: "points", label: "Points", aliases: ["points", "pts"], kind: "count" },
+  { key: "field_goals_made", label: "Field Goals Made", aliases: ["field goals made", "fg made", "fgm", "made field goals"], kind: "count" },
+  { key: "field_goals_attempted", label: "Field Goals Attempted", aliases: ["field goals attempted", "fg attempted", "fga", "field goal attempts"], kind: "count" },
+  { key: "three_pointers_made", label: "3FG Made", aliases: ["3fg made", "3fgm", "3fgs", "3s made", "made 3s", "made threes", "three pointers made", "three point makes", "3pt made", "3pt makes"], kind: "count" },
+  { key: "three_pointers_attempted", label: "3FG Attempted", aliases: ["3fg attempted", "3fga", "3 point attempts", "3pt attempts", "three pointers attempted", "three point attempts", "3s attempted"], kind: "count" },
+  { key: "free_throws_made", label: "Free Throws Made", aliases: ["free throws made", "ft made", "ftm"], kind: "count" },
+  { key: "free_throws_attempted", label: "Free Throws Attempted", aliases: ["free throws attempted", "ft attempted", "fta"], kind: "count" },
   { key: "rebounds_total", label: "Rebounds", aliases: ["rebounds", "total rebounds", "reb"], kind: "count" },
   { key: "rebounds_offensive", label: "Offensive Rebounds", aliases: ["offensive rebounds", "oreb", "orb"], kind: "count" },
   { key: "assists", label: "Assists", aliases: ["assists", "ast"], kind: "count" },
@@ -100,12 +106,6 @@ const METRICS: MetricDefinition[] = [
   { key: "three_fg_pct", label: "3P FG%", aliases: ["3p fg%", "3pt fg%", "three point percentage", "3pt percentage"], kind: "rate", formatter: "percent" },
 ];
 
-const TEAM_LOOKUP = new Map(
-  NBA_TEAMS.flatMap((team) => team.aliases.map((alias) => [normalizeText(alias), team] as const)),
-);
-const METRIC_LOOKUP = new Map(
-  METRICS.flatMap((metric) => metric.aliases.map((alias) => [normalizeText(alias), metric] as const)),
-);
 const SEASON_GAMES_CACHE = new Map<string, Promise<Record<string, unknown>[]>>();
 const GAME_DETAILS_CACHE = new Map<string, Promise<Record<string, unknown>>>();
 
@@ -113,6 +113,15 @@ function normalizeText(value: string) {
   return String(value || "")
     .toLowerCase()
     .replace(/'s\b/g, "")
+    .replace(/%/g, " pct ")
+    .replace(/\bc\s*&\s*s\b/g, "catch and shoot")
+    .replace(/\b3fgm\b/g, "3fg made")
+    .replace(/\b3fga\b/g, "3fg attempted")
+    .replace(/\b3fgs\b/g, "3fg made")
+    .replace(/\bfgm\b/g, "fg made")
+    .replace(/\bfga\b/g, "fg attempted")
+    .replace(/\bftm\b/g, "ft made")
+    .replace(/\bfta\b/g, "ft attempted")
     .replace(/\btotals\b/g, "total")
     .replace(/\bavgs?\b/g, "average")
     .replace(/\bper-game\b/g, "per game")
@@ -148,12 +157,160 @@ function uniqueTokens(value: string) {
   return [...new Set(tokenizeText(value))];
 }
 
+const MATCH_STOPWORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "for",
+  "game",
+  "had",
+  "has",
+  "have",
+  "how",
+  "in",
+  "is",
+  "many",
+  "more",
+  "of",
+  "or",
+  "season",
+  "team",
+  "than",
+  "that",
+  "the",
+  "their",
+  "this",
+  "time",
+  "what",
+  "with",
+]);
+
+function uniqueMeaningfulTokens(value: string) {
+  return uniqueTokens(value).filter((token) => !MATCH_STOPWORDS.has(token));
+}
+
 function tokenOverlapScore(promptTokens: string[], aliasTokens: string[]) {
   if (!aliasTokens.length) return 0;
   const promptSet = new Set(promptTokens);
   const matches = aliasTokens.filter((token) => promptSet.has(token)).length;
   return matches / aliasTokens.length;
 }
+
+const TEAM_SEARCH_INDEX = NBA_TEAMS.map((team) => ({
+  team,
+  aliases: [...new Set([
+    ...team.aliases,
+    team.fullName,
+    team.tricode,
+  ])].map((alias) => ({
+    alias: normalizeText(alias),
+    tokens: uniqueMeaningfulTokens(alias),
+  })),
+}));
+
+const PHRASE_VARIANT_RULES = [
+  { pattern: /\bfield goals?\b/g, replacements: ["fg"] },
+  { pattern: /\bfg\b/g, replacements: ["field goals"] },
+  { pattern: /\bfree throws?\b/g, replacements: ["ft"] },
+  { pattern: /\bft\b/g, replacements: ["free throws"] },
+  { pattern: /\b3pt\b/g, replacements: ["3fg", "3s"] },
+  { pattern: /\b3fg\b/g, replacements: ["3pt", "3s"] },
+  { pattern: /\b3s\b/g, replacements: ["3pt", "3fg"] },
+  { pattern: /\bcatch and shoot\b/g, replacements: ["catch shoot", "c and s"] },
+  { pattern: /\bc and s\b/g, replacements: ["catch and shoot"] },
+  { pattern: /\bsecond chance\b/g, replacements: ["2nd chance"] },
+  { pattern: /\b2nd chance\b/g, replacements: ["second chance"] },
+  { pattern: /\bmade\b/g, replacements: ["make", "makes"] },
+  { pattern: /\bmakes\b/g, replacements: ["made", "make"] },
+  { pattern: /\battempted\b/g, replacements: ["attempt", "attempts"] },
+  { pattern: /\battempts\b/g, replacements: ["attempted", "attempt"] },
+  { pattern: /\bpercentage\b/g, replacements: ["percent", "pct"] },
+  { pattern: /\bpercent\b/g, replacements: ["percentage", "pct"] },
+  { pattern: /\bpct\b/g, replacements: ["percentage", "percent"] },
+];
+
+function buildPhraseVariants(seed: string) {
+  const normalizedSeed = normalizeText(seed);
+  const pending = [normalizedSeed];
+  const variants = new Set<string>();
+
+  while (pending.length) {
+    const phrase = pending.pop() || "";
+    if (!phrase || variants.has(phrase)) continue;
+    variants.add(phrase);
+
+    PHRASE_VARIANT_RULES.forEach(({ pattern, replacements }) => {
+      if (!pattern.test(phrase)) return;
+      replacements.forEach((replacement) => {
+        pending.push(phrase.replace(pattern, replacement));
+      });
+    });
+  }
+
+  return [...variants];
+}
+
+function stripTrailingQualifier(value: string, qualifier: "made" | "attempted") {
+  const normalized = normalizeText(value);
+  const patterns = qualifier === "made"
+    ? [/\bmade\b/g, /\bmakes\b/g, /\bmake\b/g]
+    : [/\battempted\b/g, /\battempts\b/g, /\battempt\b/g];
+  return patterns
+    .reduce((current, pattern) => current.replace(pattern, " "), normalized)
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildMetricSearchAliases(metric: MetricDefinition) {
+  const seeds = new Set<string>([
+    metric.key.replace(/_/g, " "),
+    metric.label,
+    ...metric.aliases,
+  ]);
+
+  if (metric.key.endsWith("_made")) {
+    [...seeds].forEach((seed) => {
+      const base = stripTrailingQualifier(seed, "made");
+      if (base) {
+        seeds.add(base);
+        seeds.add(`made ${base}`);
+        seeds.add(`${base} made`);
+      }
+    });
+  }
+
+  if (metric.key.endsWith("_attempted")) {
+    [...seeds].forEach((seed) => {
+      const base = stripTrailingQualifier(seed, "attempted");
+      if (base) {
+        seeds.add(base);
+        seeds.add(`attempted ${base}`);
+        seeds.add(`${base} attempted`);
+        seeds.add(`${base} attempts`);
+      }
+    });
+  }
+
+  if (metric.formatter === "percent") {
+    seeds.add(metric.label.replace("%", " percent"));
+    seeds.add(metric.label.replace("%", " percentage"));
+  }
+
+  return [...new Set(
+    [...seeds]
+      .flatMap((seed) => buildPhraseVariants(seed))
+      .map((alias) => normalizeText(alias))
+      .filter(Boolean),
+  )];
+}
+
+const METRIC_SEARCH_INDEX = METRICS.map((metric) => ({
+  metric,
+  aliases: buildMetricSearchAliases(metric).map((alias) => ({
+    alias,
+    tokens: uniqueMeaningfulTokens(alias),
+  })),
+}));
 
 function parseThreshold(prompt: string) {
   const normalizedPrompt = normalizeText(prompt);
@@ -717,6 +874,12 @@ function buildGameMetrics(game: Record<string, unknown>, teamId: string) {
     },
     metrics: {
       points: safeNumber(teamTotals.points, 0),
+      field_goals_made: safeNumber(teamTotals.fieldGoalsMade, 0),
+      field_goals_attempted: safeNumber(teamTotals.fieldGoalsAttempted, 0),
+      three_pointers_made: safeNumber(teamTotals.threePointersMade, 0),
+      three_pointers_attempted: safeNumber(teamTotals.threePointersAttempted, 0),
+      free_throws_made: safeNumber(teamTotals.freeThrowsMade, 0),
+      free_throws_attempted: safeNumber(teamTotals.freeThrowsAttempted, 0),
       rebounds_total: safeNumber(teamTotals.reboundsTotal, 0),
       rebounds_offensive: safeNumber(teamTotals.reboundsOffensive, 0),
       assists: safeNumber(teamTotals.assists, 0),
@@ -774,16 +937,31 @@ function buildGameMetrics(game: Record<string, unknown>, teamId: string) {
   };
 }
 
-function findTeamFromPrompt(prompt: string) {
+function scoreSearchAliases(prompt: string, searchEntries: Array<{ alias: string; tokens: string[] }>) {
   const normalizedPrompt = normalizeText(prompt);
-  const promptTokens = uniqueTokens(prompt);
+  const paddedPrompt = ` ${normalizedPrompt} `;
+  const promptTokens = uniqueMeaningfulTokens(prompt);
+  let bestScore = 0;
+
+  searchEntries.forEach(({ alias, tokens }) => {
+    const exactMatch = paddedPrompt.includes(` ${alias} `);
+    const overlap = tokenOverlapScore(promptTokens, tokens);
+    const matchingTokens = tokens.filter((token) => promptTokens.includes(token)).length;
+    if (!exactMatch && matchingTokens === 0) return;
+    const score = exactMatch
+      ? 100 + (tokens.length * 5)
+      : (overlap * 20) + (matchingTokens * 4);
+    if (score > bestScore) bestScore = score;
+  });
+
+  return bestScore;
+}
+
+function findTeamFromPrompt(prompt: string) {
   let bestMatch: (typeof NBA_TEAMS)[number] | null = null;
   let bestScore = 0;
-  TEAM_LOOKUP.forEach((team, alias) => {
-    const aliasTokens = uniqueTokens(alias);
-    const exactMatch = normalizedPrompt.includes(alias);
-    const overlap = tokenOverlapScore(promptTokens, aliasTokens);
-    const score = exactMatch ? 100 + alias.length : overlap * 10;
+  TEAM_SEARCH_INDEX.forEach(({ team, aliases }) => {
+    const score = scoreSearchAliases(prompt, aliases);
     if (score > bestScore) {
       bestMatch = team;
       bestScore = score;
@@ -793,21 +971,26 @@ function findTeamFromPrompt(prompt: string) {
 }
 
 function findMetricFromPrompt(prompt: string) {
-  const normalizedPrompt = normalizeText(prompt);
-  const promptTokens = uniqueTokens(prompt);
   let bestMatch: MetricDefinition | null = null;
   let bestScore = 0;
-  METRIC_LOOKUP.forEach((metric, alias) => {
-    const aliasTokens = uniqueTokens(alias);
-    const exactMatch = normalizedPrompt.includes(alias);
-    const overlap = tokenOverlapScore(promptTokens, aliasTokens);
-    const score = exactMatch ? 100 + alias.length : (overlap * 10) + aliasTokens.length;
+  METRIC_SEARCH_INDEX.forEach(({ metric, aliases }) => {
+    const score = scoreSearchAliases(prompt, aliases);
     if (score > bestScore) {
       bestMatch = metric;
       bestScore = score;
     }
   });
   return bestScore >= 5 ? bestMatch : null;
+}
+
+function scoreTeamPrompt(team: (typeof NBA_TEAMS)[number], prompt: string) {
+  const searchEntry = TEAM_SEARCH_INDEX.find((entry) => entry.team.teamId === team.teamId);
+  return searchEntry ? scoreSearchAliases(prompt, searchEntry.aliases) : 0;
+}
+
+function scoreMetricPrompt(metric: MetricDefinition, prompt: string) {
+  const searchEntry = METRIC_SEARCH_INDEX.find((entry) => entry.metric.key === metric.key);
+  return searchEntry ? scoreSearchAliases(prompt, searchEntry.aliases) : 0;
 }
 
 function buildFallbackParse(prompt: string) {
@@ -1079,14 +1262,21 @@ Deno.serve(async (request) => {
     let team: (typeof NBA_TEAMS)[number] | null = null;
     let metric: MetricDefinition | null = null;
 
+    let bestCandidateScore = 0;
+
     for (const candidate of candidateParses) {
       const matchedTeam = NBA_TEAMS.find((entry) => entry.teamId === candidate.teamId) || null;
       const matchedMetric = METRICS.find((entry) => entry.key === candidate.statKey) || null;
       if (matchedTeam && matchedMetric) {
+        const teamScore = scoreTeamPrompt(matchedTeam, prompt);
+        const metricScore = scoreMetricPrompt(matchedMetric, prompt);
+        const sourceBonus = candidate === fallbackParsed ? 5 : 0;
+        const candidateScore = teamScore + metricScore + sourceBonus;
+        if (teamScore < 6 || metricScore < 5 || candidateScore <= bestCandidateScore) continue;
+        bestCandidateScore = candidateScore;
         parsed = candidate;
         team = matchedTeam;
         metric = matchedMetric;
-        break;
       }
     }
 
