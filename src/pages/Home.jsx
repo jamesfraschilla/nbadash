@@ -5,6 +5,7 @@ import { fetchGamesByDate, fetchTeamSeasonGames, teamLogoUrl } from "../api.js";
 import { NBA_TEAMS } from "../data/nbaTeams.js";
 import {
   formatDateInput,
+  formatDateInputInTimeZone,
   formatDateLabel,
   formatGameDateLabel,
   gameStatusLabel,
@@ -18,8 +19,8 @@ export default function Home() {
   const dateParam = params.get("d");
   const selectedTeamId = params.get("team") || "";
   const selectedOpponentTeamId = params.get("opponent") || "";
-  const date = dateParam ? parseDateInput(dateParam) : new Date();
-  const dateInput = formatDateInput(date);
+  const dateInput = dateParam || formatDateInputInTimeZone(new Date(), "America/New_York");
+  const date = parseDateInput(dateInput);
   const dateLabel = formatDateLabel(date);
   const selectedTeam = NBA_TEAMS.find((team) => team.teamId === selectedTeamId) || null;
   const selectedOpponentTeam = NBA_TEAMS.find((team) => team.teamId === selectedOpponentTeamId) || null;

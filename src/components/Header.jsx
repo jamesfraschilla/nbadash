@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { fetchGamesByDate } from "../api.js";
-import { formatDateInput, formatDateLabel, parseDateInput } from "../utils.js";
+import { formatDateInputInTimeZone, formatDateLabel, parseDateInput } from "../utils.js";
 import GameCard from "./GameCard.jsx";
 import styles from "./Header.module.css";
 
@@ -14,8 +14,8 @@ export default function Header({ theme, onToggleTheme, onSignOut, profile, isAdm
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const dateParam = params.get("d");
-  const date = dateParam ? parseDateInput(dateParam) : new Date();
-  const dateInput = formatDateInput(date);
+  const dateInput = dateParam || formatDateInputInTimeZone(new Date(), "America/New_York");
+  const date = parseDateInput(dateInput);
   const dateLabel = formatDateLabel(date);
 
   const { data: games = [] } = useQuery({
