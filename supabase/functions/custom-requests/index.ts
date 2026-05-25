@@ -69,6 +69,7 @@ type QueryAggregation =
   | "record_when_nonzero";
 
 type QueryGroupBy = "none" | "opponent" | "result";
+type QuerySortBy = "value" | "date";
 
 type ParsedQuery = {
   teamId: string;
@@ -78,6 +79,7 @@ type ParsedQuery = {
   opponentTeamId?: string;
   resultFilter?: ResultFilter;
   sort?: SortDirection;
+  sortBy?: QuerySortBy;
   limit?: number;
   groupBy?: QueryGroupBy;
 };
@@ -1162,6 +1164,17 @@ function isRecordPrompt(prompt: string) {
     || normalizedPrompt.includes("w l");
 }
 
+function wantsFullGameLog(prompt: string) {
+  const normalizedPrompt = normalizeText(prompt);
+  return normalizedPrompt.includes("each game")
+    || normalizedPrompt.includes("every game")
+    || normalizedPrompt.includes("game by game")
+    || normalizedPrompt.includes("single game")
+    || normalizedPrompt.includes("from each of their games")
+    || normalizedPrompt.includes("from all games")
+    || normalizedPrompt.includes("for all games");
+}
+
 function detectAggregation(prompt: string, threshold: number | null): QueryAggregation {
   const normalizedPrompt = normalizeText(prompt);
   const explicitListLimit = parseListLimit(prompt);
@@ -1183,6 +1196,8 @@ function detectAggregation(prompt: string, threshold: number | null): QueryAggre
     if (threshold != null) return "count_games_gte";
     return "count_games_nonzero";
   }
+
+  if (wantsFullGameLog(prompt)) return "list_games";
 
   if (explicitListLimit != null) return "list_games";
 
@@ -1207,6 +1222,8 @@ function detectAggregation(prompt: string, threshold: number | null): QueryAggre
 
 function parseSortDirection(prompt: string, aggregation: QueryAggregation): SortDirection | undefined {
   const normalizedPrompt = normalizeText(prompt);
+  if (aggregation === "list_games" && /\b(last|latest|recent|newest)\b/.test(normalizedPrompt)) return "desc";
+  if (aggregation === "list_games" && /\b(first|earliest|oldest|chronological)\b/.test(normalizedPrompt)) return "asc";
   if (
     aggregation === "max_game" ||
     aggregation === "count_games_gte" ||
@@ -1219,6 +1236,17 @@ function parseSortDirection(prompt: string, aggregation: QueryAggregation): Sort
   ) return "asc";
   if (/\b(top|highest|most|best|descending|desc)\b/.test(normalizedPrompt)) return "desc";
   if (/\b(bottom|lowest|least|worst|ascending|asc)\b/.test(normalizedPrompt)) return "asc";
+  return undefined;
+}
+
+function parseSortBy(prompt: string, aggregation: QueryAggregation): QuerySortBy | undefined {
+  const normalizedPrompt = normalizeText(prompt);
+  if (aggregation === "list_games") {
+    if (wantsFullGameLog(prompt)) return "date";
+    if (/\b(last|latest|recent|newest|first|earliest|oldest|chronological|date)\b/.test(normalizedPrompt)) return "date";
+  }
+  if (/\b(date|chronological|latest|recent|earliest|oldest)\b/.test(normalizedPrompt)) return "date";
+  if (/\b(highest|lowest|top|bottom|best|worst|most|least)\b/.test(normalizedPrompt)) return "value";
   return undefined;
 }
 
@@ -1251,6 +1279,7 @@ function buildFallbackParse(prompt: string): ParsedQuery | null {
   const resultFilter = parseResultFilter(prompt);
   const limit = parseListLimit(prompt);
   const sort = parseSortDirection(prompt, aggregation);
+  const sortBy = parseSortBy(prompt, aggregation);
   const groupBy = parseGroupBy(prompt);
 
   return {
@@ -1261,6 +1290,7 @@ function buildFallbackParse(prompt: string): ParsedQuery | null {
     opponentTeamId: opponent?.teamId,
     resultFilter,
     sort,
+    sortBy,
     limit,
     groupBy,
   };
@@ -1300,10 +1330,14 @@ const CUSTOM_REQUEST_QUERY_SCHEMA = {
       type: "string",
       enum: ["asc", "desc"],
     },
+    sortBy: {
+      type: "string",
+      enum: ["value", "date"],
+    },
     limit: {
       type: "integer",
       minimum: 1,
-      maximum: 25,
+      maximum: 200,
     },
     groupBy: {
       type: "string",
@@ -1424,7 +1458,8 @@ function normalizeParsedQuery(value: unknown): ParsedQuery | null {
   const opponentTeamId = String(candidate.opponentTeamId || "").trim();
   const resultFilter = String(candidate.resultFilter || "all").trim() as ResultFilter;
   const sort = String(candidate.sort || "").trim() as SortDirection;
-  const limit = candidate.limit != null ? Math.max(1, Math.min(25, safeNumber(candidate.limit, 5))) : undefined;
+  const sortBy = String(candidate.sortBy || "").trim() as QuerySortBy;
+  const limit = candidate.limit != null ? Math.max(1, Math.min(200, safeNumber(candidate.limit, 5))) : undefined;
   const groupBy = String(candidate.groupBy || "none").trim() as QueryGroupBy;
   return {
     teamId,
@@ -1434,6 +1469,7 @@ function normalizeParsedQuery(value: unknown): ParsedQuery | null {
     opponentTeamId: opponentTeamId && opponentTeamId !== teamId ? opponentTeamId : undefined,
     resultFilter: resultFilter === "win" || resultFilter === "loss" ? resultFilter : "all",
     sort: sort === "asc" || sort === "desc" ? sort : undefined,
+    sortBy: sortBy === "date" || sortBy === "value" ? sortBy : undefined,
     limit,
     groupBy: groupBy === "opponent" || groupBy === "result" ? groupBy : "none",
   };
@@ -1461,8 +1497,18 @@ function describeScope(
   return parts.join(" ");
 }
 
-function compareRows(left: QueryGameRow, right: QueryGameRow, sort: SortDirection | undefined) {
+function compareRows(
+  left: QueryGameRow,
+  right: QueryGameRow,
+  sort: SortDirection | undefined,
+  sortBy: QuerySortBy = "value",
+) {
   const direction = sort === "asc" ? 1 : -1;
+  if (sortBy === "date") {
+    const dateCompare = String(left.gameDate).localeCompare(String(right.gameDate)) * direction;
+    if (dateCompare !== 0) return dateCompare;
+    return (left.value - right.value) * -1;
+  }
   if (left.value !== right.value) return (left.value - right.value) * direction;
   return String(right.gameDate).localeCompare(String(left.gameDate));
 }
@@ -1490,7 +1536,7 @@ function buildGroupedSummaries(
   });
 
   const summaries = [...groups.values()].map((group) => {
-    const games = [...group.rows].sort((left, right) => compareRows(left, right, sortDirection));
+    const games = [...group.rows].sort((left, right) => compareRows(left, right, sortDirection, query.sortBy || "value"));
     const total = games.reduce((sum, row) => sum + row.value, 0);
     const average = games.length ? total / games.length : 0;
     const wins = games.filter((row) => row.result === "W").length;
@@ -1524,7 +1570,7 @@ function buildGroupedSummaries(
       value = best?.value || 0;
       displayValue = formatValue(value, metric);
     } else if (aggregation === "min_game") {
-      const best = [...games].sort((left, right) => compareRows(left, right, "asc"))[0];
+      const best = [...games].sort((left, right) => compareRows(left, right, "asc", "value"))[0];
       value = best?.value || 0;
       displayValue = formatValue(value, metric);
     } else if (aggregation === "list_games") {
@@ -1650,9 +1696,16 @@ function executeQuery(
   });
 
   const sortDirection = query.sort
-    || (aggregation === "min_game" || aggregation === "count_games_lte" || aggregation === "record_when_lte" ? "asc" : "desc");
-  const orderedRows = [...filteredRows].sort((left, right) => compareRows(left, right, sortDirection));
-  const listLimit = query.limit || (aggregation === "list_games" ? 10 : 25);
+    || (
+      aggregation === "list_games" && (query.sortBy || "value") === "date"
+        ? "asc"
+        : aggregation === "min_game" || aggregation === "count_games_lte" || aggregation === "record_when_lte"
+          ? "asc"
+          : "desc"
+    );
+  const sortBy = query.sortBy || (aggregation === "list_games" ? "date" : "value");
+  const orderedRows = [...filteredRows].sort((left, right) => compareRows(left, right, sortDirection, sortBy));
+  const listLimit = query.limit || (aggregation === "list_games" ? orderedRows.length : 25);
   const groupedSummaries = buildGroupedSummaries(orderedRows, metric, query, aggregation, threshold, sortDirection);
 
   const buildCountAnswer = (matchingRows: QueryGameRow[], comparatorText: string) => ({
@@ -1750,7 +1803,7 @@ function executeQuery(
   }
 
   if (aggregation === "max_game") {
-    const best = [...orderedRows].sort((left, right) => compareRows(left, right, "desc"))[0] || null;
+      const best = [...orderedRows].sort((left, right) => compareRows(left, right, "desc", "value"))[0] || null;
     return {
       aggregation,
       value: best?.value || 0,
@@ -1765,7 +1818,7 @@ function executeQuery(
   }
 
   if (aggregation === "min_game") {
-    const best = [...orderedRows].sort((left, right) => compareRows(left, right, "asc"))[0] || null;
+      const best = [...orderedRows].sort((left, right) => compareRows(left, right, "asc", "value"))[0] || null;
     return {
       aggregation,
       value: best?.value || 0,
@@ -1785,7 +1838,7 @@ function executeQuery(
       aggregation,
       value: listedGames.length,
       displayValue: `${listedGames.length}`,
-      answer: `Showing ${listedGames.length} ${metric.label.toLowerCase()} game${listedGames.length === 1 ? "" : "s"} for ${scopedLabel}, sorted ${sortDirection === "asc" ? "ascending" : "descending"}.`,
+      answer: `Showing ${listedGames.length} ${metric.label.toLowerCase()} game${listedGames.length === 1 ? "" : "s"} for ${scopedLabel}, sorted by ${sortBy === "date" ? "date" : metric.label.toLowerCase()} ${sortDirection === "asc" ? "ascending" : "descending"}.`,
       games: listedGames,
       sampleSize: orderedRows.length,
       groups: groupedSummaries,
@@ -1903,7 +1956,7 @@ Deno.serve(async (request) => {
       parsedQuery: parsed,
       result: {
         ...result,
-        games: (result.games as Array<Record<string, unknown>>).slice(0, 25),
+        games: result.games,
       },
       skippedGames: dataset.skippedGames,
       supportedStats: METRICS.map((entry) => ({ key: entry.key, label: entry.label })),
