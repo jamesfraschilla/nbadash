@@ -128,6 +128,10 @@ type BuiltGameMetrics = {
   metrics: Record<string, number>;
 };
 
+type CachedTeamGameRow = QueryGameRow & {
+  metrics: Record<string, number>;
+};
+
 const METRICS: MetricDefinition[] = [
   { key: "points", label: "Points", aliases: ["points", "pts"], kind: "count" },
   { key: "field_goals_made", label: "Field Goals Made", aliases: ["field goals made", "fg made", "fgm", "made field goals"], kind: "count" },
@@ -184,6 +188,10 @@ const METRICS: MetricDefinition[] = [
 
 const SEASON_GAMES_CACHE = new Map<string, Promise<Record<string, unknown>[]>>();
 const GAME_DETAILS_CACHE = new Map<string, Promise<Record<string, unknown>>>();
+const TEAM_SEASON_DATASET_CACHE = new Map<string, Promise<{
+  rows: Array<QueryGameRow & { metrics: Record<string, number> }>;
+  skippedGames: Array<{ gameId: string; gameDate: string; error: string }>;
+}>>();
 
 function normalizeText(value: string) {
   return String(value || "")
@@ -1545,8 +1553,68 @@ function buildGroupedSummaries(
   });
 }
 
+async function buildTeamSeasonDataset(
+  season: string,
+  team: (typeof NBA_TEAMS)[number],
+) {
+  const cacheKey = `${season}:${team.teamId}`;
+  if (!TEAM_SEASON_DATASET_CACHE.has(cacheKey)) {
+    TEAM_SEASON_DATASET_CACHE.set(cacheKey, (async () => {
+      const seasonGames = await fetchSeasonGames(season);
+      const teamGames = seasonGames.filter((game) => (
+        String((game as Record<string, unknown>)?.homeTeam?.teamId || "") === team.teamId ||
+        String((game as Record<string, unknown>)?.awayTeam?.teamId || "") === team.teamId
+      ));
+
+      const detailedGames = await Promise.all(
+        teamGames.map((game) => fetchGameDetailsSafe(String((game as Record<string, unknown>).gameId || ""))),
+      );
+
+      const skippedGames = detailedGames
+        .map((entry, index) => (
+          entry.error
+            ? {
+              gameId: String((teamGames[index] as Record<string, unknown>).gameId || ""),
+              gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
+              error: entry.error,
+            }
+            : null
+        ))
+        .filter(Boolean) as Array<{ gameId: string; gameDate: string; error: string }>;
+
+      const rows = detailedGames
+        .map((entry, index) => {
+          if (!entry.game) return null;
+          const game = {
+            ...entry.game,
+            gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
+          } as AnyRecord;
+          const metrics = buildGameMetrics(game, team.teamId);
+          return {
+            gameId: String(game.gameId || ""),
+            gameDate: String(game.gameDate || ""),
+            opponent: metrics.opponent,
+            value: 0,
+            result: metrics.result,
+            teamScore: safeNumber(metrics.teamScore, 0),
+            opponentScore: safeNumber(metrics.opponentScore, 0),
+            margin: safeNumber(metrics.margin, 0),
+            isHome: Boolean(metrics.isHome),
+            seasonType: String(metrics.seasonType || ""),
+            metrics: metrics.metrics,
+          } satisfies CachedTeamGameRow;
+        })
+        .filter(Boolean) as CachedTeamGameRow[];
+
+      return { rows, skippedGames };
+    })());
+  }
+
+  return TEAM_SEASON_DATASET_CACHE.get(cacheKey)!;
+}
+
 function executeQuery(
-  games: Array<Record<string, unknown>>,
+  rowsWithMetrics: CachedTeamGameRow[],
   metric: MetricDefinition,
   query: ParsedQuery,
   team: (typeof NBA_TEAMS)[number],
@@ -1561,21 +1629,18 @@ function executeQuery(
     : null;
   const scopedLabel = describeScope(team, opponentTeam, query.resultFilter || "all");
 
-  const rows: QueryGameRow[] = games.map((game) => {
-    const metrics = buildGameMetrics(game, team.teamId);
-    return {
-      gameId: String(game.gameId || ""),
-      gameDate: String(game.gameDate || ""),
-      opponent: metrics.opponent,
-      value: safeNumber((metrics.metrics as Record<string, unknown>)[metric.key], 0),
-      result: metrics.result,
-      teamScore: safeNumber(metrics.teamScore, 0),
-      opponentScore: safeNumber(metrics.opponentScore, 0),
-      margin: safeNumber(metrics.margin, 0),
-      isHome: Boolean(metrics.isHome),
-      seasonType: String(metrics.seasonType || ""),
-    };
-  });
+  const rows: QueryGameRow[] = rowsWithMetrics.map((row) => ({
+    gameId: row.gameId,
+    gameDate: row.gameDate,
+    opponent: row.opponent,
+    value: safeNumber((row.metrics as Record<string, unknown>)[metric.key], 0),
+    result: row.result,
+    teamScore: row.teamScore,
+    opponentScore: row.opponentScore,
+    margin: row.margin,
+    isHome: row.isHome,
+    seasonType: row.seasonType,
+  }));
 
   const filteredRows = rows.filter((row) => {
     if (query.opponentTeamId && row.opponent.teamId !== query.opponentTeamId) return false;
@@ -1754,7 +1819,12 @@ Deno.serve(async (request) => {
     if (!prompt) return jsonResponse(400, { error: "Prompt is required." });
 
     const fallbackParsed = normalizeParsedQuery(buildFallbackParse(prompt));
-    const openAiParsed = normalizeParsedQuery(await parsePromptWithOpenAI(prompt).catch(() => null));
+    const season = currentSeasonString();
+    const openAiParsedPromise = parsePromptWithOpenAI(prompt)
+      .then((value) => normalizeParsedQuery(value))
+      .catch(() => null);
+    const seasonGamesPromise = fetchSeasonGames(season);
+    const openAiParsed = await openAiParsedPromise;
     const candidateParses = [fallbackParsed, openAiParsed].filter(Boolean) as ParsedQuery[];
 
     let parsed: ParsedQuery | null = null;
@@ -1797,45 +1867,17 @@ Deno.serve(async (request) => {
       });
     }
 
-    const season = currentSeasonString();
-    const seasonGames = await fetchSeasonGames(season);
-    const teamGames = seasonGames.filter((game) => (
-      String((game as Record<string, unknown>)?.homeTeam?.teamId || "") === team.teamId ||
-      String((game as Record<string, unknown>)?.awayTeam?.teamId || "") === team.teamId
-    ));
-    const detailedGames = await Promise.all(
-      teamGames.map((game) => fetchGameDetailsSafe(String((game as Record<string, unknown>).gameId || ""))),
-    );
-    const enrichedGames = detailedGames
-      .map((entry, index) => (
-        entry.game
-          ? {
-            ...entry.game,
-            gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
-          }
-          : null
-      ))
-      .filter(Boolean) as Array<Record<string, unknown>>;
-    const skippedGames = detailedGames
-      .map((entry, index) => (
-        entry.error
-          ? {
-            gameId: String((teamGames[index] as Record<string, unknown>).gameId || ""),
-            gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
-            error: entry.error,
-          }
-          : null
-      ))
-      .filter(Boolean);
+    await seasonGamesPromise;
+    const dataset = await buildTeamSeasonDataset(season, team);
 
-    if (!enrichedGames.length) {
+    if (!dataset.rows.length) {
       return jsonResponse(502, {
         error: "Unable to load any completed game details for this request.",
-        skippedGames,
+        skippedGames: dataset.skippedGames,
       });
     }
 
-    const result = executeQuery(enrichedGames, metric, parsed, team);
+    const result = executeQuery(dataset.rows, metric, parsed, team);
 
     return jsonResponse(200, {
       prompt,
@@ -1863,7 +1905,7 @@ Deno.serve(async (request) => {
         ...result,
         games: (result.games as Array<Record<string, unknown>>).slice(0, 25),
       },
-      skippedGames,
+      skippedGames: dataset.skippedGames,
       supportedStats: METRICS.map((entry) => ({ key: entry.key, label: entry.label })),
     });
   } catch (error) {
