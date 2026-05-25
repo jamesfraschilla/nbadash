@@ -226,6 +226,12 @@ function loadTemplatePayload() {
   return null;
 }
 
+function isPbpHighlightsRlsError(error) {
+  const message = String(error?.message || "").toLowerCase();
+  return message.includes("row-level security policy")
+    && message.includes("pbp_highlights");
+}
+
 async function fetchRemoteSchedule(gameId) {
   if (!supabase || !gameId) return null;
   const { data, error } = await supabase
@@ -784,6 +790,10 @@ export default function PreGame() {
     ])
       .then(() => setSyncError(""))
       .catch((saveError) => {
+        if (isPbpHighlightsRlsError(saveError)) {
+          setSyncError("");
+          return;
+        }
         console.error("Failed to save pregame schedule/template", saveError);
         setSyncError(saveError?.message || "Unable to sync pre-game schedule changes.");
       });

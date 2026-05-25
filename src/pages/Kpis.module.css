@@ -1,0 +1,233 @@
+@font-face {
+  font-family: "DIN KPI Condensed";
+  src: url("../assets/fonts/DIN.ttf") format("truetype");
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "DIN KPI Alternate";
+  src: url("../assets/fonts/DINalt.ttf") format("truetype");
+  font-display: swap;
+}
+
+.page {
+  min-height: 100vh;
+  padding: 20px 20px 40px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.pageFullscreen {
+  padding: 0;
+  background: #111111;
+  overflow: hidden;
+}
+
+.topRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.topRowLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.backButton,
+.fullscreenButton,
+.exitFullscreenButton {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  padding: 6px 12px;
+  font-size: 13px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.fullscreenButton {
+  font-weight: 700;
+}
+
+.headerBlock {
+  margin-bottom: 24px;
+}
+
+.eyebrow {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.title {
+  margin: 0 0 8px;
+  font-size: clamp(28px, 4vw, 44px);
+  line-height: 1.05;
+}
+
+.syncError {
+  margin: 12px 0 0;
+  color: #c62828;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.editorGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.metricCard {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--panel);
+  padding: 18px;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.08);
+}
+
+.metricCardHeader {
+  margin-bottom: 16px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.fieldLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+
+.textInput {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font: inherit;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.textInput:last-child {
+  margin-bottom: 0;
+}
+
+.stateMessage {
+  padding: 40px 16px;
+  text-align: center;
+}
+
+.exitFullscreenButton {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 5;
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(20, 20, 20, 0.86);
+  color: #ffffff;
+}
+
+.fullscreenViewport {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #111111;
+  overflow: hidden;
+}
+
+.fullscreenStage {
+  position: relative;
+  flex: none;
+  transform-origin: center center;
+  background: #ffffff;
+}
+
+.contentBox {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 802px;
+  height: 1300px;
+  background: #000000;
+}
+
+.contentColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 92px;
+  padding: 72px 74px;
+}
+
+.displayMetric {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+
+.displayMetricName {
+  width: 100%;
+  color: #ffffff;
+  text-align: center;
+  font-family: "DIN KPI Condensed", "Arial Narrow", sans-serif;
+  font-size: 74px;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+}
+
+.displayMetricValueBox {
+  width: 100%;
+  min-height: 194px;
+  background: #d9d9d9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.displayMetricValue {
+  color: #000000;
+  font-family: "DIN KPI Alternate", sans-serif;
+  font-size: 110px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+@media (max-width: 720px) {
+  .page {
+    padding: 16px 16px 28px;
+  }
+
+  .topRow {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .topRowLeft {
+    width: 100%;
+  }
+
+  .backButton,
+  .fullscreenButton {
+    width: 100%;
+    text-align: center;
+  }
+}

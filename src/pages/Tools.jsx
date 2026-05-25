@@ -977,9 +977,7 @@ export default function Tools() {
   return (
     <div className={styles.page}>
       <section className={styles.hero}>
-        <div className={styles.kicker}>Tools</div>
         <h1 className={styles.title}>Coaching Tools</h1>
-        <p className={styles.subtitle}>Use the match-up workspace, the pre-game scouting packet generator, or the Late Game Matrix simulator from one place.</p>
       </section>
 
       <div className={styles.tabBar}>
@@ -1015,11 +1013,9 @@ export default function Tools() {
 
       {activeTab === TOOL_TABS.MATCHUP ? (
         <section className={styles.workspace}>
-          {!remoteRostersPayload?.teams ? (
+          {!remoteRostersPayload?.teams && league === "gleague" ? (
             <p className={styles.statusNote}>
-              {league === "gleague"
-                ? "Live G League rosters will appear here once the `gleague-rosters` Supabase function is deployed."
-                : "Live NBA rosters will appear here once the `nba-rosters` Supabase function is deployed. Until then, this page falls back to the bundled roster snapshot."}
+              Live G League rosters will appear here once the `gleague-rosters` Supabase function is deployed.
             </p>
           ) : null}
 
@@ -1108,10 +1104,6 @@ export default function Tools() {
         </section>
       ) : activeTab === TOOL_TABS.SCOUTING ? (
         <section className={styles.workspace}>
-          <p className={styles.statusNote}>
-            Generate an opponent packet from a recent game sample or a custom date window. This first pass focuses on team trends, key players, lineup usage, and recent results.
-          </p>
-
           <div className={styles.scoutingSetupGrid}>
             <label className={`${styles.field} ${styles.leagueField}`}>
               <span className={styles.fieldLabel}>League</span>
@@ -1295,10 +1287,6 @@ export default function Tools() {
         </section>
       ) : activeTab === TOOL_TABS.CUSTOM_REQUESTS ? (
         <section className={styles.workspace}>
-          <p className={styles.statusNote}>
-            Query the current NBA season using the same team stat model used in the dashboard. The engine supports totals, averages, top or bottom single-game results, threshold counts, win-loss records, and filters for specific opponents or wins and losses.
-          </p>
-
           <section className={styles.requestPanel}>
             <label className={styles.field}>
               <span className={styles.fieldLabel}>Prompt</span>
@@ -1313,30 +1301,6 @@ export default function Tools() {
                 rows={5}
               />
             </label>
-
-            <div className={styles.requestExamples}>
-              <button
-                type="button"
-                className={styles.toolLink}
-                onClick={() => setCustomPrompt("How many games this season has Cleveland had 5 or more kills recorded in a single game?")}
-              >
-                Cleveland 5+ kills games
-              </button>
-              <button
-                type="button"
-                className={styles.toolLink}
-                onClick={() => setCustomPrompt("What is Washington's season total for Dynamite 3s?")}
-              >
-                Washington dynamite 3s
-              </button>
-              <button
-                type="button"
-                className={styles.toolLink}
-                onClick={() => setCustomPrompt("What is New York's average transition points this season?")}
-              >
-                New York transition average
-              </button>
-            </div>
 
             <div className={styles.actionCluster}>
               <button
@@ -1475,10 +1439,6 @@ export default function Tools() {
         </section>
       ) : (
         <section className={styles.workspace}>
-          <p className={styles.statusNote}>
-            This uses the same Late Game Matrix engine as the game page, but runs in manual simulation mode so you can test scenarios without a live game.
-          </p>
-
           <div className={styles.matrixSetupGrid}>
             <label className={`${styles.field} ${styles.leagueField}`}>
               <span className={styles.fieldLabel}>League</span>

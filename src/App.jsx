@@ -17,6 +17,7 @@ const Notes = lazy(() => import("./pages/Notes.jsx"));
 const Drawing = lazy(() => import("./pages/Drawing.jsx"));
 const PreGame = lazy(() => import("./pages/PreGame.jsx"));
 const Rotations = lazy(() => import("./pages/Rotations.jsx"));
+const Kpis = lazy(() => import("./pages/Kpis.jsx"));
 const Admin = lazy(() => import("./pages/Admin.jsx"));
 const UserContent = lazy(() => import("./pages/UserContent.jsx"));
 const Tools = lazy(() => import("./pages/Tools.jsx"));
@@ -260,6 +261,7 @@ export default function App() {
             <Route path="/g/:gameId/notes" element={<Notes />} />
             <Route path="/g/:gameId/pregame" element={<PreGame />} />
             <Route path="/g/:gameId/rotations" element={<Rotations />} />
+            <Route path="/g/:gameId/kpis" element={<Kpis />} />
             <Route path="/m/:gameId" element={<Minutes />} />
             <Route path="/draw" element={<Drawing />} />
           </Routes>

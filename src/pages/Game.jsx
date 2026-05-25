@@ -2579,6 +2579,14 @@ export default function Game({ variant = "full" }) {
               Rotations
             </Link>
           )}
+          {showExtras && isRotationsGame && (
+            <Link
+              className={styles.backButton}
+              to={dateParam ? `/g/${gameId}/kpis?d=${dateParam}` : `/g/${gameId}/kpis`}
+            >
+              KPIs
+            </Link>
+          )}
         </div>
         <div className={styles.backRowCenter}>
           {isAtc && (
