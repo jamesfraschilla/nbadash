@@ -147,6 +147,7 @@ export default function Kpis() {
   const metricsStateKeyRef = useRef(payloadStateKey(loadStoredMetricsPayload(gameId)));
   const skipNextSaveRef = useRef(false);
   const hydratedRef = useRef(false);
+  const activeFieldRef = useRef("");
 
   const { data: game, isLoading, error } = useQuery({
     queryKey: ["game-kpis", gameId],
@@ -188,7 +189,31 @@ export default function Kpis() {
     const applyIncomingPayload = (incomingPayload) => {
       if (!incomingPayload) return;
       setMetricsPayload((current) => {
-        const merged = mergeMetricsPayload(current, incomingPayload);
+        const baseMerged = mergeMetricsPayload(current, incomingPayload);
+        const activeField = activeFieldRef.current;
+        const merged = activeField
+          ? {
+            ...baseMerged,
+            metrics: baseMerged.metrics.map((metric, index) => {
+              const currentMetric = current.metrics[index] || DEFAULT_METRICS[index];
+              if (activeField === `${metric.id}:name`) {
+                return {
+                  ...metric,
+                  name: currentMetric.name,
+                  nameUpdatedAt: currentMetric.nameUpdatedAt,
+                };
+              }
+              if (activeField === `${metric.id}:value`) {
+                return {
+                  ...metric,
+                  value: currentMetric.value,
+                  valueUpdatedAt: currentMetric.valueUpdatedAt,
+                };
+              }
+              return metric;
+            }),
+          }
+          : baseMerged;
         const mergedKey = payloadStateKey(merged);
         if (mergedKey === metricsStateKeyRef.current) return current;
         skipNextSaveRef.current = true;
@@ -288,7 +313,31 @@ export default function Kpis() {
         .then((savedPayload) => {
           setSyncError("");
           setMetricsPayload((current) => {
-            const merged = mergeMetricsPayload(current, savedPayload);
+            const baseMerged = mergeMetricsPayload(current, savedPayload);
+            const activeField = activeFieldRef.current;
+            const merged = activeField
+              ? {
+                ...baseMerged,
+                metrics: baseMerged.metrics.map((metric, index) => {
+                  const currentMetric = current.metrics[index] || DEFAULT_METRICS[index];
+                  if (activeField === `${metric.id}:name`) {
+                    return {
+                      ...metric,
+                      name: currentMetric.name,
+                      nameUpdatedAt: currentMetric.nameUpdatedAt,
+                    };
+                  }
+                  if (activeField === `${metric.id}:value`) {
+                    return {
+                      ...metric,
+                      value: currentMetric.value,
+                      valueUpdatedAt: currentMetric.valueUpdatedAt,
+                    };
+                  }
+                  return metric;
+                }),
+              }
+              : baseMerged;
             const mergedKey = payloadStateKey(merged);
             if (mergedKey === metricsStateKeyRef.current) {
               return current;
@@ -374,6 +423,14 @@ export default function Kpis() {
                     type="text"
                     value={metric.name}
                     onChange={(event) => updateMetric(metric.id, "name", event.target.value)}
+                    onFocus={() => {
+                      activeFieldRef.current = `${metric.id}:name`;
+                    }}
+                    onBlur={() => {
+                      if (activeFieldRef.current === `${metric.id}:name`) {
+                        activeFieldRef.current = "";
+                      }
+                    }}
                     placeholder={`KPI #${index + 1}`}
                   />
                 </label>
@@ -384,6 +441,14 @@ export default function Kpis() {
                     type="text"
                     value={metric.value}
                     onChange={(event) => updateMetric(metric.id, "value", event.target.value)}
+                    onFocus={() => {
+                      activeFieldRef.current = `${metric.id}:value`;
+                    }}
+                    onBlur={() => {
+                      if (activeFieldRef.current === `${metric.id}:value`) {
+                        activeFieldRef.current = "";
+                      }
+                    }}
                     placeholder="0"
                     inputMode="numeric"
                   />
