@@ -31,10 +31,12 @@ function normalizeMetrics(raw, fallbackUpdatedAt = 0) {
   const metrics = Array.isArray(raw) ? raw : [];
   return DEFAULT_METRICS.map((metric, index) => {
     const candidate = metrics[index];
+    const hasName = candidate && Object.prototype.hasOwnProperty.call(candidate, "name");
+    const hasValue = candidate && Object.prototype.hasOwnProperty.call(candidate, "value");
     return {
       id: metric.id,
-      name: String(candidate?.name || metric.name),
-      value: String(candidate?.value || metric.value),
+      name: String(hasName ? candidate.name ?? "" : metric.name),
+      value: String(hasValue ? candidate.value ?? "" : metric.value),
       nameUpdatedAt: Number(candidate?.nameUpdatedAt || fallbackUpdatedAt || 0),
       valueUpdatedAt: Number(candidate?.valueUpdatedAt || fallbackUpdatedAt || 0),
     };
