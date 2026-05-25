@@ -52,6 +52,50 @@ type MetricDefinition = {
   formatter?: "integer" | "percent" | "decimal";
 };
 
+type ResultFilter = "all" | "win" | "loss";
+type SortDirection = "asc" | "desc";
+type QueryAggregation =
+  | "season_total"
+  | "season_average"
+  | "max_game"
+  | "min_game"
+  | "list_games"
+  | "count_games_gte"
+  | "count_games_lte"
+  | "count_games_nonzero"
+  | "record"
+  | "record_when_gte"
+  | "record_when_lte"
+  | "record_when_nonzero";
+
+type ParsedQuery = {
+  teamId: string;
+  statKey: string;
+  aggregation: QueryAggregation;
+  threshold?: number;
+  opponentTeamId?: string;
+  resultFilter?: ResultFilter;
+  sort?: SortDirection;
+  limit?: number;
+};
+
+type QueryGameRow = {
+  gameId: string;
+  gameDate: string;
+  opponent: {
+    teamId: string;
+    tricode: string;
+    fullName: string;
+  };
+  value: number;
+  result: "W" | "L";
+  teamScore: number;
+  opponentScore: number;
+  margin: number;
+  isHome: boolean;
+  seasonType: string;
+};
+
 const METRICS: MetricDefinition[] = [
   { key: "points", label: "Points", aliases: ["points", "pts"], kind: "count" },
   { key: "field_goals_made", label: "Field Goals Made", aliases: ["field goals made", "fg made", "fgm", "made field goals"], kind: "count" },
@@ -855,6 +899,7 @@ function buildGameMetrics(game: Record<string, unknown>, teamId: string) {
   const opponentTotals = derivedTotals[opponentId] || {};
   const advancedStats = (perspective.teamStats?.advancedStats || {}) as Record<string, unknown>;
   const possessions = safeNumber(perspective.teamStats?.possessions, estimatePossessions(teamTotals, opponentTotals));
+  const teamScore = safeNumber(teamTotals.points, safeNumber(perspective.team?.score, 0));
   const opponentPoints = safeNumber(opponentTotals.points, 0);
   const deflections = safeNumber(advancedStats.deflections, 0);
   const offensiveFoulsDrawn = safeNumber(teamTotals.offensiveFoulsDrawn, safeNumber(advancedStats.offensiveFoulsDrawn, 0));
@@ -872,6 +917,12 @@ function buildGameMetrics(game: Record<string, unknown>, teamId: string) {
       tricode: String(perspective.opponent?.teamTricode || ""),
       fullName: `${String(perspective.opponent?.teamCity || "").trim()} ${String(perspective.opponent?.teamName || "").trim()}`.trim(),
     },
+    teamScore,
+    opponentScore: opponentPoints,
+    margin: teamScore - opponentPoints,
+    result: teamScore >= opponentPoints ? "W" : "L",
+    isHome: teamId === homeTeamId,
+    seasonType: String(game?.seasonType || ""),
     metrics: {
       points: safeNumber(teamTotals.points, 0),
       field_goals_made: safeNumber(teamTotals.fieldGoalsMade, 0),
@@ -993,60 +1044,162 @@ function scoreMetricPrompt(metric: MetricDefinition, prompt: string) {
   return searchEntry ? scoreSearchAliases(prompt, searchEntry.aliases) : 0;
 }
 
-function buildFallbackParse(prompt: string) {
-  const team = findTeamFromPrompt(prompt);
-  const metric = findMetricFromPrompt(prompt);
+function findTeamMatches(prompt: string) {
+  return TEAM_SEARCH_INDEX
+    .map(({ team }) => ({ team, score: scoreTeamPrompt(team, prompt) }))
+    .filter((entry) => entry.score >= 6)
+    .sort((left, right) => right.score - left.score);
+}
+
+function parseOpponentTeamFromPrompt(prompt: string, subjectTeamId: string) {
   const normalizedPrompt = normalizeText(prompt);
-  const threshold = parseThreshold(prompt);
+  const teamMatches = findTeamMatches(prompt).filter((entry) => entry.team.teamId !== subjectTeamId);
+  if (!teamMatches.length) return null;
 
-  if (!team || !metric) return null;
+  const contextualPatterns = [
+    /\bvs\b/,
+    /\bversus\b/,
+    /\bagainst\b/,
+    /\bv\b/,
+    /\bopp(?:onent)?\b/,
+  ];
 
-  if (
-    normalizedPrompt.includes("how many games") ||
-    normalizedPrompt.includes("how many times") ||
-    normalizedPrompt.includes("how often") ||
-    (normalizedPrompt.includes("how many") && threshold != null)
-  ) {
-    return {
-      teamId: team.teamId,
-      statKey: metric.key,
-      aggregation: isUpperBoundPrompt(prompt)
-        ? "count_games_lte"
-        : threshold != null
-          ? "count_games_gte"
-          : "count_games_nonzero",
-      threshold: threshold != null ? threshold : 0,
-    };
+  if (contextualPatterns.some((pattern) => pattern.test(normalizedPrompt))) {
+    return teamMatches[0]?.team || null;
   }
 
+  if (teamMatches.length > 1 && teamMatches[0].score === teamMatches[1].score) {
+    return null;
+  }
+
+  return teamMatches[0]?.score >= 10 ? teamMatches[0].team : null;
+}
+
+function parseResultFilter(prompt: string): ResultFilter {
+  const normalizedPrompt = normalizeText(prompt);
+  const winPatterns = [
+    " in wins",
+    " in win",
+    " wins only",
+    " won games",
+    " games won",
+    " when they win",
+    " when it wins",
+    " in victories",
+  ];
+  const lossPatterns = [
+    " in losses",
+    " in loss",
+    " losses only",
+    " lost games",
+    " games lost",
+    " when they lose",
+    " when it loses",
+    " in defeats",
+  ];
+  if (winPatterns.some((pattern) => normalizedPrompt.includes(pattern))) return "win";
+  if (lossPatterns.some((pattern) => normalizedPrompt.includes(pattern))) return "loss";
+  return "all";
+}
+
+function parseListLimit(prompt: string) {
+  const normalizedPrompt = normalizeText(prompt);
+  const topBottomMatch = /\b(?:top|bottom|highest|lowest|best|worst)\s+(\d{1,2})\b/.exec(normalizedPrompt);
+  if (topBottomMatch) return Math.max(1, Math.min(25, safeNumber(topBottomMatch[1], 5)));
+  const lastMatch = /\b(?:last|recent)\s+(\d{1,2})\b/.exec(normalizedPrompt);
+  if (lastMatch) return Math.max(1, Math.min(25, safeNumber(lastMatch[1], 5)));
+  return undefined;
+}
+
+function isRecordPrompt(prompt: string) {
+  const normalizedPrompt = normalizeText(prompt);
+  return normalizedPrompt.includes("record")
+    || normalizedPrompt.includes("win loss")
+    || normalizedPrompt.includes("wins and losses")
+    || normalizedPrompt.includes("w l");
+}
+
+function detectAggregation(prompt: string, threshold: number | null): QueryAggregation {
+  const normalizedPrompt = normalizeText(prompt);
+  const explicitListLimit = parseListLimit(prompt);
+  const wantsCount = normalizedPrompt.includes("how many games")
+    || normalizedPrompt.includes("how many times")
+    || normalizedPrompt.includes("how often")
+    || normalizedPrompt.includes("number of games")
+    || normalizedPrompt.includes("count of games");
+
+  if (isRecordPrompt(prompt)) {
+    if (isUpperBoundPrompt(prompt)) return "record_when_lte";
+    if (threshold != null) return "record_when_gte";
+    if (wantsCount || normalizedPrompt.includes("with ") || normalizedPrompt.includes("when ")) return "record_when_nonzero";
+    return "record";
+  }
+
+  if (wantsCount || (normalizedPrompt.includes("how many") && threshold != null)) {
+    if (isUpperBoundPrompt(prompt)) return "count_games_lte";
+    if (threshold != null) return "count_games_gte";
+    return "count_games_nonzero";
+  }
+
+  if (explicitListLimit != null) return "list_games";
+
   if (normalizedPrompt.includes("average") || normalizedPrompt.includes("mean") || normalizedPrompt.includes("per game")) {
-    return {
-      teamId: team.teamId,
-      statKey: metric.key,
-      aggregation: "season_average",
-    };
+    return "season_average";
   }
 
   if (normalizedPrompt.includes("highest") || normalizedPrompt.includes("most") || normalizedPrompt.includes("max") || normalizedPrompt.includes("best")) {
-    return {
-      teamId: team.teamId,
-      statKey: metric.key,
-      aggregation: "max_game",
-    };
+    return normalizedPrompt.includes("games") ? "list_games" : "max_game";
   }
 
   if (normalizedPrompt.includes("lowest") || normalizedPrompt.includes("least") || normalizedPrompt.includes("min") || normalizedPrompt.includes("fewest") || normalizedPrompt.includes("worst")) {
-    return {
-      teamId: team.teamId,
-      statKey: metric.key,
-      aggregation: "min_game",
-    };
+    return normalizedPrompt.includes("games") ? "list_games" : "min_game";
   }
+
+  if (normalizedPrompt.includes("show") || normalizedPrompt.includes("list ") || normalizedPrompt.includes("game log")) {
+    return "list_games";
+  }
+
+  return "season_total";
+}
+
+function parseSortDirection(prompt: string, aggregation: QueryAggregation): SortDirection | undefined {
+  const normalizedPrompt = normalizeText(prompt);
+  if (
+    aggregation === "max_game" ||
+    aggregation === "count_games_gte" ||
+    aggregation === "record_when_gte"
+  ) return "desc";
+  if (
+    aggregation === "min_game" ||
+    aggregation === "count_games_lte" ||
+    aggregation === "record_when_lte"
+  ) return "asc";
+  if (/\b(top|highest|most|best|descending|desc)\b/.test(normalizedPrompt)) return "desc";
+  if (/\b(bottom|lowest|least|worst|ascending|asc)\b/.test(normalizedPrompt)) return "asc";
+  return undefined;
+}
+
+function buildFallbackParse(prompt: string): ParsedQuery | null {
+  const team = findTeamFromPrompt(prompt);
+  const metric = findMetricFromPrompt(prompt);
+  if (!team || !metric) return null;
+
+  const threshold = parseThreshold(prompt);
+  const aggregation = detectAggregation(prompt, threshold);
+  const opponent = parseOpponentTeamFromPrompt(prompt, team.teamId);
+  const resultFilter = parseResultFilter(prompt);
+  const limit = parseListLimit(prompt);
+  const sort = parseSortDirection(prompt, aggregation);
 
   return {
     teamId: team.teamId,
     statKey: metric.key,
-    aggregation: "season_total",
+    aggregation,
+    threshold: threshold != null ? threshold : undefined,
+    opponentTeamId: opponent?.teamId,
+    resultFilter,
+    sort,
+    limit,
   };
 }
 
@@ -1056,6 +1209,20 @@ async function parsePromptWithOpenAI(prompt: string) {
 
   const teamSummary = NBA_TEAMS.map((team) => `${team.fullName} (${team.tricode})`).join(", ");
   const metricSummary = METRICS.map((metric) => `${metric.key}: ${metric.label}`).join("; ");
+  const aggregationSummary = [
+    "season_total",
+    "season_average",
+    "max_game",
+    "min_game",
+    "list_games",
+    "count_games_gte",
+    "count_games_lte",
+    "count_games_nonzero",
+    "record",
+    "record_when_gte",
+    "record_when_lte",
+    "record_when_nonzero",
+  ].join(", ");
   const response = await fetch(OPENAI_API_URL, {
     method: "POST",
     headers: {
@@ -1070,9 +1237,11 @@ async function parsePromptWithOpenAI(prompt: string) {
           role: "system",
           content:
             "Parse an NBA dashboard stat request into JSON only. " +
-            "Use one team only. Choose one statKey from the provided catalog. " +
-            "Allowed aggregations: count_games_gte, count_games_lte, count_games_nonzero, season_total, season_average, max_game, min_game. " +
-            "Return JSON with keys teamId, statKey, aggregation, threshold(optional).",
+            "Use one subject team only and one statKey from the provided catalog. " +
+            "You may also identify one opponent team filter and one win/loss filter if the prompt asks for them. " +
+            `Allowed aggregations: ${aggregationSummary}. ` +
+            "Return JSON with keys teamId, statKey, aggregation, threshold(optional), opponentTeamId(optional), resultFilter(optional as all|win|loss), sort(optional as asc|desc), limit(optional integer). " +
+            "Do not calculate any answer. Only return the query object.",
         },
         {
           role: "user",
@@ -1101,9 +1270,14 @@ async function parsePromptWithOpenAI(prompt: string) {
 
 function isSupportedAggregation(value: unknown) {
   return [
+    "list_games",
     "count_games_gte",
     "count_games_lte",
     "count_games_nonzero",
+    "record",
+    "record_when_gte",
+    "record_when_lte",
+    "record_when_nonzero",
     "season_total",
     "season_average",
     "max_game",
@@ -1111,18 +1285,26 @@ function isSupportedAggregation(value: unknown) {
   ].includes(String(value || "").trim());
 }
 
-function normalizeParsedQuery(value: unknown) {
+function normalizeParsedQuery(value: unknown): ParsedQuery | null {
   if (!value || typeof value !== "object") return null;
   const candidate = value as Record<string, unknown>;
   const teamId = String(candidate.teamId || "").trim();
   const statKey = String(candidate.statKey || "").trim();
-  const aggregation = String(candidate.aggregation || "").trim();
+  const aggregation = String(candidate.aggregation || "").trim() as QueryAggregation;
   if (!teamId || !statKey || !isSupportedAggregation(aggregation)) return null;
+  const opponentTeamId = String(candidate.opponentTeamId || "").trim();
+  const resultFilter = String(candidate.resultFilter || "all").trim() as ResultFilter;
+  const sort = String(candidate.sort || "").trim() as SortDirection;
+  const limit = candidate.limit != null ? Math.max(1, Math.min(25, safeNumber(candidate.limit, 5))) : undefined;
   return {
     teamId,
     statKey,
     aggregation,
     threshold: candidate.threshold != null ? safeNumber(candidate.threshold, 0) : undefined,
+    opponentTeamId: opponentTeamId && opponentTeamId !== teamId ? opponentTeamId : undefined,
+    resultFilter: resultFilter === "win" || resultFilter === "loss" ? resultFilter : "all",
+    sort: sort === "asc" || sort === "desc" ? sort : undefined,
+    limit,
   };
 }
 
@@ -1132,101 +1314,209 @@ function formatValue(value: number, metric: MetricDefinition) {
   return `${Math.round(value)}`;
 }
 
-function executeQuery(games: Array<Record<string, unknown>>, metric: MetricDefinition, query: Record<string, unknown>, team: (typeof NBA_TEAMS)[number]) {
+function formatRecordDisplay(wins: number, losses: number) {
+  return `${wins}-${losses}`;
+}
+
+function describeScope(
+  team: (typeof NBA_TEAMS)[number],
+  opponent: (typeof NBA_TEAMS)[number] | null,
+  resultFilter: ResultFilter,
+) {
+  const parts = [team.fullName];
+  if (opponent) parts.push(`against ${opponent.fullName}`);
+  if (resultFilter === "win") parts.push("in wins");
+  if (resultFilter === "loss") parts.push("in losses");
+  return parts.join(" ");
+}
+
+function compareRows(left: QueryGameRow, right: QueryGameRow, sort: SortDirection | undefined) {
+  const direction = sort === "asc" ? 1 : -1;
+  if (left.value !== right.value) return (left.value - right.value) * direction;
+  return String(right.gameDate).localeCompare(String(left.gameDate));
+}
+
+function executeQuery(
+  games: Array<Record<string, unknown>>,
+  metric: MetricDefinition,
+  query: ParsedQuery,
+  team: (typeof NBA_TEAMS)[number],
+) {
   const threshold = safeNumber(query.threshold, 0);
-  const requestedAggregation = String(query.aggregation || "season_total");
+  const requestedAggregation = query.aggregation || "season_total";
   const aggregation = metric.kind === "rate" && requestedAggregation === "season_total"
     ? "season_average"
     : requestedAggregation;
-  const values = games.map((game) => {
+  const opponentTeam = query.opponentTeamId
+    ? NBA_TEAMS.find((entry) => entry.teamId === query.opponentTeamId) || null
+    : null;
+  const scopedLabel = describeScope(team, opponentTeam, query.resultFilter || "all");
+
+  const rows: QueryGameRow[] = games.map((game) => {
     const metrics = buildGameMetrics(game, team.teamId);
     return {
       gameId: String(game.gameId || ""),
       gameDate: String(game.gameDate || ""),
       opponent: metrics.opponent,
       value: safeNumber((metrics.metrics as Record<string, unknown>)[metric.key], 0),
+      result: metrics.result,
+      teamScore: safeNumber(metrics.teamScore, 0),
+      opponentScore: safeNumber(metrics.opponentScore, 0),
+      margin: safeNumber(metrics.margin, 0),
+      isHome: Boolean(metrics.isHome),
+      seasonType: String(metrics.seasonType || ""),
     };
   });
 
-  if (aggregation === "count_games_gte") {
-    const matchingGames = values.filter((entry) => entry.value >= threshold);
+  const filteredRows = rows.filter((row) => {
+    if (query.opponentTeamId && row.opponent.teamId !== query.opponentTeamId) return false;
+    if (query.resultFilter === "win" && row.result !== "W") return false;
+    if (query.resultFilter === "loss" && row.result !== "L") return false;
+    return true;
+  });
+
+  const sortDirection = query.sort
+    || (aggregation === "min_game" || aggregation === "count_games_lte" || aggregation === "record_when_lte" ? "asc" : "desc");
+  const orderedRows = [...filteredRows].sort((left, right) => compareRows(left, right, sortDirection));
+  const listLimit = query.limit || (aggregation === "list_games" ? 10 : 25);
+
+  const buildCountAnswer = (matchingRows: QueryGameRow[], comparatorText: string) => ({
+    aggregation,
+    value: matchingRows.length,
+    displayValue: `${matchingRows.length}`,
+    answer: `${scopedLabel} had ${matchingRows.length} game${matchingRows.length === 1 ? "" : "s"} this season with ${comparatorText} ${metric.label.toLowerCase()}.`,
+    games: matchingRows,
+    sampleSize: filteredRows.length,
+  });
+
+  const buildRecordAnswer = (matchingRows: QueryGameRow[], comparatorText: string | null) => {
+    const wins = matchingRows.filter((row) => row.result === "W").length;
+    const losses = matchingRows.filter((row) => row.result === "L").length;
+    const qualifier = comparatorText ? ` when posting ${comparatorText} ${metric.label.toLowerCase()}` : "";
     return {
       aggregation,
-      value: matchingGames.length,
-      displayValue: `${matchingGames.length}`,
-      answer: `${team.fullName} had ${matchingGames.length} game${matchingGames.length === 1 ? "" : "s"} this season with ${threshold}+ ${metric.label.toLowerCase()}.`,
-      games: matchingGames,
+      value: wins - losses,
+      displayValue: formatRecordDisplay(wins, losses),
+      answer: `${scopedLabel}'s record${qualifier} was ${wins}-${losses}.`,
+      games: matchingRows,
+      sampleSize: filteredRows.length,
+      record: {
+        wins,
+        losses,
+        winPct: matchingRows.length ? (wins / matchingRows.length) * 100 : 0,
+      },
     };
+  };
+
+  if (!filteredRows.length) {
+    return {
+      aggregation,
+      value: 0,
+      displayValue: aggregation === "record" || aggregation.startsWith("record_when") ? "0-0" : "0",
+      answer: `No completed games matched that filter for ${scopedLabel}.`,
+      games: [],
+      sampleSize: 0,
+    };
+  }
+
+  if (aggregation === "count_games_gte") {
+    const matchingRows = orderedRows.filter((entry) => entry.value >= threshold);
+    return buildCountAnswer(matchingRows, `${threshold}+`);
   }
 
   if (aggregation === "count_games_lte") {
-    const matchingGames = values.filter((entry) => entry.value <= threshold);
-    return {
-      aggregation,
-      value: matchingGames.length,
-      displayValue: `${matchingGames.length}`,
-      answer: `${team.fullName} had ${matchingGames.length} game${matchingGames.length === 1 ? "" : "s"} this season with ${threshold} or fewer ${metric.label.toLowerCase()}.`,
-      games: matchingGames,
-    };
+    const matchingRows = orderedRows.filter((entry) => entry.value <= threshold);
+    return buildCountAnswer(matchingRows, `${threshold} or fewer`);
   }
 
   if (aggregation === "count_games_nonzero") {
-    const matchingGames = values.filter((entry) => entry.value > 0);
+    const matchingRows = orderedRows.filter((entry) => entry.value > 0);
     return {
       aggregation,
-      value: matchingGames.length,
-      displayValue: `${matchingGames.length}`,
-      answer: `${team.fullName} recorded ${metric.label.toLowerCase()} in ${matchingGames.length} game${matchingGames.length === 1 ? "" : "s"} this season.`,
-      games: matchingGames,
+      value: matchingRows.length,
+      displayValue: `${matchingRows.length}`,
+      answer: `${scopedLabel} recorded ${metric.label.toLowerCase()} in ${matchingRows.length} game${matchingRows.length === 1 ? "" : "s"} this season.`,
+      games: matchingRows,
+      sampleSize: filteredRows.length,
     };
   }
 
+  if (aggregation === "record") {
+    return buildRecordAnswer(orderedRows, null);
+  }
+
+  if (aggregation === "record_when_gte") {
+    return buildRecordAnswer(orderedRows.filter((entry) => entry.value >= threshold), `${threshold}+`);
+  }
+
+  if (aggregation === "record_when_lte") {
+    return buildRecordAnswer(orderedRows.filter((entry) => entry.value <= threshold), `${threshold} or fewer`);
+  }
+
+  if (aggregation === "record_when_nonzero") {
+    return buildRecordAnswer(orderedRows.filter((entry) => entry.value > 0), "any");
+  }
+
   if (aggregation === "season_average") {
-    const average = values.length
-      ? values.reduce((sum, entry) => sum + entry.value, 0) / values.length
-      : 0;
+    const average = orderedRows.reduce((sum, entry) => sum + entry.value, 0) / orderedRows.length;
     return {
       aggregation,
       value: average,
       displayValue: formatValue(average, metric),
-      answer: `${team.fullName} averaged ${formatValue(average, metric)} ${metric.label.toLowerCase()} this season across ${values.length} games.`,
-      games: values,
+      answer: `${scopedLabel} averaged ${formatValue(average, metric)} ${metric.label.toLowerCase()} across ${orderedRows.length} game${orderedRows.length === 1 ? "" : "s"}.`,
+      games: orderedRows,
+      sampleSize: orderedRows.length,
     };
   }
 
   if (aggregation === "max_game") {
-    const best = values.reduce((current, entry) => (!current || entry.value > current.value ? entry : current), null as null | typeof values[number]);
+    const best = [...orderedRows].sort((left, right) => compareRows(left, right, "desc"))[0] || null;
     return {
       aggregation,
       value: best?.value || 0,
       displayValue: formatValue(best?.value || 0, metric),
       answer: best
-        ? `${team.fullName}'s highest single-game ${metric.label.toLowerCase()} total this season was ${formatValue(best.value, metric)} on ${best.gameDate} against ${best.opponent.tricode || best.opponent.fullName}.`
-        : `No completed games found for ${team.fullName}.`,
+        ? `${scopedLabel}'s highest single-game ${metric.label.toLowerCase()} total was ${formatValue(best.value, metric)} on ${best.gameDate} against ${best.opponent.tricode || best.opponent.fullName}.`
+        : `No completed games found for ${scopedLabel}.`,
       games: best ? [best] : [],
+      sampleSize: orderedRows.length,
     };
   }
 
   if (aggregation === "min_game") {
-    const best = values.reduce((current, entry) => (!current || entry.value < current.value ? entry : current), null as null | typeof values[number]);
+    const best = [...orderedRows].sort((left, right) => compareRows(left, right, "asc"))[0] || null;
     return {
       aggregation,
       value: best?.value || 0,
       displayValue: formatValue(best?.value || 0, metric),
       answer: best
-        ? `${team.fullName}'s lowest single-game ${metric.label.toLowerCase()} total this season was ${formatValue(best.value, metric)} on ${best.gameDate} against ${best.opponent.tricode || best.opponent.fullName}.`
-        : `No completed games found for ${team.fullName}.`,
+        ? `${scopedLabel}'s lowest single-game ${metric.label.toLowerCase()} total was ${formatValue(best.value, metric)} on ${best.gameDate} against ${best.opponent.tricode || best.opponent.fullName}.`
+        : `No completed games found for ${scopedLabel}.`,
       games: best ? [best] : [],
+      sampleSize: orderedRows.length,
     };
   }
 
-  const total = values.reduce((sum, entry) => sum + entry.value, 0);
+  if (aggregation === "list_games") {
+    const listedGames = orderedRows.slice(0, listLimit);
+    return {
+      aggregation,
+      value: listedGames.length,
+      displayValue: `${listedGames.length}`,
+      answer: `Showing ${listedGames.length} ${metric.label.toLowerCase()} game${listedGames.length === 1 ? "" : "s"} for ${scopedLabel}, sorted ${sortDirection === "asc" ? "ascending" : "descending"}.`,
+      games: listedGames,
+      sampleSize: orderedRows.length,
+    };
+  }
+
+  const total = orderedRows.reduce((sum, entry) => sum + entry.value, 0);
   return {
     aggregation: "season_total",
     value: total,
     displayValue: formatValue(total, metric),
-    answer: `${team.fullName}'s season total for ${metric.label.toLowerCase()} is ${formatValue(total, metric)} across ${values.length} games.`,
-    games: values,
+    answer: `${scopedLabel}'s total ${metric.label.toLowerCase()} was ${formatValue(total, metric)} across ${orderedRows.length} game${orderedRows.length === 1 ? "" : "s"}.`,
+    games: orderedRows,
+    sampleSize: orderedRows.length,
   };
 }
 
@@ -1246,19 +1536,9 @@ Deno.serve(async (request) => {
 
     const fallbackParsed = normalizeParsedQuery(buildFallbackParse(prompt));
     const openAiParsed = normalizeParsedQuery(await parsePromptWithOpenAI(prompt).catch(() => null));
-    const candidateParses = [fallbackParsed, openAiParsed].filter(Boolean) as Array<{
-      teamId: string;
-      statKey: string;
-      aggregation: string;
-      threshold?: number;
-    }>;
+    const candidateParses = [fallbackParsed, openAiParsed].filter(Boolean) as ParsedQuery[];
 
-    let parsed: null | {
-      teamId: string;
-      statKey: string;
-      aggregation: string;
-      threshold?: number;
-    } = null;
+    let parsed: ParsedQuery | null = null;
     let team: (typeof NBA_TEAMS)[number] | null = null;
     let metric: MetricDefinition | null = null;
 
@@ -1270,10 +1550,19 @@ Deno.serve(async (request) => {
       if (matchedTeam && matchedMetric) {
         const teamScore = scoreTeamPrompt(matchedTeam, prompt);
         const metricScore = scoreMetricPrompt(matchedMetric, prompt);
+        const matchedOpponent = candidate.opponentTeamId
+          ? NBA_TEAMS.find((entry) => entry.teamId === candidate.opponentTeamId) || null
+          : null;
+        const opponentScore = matchedOpponent ? scoreTeamPrompt(matchedOpponent, prompt) : 0;
         const sourceBonus = candidate === fallbackParsed ? 5 : 0;
-        const candidateScore = teamScore + metricScore + sourceBonus;
+        const filterBonus = (candidate.resultFilter && candidate.resultFilter !== "all" ? 2 : 0)
+          + (matchedOpponent ? 2 : 0);
+        const candidateScore = teamScore + metricScore + opponentScore + sourceBonus + filterBonus;
         if (teamScore < 6 || metricScore < 5 || candidateScore <= bestCandidateScore) continue;
         bestCandidateScore = candidateScore;
+        if (candidate.opponentTeamId === candidate.teamId) {
+          candidate.opponentTeamId = undefined;
+        }
         parsed = candidate;
         team = matchedTeam;
         metric = matchedMetric;
@@ -1327,7 +1616,7 @@ Deno.serve(async (request) => {
       });
     }
 
-    const result = executeQuery(enrichedGames, metric, parsed as unknown as Record<string, unknown>, team);
+    const result = executeQuery(enrichedGames, metric, parsed, team);
 
     return jsonResponse(200, {
       prompt,
@@ -1337,6 +1626,14 @@ Deno.serve(async (request) => {
         tricode: team.tricode,
         fullName: team.fullName,
       },
+      filters: {
+        opponent: parsed.opponentTeamId
+          ? NBA_TEAMS.find((entry) => entry.teamId === parsed.opponentTeamId) || null
+          : null,
+        resultFilter: parsed.resultFilter || "all",
+        sort: parsed.sort || null,
+        limit: parsed.limit || null,
+      },
       stat: {
         key: metric.key,
         label: metric.label,
@@ -1345,7 +1642,6 @@ Deno.serve(async (request) => {
       result: {
         ...result,
         games: (result.games as Array<Record<string, unknown>>).slice(0, 25),
-        sampleSize: enrichedGames.length,
       },
       skippedGames,
       supportedStats: METRICS.map((entry) => ({ key: entry.key, label: entry.label })),

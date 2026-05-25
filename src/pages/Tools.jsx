@@ -1296,7 +1296,7 @@ export default function Tools() {
       ) : activeTab === TOOL_TABS.CUSTOM_REQUESTS ? (
         <section className={styles.workspace}>
           <p className={styles.statusNote}>
-            Query the current NBA season using the same team stat model used in the dashboard. This first pass supports team-level dashboard stats, including kills, disruptions, transition, creating, ratings, and shot-profile metrics.
+            Query the current NBA season using the same team stat model used in the dashboard. The engine supports totals, averages, top or bottom single-game results, threshold counts, win-loss records, and filters for specific opponents or wins and losses.
           </p>
 
           <section className={styles.requestPanel}>
@@ -1378,6 +1378,19 @@ export default function Tools() {
                   <div>{customRequestResult?.stat?.label || "Unknown"}</div>
                 </div>
                 <div className={styles.requestMetaCard}>
+                  <div className={styles.scoutingDetailTitle}>Filters</div>
+                  <div>
+                    {[
+                      customRequestResult?.filters?.opponent?.tricode
+                        ? `vs ${customRequestResult.filters.opponent.tricode}`
+                        : null,
+                      customRequestResult?.parsedQuery?.resultFilter && customRequestResult?.parsedQuery?.resultFilter !== "all"
+                        ? `${customRequestResult.parsedQuery.resultFilter}s`
+                        : "All results",
+                    ].filter(Boolean).join(" · ")}
+                  </div>
+                </div>
+                <div className={styles.requestMetaCard}>
                   <div className={styles.scoutingDetailTitle}>Aggregation</div>
                   <div>{String(customRequestResult?.result?.aggregation || "").replaceAll("_", " ")}</div>
                 </div>
@@ -1400,6 +1413,8 @@ export default function Tools() {
                         <tr>
                           <th>Date</th>
                           <th>Opponent</th>
+                          <th>Result</th>
+                          <th>Score</th>
                           <th>Value</th>
                           <th>Game ID</th>
                         </tr>
@@ -1409,6 +1424,8 @@ export default function Tools() {
                           <tr key={`${game.gameId}-${game.gameDate}`}>
                             <td>{game.gameDate}</td>
                             <td>{game?.opponent?.tricode || game?.opponent?.fullName || "-"}</td>
+                            <td>{game.result || "-"}</td>
+                            <td>{Number.isFinite(Number(game.teamScore)) && Number.isFinite(Number(game.opponentScore)) ? `${game.teamScore}-${game.opponentScore}` : "-"}</td>
                             <td>{Number.isFinite(Number(game.value)) ? Number(game.value).toFixed(Math.abs(Number(game.value) % 1) > 0 ? 1 : 0) : game.value}</td>
                             <td>{game.gameId}</td>
                           </tr>
