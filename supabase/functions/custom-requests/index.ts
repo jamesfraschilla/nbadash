@@ -99,6 +99,35 @@ type QueryGameRow = {
   seasonType: string;
 };
 
+type AnyRecord = Record<string, unknown>;
+
+type TeamPerspective = {
+  side: "home" | "away";
+  team: AnyRecord;
+  opponent: AnyRecord;
+  teamStats: AnyRecord;
+  opponentStats: AnyRecord;
+  teamBox: AnyRecord;
+  opponentBox: AnyRecord;
+};
+
+type BuiltGameMetrics = {
+  teamId: string;
+  opponentId: string;
+  opponent: {
+    teamId: string;
+    tricode: string;
+    fullName: string;
+  };
+  teamScore: number;
+  opponentScore: number;
+  margin: number;
+  result: "W" | "L";
+  isHome: boolean;
+  seasonType: string;
+  metrics: Record<string, number>;
+};
+
 const METRICS: MetricDefinition[] = [
   { key: "points", label: "Points", aliases: ["points", "pts"], kind: "count" },
   { key: "field_goals_made", label: "Field Goals Made", aliases: ["field goals made", "fg made", "fgm", "made field goals"], kind: "count" },
@@ -863,32 +892,35 @@ function computeDisplayedKills(actions: Array<Record<string, unknown>>, teamId: 
   return kills[teamId] || 0;
 }
 
-function selectTeamPerspective(game: Record<string, unknown>, teamId: string) {
+function selectTeamPerspective(game: AnyRecord, teamId: string): TeamPerspective {
   const homeTeamId = String(game?.homeTeam?.teamId || "");
   const awayTeamId = String(game?.awayTeam?.teamId || "");
+  const emptyRecord: AnyRecord = {};
+  const teamStats = (game.teamStats || emptyRecord) as AnyRecord;
+  const boxScore = (game.boxScore || emptyRecord) as AnyRecord;
   if (teamId === homeTeamId) {
     return {
       side: "home",
-      team: (game.homeTeam || {}) as Record<string, unknown>,
-      opponent: (game.awayTeam || {}) as Record<string, unknown>,
-      teamStats: ((game.teamStats || {}) as Record<string, unknown>).home as Record<string, unknown> || {},
-      opponentStats: ((game.teamStats || {}) as Record<string, unknown>).away as Record<string, unknown> || {},
-      teamBox: ((game.boxScore || {}) as Record<string, unknown>).home as Record<string, unknown> || {},
-      opponentBox: ((game.boxScore || {}) as Record<string, unknown>).away as Record<string, unknown> || {},
+      team: (game.homeTeam || emptyRecord) as AnyRecord,
+      opponent: (game.awayTeam || emptyRecord) as AnyRecord,
+      teamStats: (teamStats.home || emptyRecord) as AnyRecord,
+      opponentStats: (teamStats.away || emptyRecord) as AnyRecord,
+      teamBox: (boxScore.home || emptyRecord) as AnyRecord,
+      opponentBox: (boxScore.away || emptyRecord) as AnyRecord,
     };
   }
   return {
     side: "away",
-    team: (game.awayTeam || {}) as Record<string, unknown>,
-    opponent: (game.homeTeam || {}) as Record<string, unknown>,
-    teamStats: ((game.teamStats || {}) as Record<string, unknown>).away as Record<string, unknown> || {},
-    opponentStats: ((game.teamStats || {}) as Record<string, unknown>).home as Record<string, unknown> || {},
-    teamBox: ((game.boxScore || {}) as Record<string, unknown>).away as Record<string, unknown> || {},
-    opponentBox: ((game.boxScore || {}) as Record<string, unknown>).home as Record<string, unknown> || {},
+    team: (game.awayTeam || emptyRecord) as AnyRecord,
+    opponent: (game.homeTeam || emptyRecord) as AnyRecord,
+    teamStats: (teamStats.away || emptyRecord) as AnyRecord,
+    opponentStats: (teamStats.home || emptyRecord) as AnyRecord,
+    teamBox: (boxScore.away || emptyRecord) as AnyRecord,
+    opponentBox: (boxScore.home || emptyRecord) as AnyRecord,
   };
 }
 
-function buildGameMetrics(game: Record<string, unknown>, teamId: string) {
+function buildGameMetrics(game: AnyRecord, teamId: string): BuiltGameMetrics {
   const perspective = selectTeamPerspective(game, teamId);
   const homeTeamId = String(game?.homeTeam?.teamId || "");
   const awayTeamId = String(game?.awayTeam?.teamId || "");
