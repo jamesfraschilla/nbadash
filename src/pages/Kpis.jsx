@@ -287,11 +287,17 @@ export default function Kpis() {
       saveRemoteMetricsPayload(gameId, metricsPayload)
         .then((savedPayload) => {
           setSyncError("");
-          const savedKey = payloadStateKey(savedPayload);
-          if (savedKey === metricsStateKeyRef.current) return;
-          skipNextSaveRef.current = true;
-          metricsStateKeyRef.current = savedKey;
-          setMetricsPayload(savedPayload);
+          setMetricsPayload((current) => {
+            const merged = mergeMetricsPayload(current, savedPayload);
+            const mergedKey = payloadStateKey(merged);
+            if (mergedKey === metricsStateKeyRef.current) {
+              return current;
+            }
+            skipNextSaveRef.current = true;
+            metricsStateKeyRef.current = mergedKey;
+            persistMetricsPayload(gameId, merged);
+            return merged;
+          });
         })
         .catch((saveError) => {
           console.error("Failed to save KPI state.", saveError);
