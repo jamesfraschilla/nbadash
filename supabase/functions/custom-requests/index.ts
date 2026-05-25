@@ -1,5 +1,5 @@
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
-const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
+const OPENAI_API_URL = "https://api.openai.com/v1/responses";
 const DEFAULT_OPENAI_MODEL =
   Deno.env.get("OPENAI_SCOUTING_MODEL") ||
   Deno.env.get("OPENAI_ANALYSIS_MODEL") ||
@@ -1226,6 +1226,74 @@ function buildFallbackParse(prompt: string): ParsedQuery | null {
   };
 }
 
+const CUSTOM_REQUEST_QUERY_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["teamId", "statKey", "aggregation", "resultFilter", "groupBy"],
+  properties: {
+    teamId: { type: "string" },
+    statKey: { type: "string" },
+    aggregation: {
+      type: "string",
+      enum: [
+        "season_total",
+        "season_average",
+        "max_game",
+        "min_game",
+        "list_games",
+        "count_games_gte",
+        "count_games_lte",
+        "count_games_nonzero",
+        "record",
+        "record_when_gte",
+        "record_when_lte",
+        "record_when_nonzero",
+      ],
+    },
+    threshold: { type: "number" },
+    opponentTeamId: { type: "string" },
+    resultFilter: {
+      type: "string",
+      enum: ["all", "win", "loss"],
+    },
+    sort: {
+      type: "string",
+      enum: ["asc", "desc"],
+    },
+    limit: {
+      type: "integer",
+      minimum: 1,
+      maximum: 25,
+    },
+    groupBy: {
+      type: "string",
+      enum: ["none", "opponent", "result"],
+    },
+  },
+};
+
+function extractResponseText(payload: Record<string, unknown>) {
+  if (typeof payload?.output_text === "string" && payload.output_text.trim()) {
+    return payload.output_text.trim();
+  }
+
+  const outputItems = Array.isArray(payload?.output) ? payload.output : [];
+  const textParts: string[] = [];
+
+  outputItems.forEach((item) => {
+    if (!item || typeof item !== "object") return;
+    const contentItems = Array.isArray((item as Record<string, unknown>).content)
+      ? (item as Record<string, unknown>).content as Array<Record<string, unknown>>
+      : [];
+    contentItems.forEach((contentItem) => {
+      const text = String(contentItem?.text || "").trim();
+      if (text) textParts.push(text);
+    });
+  });
+
+  return textParts.join("\n").trim();
+}
+
 async function parsePromptWithOpenAI(prompt: string) {
   const apiKey = Deno.env.get("OPENAI_API_KEY") || "";
   if (!apiKey) return null;
@@ -1254,29 +1322,27 @@ async function parsePromptWithOpenAI(prompt: string) {
     },
     body: JSON.stringify({
       model: DEFAULT_OPENAI_MODEL,
-      temperature: 0,
-      messages: [
-        {
-          role: "system",
-          content:
-            "Parse an NBA dashboard stat request into JSON only. " +
-            "Use one subject team only and one statKey from the provided catalog. " +
-            "You may also identify one opponent team filter and one win/loss filter if the prompt asks for them. " +
-            `Allowed aggregations: ${aggregationSummary}. ` +
-            "Return JSON with keys teamId, statKey, aggregation, threshold(optional), opponentTeamId(optional), resultFilter(optional as all|win|loss), sort(optional as asc|desc), limit(optional integer), groupBy(optional as none|opponent|result). " +
-            "Do not calculate any answer. Only return the query object.",
+      instructions:
+        "Parse an NBA dashboard stat request into a structured query object. " +
+        "Use one subject team only and one statKey from the provided catalog. " +
+        "You may also identify one opponent team filter and one win/loss filter if the prompt asks for them. " +
+        `Allowed aggregations: ${aggregationSummary}. ` +
+        "Do not calculate any answer. Only return the query object.",
+      input: `Teams: ${teamSummary}\nStats: ${metricSummary}\nPrompt: ${prompt}`,
+      text: {
+        format: {
+          type: "json_schema",
+          name: "custom_request_query",
+          strict: true,
+          schema: CUSTOM_REQUEST_QUERY_SCHEMA,
         },
-        {
-          role: "user",
-          content: `Teams: ${teamSummary}\nStats: ${metricSummary}\nPrompt: ${prompt}`,
-        },
-      ],
+      },
     }),
   });
 
   if (!response.ok) return null;
   const payload = await response.json();
-  const text = String(payload?.choices?.[0]?.message?.content || "").trim();
+  const text = extractResponseText(payload as Record<string, unknown>);
   if (!text) return null;
   try {
     return JSON.parse(text);
