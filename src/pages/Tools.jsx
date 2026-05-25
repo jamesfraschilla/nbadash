@@ -1387,6 +1387,9 @@ export default function Tools() {
                       customRequestResult?.parsedQuery?.resultFilter && customRequestResult?.parsedQuery?.resultFilter !== "all"
                         ? `${customRequestResult.parsedQuery.resultFilter}s`
                         : "All results",
+                      customRequestResult?.filters?.groupBy && customRequestResult.filters.groupBy !== "none"
+                        ? `grouped by ${customRequestResult.filters.groupBy}`
+                        : null,
                     ].filter(Boolean).join(" · ")}
                   </div>
                 </div>
@@ -1403,6 +1406,38 @@ export default function Tools() {
                   <div>{customRequestResult?.result?.displayValue || "0"}</div>
                 </div>
               </div>
+
+              {Array.isArray(customRequestResult?.result?.groups) && customRequestResult.result.groups.length ? (
+                <div className={styles.requestGamesWrap}>
+                  <div className={styles.scoutingDetailTitle}>Grouped Summary</div>
+                  <div className={styles.requestTableWrap}>
+                    <table className={styles.requestTable}>
+                      <thead>
+                        <tr>
+                          <th>Group</th>
+                          <th>Value</th>
+                          <th>Games</th>
+                          <th>Record</th>
+                          <th>Avg</th>
+                          <th>Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {customRequestResult.result.groups.map((group) => (
+                          <tr key={group.key}>
+                            <td>{group.label}</td>
+                            <td>{group.displayValue}</td>
+                            <td>{group.sampleSize}</td>
+                            <td>{Number.isFinite(Number(group.wins)) && Number.isFinite(Number(group.losses)) ? `${group.wins}-${group.losses}` : "-"}</td>
+                            <td>{group.averageDisplayValue || "-"}</td>
+                            <td>{group.totalDisplayValue || "-"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : null}
 
               {Array.isArray(customRequestResult?.result?.games) && customRequestResult.result.games.length ? (
                 <div className={styles.requestGamesWrap}>

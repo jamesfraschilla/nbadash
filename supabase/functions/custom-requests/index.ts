@@ -68,6 +68,8 @@ type QueryAggregation =
   | "record_when_lte"
   | "record_when_nonzero";
 
+type QueryGroupBy = "none" | "opponent" | "result";
+
 type ParsedQuery = {
   teamId: string;
   statKey: string;
@@ -77,6 +79,7 @@ type ParsedQuery = {
   resultFilter?: ResultFilter;
   sort?: SortDirection;
   limit?: number;
+  groupBy?: QueryGroupBy;
 };
 
 type QueryGameRow = {
@@ -1179,6 +1182,24 @@ function parseSortDirection(prompt: string, aggregation: QueryAggregation): Sort
   return undefined;
 }
 
+function parseGroupBy(prompt: string): QueryGroupBy {
+  const normalizedPrompt = normalizeText(prompt);
+  if (
+    normalizedPrompt.includes("by opponent")
+    || normalizedPrompt.includes("per opponent")
+    || normalizedPrompt.includes("each opponent")
+    || normalizedPrompt.includes("against each")
+  ) return "opponent";
+  if (
+    normalizedPrompt.includes("by result")
+    || normalizedPrompt.includes("by win loss")
+    || normalizedPrompt.includes("by wins and losses")
+    || normalizedPrompt.includes("split by win")
+    || normalizedPrompt.includes("split by result")
+  ) return "result";
+  return "none";
+}
+
 function buildFallbackParse(prompt: string): ParsedQuery | null {
   const team = findTeamFromPrompt(prompt);
   const metric = findMetricFromPrompt(prompt);
@@ -1190,6 +1211,7 @@ function buildFallbackParse(prompt: string): ParsedQuery | null {
   const resultFilter = parseResultFilter(prompt);
   const limit = parseListLimit(prompt);
   const sort = parseSortDirection(prompt, aggregation);
+  const groupBy = parseGroupBy(prompt);
 
   return {
     teamId: team.teamId,
@@ -1200,6 +1222,7 @@ function buildFallbackParse(prompt: string): ParsedQuery | null {
     resultFilter,
     sort,
     limit,
+    groupBy,
   };
 }
 
@@ -1240,7 +1263,7 @@ async function parsePromptWithOpenAI(prompt: string) {
             "Use one subject team only and one statKey from the provided catalog. " +
             "You may also identify one opponent team filter and one win/loss filter if the prompt asks for them. " +
             `Allowed aggregations: ${aggregationSummary}. ` +
-            "Return JSON with keys teamId, statKey, aggregation, threshold(optional), opponentTeamId(optional), resultFilter(optional as all|win|loss), sort(optional as asc|desc), limit(optional integer). " +
+            "Return JSON with keys teamId, statKey, aggregation, threshold(optional), opponentTeamId(optional), resultFilter(optional as all|win|loss), sort(optional as asc|desc), limit(optional integer), groupBy(optional as none|opponent|result). " +
             "Do not calculate any answer. Only return the query object.",
         },
         {
@@ -1296,6 +1319,7 @@ function normalizeParsedQuery(value: unknown): ParsedQuery | null {
   const resultFilter = String(candidate.resultFilter || "all").trim() as ResultFilter;
   const sort = String(candidate.sort || "").trim() as SortDirection;
   const limit = candidate.limit != null ? Math.max(1, Math.min(25, safeNumber(candidate.limit, 5))) : undefined;
+  const groupBy = String(candidate.groupBy || "none").trim() as QueryGroupBy;
   return {
     teamId,
     statKey,
@@ -1305,6 +1329,7 @@ function normalizeParsedQuery(value: unknown): ParsedQuery | null {
     resultFilter: resultFilter === "win" || resultFilter === "loss" ? resultFilter : "all",
     sort: sort === "asc" || sort === "desc" ? sort : undefined,
     limit,
+    groupBy: groupBy === "opponent" || groupBy === "result" ? groupBy : "none",
   };
 }
 
@@ -1334,6 +1359,92 @@ function compareRows(left: QueryGameRow, right: QueryGameRow, sort: SortDirectio
   const direction = sort === "asc" ? 1 : -1;
   if (left.value !== right.value) return (left.value - right.value) * direction;
   return String(right.gameDate).localeCompare(String(left.gameDate));
+}
+
+function buildGroupedSummaries(
+  rows: QueryGameRow[],
+  metric: MetricDefinition,
+  query: ParsedQuery,
+  aggregation: QueryAggregation,
+  threshold: number,
+  sortDirection: SortDirection,
+) {
+  if (!rows.length || !query.groupBy || query.groupBy === "none") return [];
+
+  const groups = new Map<string, { label: string; rows: QueryGameRow[] }>();
+  rows.forEach((row) => {
+    const key = query.groupBy === "opponent" ? row.opponent.teamId : row.result;
+    const label = query.groupBy === "opponent"
+      ? (row.opponent.tricode || row.opponent.fullName || row.opponent.teamId)
+      : row.result;
+    if (!groups.has(key)) {
+      groups.set(key, { label, rows: [] });
+    }
+    groups.get(key)?.rows.push(row);
+  });
+
+  const summaries = [...groups.values()].map((group) => {
+    const games = [...group.rows].sort((left, right) => compareRows(left, right, sortDirection));
+    const total = games.reduce((sum, row) => sum + row.value, 0);
+    const average = games.length ? total / games.length : 0;
+    const wins = games.filter((row) => row.result === "W").length;
+    const losses = games.filter((row) => row.result === "L").length;
+    let value = total;
+    let displayValue = formatValue(total, metric);
+
+    if (aggregation === "season_average") {
+      value = average;
+      displayValue = formatValue(average, metric);
+    } else if (aggregation === "count_games_gte") {
+      value = games.filter((row) => row.value >= threshold).length;
+      displayValue = `${value}`;
+    } else if (aggregation === "count_games_lte") {
+      value = games.filter((row) => row.value <= threshold).length;
+      displayValue = `${value}`;
+    } else if (aggregation === "count_games_nonzero") {
+      value = games.filter((row) => row.value > 0).length;
+      displayValue = `${value}`;
+    } else if (aggregation === "record" || aggregation === "record_when_gte" || aggregation === "record_when_lte" || aggregation === "record_when_nonzero") {
+      let recordRows = games;
+      if (aggregation === "record_when_gte") recordRows = games.filter((row) => row.value >= threshold);
+      if (aggregation === "record_when_lte") recordRows = games.filter((row) => row.value <= threshold);
+      if (aggregation === "record_when_nonzero") recordRows = games.filter((row) => row.value > 0);
+      const recordWins = recordRows.filter((row) => row.result === "W").length;
+      const recordLosses = recordRows.filter((row) => row.result === "L").length;
+      value = recordWins - recordLosses;
+      displayValue = `${recordWins}-${recordLosses}`;
+    } else if (aggregation === "max_game") {
+      const best = games[0];
+      value = best?.value || 0;
+      displayValue = formatValue(value, metric);
+    } else if (aggregation === "min_game") {
+      const best = [...games].sort((left, right) => compareRows(left, right, "asc"))[0];
+      value = best?.value || 0;
+      displayValue = formatValue(value, metric);
+    } else if (aggregation === "list_games") {
+      value = games.length;
+      displayValue = `${games.length}`;
+    }
+
+    return {
+      key: group.label,
+      label: group.label,
+      value,
+      displayValue,
+      sampleSize: games.length,
+      wins,
+      losses,
+      averageDisplayValue: formatValue(average, metric),
+      totalDisplayValue: formatValue(total, metric),
+    };
+  });
+
+  return summaries.sort((left, right) => {
+    if (typeof left.value === "number" && typeof right.value === "number" && left.value !== right.value) {
+      return sortDirection === "asc" ? left.value - right.value : right.value - left.value;
+    }
+    return left.label.localeCompare(right.label);
+  });
 }
 
 function executeQuery(
@@ -1379,15 +1490,17 @@ function executeQuery(
     || (aggregation === "min_game" || aggregation === "count_games_lte" || aggregation === "record_when_lte" ? "asc" : "desc");
   const orderedRows = [...filteredRows].sort((left, right) => compareRows(left, right, sortDirection));
   const listLimit = query.limit || (aggregation === "list_games" ? 10 : 25);
+  const groupedSummaries = buildGroupedSummaries(orderedRows, metric, query, aggregation, threshold, sortDirection);
 
   const buildCountAnswer = (matchingRows: QueryGameRow[], comparatorText: string) => ({
     aggregation,
     value: matchingRows.length,
-    displayValue: `${matchingRows.length}`,
-    answer: `${scopedLabel} had ${matchingRows.length} game${matchingRows.length === 1 ? "" : "s"} this season with ${comparatorText} ${metric.label.toLowerCase()}.`,
-    games: matchingRows,
-    sampleSize: filteredRows.length,
-  });
+      displayValue: `${matchingRows.length}`,
+      answer: `${scopedLabel} had ${matchingRows.length} game${matchingRows.length === 1 ? "" : "s"} this season with ${comparatorText} ${metric.label.toLowerCase()}.`,
+      games: matchingRows,
+      sampleSize: filteredRows.length,
+      groups: groupedSummaries,
+    });
 
   const buildRecordAnswer = (matchingRows: QueryGameRow[], comparatorText: string | null) => {
     const wins = matchingRows.filter((row) => row.result === "W").length;
@@ -1400,6 +1513,7 @@ function executeQuery(
       answer: `${scopedLabel}'s record${qualifier} was ${wins}-${losses}.`,
       games: matchingRows,
       sampleSize: filteredRows.length,
+      groups: groupedSummaries,
       record: {
         wins,
         losses,
@@ -1416,6 +1530,7 @@ function executeQuery(
       answer: `No completed games matched that filter for ${scopedLabel}.`,
       games: [],
       sampleSize: 0,
+      groups: groupedSummaries,
     };
   }
 
@@ -1438,6 +1553,7 @@ function executeQuery(
       answer: `${scopedLabel} recorded ${metric.label.toLowerCase()} in ${matchingRows.length} game${matchingRows.length === 1 ? "" : "s"} this season.`,
       games: matchingRows,
       sampleSize: filteredRows.length,
+      groups: groupedSummaries,
     };
   }
 
@@ -1466,6 +1582,7 @@ function executeQuery(
       answer: `${scopedLabel} averaged ${formatValue(average, metric)} ${metric.label.toLowerCase()} across ${orderedRows.length} game${orderedRows.length === 1 ? "" : "s"}.`,
       games: orderedRows,
       sampleSize: orderedRows.length,
+      groups: groupedSummaries,
     };
   }
 
@@ -1480,6 +1597,7 @@ function executeQuery(
         : `No completed games found for ${scopedLabel}.`,
       games: best ? [best] : [],
       sampleSize: orderedRows.length,
+      groups: groupedSummaries,
     };
   }
 
@@ -1494,6 +1612,7 @@ function executeQuery(
         : `No completed games found for ${scopedLabel}.`,
       games: best ? [best] : [],
       sampleSize: orderedRows.length,
+      groups: groupedSummaries,
     };
   }
 
@@ -1506,6 +1625,7 @@ function executeQuery(
       answer: `Showing ${listedGames.length} ${metric.label.toLowerCase()} game${listedGames.length === 1 ? "" : "s"} for ${scopedLabel}, sorted ${sortDirection === "asc" ? "ascending" : "descending"}.`,
       games: listedGames,
       sampleSize: orderedRows.length,
+      groups: groupedSummaries,
     };
   }
 
@@ -1517,6 +1637,7 @@ function executeQuery(
     answer: `${scopedLabel}'s total ${metric.label.toLowerCase()} was ${formatValue(total, metric)} across ${orderedRows.length} game${orderedRows.length === 1 ? "" : "s"}.`,
     games: orderedRows,
     sampleSize: orderedRows.length,
+    groups: groupedSummaries,
   };
 }
 
@@ -1633,6 +1754,7 @@ Deno.serve(async (request) => {
         resultFilter: parsed.resultFilter || "all",
         sort: parsed.sort || null,
         limit: parsed.limit || null,
+        groupBy: parsed.groupBy || "none",
       },
       stat: {
         key: metric.key,
