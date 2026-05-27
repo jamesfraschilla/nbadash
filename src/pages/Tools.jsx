@@ -206,6 +206,42 @@ function formatPlayerOption(player) {
   return `#${player.jerseyNum || "--"} ${player.fullName}`.trim();
 }
 
+function parseSortableNumeric(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  if (/^-?\d+(?:\.\d+)?$/.test(raw)) return Number(raw);
+  if (/^-?\d+(?:\.\d+)?\/-?\d+(?:\.\d+)?$/.test(raw)) {
+    const [left, right] = raw.split("/").map(Number);
+    return (left * 10000) + right;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const timestamp = Date.parse(`${raw}T00:00:00Z`);
+    return Number.isFinite(timestamp) ? timestamp : null;
+  }
+  if (/^-?\d+\s+games?$/i.test(raw)) {
+    return Number(raw.replace(/[^0-9.-]/g, ""));
+  }
+  if (/^-?\d+\s*-\s*-?\d+$/.test(raw)) {
+    const [wins, losses] = raw.split("-").map((part) => Number(part.trim()));
+    return (wins * 1000) - losses;
+  }
+  return null;
+}
+
+function compareSortableValues(left, right) {
+  const leftNumeric = parseSortableNumeric(left);
+  const rightNumeric = parseSortableNumeric(right);
+
+  if (leftNumeric !== null && rightNumeric !== null) {
+    return leftNumeric - rightNumeric;
+  }
+
+  return String(left ?? "").localeCompare(String(right ?? ""), undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
 function resolveSelectedPlayers(playerIds, roster) {
   const playersById = new Map((roster || []).map((player) => [player.personId, player]));
   return [...EMPTY_PLAYER_IDS].map((_, index) => {
@@ -304,6 +340,7 @@ export default function Tools() {
   const [customRequestLoading, setCustomRequestLoading] = useState(false);
   const [customRequestError, setCustomRequestError] = useState("");
   const [customRequestResult, setCustomRequestResult] = useState(null);
+  const [customTableSort, setCustomTableSort] = useState({ table: "", column: "", direction: "asc" });
 
   const canUseTools = hasFeature("tools");
   const draftParam = String(params.get("draft") || "").trim();
@@ -605,6 +642,10 @@ export default function Tools() {
   }, [defaultScoutingDraft, packetParam, scoutingResult]);
 
   useEffect(() => {
+    setCustomTableSort({ table: "", column: "", direction: "asc" });
+  }, [customRequestResult]);
+
+  useEffect(() => {
     setLateGameSetup((current) => (
       current.awayTeamId || current.homeTeamId ? current : defaultLateGameSetup
     ));
@@ -763,6 +804,99 @@ export default function Tools() {
     setCustomPrompt("");
     setCustomRequestError("");
     setCustomRequestResult(null);
+  };
+
+  const sortedRequestGroups = useMemo(() => {
+    const groups = Array.isArray(customRequestResult?.result?.groups) ? customRequestResult.result.groups : [];
+    if (!groups.length || customTableSort.table !== "groups" || !customTableSort.column) return groups;
+
+    const direction = customTableSort.direction === "desc" ? -1 : 1;
+    return [...groups].sort((left, right) => {
+      const leftValue = customTableSort.column === "group"
+        ? left.label
+        : customTableSort.column === "value"
+          ? left.displayValue
+          : customTableSort.column === "games"
+            ? left.sampleSize
+            : customTableSort.column === "record"
+              ? `${left.wins}-${left.losses}`
+              : customTableSort.column === "avg"
+                ? left.averageDisplayValue
+                : left.totalDisplayValue;
+      const rightValue = customTableSort.column === "group"
+        ? right.label
+        : customTableSort.column === "value"
+          ? right.displayValue
+          : customTableSort.column === "games"
+            ? right.sampleSize
+            : customTableSort.column === "record"
+              ? `${right.wins}-${right.losses}`
+              : customTableSort.column === "avg"
+                ? right.averageDisplayValue
+                : right.totalDisplayValue;
+      const comparison = compareSortableValues(leftValue, rightValue);
+      if (comparison !== 0) return comparison * direction;
+      return String(left.label || "").localeCompare(String(right.label || ""));
+    });
+  }, [customRequestResult, customTableSort]);
+
+  const sortedRequestTableRows = useMemo(() => {
+    const rows = Array.isArray(customRequestResult?.result?.table?.rows) ? customRequestResult.result.table.rows : [];
+    if (!rows.length || customTableSort.table !== "game-table" || !customTableSort.column) return rows;
+
+    const direction = customTableSort.direction === "desc" ? -1 : 1;
+    return [...rows].sort((left, right) => {
+      const comparison = compareSortableValues(left.values?.[customTableSort.column], right.values?.[customTableSort.column]);
+      if (comparison !== 0) return comparison * direction;
+      return String(left.gameDate || "").localeCompare(String(right.gameDate || ""));
+    });
+  }, [customRequestResult, customTableSort]);
+
+  const sortedRequestGames = useMemo(() => {
+    const games = Array.isArray(customRequestResult?.result?.games) ? customRequestResult.result.games : [];
+    if (!games.length || customTableSort.table !== "game-log" || !customTableSort.column) return games;
+
+    const direction = customTableSort.direction === "desc" ? -1 : 1;
+    return [...games].sort((left, right) => {
+      const leftValue = customTableSort.column === "gameDate"
+        ? left.gameDate
+        : customTableSort.column === "opponent"
+          ? left?.opponent?.tricode || left?.opponent?.fullName || "-"
+          : customTableSort.column === "result"
+            ? left.result || "-"
+            : customTableSort.column === "score"
+              ? `${left.teamScore}-${left.opponentScore}`
+              : customTableSort.column === "value"
+                ? left.value
+                : left.gameId;
+      const rightValue = customTableSort.column === "gameDate"
+        ? right.gameDate
+        : customTableSort.column === "opponent"
+          ? right?.opponent?.tricode || right?.opponent?.fullName || "-"
+          : customTableSort.column === "result"
+            ? right.result || "-"
+            : customTableSort.column === "score"
+              ? `${right.teamScore}-${right.opponentScore}`
+              : customTableSort.column === "value"
+                ? right.value
+                : right.gameId;
+      const comparison = compareSortableValues(leftValue, rightValue);
+      if (comparison !== 0) return comparison * direction;
+      return String(left.gameDate || "").localeCompare(String(right.gameDate || ""));
+    });
+  }, [customRequestResult, customTableSort]);
+
+  const handleRequestTableSort = (table, column) => {
+    setCustomTableSort((current) => (
+      current.table === table && current.column === column
+        ? { table, column, direction: current.direction === "asc" ? "desc" : "asc" }
+        : { table, column, direction: "asc" }
+    ));
+  };
+
+  const sortIndicator = (table, column) => {
+    if (customTableSort.table !== table || customTableSort.column !== column) return "";
+    return customTableSort.direction === "asc" ? " ▲" : " ▼";
   };
 
   const handleSave = async () => {
@@ -1383,16 +1517,16 @@ export default function Tools() {
                     <table className={styles.requestTable}>
                       <thead>
                         <tr>
-                          <th>Group</th>
-                          <th>Value</th>
-                          <th>Games</th>
-                          <th>Record</th>
-                          <th>Avg</th>
-                          <th>Total</th>
+                          <th><button type="button" className={styles.tableSortButton} onClick={() => handleRequestTableSort("groups", "group")}>Group{sortIndicator("groups", "group")}</button></th>
+                          <th><button type="button" className={styles.tableSortButton} onClick={() => handleRequestTableSort("groups", "value")}>Value{sortIndicator("groups", "value")}</button></th>
+                          <th><button type="button" className={styles.tableSortButton} onClick={() => handleRequestTableSort("groups", "games")}>Games{sortIndicator("groups", "games")}</button></th>
+                          <th><button type="button" className={styles.tableSortButton} onClick={() => handleRequestTableSort("groups", "record")}>Record{sortIndicator("groups", "record")}</button></th>
+                          <th><button type="button" className={styles.tableSortButton} onClick={() => handleRequestTableSort("groups", "avg")}>Avg{sortIndicator("groups", "avg")}</button></th>
+                          <th><button type="button" className={styles.tableSortButton} onClick={() => handleRequestTableSort("groups", "total")}>Total{sortIndicator("groups", "total")}</button></th>
                         </tr>
                       </thead>
                       <tbody>
-                        {customRequestResult.result.groups.map((group) => (
+                        {sortedRequestGroups.map((group) => (
                           <tr key={group.key}>
                             <td>{group.label}</td>
                             <td>{group.displayValue}</td>
@@ -1416,12 +1550,20 @@ export default function Tools() {
                       <thead>
                         <tr>
                           {customRequestResult.result.table.columns.map((column) => (
-                            <th key={column.key}>{column.label}</th>
+                            <th key={column.key}>
+                              <button
+                                type="button"
+                                className={styles.tableSortButton}
+                                onClick={() => handleRequestTableSort("game-table", column.key)}
+                              >
+                                {column.label}{sortIndicator("game-table", column.key)}
+                              </button>
+                            </th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
-                        {customRequestResult.result.table.rows.map((row) => (
+                        {sortedRequestTableRows.map((row) => (
                           <tr key={`${row.gameId}-${row.gameDate}`}>
                             {customRequestResult.result.table.columns.map((column) => (
                               <td key={`${row.gameId}-${column.key}`}>{row.values?.[column.key] ?? "-"}</td>
@@ -1439,16 +1581,16 @@ export default function Tools() {
                     <table className={styles.requestTable}>
                       <thead>
                         <tr>
-                          <th>Date</th>
-                          <th>Opponent</th>
-                          <th>Result</th>
-                          <th>Score</th>
-                          <th>Value</th>
-                          <th>Game ID</th>
+                          <th><button type="button" className={styles.tableSortButton} onClick={() => handleRequestTableSort("game-log", "gameDate")}>Date{sortIndicator("game-log", "gameDate")}</button></th>
+                          <th><button type="button" className={styles.tableSortButton} onClick={() => handleRequestTableSort("game-log", "opponent")}>Opponent{sortIndicator("game-log", "opponent")}</button></th>
+                          <th><button type="button" className={styles.tableSortButton} onClick={() => handleRequestTableSort("game-log", "result")}>Result{sortIndicator("game-log", "result")}</button></th>
+                          <th><button type="button" className={styles.tableSortButton} onClick={() => handleRequestTableSort("game-log", "score")}>Score{sortIndicator("game-log", "score")}</button></th>
+                          <th><button type="button" className={styles.tableSortButton} onClick={() => handleRequestTableSort("game-log", "value")}>Value{sortIndicator("game-log", "value")}</button></th>
+                          <th><button type="button" className={styles.tableSortButton} onClick={() => handleRequestTableSort("game-log", "gameId")}>Game ID{sortIndicator("game-log", "gameId")}</button></th>
                         </tr>
                       </thead>
                       <tbody>
-                        {customRequestResult.result.games.map((game) => (
+                        {sortedRequestGames.map((game) => (
                           <tr key={`${game.gameId}-${game.gameDate}`}>
                             <td>{game.gameDate}</td>
                             <td>{game?.opponent?.tricode || game?.opponent?.fullName || "-"}</td>

@@ -398,6 +398,24 @@
   color: var(--muted);
 }
 
+.tableSortButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.tableSortButton:hover {
+  color: var(--text);
+}
+
 @media (max-width: 900px) {
   .toolGrid {
     grid-template-columns: 1fr;
