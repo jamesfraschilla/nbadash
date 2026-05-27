@@ -1351,6 +1351,11 @@ export default function Tools() {
                       customRequestResult?.parsedQuery?.resultFilter && customRequestResult?.parsedQuery?.resultFilter !== "all"
                         ? `${customRequestResult.parsedQuery.resultFilter}s`
                         : "All results",
+                      customRequestResult?.filters?.seasonScope && customRequestResult.filters.seasonScope !== "all"
+                        ? customRequestResult.filters.seasonScope === "playoffs"
+                          ? "playoffs"
+                          : "regular season"
+                        : null,
                       customRequestResult?.filters?.groupBy && customRequestResult.filters.groupBy !== "none"
                         ? `grouped by ${customRequestResult.filters.groupBy}`
                         : null,
@@ -1403,7 +1408,31 @@ export default function Tools() {
                 </div>
               ) : null}
 
-              {Array.isArray(customRequestResult?.result?.games) && customRequestResult.result.games.length ? (
+              {Array.isArray(customRequestResult?.result?.table?.columns) && Array.isArray(customRequestResult?.result?.table?.rows) ? (
+                <div className={styles.requestGamesWrap}>
+                  <div className={styles.scoutingDetailTitle}>Game Table</div>
+                  <div className={styles.requestTableWrap}>
+                    <table className={styles.requestTable}>
+                      <thead>
+                        <tr>
+                          {customRequestResult.result.table.columns.map((column) => (
+                            <th key={column.key}>{column.label}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {customRequestResult.result.table.rows.map((row) => (
+                          <tr key={`${row.gameId}-${row.gameDate}`}>
+                            {customRequestResult.result.table.columns.map((column) => (
+                              <td key={`${row.gameId}-${column.key}`}>{row.values?.[column.key] ?? "-"}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : Array.isArray(customRequestResult?.result?.games) && customRequestResult.result.games.length ? (
                 <div className={styles.requestGamesWrap}>
                   <div className={styles.scoutingDetailTitle}>Game Log</div>
                   <div className={styles.requestTableWrap}>
