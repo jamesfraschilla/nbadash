@@ -547,9 +547,48 @@ async function fetchSeasonGames(season = currentSeasonString()) {
   return SEASON_GAMES_CACHE.get(season)!;
 }
 
+function isSuspiciousGamePayload(game: Record<string, unknown>) {
+  const homeScore = safeNumber((game.homeTeam as Record<string, unknown> | undefined)?.score, 0);
+  const awayScore = safeNumber((game.awayTeam as Record<string, unknown> | undefined)?.score, 0);
+  const homeBoxPoints = safeNumber((((game.boxScore as Record<string, unknown> | undefined)?.home as Record<string, unknown> | undefined)?.totals as Record<string, unknown> | undefined)?.points, 0);
+  const awayBoxPoints = safeNumber((((game.boxScore as Record<string, unknown> | undefined)?.away as Record<string, unknown> | undefined)?.totals as Record<string, unknown> | undefined)?.points, 0);
+  const playByPlayCount = Array.isArray(game.playByPlayActions) ? game.playByPlayActions.length : 0;
+
+  if ((homeScore > 0 || awayScore > 0) && homeBoxPoints === 0 && awayBoxPoints === 0) return true;
+  if (playByPlayCount === 0 && (homeScore > 0 || awayScore > 0)) return true;
+  if (homeBoxPoints > 0 && homeScore > 0 && Math.abs(homeBoxPoints - homeScore) > 2) return true;
+  if (awayBoxPoints > 0 && awayScore > 0 && Math.abs(awayBoxPoints - awayScore) > 2) return true;
+  return false;
+}
+
+async function fetchGameDetailsWithRetry(gameId: string, maxAttempts = 3) {
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const game = await requestJson(`${API_BASE}/games/${gameId}`) as Record<string, unknown>;
+      if (isSuspiciousGamePayload(game)) {
+        throw new Error(`Incomplete game payload for ${gameId}.`);
+      }
+      return game;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 150));
+      }
+    }
+  }
+
+  throw lastError || new Error(`Failed to fetch game ${gameId}.`);
+}
+
 async function fetchGameDetails(gameId: string) {
   if (!GAME_DETAILS_CACHE.has(gameId)) {
-    GAME_DETAILS_CACHE.set(gameId, requestJson(`${API_BASE}/games/${gameId}`));
+    const request = fetchGameDetailsWithRetry(gameId).catch((error) => {
+      GAME_DETAILS_CACHE.delete(gameId);
+      throw error;
+    });
+    GAME_DETAILS_CACHE.set(gameId, request);
   }
   return GAME_DETAILS_CACHE.get(gameId)!;
 }
@@ -960,13 +999,21 @@ function buildGameMetrics(game: AnyRecord, teamId: string): BuiltGameMetrics {
     homeTeamId,
     awayTeamId,
   );
-  const teamTotals = derivedTotals[teamId] || {};
+  const teamBoxTotals = (perspective.teamBox?.totals || {}) as Record<string, unknown>;
+  const opponentBoxTotals = (perspective.opponentBox?.totals || {}) as Record<string, unknown>;
+  const teamTotals = {
+    ...teamBoxTotals,
+    ...(derivedTotals[teamId] || {}),
+  };
   const opponentId = teamId === homeTeamId ? awayTeamId : homeTeamId;
-  const opponentTotals = derivedTotals[opponentId] || {};
+  const opponentTotals = {
+    ...opponentBoxTotals,
+    ...(derivedTotals[opponentId] || {}),
+  };
   const advancedStats = (perspective.teamStats?.advancedStats || {}) as Record<string, unknown>;
   const possessions = safeNumber(perspective.teamStats?.possessions, estimatePossessions(teamTotals, opponentTotals));
   const teamScore = safeNumber(teamTotals.points, safeNumber(perspective.team?.score, 0));
-  const opponentPoints = safeNumber(opponentTotals.points, 0);
+  const opponentPoints = safeNumber(opponentTotals.points, safeNumber(perspective.opponent?.score, 0));
   const deflections = safeNumber(advancedStats.deflections, 0);
   const offensiveFoulsDrawn = safeNumber(teamTotals.offensiveFoulsDrawn, safeNumber(advancedStats.offensiveFoulsDrawn, 0));
   const disruptions = safeNumber(teamTotals.steals, 0) + safeNumber(teamTotals.blocks, 0) + offensiveFoulsDrawn + deflections;
@@ -1877,6 +1924,10 @@ async function buildTeamSeasonDataset(
           } satisfies CachedTeamGameRow;
         })
         .filter(Boolean) as CachedTeamGameRow[];
+
+      if (skippedGames.length) {
+        TEAM_SEASON_DATASET_CACHE.delete(cacheKey);
+      }
 
       return { rows, skippedGames };
     })());
