@@ -1164,28 +1164,28 @@ function findTeamMatches(prompt: string) {
     .sort((left, right) => right.score - left.score);
 }
 
-function parseOpponentTeamFromPrompt(prompt: string, subjectTeamId: string) {
+function hasExplicitOpponentContext(prompt: string) {
   const normalizedPrompt = normalizeText(prompt);
-  const teamMatches = findTeamMatches(prompt).filter((entry) => entry.team.teamId !== subjectTeamId);
-  if (!teamMatches.length) return null;
-
-  const contextualPatterns = [
+  return [
     /\bvs\b/,
     /\bversus\b/,
     /\bagainst\b/,
     /\bv\b/,
     /\bopp(?:onent)?\b/,
-  ];
+  ].some((pattern) => pattern.test(normalizedPrompt));
+}
 
-  if (contextualPatterns.some((pattern) => pattern.test(normalizedPrompt))) {
-    return teamMatches[0]?.team || null;
-  }
+function parseOpponentTeamFromPrompt(prompt: string, subjectTeamId: string) {
+  if (!hasExplicitOpponentContext(prompt)) return null;
+
+  const teamMatches = findTeamMatches(prompt).filter((entry) => entry.team.teamId !== subjectTeamId);
+  if (!teamMatches.length) return null;
 
   if (teamMatches.length > 1 && teamMatches[0].score === teamMatches[1].score) {
     return null;
   }
 
-  return teamMatches[0]?.score >= 10 ? teamMatches[0].team : null;
+  return teamMatches[0]?.team || null;
 }
 
 function parseResultFilter(prompt: string): ResultFilter {
@@ -2198,6 +2198,8 @@ Deno.serve(async (request) => {
     }
 
     const fallbackParsed = normalizeParsedQuery(buildFallbackParse(prompt));
+    const promptThreshold = parseThreshold(prompt);
+    const promptHasExplicitOpponent = hasExplicitOpponentContext(prompt);
     const season = currentSeasonString();
     const openAiParsedPromise = parsePromptWithOpenAI(prompt)
       .then((value) => normalizeParsedQuery(value))
@@ -2216,6 +2218,12 @@ Deno.serve(async (request) => {
       const matchedTeam = NBA_TEAMS.find((entry) => entry.teamId === candidate.teamId) || null;
       const matchedMetric = METRICS.find((entry) => entry.key === candidate.statKey) || null;
       if (matchedTeam && matchedMetric) {
+        if (candidate.opponentTeamId && !promptHasExplicitOpponent) {
+          candidate.opponentTeamId = undefined;
+        }
+        if (promptThreshold != null && candidate.threshold == null) {
+          continue;
+        }
         const teamScore = scoreTeamPrompt(matchedTeam, prompt);
         const metricScore = scoreMetricPrompt(matchedMetric, prompt);
         const matchedOpponent = candidate.opponentTeamId
@@ -2225,7 +2233,8 @@ Deno.serve(async (request) => {
         const sourceBonus = candidate === fallbackParsed ? 5 : 0;
         const filterBonus = (candidate.resultFilter && candidate.resultFilter !== "all" ? 2 : 0)
           + (matchedOpponent ? 2 : 0);
-        const candidateScore = teamScore + metricScore + opponentScore + sourceBonus + filterBonus;
+        const thresholdBonus = promptThreshold != null && candidate.threshold === promptThreshold ? 4 : 0;
+        const candidateScore = teamScore + metricScore + opponentScore + sourceBonus + filterBonus + thresholdBonus;
         if (teamScore < 6 || metricScore < 5 || candidateScore <= bestCandidateScore) continue;
         bestCandidateScore = candidateScore;
         if (candidate.opponentTeamId === candidate.teamId) {
@@ -2295,3 +2304,4 @@ Deno.serve(async (request) => {
     });
   }
 });
+After 
