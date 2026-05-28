@@ -1461,6 +1461,29 @@ function buildTemplateAnalysis(features: ReturnType<typeof buildFeaturePayload>)
   };
 }
 
+function sanitizeAiHeadline(headline: string, features: ReturnType<typeof buildFeaturePayload>) {
+  const trimmed = String(headline || "").trim();
+  if (!trimmed) return "";
+
+  const endingMargin = Math.max(
+    Math.abs(safeNumber(features?.score?.margin?.home, 0)),
+    Math.abs(safeNumber(features?.score?.margin?.away, 0)),
+  );
+  const largestLead = Object.values(features?.gameFlow?.largestLead || {}).reduce((max, entry) => {
+    const points = safeNumber((entry as { points?: number } | null)?.points, 0);
+    return Math.max(max, points);
+  }, 0);
+
+  if (!largestLead || largestLead === endingMargin) return trimmed;
+  if (/largest lead|peaked at|as large as|as many as/i.test(trimmed)) return trimmed;
+
+  return trimmed.replace(/\b((?:a|an|the)\s+)?(\d+)[-\s]?point lead\b/gi, (match, article = "", rawNumber = "") => {
+    const leadNumber = Number(rawNumber);
+    if (!Number.isFinite(leadNumber) || leadNumber === endingMargin || leadNumber !== largestLead) return match;
+    return `${article}lead that peaked at ${leadNumber}`;
+  });
+}
+
 async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayload>) {
   const apiKey = Deno.env.get("OPENAI_API_KEY") || "";
   if (!apiKey) return null;
@@ -1477,8 +1500,9 @@ async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayloa
     "When the data shows a late-game collapse, comeback, or dramatic final-minute swing, make that central to the analysis even if aggregate quarter stats point elsewhere.",
     "Use game-flow context such as lead changes, largest leads, and concentrated momentum bursts to describe how the stretch unfolded, not just who won the box-score categories.",
     "Do not confuse largest lead within the stretch with the score or margin at the end of the stretch.",
+    "The headline follows the same rule: do not use bare 'N-point lead' wording unless N is the actual ending margin of the selected span.",
     "If you say 'by the end of the quarter', 'by the end of the span', or similar, that statement must match score.end exactly.",
-    "If you mention the largest lead, label it explicitly as the largest lead and not the ending margin unless they are the same.",
+    "If you mention the largest lead, label it explicitly as the largest lead or say the lead peaked there, and not the ending margin unless they are the same.",
     "Call out notable individual player stretches when the provided data clearly supports it, especially when one player drove a large share of a team's scoring in the selected window.",
     "Only mention lineup notes when they materially matter in the range.",
     "Return compact JSON with keys: headline, summary, sections.",
@@ -1522,7 +1546,7 @@ async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayloa
   const parsed = JSON.parse(content);
   return {
     source: "ai",
-    headline: String(parsed?.headline || "").trim(),
+    headline: sanitizeAiHeadline(String(parsed?.headline || "").trim(), features),
     summary: String(parsed?.summary || "").trim(),
     sections: Array.isArray(parsed?.sections)
       ? parsed.sections
