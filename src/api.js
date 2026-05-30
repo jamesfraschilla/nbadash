@@ -1,6 +1,7 @@
 import { gLeagueHeadshotOverrides } from "./gLeagueHeadshotOverrides.js";
 import { NBA_TEAMS } from "./data/nbaTeams.js";
 import { aggregateSegmentStats } from "./segmentStats.js";
+import { supabase } from "./supabaseClient.js";
 import { formatDateInput } from "./utils.js";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
@@ -10,12 +11,25 @@ const SUMMER_LEAGUE_PAGE_CACHE = new Map();
 const SUMMER_LEAGUE_GAME_URL_CACHE = new Map();
 const NBA_TEAM_BY_TRICODE = new Map(NBA_TEAMS.map((team) => [team.tricode, team]));
 const SUPABASE_URL = import.meta?.env?.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta?.env?.VITE_SUPABASE_ANON_KEY;
 const SUPABASE_FUNCTIONS_BASE = SUPABASE_URL
   ? `${String(SUPABASE_URL).replace(/\/$/, "")}/functions/v1`
   : "";
 
 async function requestJson(url) {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  const headers = { Accept: "application/json" };
+  if (SUPABASE_FUNCTIONS_BASE && String(url || "").startsWith(SUPABASE_FUNCTIONS_BASE)) {
+    if (SUPABASE_ANON_KEY) {
+      headers.apikey = SUPABASE_ANON_KEY;
+    }
+    const accessToken = await supabase?.auth?.getSession?.()
+      .then(({ data }) => data?.session?.access_token || "")
+      .catch(() => "");
+    if (accessToken) {
+      headers.Authorization = `Bearer ${accessToken}`;
+    }
+  }
+  const res = await fetch(url, { headers });
   if (!res.ok) {
     const error = new Error(`Request failed: ${res.status}`);
     error.status = res.status;
@@ -1390,7 +1404,7 @@ async function fetchSummerLeagueGame(gameId, dateStr = null) {
 export async function fetchGamesByDate(dateStr) {
   const url = `${API_BASE}/games/byDate?date=${dateStr}`;
   const [baseGames, summerGames] = await Promise.all([
-    requestJson(url).catch(() => []),
+    requestJson(url),
     isJulyDate(dateStr) ? fetchSummerLeagueGamesByDate(dateStr).catch(() => []) : Promise.resolve([]),
   ]);
   const filteredBaseGames = (Array.isArray(baseGames) ? baseGames : []).filter(isNbaDashboardGame);

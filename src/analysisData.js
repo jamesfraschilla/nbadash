@@ -16,6 +16,9 @@ async function getCurrentAccessToken() {
 export async function requestGameAnalysis({ gameId, game, minutesData, range }) {
   requireSupabase();
   const accessToken = await getCurrentAccessToken();
+  if (!accessToken) {
+    throw new Error("Your session has expired. Sign in again, then rerun Analysis.");
+  }
   const { data, error } = await supabase.functions.invoke("nba-game-analysis", {
     headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
     body: {
@@ -28,6 +31,9 @@ export async function requestGameAnalysis({ gameId, game, minutesData, range }) 
   });
 
   if (error) {
+    if (/non-2xx status code/i.test(String(error.message || ""))) {
+      throw new Error("Analysis request was rejected by the server. Sign out and back in, then try again.");
+    }
     throw new Error(error.message || "Unable to generate analysis.");
   }
 
