@@ -5,7 +5,6 @@ import AuthGate from "./components/AuthGate.jsx";
 import LegacyNotesImportPrompt from "./components/LegacyNotesImportPrompt.jsx";
 import PasswordResetGate from "./components/PasswordResetGate.jsx";
 import { useAuth } from "./auth/useAuth.js";
-import { syncRemoteRefereeHeadshotState } from "./refereeHeadshots.js";
 import { readLocalStorage, writeLocalStorage } from "./storage.js";
 
 const UPDATE_CHECK_INTERVAL_MS = 2 * 60 * 1000;
@@ -69,7 +68,9 @@ export default function App() {
 
   useEffect(() => {
     if (user?.id) {
-      syncRemoteRefereeHeadshotState(user.id).catch(() => {});
+      import("./refereeHeadshots.js")
+        .then(({ syncRemoteRefereeHeadshotState }) => syncRemoteRefereeHeadshotState(user.id))
+        .catch(() => {});
     }
   }, [user?.id]);
 

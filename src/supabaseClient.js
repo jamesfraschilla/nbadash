@@ -15,14 +15,68 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.warn("Supabase env vars are missing. Highlights will be disabled.");
 }
 
+function safeReadStorage(storage, key) {
+  if (!storage) return null;
+  try {
+    return storage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeRemoveStorage(storage, key) {
+  if (!storage) return;
+  try {
+    storage.removeItem(key);
+  } catch {
+    // Ignore restrictive browser storage failures.
+  }
+}
+
+function parseStoredAuthValue(rawValue) {
+  if (!rawValue) return null;
+  try {
+    const parsed = JSON.parse(rawValue);
+    const currentSession = parsed?.currentSession;
+    const expiresAt = Number(
+      currentSession?.expires_at
+      || currentSession?.expiresAt
+      || parsed?.expires_at
+      || parsed?.expiresAt
+      || 0
+    );
+    return {
+      rawValue,
+      expiresAt: Number.isFinite(expiresAt) ? expiresAt : 0,
+    };
+  } catch {
+    return {
+      rawValue,
+      expiresAt: 0,
+    };
+  }
+}
+
 const browserStorage = typeof window !== "undefined"
   ? {
     getItem(key) {
-      return window.localStorage.getItem(key) ?? window.sessionStorage?.getItem(key) ?? null;
+      const localValue = safeReadStorage(window.localStorage, key);
+      const sessionValue = safeReadStorage(window.sessionStorage, key);
+      const localEntry = parseStoredAuthValue(localValue);
+      const sessionEntry = parseStoredAuthValue(sessionValue);
+
+      if (localEntry && sessionEntry) {
+        return sessionEntry.expiresAt > localEntry.expiresAt
+          ? sessionEntry.rawValue
+          : localEntry.rawValue;
+      }
+
+      return localEntry?.rawValue ?? sessionEntry?.rawValue ?? null;
     },
     setItem(key, value) {
       try {
         window.localStorage.setItem(key, value);
+        safeRemoveStorage(window.sessionStorage, key);
       } catch (error) {
         const isQuotaError = error?.name === "QuotaExceededError"
           || error?.name === "NS_ERROR_DOM_QUOTA_REACHED"
@@ -34,11 +88,12 @@ const browserStorage = typeof window !== "undefined"
         STORAGE_EVICTION_PREFIXES.forEach((prefix) => {
           Object.keys(window.localStorage)
             .filter((storageKey) => storageKey.startsWith(prefix))
-            .forEach((storageKey) => window.localStorage.removeItem(storageKey));
+            .forEach((storageKey) => safeRemoveStorage(window.localStorage, storageKey));
         });
 
         try {
           window.localStorage.setItem(key, value);
+          safeRemoveStorage(window.sessionStorage, key);
           return;
         } catch (retryError) {
           if (window.sessionStorage) {
@@ -50,10 +105,8 @@ const browserStorage = typeof window !== "undefined"
       }
     },
     removeItem(key) {
-      window.localStorage.removeItem(key);
-      if (window.sessionStorage) {
-        window.sessionStorage.removeItem(key);
-      }
+      safeRemoveStorage(window.localStorage, key);
+      safeRemoveStorage(window.sessionStorage, key);
     },
   }
   : undefined;

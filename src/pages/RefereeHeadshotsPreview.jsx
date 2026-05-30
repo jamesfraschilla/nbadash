@@ -7,7 +7,6 @@ import {
   cacheStoredRefereeHeadshotOverrides,
   cacheStoredRefereeHeadshotPreferences,
   buildRefereeHeadshotGroups,
-  buildRefereeHeadshotImageItems,
   buildRefereeHeadshotTransform,
   choosePreferredRefereeHeadshot,
   DEFAULT_REFEREE_HEADSHOT_OVERRIDES,
@@ -16,6 +15,7 @@ import {
   getAssignedRefereeNameKey,
   getRefereeAlternateNames,
   loadRemoteRefereeHeadshotState,
+  loadRefereeHeadshotImageItems,
   normalizeNameKey,
   REFEREE_HEADSHOT_OVERRIDE_STORAGE_KEY,
   REFEREE_HEADSHOT_PREFERENCES_STORAGE_KEY,
@@ -155,15 +155,33 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
   const [showOnlyEdited, setShowOnlyEdited] = useState(false);
   const [showOnlyDuplicates, setShowOnlyDuplicates] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
+  const [allItems, setAllItems] = useState([]);
   const [copyMessage, setCopyMessage] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
   const [uploadMessage, setUploadMessage] = useState("");
   const fileInputRef = useRef(null);
   const localCacheWarning = "Browser storage is full. Changes remain in this tab, but click Save Changes before refreshing.";
 
-  const allItems = useMemo(() => buildRefereeHeadshotImageItems(preferences), [preferences]);
   const savedOverridesSignatureRef = useRef(serializeRefereeHeadshotOverrides(readInitialOverrides()));
   const savedPreferencesSignatureRef = useRef(serializeRefereeHeadshotPreferences(readInitialPreferences()));
+
+  useEffect(() => {
+    let cancelled = false;
+    loadRefereeHeadshotImageItems(preferences)
+      .then((items) => {
+        if (!cancelled) {
+          setAllItems(items);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAllItems([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [preferences]);
 
   useEffect(() => {
     const cacheResult = cacheStoredRefereeHeadshotOverrides(overrides);

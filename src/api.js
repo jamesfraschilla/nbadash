@@ -1564,7 +1564,11 @@ async function fetchAllSeasonGames(season = currentSeasonString()) {
 export async function fetchTeamSeasonGames(teamId, opponentTeamId = "", season = currentSeasonString()) {
   const safeTeamId = String(teamId || "").trim();
   const safeOpponentTeamId = String(opponentTeamId || "").trim();
-  const seasonGames = await fetchAllSeasonGames(season);
+  const seasonGames = await (
+    SUPABASE_FUNCTIONS_BASE
+      ? fetchTeamSeasonGamesFromFunction(safeTeamId, season).catch(() => fetchAllSeasonGames(season))
+      : fetchAllSeasonGames(season)
+  );
   return seasonGames.filter((game) => {
     const homeTeamId = String(game?.homeTeam?.teamId || "");
     const awayTeamId = String(game?.awayTeam?.teamId || "");
@@ -1678,6 +1682,17 @@ export async function fetchCurrentGLeagueRosters() {
     throw new Error("Supabase functions are not configured.");
   }
   return requestJson(`${SUPABASE_FUNCTIONS_BASE}/gleague-rosters`);
+}
+
+async function fetchTeamSeasonGamesFromFunction(teamId, season = currentSeasonString()) {
+  if (!SUPABASE_FUNCTIONS_BASE) {
+    throw new Error("Supabase functions are not configured.");
+  }
+  const url = new URL(`${SUPABASE_FUNCTIONS_BASE}/team-games`);
+  url.searchParams.set("teamId", String(teamId || "").trim());
+  url.searchParams.set("season", season);
+  const payload = await requestJson(url.toString());
+  return Array.isArray(payload?.games) ? payload.games : [];
 }
 
 export function nbaEventVideoUrl({ gameId, actionNumber, seasonYear, title }) {

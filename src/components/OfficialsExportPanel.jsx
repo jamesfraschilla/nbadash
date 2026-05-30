@@ -7,7 +7,7 @@ import {
   buildCanvasAvatarPlacement,
   buildRefereeHeadshotTransform,
   getRefereeHeadshotOverride,
-  getRefereeHeadshotUrl,
+  loadRefereeHeadshotUrl,
 } from "../refereeHeadshots.js";
 import styles from "./OfficialsExportPanel.module.css";
 
@@ -106,7 +106,7 @@ function normalizeOfficial(official, index) {
     ).trim(),
     roleKey: sortMeta.role,
     isAlternate: sortMeta.isAlternate,
-    headshotUrl: getRefereeHeadshotUrl(fullName),
+    headshotUrl: null,
   };
 }
 
@@ -129,6 +129,17 @@ function buildOfficialsData(officials, publishedOrder) {
   const hideAlternateFooter = rawOfficials.length === 4 && primary.length === 3;
 
   return { primary, alternates: hideAlternateFooter ? [] : alternates };
+}
+
+async function hydrateOfficialsData(officialsData) {
+  const hydrate = async (official) => ({
+    ...official,
+    headshotUrl: await loadRefereeHeadshotUrl(official.fullName),
+  });
+  return {
+    primary: await Promise.all((officialsData?.primary || []).map(hydrate)),
+    alternates: officialsData?.alternates || [],
+  };
 }
 
 function getInitials(fullName) {
@@ -635,12 +646,34 @@ function Spinner() {
 
 export default function OfficialsExportPanel({ officials, gameId, publishedOrder, gameTimeLocal = "" }) {
   const [headshotVersion, setHeadshotVersion] = useState(0);
-  const { primary, alternates } = useMemo(
+  const baseOfficialsData = useMemo(
     () => buildOfficialsData(officials, publishedOrder),
     [headshotVersion, officials, publishedOrder]
   );
+  const [resolvedOfficialsData, setResolvedOfficialsData] = useState(baseOfficialsData);
   const [busyFormat, setBusyFormat] = useState("");
   const [exportOpen, setExportOpen] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setResolvedOfficialsData(baseOfficialsData);
+    hydrateOfficialsData(baseOfficialsData)
+      .then((nextData) => {
+        if (!cancelled) {
+          setResolvedOfficialsData(nextData);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setResolvedOfficialsData(baseOfficialsData);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [baseOfficialsData]);
+
+  const { primary, alternates } = resolvedOfficialsData;
 
   useEffect(() => {
     const handleRefresh = () => setHeadshotVersion((value) => value + 1);
@@ -662,7 +695,8 @@ export default function OfficialsExportPanel({ officials, gameId, publishedOrder
         await document.fonts.ready;
       }
 
-      const canvas = await buildExportCanvas(format, primary, alternates, getThemeMode(), gameTimeLocal);
+      const exportData = await hydrateOfficialsData(baseOfficialsData);
+      const canvas = await buildExportCanvas(format, exportData.primary, exportData.alternates, getThemeMode(), gameTimeLocal);
       downloadCanvas(canvas, `officials-${gameId || "game"}-${format}.png`);
       setExportOpen(false);
     } catch (error) {

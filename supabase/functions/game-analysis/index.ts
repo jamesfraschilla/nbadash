@@ -1,3 +1,5 @@
+import { createClient } from "npm:@supabase/supabase-js@2";
+
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 const DEFAULT_OPENAI_MODEL = Deno.env.get("OPENAI_ANALYSIS_MODEL") || "gpt-4.1-mini";
@@ -16,6 +18,53 @@ function jsonResponse(status: number, payload: Record<string, unknown>) {
       "Content-Type": "application/json",
     },
   });
+}
+
+function getUserClient(authHeader: string) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error("Supabase auth env vars are not configured.");
+  }
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+    global: {
+      headers: authHeader ? { Authorization: authHeader } : {},
+    },
+  });
+}
+
+async function requireActiveUser(userClient: ReturnType<typeof createClient>, req: Request) {
+  const authHeader = req.headers.get("Authorization") || "";
+  let token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+  if (!token) {
+    const cloned = req.clone();
+    const body = await cloned.json().catch(() => ({}));
+    token = typeof body?.accessToken === "string" ? body.accessToken : "";
+  }
+  if (!token) {
+    return { error: "Missing authorization token.", status: 401 } as const;
+  }
+
+  const { data: userData, error: authError } = await userClient.auth.getUser(token);
+  if (authError || !userData?.user?.id) {
+    return { error: "Unable to verify session.", status: 401 } as const;
+  }
+
+  const { data: profile, error: profileError } = await userClient
+    .from("profiles")
+    .select("id,role,status")
+    .eq("id", userData.user.id)
+    .maybeSingle();
+
+  if (profileError || !profile || profile.status !== "active") {
+    return { error: "Active account required.", status: 403 } as const;
+  }
+
+  return { userId: profile.id } as const;
 }
 
 function safeNumber(value: unknown, fallback = 0) {
@@ -1579,6 +1628,18 @@ Deno.serve(async (req) => {
 
   if (req.method !== "POST") {
     return jsonResponse(405, { error: "Method not allowed." });
+  }
+
+  let userClient: ReturnType<typeof createClient>;
+  try {
+    userClient = getUserClient(req.headers.get("Authorization") || "");
+  } catch (error) {
+    return jsonResponse(500, { error: error instanceof Error ? error.message : "Supabase auth is unavailable." });
+  }
+
+  const permission = await requireActiveUser(userClient, req);
+  if ("error" in permission) {
+    return jsonResponse(permission.status, { error: permission.error });
   }
 
   try {

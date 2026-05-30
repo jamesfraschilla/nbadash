@@ -587,19 +587,80 @@ async function fetchRemoteSavedLineups(teamScope) {
   };
 }
 
+async function writeSharedPayloadWithRetry(scopeType, scopeKey, payloadBuilder, requestedUpdatedAt = Date.now(), maxAttempts = 4) {
+  if (!supabase || !scopeType || !scopeKey) return null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const { data: currentRow, error: readError } = await supabase
+      .from(ROTATIONS_TABLE)
+      .select("payload,updated_at")
+      .eq("scope_type", scopeType)
+      .eq("scope_key", scopeKey)
+      .maybeSingle();
+
+    if (readError) throw readError;
+
+    const currentPayload = currentRow?.payload && typeof currentRow.payload === "object"
+      ? currentRow.payload
+      : null;
+    const currentPayloadUpdatedAt = Number(currentPayload?.updatedAt || 0);
+    if (currentPayloadUpdatedAt > Number(requestedUpdatedAt || 0)) {
+      return currentPayload;
+    }
+
+    const nextPayload = {
+      ...payloadBuilder(currentPayload),
+      updatedAt: requestedUpdatedAt,
+    };
+
+    if (currentRow?.updated_at) {
+      const { data: updatedRow, error: updateError } = await supabase
+        .from(ROTATIONS_TABLE)
+        .update({ payload: nextPayload })
+        .eq("scope_type", scopeType)
+        .eq("scope_key", scopeKey)
+        .eq("updated_at", currentRow.updated_at)
+        .select("payload")
+        .maybeSingle();
+
+      if (updateError) throw updateError;
+      if (updatedRow?.payload) {
+        return updatedRow.payload;
+      }
+      continue;
+    }
+
+    const { data: insertedRow, error: insertError } = await supabase
+      .from(ROTATIONS_TABLE)
+      .insert({
+        scope_type: scopeType,
+        scope_key: scopeKey,
+        payload: nextPayload,
+      })
+      .select("payload")
+      .maybeSingle();
+
+    if (!insertError && insertedRow?.payload) {
+      return insertedRow.payload;
+    }
+    if (insertError?.code !== "23505") {
+      throw insertError;
+    }
+  }
+
+  throw new Error("Unable to save shared rotations state after multiple retries.");
+}
+
 async function saveRemoteSavedLineups(teamScope, lineups, updatedAt = Date.now()) {
   if (!supabase || !teamScope) return;
-  const { error } = await supabase.from(ROTATIONS_TABLE).upsert(
-    {
-      scope_type: ROTATIONS_SCOPE_SAVED_LINEUPS,
-      scope_key: globalScopeKey(teamScope),
-      payload: {
-        lineups: normalizeSavedLineups(lineups),
-      },
-    },
-    { onConflict: "scope_type,scope_key" }
+  await writeSharedPayloadWithRetry(
+    ROTATIONS_SCOPE_SAVED_LINEUPS,
+    globalScopeKey(teamScope),
+    () => ({
+      lineups: normalizeSavedLineups(lineups),
+    }),
+    updatedAt,
   );
-  if (error) throw error;
 }
 
 async function fetchRemoteGameState(gameId, teamScope) {
@@ -621,18 +682,14 @@ async function fetchRemoteGameState(gameId, teamScope) {
 
 async function saveRemoteGameState(gameId, state, updatedAt = Date.now()) {
   if (!supabase || !gameId) return;
-  const { error } = await supabase.from(ROTATIONS_TABLE).upsert(
-    {
-      scope_type: ROTATIONS_SCOPE_GAME,
-      scope_key: String(gameId),
-      payload: {
-        ...state,
-        updatedAt,
-      },
-    },
-    { onConflict: "scope_type,scope_key" }
+  await writeSharedPayloadWithRetry(
+    ROTATIONS_SCOPE_GAME,
+    String(gameId),
+    () => ({
+      ...state,
+    }),
+    updatedAt,
   );
-  if (error) throw error;
 }
 
 async function fetchRemoteDepthTemplate(teamScope) {
@@ -655,18 +712,15 @@ async function fetchRemoteDepthTemplate(teamScope) {
 
 async function saveRemoteDepthTemplate(teamScope, depthChart, updatedAt = Date.now(), sourceGameId = "") {
   if (!supabase || !teamScope) return;
-  const { error } = await supabase.from(ROTATIONS_TABLE).upsert(
-    {
-      scope_type: ROTATIONS_SCOPE_DEPTH_TEMPLATE,
-      scope_key: globalScopeKey(teamScope),
-      payload: {
-        depthChart: normalizeDepthChart(depthChart, teamScope),
-        sourceGameId: String(sourceGameId || ""),
-      },
-    },
-    { onConflict: "scope_type,scope_key" }
+  await writeSharedPayloadWithRetry(
+    ROTATIONS_SCOPE_DEPTH_TEMPLATE,
+    globalScopeKey(teamScope),
+    () => ({
+      depthChart: normalizeDepthChart(depthChart, teamScope),
+      sourceGameId: String(sourceGameId || ""),
+    }),
+    updatedAt,
   );
-  if (error) throw error;
 }
 
 function buildOpponentLine(game, monitoredTeam) {

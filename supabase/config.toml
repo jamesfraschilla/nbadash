@@ -11,7 +11,10 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.game-analysis]
-verify_jwt = false
+verify_jwt = true
 
 [functions.pregame-scouting]
+verify_jwt = true
+
+[functions.team-games]
 verify_jwt = false

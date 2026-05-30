@@ -121,20 +121,80 @@ async function fetchRemoteMetricsPayload(gameId) {
   });
 }
 
+async function saveSharedPayloadWithRetry({ scopeType, scopeKey, buildPayload, maxAttempts = 4 }) {
+  if (!supabase) return null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const { data: currentRow, error: readError } = await supabase
+      .from(KPI_SHARED_TABLE)
+      .select("payload,updated_at")
+      .eq("scope_type", scopeType)
+      .eq("scope_key", scopeKey)
+      .maybeSingle();
+
+    if (readError) throw readError;
+
+    const currentPayload = currentRow?.payload
+      ? normalizeMetricsPayload({
+        updatedAt: currentRow?.updated_at ? new Date(currentRow.updated_at).getTime() : Number(currentRow?.payload?.updatedAt || 0),
+        metrics: currentRow?.payload?.metrics,
+      })
+      : null;
+
+    const nextPayload = buildPayload(currentPayload);
+
+    if (currentRow?.updated_at) {
+      const { data: updatedRow, error: updateError } = await supabase
+        .from(KPI_SHARED_TABLE)
+        .update({ payload: nextPayload })
+        .eq("scope_type", scopeType)
+        .eq("scope_key", scopeKey)
+        .eq("updated_at", currentRow.updated_at)
+        .select("payload,updated_at")
+        .maybeSingle();
+
+      if (updateError) throw updateError;
+      if (updatedRow?.payload) {
+        return normalizeMetricsPayload({
+          updatedAt: updatedRow.updated_at ? new Date(updatedRow.updated_at).getTime() : Number(updatedRow?.payload?.updatedAt || 0),
+          metrics: updatedRow.payload.metrics,
+        });
+      }
+      continue;
+    }
+
+    const { data: insertedRow, error: insertError } = await supabase
+      .from(KPI_SHARED_TABLE)
+      .insert({
+        scope_type: scopeType,
+        scope_key: scopeKey,
+        payload: nextPayload,
+      })
+      .select("payload,updated_at")
+      .maybeSingle();
+
+    if (!insertError && insertedRow?.payload) {
+      return normalizeMetricsPayload({
+        updatedAt: insertedRow.updated_at ? new Date(insertedRow.updated_at).getTime() : Number(insertedRow?.payload?.updatedAt || 0),
+        metrics: insertedRow.payload.metrics,
+      });
+    }
+
+    if (insertError?.code !== "23505") {
+      throw insertError;
+    }
+  }
+
+  throw new Error("Unable to save KPI changes after multiple retries.");
+}
+
 async function saveRemoteMetricsPayload(gameId, payload) {
   if (!supabase || !gameId) return payload;
-  const remotePayload = await fetchRemoteMetricsPayload(gameId);
-  const merged = mergeMetricsPayload(payload, remotePayload);
-  const { error } = await supabase.from(KPI_SHARED_TABLE).upsert(
-    {
-      scope_type: KPI_SCOPE_TYPE,
-      scope_key: String(gameId),
-      payload: merged,
-    },
-    { onConflict: "scope_type,scope_key" }
-  );
-  if (error) throw error;
-  return merged;
+  return saveSharedPayloadWithRetry({
+    scopeType: KPI_SCOPE_TYPE,
+    scopeKey: String(gameId),
+    buildPayload: (remotePayload) => mergeMetricsPayload(payload, remotePayload),
+  });
 }
 
 export default function Kpis() {

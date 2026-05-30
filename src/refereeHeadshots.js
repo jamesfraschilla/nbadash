@@ -47,7 +47,7 @@ export function buildManualRefereeItemId(nameKey) {
   return normalizedKey ? `manual:${normalizedKey}` : "";
 }
 
-const IMAGE_MODULES = import.meta.glob(
+const IMAGE_MODULE_LOADERS = import.meta.glob(
   [
     "./assets/referees/*.jpg",
     "./assets/referees/*.jpeg",
@@ -58,8 +58,10 @@ const IMAGE_MODULES = import.meta.glob(
     "./assets/referees_review_duplicates/*.JPG",
     "./assets/referees_review_duplicates/*.JPEG",
   ],
-  { eager: true, import: "default" }
+  { import: "default" }
 );
+let staticRefereeHeadshotItems = [];
+let staticRefereeHeadshotItemsPromise = null;
 
 export function normalizeNameKey(value) {
   return String(value || "")
@@ -433,8 +435,8 @@ export function buildCanvasAvatarPlacement({
   };
 }
 
-export function buildRefereeHeadshotImageItems(preferences = DEFAULT_REFEREE_HEADSHOT_PREFERENCES) {
-  const assetItems = Object.entries(IMAGE_MODULES)
+function buildStaticRefereeHeadshotItems(assetEntries) {
+  return assetEntries
     .map(([path, url]) => {
       const fileName = path.split("/").pop() || "";
       const fullName = fileName.replace(/\.(jpe?g)$/i, "");
@@ -454,7 +456,22 @@ export function buildRefereeHeadshotImageItems(preferences = DEFAULT_REFEREE_HEA
       if (a.isDuplicate !== b.isDuplicate) return a.isDuplicate ? 1 : -1;
       return a.fullName.localeCompare(b.fullName);
     });
+}
 
+async function ensureStaticRefereeHeadshotItemsLoaded() {
+  if (staticRefereeHeadshotItems.length) return staticRefereeHeadshotItems;
+  if (!staticRefereeHeadshotItemsPromise) {
+    staticRefereeHeadshotItemsPromise = Promise.all(
+      Object.entries(IMAGE_MODULE_LOADERS).map(async ([path, loader]) => [path, await loader()])
+    ).then((entries) => {
+      staticRefereeHeadshotItems = buildStaticRefereeHeadshotItems(entries);
+      return staticRefereeHeadshotItems;
+    });
+  }
+  return staticRefereeHeadshotItemsPromise;
+}
+
+export function buildRefereeHeadshotImageItems(preferences = DEFAULT_REFEREE_HEADSHOT_PREFERENCES) {
   const manualItems = Object.entries(preferences.manualRefereesByNameKey || {})
     .map(([nameKey, displayName]) => {
       const normalizedKey = normalizeNameKey(nameKey);
@@ -474,7 +491,12 @@ export function buildRefereeHeadshotImageItems(preferences = DEFAULT_REFEREE_HEA
     .filter((item) => item.nameKey && item.fullName)
     .sort((a, b) => a.fullName.localeCompare(b.fullName));
 
-  return [...assetItems, ...manualItems];
+  return [...staticRefereeHeadshotItems, ...manualItems];
+}
+
+export async function loadRefereeHeadshotImageItems(preferences = DEFAULT_REFEREE_HEADSHOT_PREFERENCES) {
+  await ensureStaticRefereeHeadshotItemsLoaded();
+  return buildRefereeHeadshotImageItems(preferences);
 }
 
 export function getAssignedRefereeName(item, preferences = DEFAULT_REFEREE_HEADSHOT_PREFERENCES) {
@@ -618,6 +640,12 @@ export function getRefereeHeadshotUrl(fullName, preferences = null) {
   const lookup = buildRefereeHeadshotLookup(effectivePreferences);
   const resolvedKey = resolveRefereeHeadshotNameKey(fullName, effectivePreferences);
   return lookup.get(resolvedKey) || lookup.get(normalizeNameKey(fullName)) || null;
+}
+
+export async function loadRefereeHeadshotUrl(fullName, preferences = null) {
+  const effectivePreferences = preferences || readStoredRefereeHeadshotPreferences();
+  await ensureStaticRefereeHeadshotItemsLoaded();
+  return getRefereeHeadshotUrl(fullName, effectivePreferences);
 }
 
 export function resolveRefereeHeadshotOverrideKey(fullName, overrides = null, preferences = null) {
