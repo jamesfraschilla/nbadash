@@ -1430,6 +1430,7 @@ function currentSeasonString(date = new Date()) {
 }
 
 const SEASON_GAMES_CACHE = new Map();
+const SEASON_GAMES_PROMISES = new Map();
 const SEASON_GAMES_STORAGE_PREFIX = "nba-dashboard-season-games:";
 const SEASON_GAMES_STORAGE_TTL_MS = 6 * 60 * 60 * 1000;
 
@@ -1543,36 +1544,52 @@ async function fetchAllSeasonGames(season = currentSeasonString()) {
     return cachedInStorage;
   }
 
-  const { start, end } = currentSeasonBounds(new Date());
-  const dateInputs = enumerateDateInputs(start, end);
-  const concurrency = 8;
-  const aggregated = [];
+  const pending = SEASON_GAMES_PROMISES.get(season);
+  if (pending) return pending;
 
-  for (let index = 0; index < dateInputs.length; index += concurrency) {
-    const slice = dateInputs.slice(index, index + concurrency);
-    const batchResults = await Promise.all(
-      slice.map(async (dateInput) => {
-        const games = await fetchGamesByDate(dateInput).catch(() => []);
-        return (Array.isArray(games) ? games : [])
-          .filter((game) => !String(game?.gameId || "").startsWith("202"))
-          .filter(isPlayedGame)
-          .map((game) => annotateSeasonGame(game, dateInput));
-      })
-    );
-    aggregated.push(...batchResults.flat());
+  const nextPromise = (async () => {
+    const { start, end } = currentSeasonBounds(new Date());
+    const dateInputs = enumerateDateInputs(start, end);
+    const concurrency = 8;
+    const aggregated = [];
+
+    for (let index = 0; index < dateInputs.length; index += concurrency) {
+      const slice = dateInputs.slice(index, index + concurrency);
+      const batchResults = await Promise.all(
+        slice.map(async (dateInput) => {
+          const games = await fetchGamesByDate(dateInput).catch(() => []);
+          return (Array.isArray(games) ? games : [])
+            .filter((game) => !String(game?.gameId || "").startsWith("202"))
+            .filter(isPlayedGame)
+            .map((game) => annotateSeasonGame(game, dateInput));
+        })
+      );
+      aggregated.push(...batchResults.flat());
+    }
+
+    const deduped = [...new Map(
+      aggregated.map((game) => [String(game.gameId || ""), compactSeasonGame(game)])
+    ).values()].sort((left, right) => {
+      const dateCompare = String(right.gameDate || "").localeCompare(String(left.gameDate || ""));
+      if (dateCompare !== 0) return dateCompare;
+      return String(right.gameId || "").localeCompare(String(left.gameId || ""));
+    });
+
+    SEASON_GAMES_CACHE.set(season, deduped);
+    saveSeasonGamesToStorage(season, deduped);
+    return deduped;
+  })();
+
+  SEASON_GAMES_PROMISES.set(season, nextPromise);
+  try {
+    return await nextPromise;
+  } finally {
+    SEASON_GAMES_PROMISES.delete(season);
   }
+}
 
-  const deduped = [...new Map(
-    aggregated.map((game) => [String(game.gameId || ""), compactSeasonGame(game)])
-  ).values()].sort((left, right) => {
-    const dateCompare = String(right.gameDate || "").localeCompare(String(left.gameDate || ""));
-    if (dateCompare !== 0) return dateCompare;
-    return String(right.gameId || "").localeCompare(String(left.gameId || ""));
-  });
-
-  SEASON_GAMES_CACHE.set(season, deduped);
-  saveSeasonGamesToStorage(season, deduped);
-  return deduped;
+export function prefetchCurrentSeasonGames(season = currentSeasonString()) {
+  return fetchAllSeasonGames(season).catch(() => null);
 }
 
 export async function fetchTeamSeasonGames(teamId, opponentTeamId = "", season = currentSeasonString()) {

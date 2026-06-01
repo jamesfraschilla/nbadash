@@ -6,23 +6,10 @@ function requireSupabase() {
   }
 }
 
-async function getCurrentAccessToken() {
-  requireSupabase();
-  const { data, error } = await supabase.auth.getSession();
-  if (error) throw error;
-  return data?.session?.access_token || "";
-}
-
 export async function requestGameAnalysis({ gameId, game, minutesData, range }) {
   requireSupabase();
-  const accessToken = await getCurrentAccessToken();
-  if (!accessToken) {
-    throw new Error("Your session has expired. Sign in again, then rerun Analysis.");
-  }
-  const { data, error } = await supabase.functions.invoke("nba-game-analysis", {
-    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+  const { data, error } = await supabase.functions.invoke("game-analysis", {
     body: {
-      accessToken,
       gameId,
       game,
       minutesData,
@@ -31,9 +18,6 @@ export async function requestGameAnalysis({ gameId, game, minutesData, range }) 
   });
 
   if (error) {
-    if (/non-2xx status code/i.test(String(error.message || ""))) {
-      throw new Error("Analysis request was rejected by the server. Sign out and back in, then try again.");
-    }
     throw new Error(error.message || "Unable to generate analysis.");
   }
 
