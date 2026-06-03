@@ -824,18 +824,16 @@ export default function Game({ variant = "full" }) {
     queryKey: ["game-roster-caps", awayTeamScope],
     queryFn: () => fetchRemotePregamePlayers(awayTeamScope),
     enabled: Boolean(awayTeamScope),
-    staleTime: 10_000,
-    refetchInterval: 10_000,
-    refetchIntervalInBackground: true,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: homeRemoteRoster } = useQuery({
     queryKey: ["game-roster-caps", homeTeamScope],
     queryFn: () => fetchRemotePregamePlayers(homeTeamScope),
     enabled: Boolean(homeTeamScope),
-    staleTime: 10_000,
-    refetchInterval: 10_000,
-    refetchIntervalInBackground: true,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: periodSnapshots = [] } = useQuery({

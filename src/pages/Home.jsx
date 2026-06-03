@@ -97,6 +97,8 @@ export default function Home() {
     queryFn: () => (selectedTeamId
       ? fetchTeamSeasonGames(selectedTeamId, selectedOpponentTeamId)
       : fetchGamesByDate(dateInput)),
+    staleTime: selectedTeamId ? 5 * 60 * 1000 : 30_000,
+    refetchOnWindowFocus: false,
   });
 
   const { nbaGames, gLeagueGames } = useMemo(() => {

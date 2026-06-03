@@ -1582,40 +1582,40 @@ export default function Rotations() {
     queryKey: ["rotations-players-legacy-remote", monitoredTeamScope],
     queryFn: () => fetchLegacyRemotePlayers(monitoredTeamScope),
     enabled: Boolean(supabase && monitoredTeamScope),
-    staleTime: 10_000,
-    refetchInterval: 10_000,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: remotePregamePlayers, isFetched: remotePregamePlayersFetched } = useQuery({
     queryKey: ["pregame-players-remote", monitoredTeamScope],
     queryFn: () => fetchRemotePregamePlayers(monitoredTeamScope),
     enabled: Boolean(supabase && monitoredTeamScope),
-    staleTime: 10_000,
-    refetchInterval: 10_000,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: remoteSavedLineups, isFetched: remoteSavedLineupsFetched } = useQuery({
     queryKey: ["rotations-saved-lineups-remote", monitoredTeamScope],
     queryFn: () => fetchRemoteSavedLineups(monitoredTeamScope),
     enabled: Boolean(supabase && monitoredTeamScope),
-    staleTime: 10_000,
-    refetchInterval: 10_000,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: remoteGameState, isFetched: remoteGameFetched } = useQuery({
     queryKey: ["rotations-game-remote", gameId, monitoredTeamScope],
     queryFn: () => fetchRemoteGameState(gameId, monitoredTeamScope),
     enabled: Boolean(supabase && gameId && monitoredTeamScope),
-    staleTime: 10_000,
-    refetchInterval: 10_000,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: remoteDepthTemplate, isFetched: remoteDepthFetched } = useQuery({
     queryKey: ["rotations-depth-template-remote", monitoredTeamScope],
     queryFn: () => fetchRemoteDepthTemplate(monitoredTeamScope),
     enabled: Boolean(supabase && monitoredTeamScope),
-    staleTime: 10_000,
-    refetchInterval: 10_000,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   const activeVersion = useMemo(

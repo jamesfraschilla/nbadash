@@ -1431,7 +1431,10 @@ function currentSeasonString(date = new Date()) {
 
 const SEASON_GAMES_CACHE = new Map();
 const SEASON_GAMES_PROMISES = new Map();
+const TEAM_SEASON_GAMES_CACHE = new Map();
+const TEAM_SEASON_GAMES_PROMISES = new Map();
 const SEASON_GAMES_STORAGE_PREFIX = "nba-dashboard-season-games:";
+const TEAM_SEASON_GAMES_STORAGE_PREFIX = "nba-dashboard-team-season-games:";
 const SEASON_GAMES_STORAGE_TTL_MS = 6 * 60 * 60 * 1000;
 
 function currentSeasonBounds(date = new Date()) {
@@ -1502,6 +1505,10 @@ function seasonGamesStorageKey(season) {
   return `${SEASON_GAMES_STORAGE_PREFIX}${season}`;
 }
 
+function teamSeasonGamesStorageKey(teamId, season) {
+  return `${TEAM_SEASON_GAMES_STORAGE_PREFIX}${season}:${teamId}`;
+}
+
 function loadSeasonGamesFromStorage(season) {
   if (typeof window === "undefined") return null;
   try {
@@ -1522,10 +1529,40 @@ function loadSeasonGamesFromStorage(season) {
   }
 }
 
+function loadTeamSeasonGamesFromStorage(teamId, season) {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(teamSeasonGamesStorageKey(teamId, season));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const updatedAt = Number(parsed?.updatedAt || 0);
+    if (updatedAt && Date.now() - updatedAt > SEASON_GAMES_STORAGE_TTL_MS) {
+      window.localStorage.removeItem(teamSeasonGamesStorageKey(teamId, season));
+      return null;
+    }
+    if (!Array.isArray(parsed?.games)) return null;
+    return parsed.games.map(normalizeCachedSeasonGame).filter(Boolean);
+  } catch {
+    return null;
+  }
+}
+
 function saveSeasonGamesToStorage(season, games) {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(seasonGamesStorageKey(season), JSON.stringify({
+      updatedAt: Date.now(),
+      games: games.map(compactSeasonGame),
+    }));
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+function saveTeamSeasonGamesToStorage(teamId, season, games) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(teamSeasonGamesStorageKey(teamId, season), JSON.stringify({
       updatedAt: Date.now(),
       games: games.map(compactSeasonGame),
     }));
@@ -1592,15 +1629,10 @@ export function prefetchCurrentSeasonGames(season = currentSeasonString()) {
   return fetchAllSeasonGames(season).catch(() => null);
 }
 
-export async function fetchTeamSeasonGames(teamId, opponentTeamId = "", season = currentSeasonString()) {
+function filterSeasonGamesForTeam(games, teamId, opponentTeamId = "") {
   const safeTeamId = String(teamId || "").trim();
   const safeOpponentTeamId = String(opponentTeamId || "").trim();
-  const seasonGames = await (
-    SUPABASE_FUNCTIONS_BASE
-      ? fetchTeamSeasonGamesFromFunction(safeTeamId, season).catch(() => fetchAllSeasonGames(season))
-      : fetchAllSeasonGames(season)
-  );
-  return seasonGames.filter((game) => {
+  return (Array.isArray(games) ? games : []).filter((game) => {
     const homeTeamId = String(game?.homeTeam?.teamId || "");
     const awayTeamId = String(game?.awayTeam?.teamId || "");
     const teamMatches = homeTeamId === safeTeamId || awayTeamId === safeTeamId;
@@ -1608,6 +1640,47 @@ export async function fetchTeamSeasonGames(teamId, opponentTeamId = "", season =
     if (!safeOpponentTeamId) return true;
     return homeTeamId === safeOpponentTeamId || awayTeamId === safeOpponentTeamId;
   });
+}
+
+export async function fetchTeamSeasonGames(teamId, opponentTeamId = "", season = currentSeasonString()) {
+  const safeTeamId = String(teamId || "").trim();
+  const safeOpponentTeamId = String(opponentTeamId || "").trim();
+  const teamSeasonCacheKey = `${season}:${safeTeamId}`;
+  let seasonGames = TEAM_SEASON_GAMES_CACHE.get(teamSeasonCacheKey) || loadTeamSeasonGamesFromStorage(safeTeamId, season);
+
+  if (!seasonGames) {
+    const cachedFullSeasonGames = SEASON_GAMES_CACHE.get(season) || loadSeasonGamesFromStorage(season);
+    if (cachedFullSeasonGames?.length) {
+      seasonGames = filterSeasonGamesForTeam(cachedFullSeasonGames, safeTeamId);
+      TEAM_SEASON_GAMES_CACHE.set(teamSeasonCacheKey, seasonGames);
+      saveTeamSeasonGamesToStorage(safeTeamId, season, seasonGames);
+    }
+  }
+
+  if (!seasonGames) {
+    const pending = TEAM_SEASON_GAMES_PROMISES.get(teamSeasonCacheKey);
+    if (pending) {
+      seasonGames = await pending;
+    } else {
+      const nextPromise = (
+        SUPABASE_FUNCTIONS_BASE
+          ? fetchTeamSeasonGamesFromFunction(safeTeamId, season).catch(() => fetchAllSeasonGames(season))
+          : fetchAllSeasonGames(season)
+      ).then((games) => {
+        TEAM_SEASON_GAMES_CACHE.set(teamSeasonCacheKey, games);
+        saveTeamSeasonGamesToStorage(safeTeamId, season, games);
+        return games;
+      }).finally(() => {
+        TEAM_SEASON_GAMES_PROMISES.delete(teamSeasonCacheKey);
+      });
+      TEAM_SEASON_GAMES_PROMISES.set(teamSeasonCacheKey, nextPromise);
+      seasonGames = await nextPromise;
+    }
+  } else {
+    TEAM_SEASON_GAMES_CACHE.set(teamSeasonCacheKey, seasonGames);
+  }
+
+  return filterSeasonGamesForTeam(seasonGames, safeTeamId, safeOpponentTeamId);
 }
 
 export async function fetchGame(gameId, segment = null, options = {}) {
