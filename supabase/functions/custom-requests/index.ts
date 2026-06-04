@@ -235,11 +235,14 @@ function normalizeText(value: string) {
     .replace(/'s\b/g, "")
     .replace(/%/g, " pct ")
     .replace(/\bc\s*&\s*s\b/g, "catch and shoot")
+    .replace(/\b3fgas\b/g, "3fg attempted")
     .replace(/\b3fgm\b/g, "3fg made")
     .replace(/\b3fga\b/g, "3fg attempted")
     .replace(/\b3fgs\b/g, "3fg made")
+    .replace(/\bfgas\b/g, "fg attempted")
     .replace(/\bfgm\b/g, "fg made")
     .replace(/\bfga\b/g, "fg attempted")
+    .replace(/\bftas\b/g, "ft attempted")
     .replace(/\bftm\b/g, "ft made")
     .replace(/\bfta\b/g, "ft attempted")
     .replace(/\btotals\b/g, "total")
@@ -255,6 +258,9 @@ function normalizeText(value: string) {
 function normalizeToken(token: string) {
   const normalized = String(token || "").trim().toLowerCase();
   if (!normalized) return "";
+  if (normalized === "3fgas") return "3fga";
+  if (normalized === "fgas") return "fga";
+  if (normalized === "ftas") return "fta";
   if (normalized === "totals") return "total";
   if (normalized === "avg" || normalized === "avgs") return "average";
   if (normalized === "times") return "time";
