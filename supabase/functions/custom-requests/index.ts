@@ -165,6 +165,7 @@ type ParsedGameTableRequest = {
 };
 
 const METRICS: MetricDefinition[] = [
+  { key: "minutes", label: "Minutes", aliases: ["minutes", "minute", "mins", "min"], kind: "count", formatter: "decimal" },
   { key: "points", label: "Points", aliases: ["points", "pts"], kind: "count" },
   { key: "field_goals_made", label: "Field Goals Made", aliases: ["field goals made", "fg made", "fgm", "made field goals"], kind: "count" },
   { key: "field_goals_attempted", label: "Field Goals Attempted", aliases: ["field goals attempted", "fg attempted", "fga", "field goal attempts"], kind: "count" },
@@ -1121,6 +1122,7 @@ function buildGameMetrics(game: AnyRecord, teamId: string): BuiltGameMetrics {
 }
 
 function buildPlayerMetricMap(player: Record<string, unknown>) {
+  const minutes = parseMinutesToDecimal(player.minutes);
   const fieldGoalsAttempted = safeNumber(player.fieldGoalsAttempted, 0);
   const threePointersAttempted = safeNumber(player.threePointersAttempted, 0);
   const freeThrowsAttempted = safeNumber(player.freeThrowsAttempted, 0);
@@ -1133,6 +1135,7 @@ function buildPlayerMetricMap(player: Record<string, unknown>) {
   const midFieldGoalsMade = safeNumber(player.midFieldGoalsMade, 0);
 
   return {
+    minutes,
     points: safeNumber(player.points, 0),
     field_goals_made: safeNumber(player.fieldGoalsMade, 0),
     field_goals_attempted: fieldGoalsAttempted,
@@ -1832,6 +1835,22 @@ function formatValue(value: number, metric: MetricDefinition) {
   if (metric.formatter === "percent") return `${value.toFixed(1)}%`;
   if (metric.formatter === "decimal") return value.toFixed(1);
   return `${Math.round(value)}`;
+}
+
+function parseMinutesToDecimal(value: unknown) {
+  const raw = String(value || "").trim();
+  if (!raw) return 0;
+  const isoMatch = /^PT(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$/i.exec(raw);
+  if (isoMatch) {
+    const minutes = Number(isoMatch[1] || 0);
+    const seconds = Number(isoMatch[2] || 0);
+    return minutes + (seconds / 60);
+  }
+  const colonMatch = /^(\d+):(\d+(?:\.\d+)?)$/.exec(raw);
+  if (colonMatch) {
+    return Number(colonMatch[1] || 0) + (Number(colonMatch[2] || 0) / 60);
+  }
+  return safeNumber(raw, 0);
 }
 
 function toDisplayName(firstName: unknown, familyName: unknown) {
