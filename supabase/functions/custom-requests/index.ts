@@ -1384,8 +1384,10 @@ function parseResultFilter(prompt: string): ResultFilter {
     " when it loses",
     " in defeats",
   ];
-  const hasWin = winPatterns.some((pattern) => normalizedPrompt.includes(pattern));
-  const hasLoss = lossPatterns.some((pattern) => normalizedPrompt.includes(pattern));
+  const hasWin = winPatterns.some((pattern) => normalizedPrompt.includes(pattern))
+    || /\bin\s+(?:[a-z]+\s+){0,4}wins?\b/.test(normalizedPrompt);
+  const hasLoss = lossPatterns.some((pattern) => normalizedPrompt.includes(pattern))
+    || /\bin\s+(?:[a-z]+\s+){0,4}loss(?:es)?\b/.test(normalizedPrompt);
   if (hasWin && hasLoss) return "all";
   if (hasWin) return "win";
   if (hasLoss) return "loss";
@@ -1497,10 +1499,14 @@ function parseSortBy(prompt: string, aggregation: QueryAggregation): QuerySortBy
 
 function parseGroupBy(prompt: string): QueryGroupBy {
   const normalizedPrompt = normalizeText(prompt);
+  const referencesWins = /\bwins?\b/.test(normalizedPrompt);
+  const referencesLosses = /\bloss(?:es)?\b/.test(normalizedPrompt);
   if (
     /\bwins?\s+vs\.?\s+losses?\b/.test(normalizedPrompt)
     || /\bwins?\s+versus\s+losses?\b/.test(normalizedPrompt)
-    || (normalizedPrompt.includes(" in wins") && normalizedPrompt.includes(" in losses"))
+    || /\bwin\s*\/\s*loss\b/.test(normalizedPrompt)
+    || /\bin\s+(?:[a-z]+\s+){0,4}wins?\b/.test(normalizedPrompt) && /\bin\s+(?:[a-z]+\s+){0,4}loss(?:es)?\b/.test(normalizedPrompt)
+    || (referencesWins && referencesLosses && /\b(vs\.?|versus|split|compare|comparison)\b/.test(normalizedPrompt))
   ) return "result";
   if (
     normalizedPrompt.includes("by opponent")
@@ -1837,6 +1843,11 @@ function formatValue(value: number, metric: MetricDefinition) {
   return `${Math.round(value)}`;
 }
 
+function formatAverageValue(value: number, metric: MetricDefinition) {
+  if (metric.formatter === "percent") return `${value.toFixed(1)}%`;
+  return value.toFixed(1);
+}
+
 function parseMinutesToDecimal(value: unknown) {
   const raw = String(value || "").trim();
   if (!raw) return 0;
@@ -2036,7 +2047,7 @@ function buildGroupedSummaries(
 
     if (aggregation === "season_average") {
       value = average;
-      displayValue = formatValue(average, metric);
+      displayValue = formatAverageValue(average, metric);
     } else if (aggregation === "count_games_gte") {
       value = games.filter((row) => row.value >= threshold).length;
       displayValue = `${value}`;
@@ -2076,7 +2087,7 @@ function buildGroupedSummaries(
       sampleSize: games.length,
       wins,
       losses,
-      averageDisplayValue: formatValue(average, metric),
+      averageDisplayValue: formatAverageValue(average, metric),
       totalDisplayValue: formatValue(total, metric),
     };
   });
@@ -2342,11 +2353,15 @@ function executeQuery(
 
   if (aggregation === "season_average") {
     const average = orderedRows.reduce((sum, entry) => sum + entry.value, 0) / orderedRows.length;
+    const displayAverage = formatAverageValue(average, metric);
+    const answer = groupedSummaries.length && query.groupBy !== "none"
+      ? `Showing ${metric.label.toLowerCase()} averages for ${subjectScopeLabel}, grouped by ${query.groupBy === "result" ? "result" : "opponent"}.`
+      : `${subjectScopeLabel} averaged ${displayAverage} ${metric.label.toLowerCase()} across ${orderedRows.length} game${orderedRows.length === 1 ? "" : "s"}.`;
     return {
       aggregation,
       value: average,
-      displayValue: formatValue(average, metric),
-      answer: `${subjectScopeLabel} averaged ${formatValue(average, metric)} ${metric.label.toLowerCase()} across ${orderedRows.length} game${orderedRows.length === 1 ? "" : "s"}.`,
+      displayValue: displayAverage,
+      answer,
       games: orderedRows,
       sampleSize: orderedRows.length,
       groups: groupedSummaries,
