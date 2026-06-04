@@ -280,6 +280,12 @@ test("custom requests resolve representative natural-language stat prompts", () 
     ["Washington FGA this season", "field_goals_attempted"],
     ["Washington FTM this season", "free_throws_made"],
     ["Washington catch and shoot 3 percentage", "catch_shoot_3_percent"],
+    ["How many 3PAs does James Harden average?", "three_pointers_attempted"],
+    ["How many boards does Bam Adebayo average?", "rebounds_total"],
+    ["How many dimes does Tyrese Haliburton average?", "assists"],
+    ["How many swats does Myles Turner average?", "blocks"],
+    ["What is Shai's off rating in wins?", "offensive_rating"],
+    ["How many MP does Jalen Duren play?", "minutes"],
   ];
 
   cases.forEach(([prompt, expectedMetric]) => {

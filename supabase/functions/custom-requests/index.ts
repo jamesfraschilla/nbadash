@@ -69,7 +69,7 @@ type QueryAggregation =
   | "record_when_lte"
   | "record_when_nonzero";
 
-type QueryGroupBy = "none" | "opponent" | "result" | "period" | "home_away" | "month" | "season_scope";
+type QueryGroupBy = "none" | "opponent" | "result" | "period" | "home_away" | "month" | "season_scope" | "on_off";
 type QuerySortBy = "value" | "date";
 
 type ParsedQuery = {
@@ -86,6 +86,8 @@ type ParsedQuery = {
   sortBy?: QuerySortBy;
   limit?: number;
   groupBy?: QueryGroupBy;
+  contextPlayerIds?: string[];
+  contextPlayerNames?: string[];
 };
 
 type QueryGameRow = {
@@ -244,6 +246,41 @@ const TEAM_ROSTERS_CACHE = new Map<string, Promise<Array<{
   team: (typeof NBA_TEAMS)[number];
   players: Array<{ playerId: string; playerName: string }>;
 }>>>();
+const GAME_MINUTES_CACHE = new Map<string, Promise<Record<string, unknown>>>();
+const TEAM_ON_OFF_DATASET_CACHE = new Map<string, Promise<{
+  rows: CachedTeamGameRow[];
+  skippedGames: Array<{ gameId: string; gameDate: string; error: string }>;
+}>>();
+
+const PERIOD_SUPPORTED_METRIC_KEYS = new Set([
+  "minutes",
+  "points",
+  "field_goals_made",
+  "field_goals_attempted",
+  "three_pointers_made",
+  "three_pointers_attempted",
+  "free_throws_made",
+  "free_throws_attempted",
+  "rebounds_total",
+  "rebounds_offensive",
+  "assists",
+  "steals",
+  "blocks",
+  "turnovers",
+  "fouls_personal",
+  "three_fg_pct",
+  "efg_pct",
+  "tov_pct",
+  "ftr",
+  "three_rate",
+]);
+
+const ON_OFF_SUPPORTED_METRIC_KEYS = new Set([
+  "points",
+  "offensive_rating",
+  "defensive_rating",
+  "net_rating",
+]);
 
 function normalizeText(value: string) {
   return String(value || "")
@@ -520,6 +557,25 @@ function currentSeasonBounds(date = new Date()) {
   };
 }
 
+function parseClockText(clock: unknown) {
+  const raw = String(clock || "").trim();
+  if (!raw) return 0;
+  const parts = raw.split(":");
+  if (parts.length !== 2) return 0;
+  return (Number(parts[0] || 0) * 60) + Number(parts[1] || 0);
+}
+
+function parseIsoClock(clock: unknown) {
+  const raw = String(clock || "").trim();
+  const match = /PT(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?/i.exec(raw);
+  if (!match) return 0;
+  return (Number(match[1] || 0) * 60) + Number(match[2] || 0);
+}
+
+function periodLengthSeconds(period: number) {
+  return period > 4 ? 5 * 60 : 12 * 60;
+}
+
 function formatDateInput(date: Date) {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
 }
@@ -639,6 +695,32 @@ async function fetchGameDetailsSafe(gameId: string) {
       error: error instanceof Error ? error.message : "Unknown error.",
     };
   }
+}
+
+async function fetchMinutesWithRetry(gameId: string, maxAttempts = 3) {
+  let lastError: Error | null = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await requestJson(`${API_BASE}/games/${gameId}/minutes`) as Record<string, unknown>;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 150));
+      }
+    }
+  }
+  throw lastError || new Error(`Failed to fetch minutes for ${gameId}.`);
+}
+
+async function fetchGameMinutes(gameId: string) {
+  if (!GAME_MINUTES_CACHE.has(gameId)) {
+    const request = fetchMinutesWithRetry(gameId).catch((error) => {
+      GAME_MINUTES_CACHE.delete(gameId);
+      throw error;
+    });
+    GAME_MINUTES_CACHE.set(gameId, request);
+  }
+  return GAME_MINUTES_CACHE.get(gameId)!;
 }
 
 async function fetchTeamRoster(team: (typeof NBA_TEAMS)[number], season: string) {
@@ -1286,7 +1368,7 @@ function buildPlayerSeasonRows(game: AnyRecord, team: (typeof NBA_TEAMS)[number]
     .filter(Boolean) as CachedPlayerGameRow[];
 }
 
-function buildPlayerPeriodPointRows(game: AnyRecord, team: (typeof NBA_TEAMS)[number]) {
+function buildPlayerPeriodMetricRows(game: AnyRecord, team: (typeof NBA_TEAMS)[number], minutesData?: AnyRecord | null) {
   const perspective = selectTeamPerspective(game, team.teamId);
   const players = Array.isArray(perspective.teamBox?.players) ? perspective.teamBox.players as Array<Record<string, unknown>> : [];
   const actions = Array.isArray(game?.playByPlayActions) ? game.playByPlayActions as Array<Record<string, unknown>> : [];
@@ -1305,7 +1387,53 @@ function buildPlayerPeriodPointRows(game: AnyRecord, team: (typeof NBA_TEAMS)[nu
     return aOrder - bOrder;
   });
 
-  const pointsByPlayerPeriod = new Map<string, number>();
+  const metricsByPlayerPeriod = new Map<string, Record<string, number>>();
+  const minutesByPlayerPeriod = new Map<string, number>();
+  const ensurePeriodMetrics = (playerId: string, period: number) => {
+    const key = `${playerId}:Q${period}`;
+    if (!metricsByPlayerPeriod.has(key)) {
+      metricsByPlayerPeriod.set(key, {
+        minutes: 0,
+        points: 0,
+        field_goals_made: 0,
+        field_goals_attempted: 0,
+        three_pointers_made: 0,
+        three_pointers_attempted: 0,
+        free_throws_made: 0,
+        free_throws_attempted: 0,
+        rebounds_total: 0,
+        rebounds_offensive: 0,
+        assists: 0,
+        steals: 0,
+        blocks: 0,
+        turnovers: 0,
+        fouls_personal: 0,
+      });
+    }
+    return metricsByPlayerPeriod.get(key)!;
+  };
+
+  const isHome = String(game?.homeTeam?.teamId || "") === team.teamId;
+  const periods = Array.isArray(minutesData?.periods) ? minutesData.periods as Array<Record<string, unknown>> : [];
+  periods.forEach((periodEntry) => {
+    const period = safeNumber(periodEntry.period, 0);
+    const stints = Array.isArray(periodEntry.stints) ? periodEntry.stints as Array<Record<string, unknown>> : [];
+    if (period < 1 || period > 4 || !stints.length) return;
+    stints.forEach((stint) => {
+      const playersForTeam = Array.isArray(isHome ? stint.playersHome : stint.playersAway)
+        ? (isHome ? stint.playersHome : stint.playersAway) as Array<Record<string, unknown>>
+        : [];
+      const durationMinutes = Math.max(0, parseClockText(stint.startClock) - parseClockText(stint.endClock)) / 60;
+      if (!durationMinutes) return;
+      playersForTeam.forEach((player) => {
+        const playerId = String(player.personId || "").trim();
+        if (!playerId) return;
+        const key = `${playerId}:Q${period}`;
+        minutesByPlayerPeriod.set(key, safeNumber(minutesByPlayerPeriod.get(key), 0) + durationMinutes);
+      });
+    });
+  });
+
   orderedActions.forEach((action) => {
     const teamId = String(action.teamId || "");
     const playerId = String(action.personId || "");
@@ -1314,25 +1442,73 @@ function buildPlayerPeriodPointRows(game: AnyRecord, team: (typeof NBA_TEAMS)[nu
 
     const actionType = String(action.actionType || "").toLowerCase();
     const shotResult = String(action.shotResult || "");
+    const periodMetrics = ensurePeriodMetrics(playerId, period);
     let points = 0;
     if ((actionType === "2pt" || actionType === "3pt") && shotResult === "Made") {
       points = actionType === "3pt" ? 3 : 2;
     } else if (actionType === "freethrow" && shotResult === "Made") {
       points = 1;
-    } else {
-      points = safeNumber(action.pointsTotal, 0);
     }
-    if (!points) return;
 
-    const key = `${playerId}:Q${period}`;
-    pointsByPlayerPeriod.set(key, safeNumber(pointsByPlayerPeriod.get(key), 0) + points);
+    if (actionType === "2pt" || actionType === "3pt") {
+      periodMetrics.field_goals_attempted += 1;
+      if (actionType === "3pt") periodMetrics.three_pointers_attempted += 1;
+      if (shotResult === "Made") {
+        periodMetrics.field_goals_made += 1;
+        if (actionType === "3pt") periodMetrics.three_pointers_made += 1;
+      }
+    }
+
+    if (actionType === "freethrow") {
+      periodMetrics.free_throws_attempted += 1;
+      if (shotResult === "Made") periodMetrics.free_throws_made += 1;
+    }
+
+    if (actionType === "rebound") {
+      periodMetrics.rebounds_total += 1;
+      if (String(action.subType || "").toLowerCase() === "offensive") {
+        periodMetrics.rebounds_offensive += 1;
+      }
+    }
+
+    if (actionType === "assist") periodMetrics.assists += 1;
+    if (actionType === "steal") periodMetrics.steals += 1;
+    if (actionType === "block") periodMetrics.blocks += 1;
+    if (actionType === "turnover") periodMetrics.turnovers += 1;
+    if (actionType === "foul" && isPersonalFoul(action)) periodMetrics.fouls_personal += 1;
+    if (points > 0) periodMetrics.points += points;
   });
 
   return players.flatMap((player) => {
     const playerId = String(player.personId || "").trim();
     const playerName = toDisplayName(player.firstName, player.familyName);
     if (!playerId || !playerName) return [];
-    return [1, 2, 3, 4].map((period) => ({
+    return [1, 2, 3, 4].map((period) => {
+      const periodMetrics = metricsByPlayerPeriod.get(`${playerId}:Q${period}`) || {
+        minutes: safeNumber(minutesByPlayerPeriod.get(`${playerId}:Q${period}`), 0),
+        points: 0,
+        field_goals_made: 0,
+        field_goals_attempted: 0,
+        three_pointers_made: 0,
+        three_pointers_attempted: 0,
+        free_throws_made: 0,
+        free_throws_attempted: 0,
+        rebounds_total: 0,
+        rebounds_offensive: 0,
+        assists: 0,
+        steals: 0,
+        blocks: 0,
+        turnovers: 0,
+        fouls_personal: 0,
+      };
+      periodMetrics.minutes = safeNumber(minutesByPlayerPeriod.get(`${playerId}:Q${period}`), 0);
+      const fga = safeNumber(periodMetrics.field_goals_attempted, 0);
+      const fgm = safeNumber(periodMetrics.field_goals_made, 0);
+      const threeA = safeNumber(periodMetrics.three_pointers_attempted, 0);
+      const threeM = safeNumber(periodMetrics.three_pointers_made, 0);
+      const fta = safeNumber(periodMetrics.free_throws_attempted, 0);
+      const tov = safeNumber(periodMetrics.turnovers, 0);
+      return ({
       gameId: String(game.gameId || ""),
       gameDate: String(game.gameDate || ""),
       opponent,
@@ -1349,9 +1525,15 @@ function buildPlayerPeriodPointRows(game: AnyRecord, team: (typeof NBA_TEAMS)[nu
       playerName,
       teamId: team.teamId,
       metrics: {
-        points: safeNumber(pointsByPlayerPeriod.get(`${playerId}:Q${period}`), 0),
+        ...periodMetrics,
+        three_fg_pct: threeA > 0 ? (threeM / threeA) * 100 : 0,
+        efg_pct: fga > 0 ? ((fgm + (0.5 * threeM)) / fga) * 100 : 0,
+        tov_pct: (fga || fta || tov) ? (tov / (fga + (0.44 * fta) + tov)) * 100 : 0,
+        ftr: fga > 0 ? fta / fga : 0,
+        three_rate: fga > 0 ? (threeA / fga) * 100 : 0,
       },
-    } satisfies CachedPlayerGameRow));
+    } satisfies CachedPlayerGameRow);
+    });
   });
 }
 
@@ -1469,13 +1651,18 @@ function findPlayerByExactName(rows: CachedPlayerGameRow[], playerName: string) 
 }
 
 function extractLikelyPlayerName(prompt: string, team?: (typeof NBA_TEAMS)[number] | null) {
+  const matches = extractLikelyPlayerNames(prompt, team);
+  return matches[0] || null;
+}
+
+function extractLikelyPlayerNames(prompt: string, team?: (typeof NBA_TEAMS)[number] | null) {
   const matches = [...String(prompt || "").matchAll(/\b([A-Z][a-z]+(?:\s+[A-Z][A-Za-z'.-]+)+)\b/g)]
     .map((match) => String(match[1] || "").trim())
     .filter(Boolean);
-  if (!matches.length) return null;
+  if (!matches.length) return [];
 
   if (!team) {
-    return matches.find((candidate) => candidate.split(/\s+/).length >= 2) || null;
+    return uniqueByKey(matches.filter((candidate) => candidate.split(/\s+/).length >= 2), (candidate) => normalizePlayerName(candidate));
   }
 
   const teamNameParts = new Set([
@@ -1484,13 +1671,13 @@ function extractLikelyPlayerName(prompt: string, team?: (typeof NBA_TEAMS)[numbe
     ...team.aliases.map(normalizePlayerName),
   ]);
 
-  return matches.find((candidate) => {
+  return matches.filter((candidate) => {
     const normalized = normalizePlayerName(candidate);
     if (!normalized) return false;
     if (teamNameParts.has(normalized)) return false;
     if ([...teamNameParts].some((part) => part && normalized === part)) return false;
     return candidate.split(/\s+/).length >= 2;
-  }) || null;
+  });
 }
 
 async function inferTeamFromPlayerPrompt(prompt: string, season: string) {
@@ -1524,6 +1711,64 @@ async function inferTeamFromPlayerPrompt(prompt: string, season: string) {
   });
 
   return bestMatch && bestMatch.score >= 70 ? bestMatch : null;
+}
+
+async function inferPlayersFromPrompt(prompt: string, season: string, teamOverride: (typeof NBA_TEAMS)[number] | null = null) {
+  const likelyPlayerNames = extractLikelyPlayerNames(prompt, teamOverride);
+  if (!likelyPlayerNames.length) return [];
+
+  if (teamOverride) {
+    const roster = await fetchTeamRoster(teamOverride, season).catch(() => null);
+    if (!roster) return [];
+    return likelyPlayerNames.map((playerName) => {
+      const normalizedTarget = normalizePlayerName(playerName);
+      let bestMatch: { playerName: string; playerId: string; score: number } | null = null;
+      roster.players.forEach((player) => {
+        const normalizedPlayerName = normalizePlayerName(player.playerName);
+        let score = 0;
+        if (normalizedPlayerName === normalizedTarget) score = 100;
+        else {
+          const distance = boundedLevenshtein(normalizedTarget, normalizedPlayerName, 2);
+          if (distance <= 2) score = 90 - (distance * 10);
+        }
+        if (!bestMatch || score > bestMatch.score) {
+          bestMatch = { playerName: player.playerName, playerId: player.playerId, score };
+        }
+      });
+      return bestMatch && bestMatch.score >= 70
+        ? { promptName: playerName, playerName: bestMatch.playerName, playerId: bestMatch.playerId, team: teamOverride, score: bestMatch.score }
+        : null;
+    }).filter(Boolean) as Array<{ promptName: string; playerName: string; playerId: string; team: (typeof NBA_TEAMS)[number]; score: number }>;
+  }
+
+  const rosters = await fetchAllTeamRosters(season);
+  return likelyPlayerNames.map((playerName) => {
+    const normalizedTarget = normalizePlayerName(playerName);
+    let bestMatch: { team: (typeof NBA_TEAMS)[number]; playerName: string; playerId: string; score: number } | null = null;
+    rosters.forEach((roster) => {
+      roster.players.forEach((player) => {
+        const normalizedPlayerName = normalizePlayerName(player.playerName);
+        let score = 0;
+        if (normalizedPlayerName === normalizedTarget) score = 100;
+        else {
+          const distance = boundedLevenshtein(normalizedTarget, normalizedPlayerName, 2);
+          if (distance <= 2) score = 90 - (distance * 10);
+        }
+        if (!bestMatch || score > bestMatch.score) {
+          bestMatch = { team: roster.team, playerName: player.playerName, playerId: player.playerId, score };
+        }
+      });
+    });
+    return bestMatch && bestMatch.score >= 70
+      ? { promptName: playerName, playerName: bestMatch.playerName, playerId: bestMatch.playerId, team: bestMatch.team, score: bestMatch.score }
+      : null;
+  }).filter(Boolean) as Array<{ promptName: string; playerName: string; playerId: string; team: (typeof NBA_TEAMS)[number]; score: number }>;
+}
+
+function isComparisonPrompt(prompt: string) {
+  const normalizedPrompt = normalizeText(prompt);
+  return /\b(compare|comparison|versus|vs\.?|who averages more|who has more|which player|better)\b/.test(normalizedPrompt)
+    || (extractLikelyPlayerNames(prompt, null).length >= 2 && /\b(or|vs\.?|versus|and)\b/.test(normalizedPrompt));
 }
 
 function scoreSearchAliases(prompt: string, searchEntries: Array<{ alias: string; tokens: string[] }>) {
@@ -1766,6 +2011,16 @@ function parseGroupBy(prompt: string): QueryGroupBy {
     || normalizedPrompt.includes("each period")
   ) return "period";
   if (
+    normalizedPrompt.includes("on off")
+    || normalizedPrompt.includes("on/off")
+    || normalizedPrompt.includes("on the floor")
+    || normalizedPrompt.includes("off the floor")
+    || normalizedPrompt.includes("on court")
+    || normalizedPrompt.includes("off court")
+    || /\bwith\s+[a-z0-9 .'-]+\s+on\b/.test(normalizedPrompt)
+    || /\bwith\s+[a-z0-9 .'-]+\s+off\b/.test(normalizedPrompt)
+  ) return "on_off";
+  if (
     (referencesHome && referencesAway && /\b(vs\.?|versus|split|compare|comparison)\b/.test(normalizedPrompt))
     || normalizedPrompt.includes("by home away")
     || normalizedPrompt.includes("home vs away")
@@ -1987,7 +2242,7 @@ const CUSTOM_REQUEST_QUERY_SCHEMA = {
     },
     groupBy: {
       type: "string",
-      enum: ["none", "opponent", "result", "period", "home_away", "month", "season_scope"],
+      enum: ["none", "opponent", "result", "period", "home_away", "month", "season_scope", "on_off"],
     },
   },
 };
@@ -2119,7 +2374,7 @@ function normalizeParsedQuery(value: unknown): ParsedQuery | null {
     sort: sort === "asc" || sort === "desc" ? sort : undefined,
     sortBy: sortBy === "date" || sortBy === "value" ? sortBy : undefined,
     limit,
-    groupBy: ["opponent", "result", "period", "home_away", "month", "season_scope"].includes(groupBy) ? groupBy : "none",
+    groupBy: ["opponent", "result", "period", "home_away", "month", "season_scope", "on_off"].includes(groupBy) ? groupBy : "none",
   };
 }
 
@@ -2236,6 +2491,7 @@ function groupByLabel(groupBy: QueryGroupBy) {
   if (groupBy === "home_away") return "home/away";
   if (groupBy === "month") return "month";
   if (groupBy === "season_scope") return "season type";
+  if (groupBy === "on_off") return "on/off";
   return "opponent";
 }
 
@@ -2267,6 +2523,12 @@ function resolveGroupIdentity(row: QueryGameRow, groupBy: QueryGroupBy) {
     return {
       key: isPlayoff ? "playoffs" : "regular",
       label: isPlayoff ? "Playoffs" : "Regular Season",
+    };
+  }
+  if (groupBy === "on_off") {
+    return {
+      key: String(row.groupKey || row.groupLabel || ""),
+      label: String(row.groupLabel || row.groupKey || "-"),
     };
   }
   return { key: row.result, label: row.result };
@@ -2583,16 +2845,26 @@ async function buildPlayerPeriodPointsDataset(
       ));
 
       const detailedGames = await Promise.all(
-        teamGames.map((game) => fetchGameDetailsSafe(String((game as Record<string, unknown>).gameId || ""))),
+        teamGames.map(async (game) => {
+          const gameId = String((game as Record<string, unknown>).gameId || "");
+          const [gameEntry, minutesEntry] = await Promise.all([
+            fetchGameDetailsSafe(gameId),
+            fetchGameMinutes(gameId).then((value) => ({ data: value, error: null })).catch((error) => ({
+              data: null,
+              error: error instanceof Error ? error.message : String(error),
+            })),
+          ]);
+          return { gameEntry, minutesEntry };
+        }),
       );
 
       const skippedGames = detailedGames
         .map((entry, index) => (
-          entry.error
+          entry.gameEntry.error || entry.minutesEntry.error
             ? {
               gameId: String((teamGames[index] as Record<string, unknown>).gameId || ""),
               gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
-              error: entry.error,
+              error: entry.gameEntry.error || entry.minutesEntry.error || "Unable to load game detail or minutes data.",
             }
             : null
         ))
@@ -2600,12 +2872,12 @@ async function buildPlayerPeriodPointsDataset(
 
       const rows = detailedGames
         .flatMap((entry, index) => {
-          if (!entry.game) return [];
+          if (!entry.gameEntry.game || !entry.minutesEntry.data) return [];
           const game = {
-            ...entry.game,
+            ...entry.gameEntry.game,
             gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
           } as AnyRecord;
-          return buildPlayerPeriodPointRows(game, team);
+          return buildPlayerPeriodMetricRows(game, team, entry.minutesEntry.data as AnyRecord);
         });
 
       if (skippedGames.length) {
@@ -2666,6 +2938,293 @@ async function buildTeamPeriodPointsDataset(
   }
 
   return TEAM_PERIOD_POINTS_DATASET_CACHE.get(cacheKey)!;
+}
+
+function buildTeamOnOffRows(
+  game: AnyRecord,
+  minutesData: AnyRecord,
+  team: (typeof NBA_TEAMS)[number],
+  targetPlayerIds: string[],
+) {
+  const perspective = selectTeamPerspective(game, team.teamId);
+  const teamScore = safeNumber(perspective.team?.score, safeNumber((perspective.teamBox?.totals as Record<string, unknown> | undefined)?.points, 0));
+  const opponentScore = safeNumber(perspective.opponent?.score, safeNumber((perspective.opponentBox?.totals as Record<string, unknown> | undefined)?.points, 0));
+  const result: "W" | "L" = teamScore >= opponentScore ? "W" : "L";
+  const opponent = {
+    teamId: String(perspective.opponent?.teamId || ""),
+    tricode: String(perspective.opponent?.teamTricode || ""),
+    fullName: `${String(perspective.opponent?.teamCity || "").trim()} ${String(perspective.opponent?.teamName || "").trim()}`.trim(),
+  };
+  const isHome = String(game?.homeTeam?.teamId || "") === team.teamId;
+  const actions = Array.isArray(game?.playByPlayActions) ? game.playByPlayActions as Array<Record<string, unknown>> : [];
+  const periods = Array.isArray(minutesData?.periods) ? minutesData.periods as Array<Record<string, unknown>> : [];
+
+  const buckets: Record<string, { pointsFor: number; pointsAgainst: number; possessionsFor: number; possessionsAgainst: number }> = {
+    on: { pointsFor: 0, pointsAgainst: 0, possessionsFor: 0, possessionsAgainst: 0 },
+    off: { pointsFor: 0, pointsAgainst: 0, possessionsFor: 0, possessionsAgainst: 0 },
+  };
+
+  periods.forEach((periodEntry) => {
+    const period = safeNumber(periodEntry.period, 0);
+    const stints = Array.isArray(periodEntry.stints) ? periodEntry.stints as Array<Record<string, unknown>> : [];
+    if (!period || !stints.length) return;
+
+    const stintDescriptors = stints.map((stint) => {
+      const players = Array.isArray(isHome ? stint.playersHome : stint.playersAway)
+        ? (isHome ? stint.playersHome : stint.playersAway) as Array<Record<string, unknown>>
+        : [];
+      const lineupIds = new Set(players.map((player) => String(player.personId || "")));
+      const on = targetPlayerIds.every((playerId) => lineupIds.has(playerId));
+      return {
+        startSec: Math.min(parseClockText(stint.startClock), periodLengthSeconds(period)),
+        endSec: Math.min(parseClockText(stint.endClock), periodLengthSeconds(period)),
+        bucket: on ? "on" : "off",
+      };
+    });
+
+    const periodActions = actions
+      .filter((action) => safeNumber(action.period, 0) === period)
+      .sort((left, right) => safeNumber(left.orderNumber ?? left.actionNumber, 0) - safeNumber(right.orderNumber ?? right.actionNumber, 0));
+
+    let lastPossession: string | null = null;
+    periodActions.forEach((action) => {
+      const actionSec = parseIsoClock(action.clock);
+      const stint = stintDescriptors.find((entry) => actionSec <= entry.startSec && actionSec > entry.endSec);
+      if (!stint) return;
+      const bucket = buckets[stint.bucket];
+      const actionType = String(action.actionType || "").toLowerCase();
+      const shotResult = String(action.shotResult || "");
+      let points = 0;
+      if ((actionType === "2pt" || actionType === "3pt") && shotResult === "Made") {
+        points = actionType === "3pt" ? 3 : 2;
+      } else if (actionType === "freethrow" && shotResult === "Made") {
+        points = 1;
+      }
+      if (points > 0) {
+        if (String(action.teamId || "") === team.teamId) bucket.pointsFor += points;
+        else bucket.pointsAgainst += points;
+      }
+
+      const possession = String(action.possession || "");
+      if (possession && possession !== lastPossession) {
+        if (possession === team.teamId) bucket.possessionsFor += 1;
+        else bucket.possessionsAgainst += 1;
+        lastPossession = possession;
+      }
+    });
+  });
+
+  return ["on", "off"].map((bucketKey) => {
+    const bucket = buckets[bucketKey];
+    const possessionsFor = bucket.possessionsFor;
+    const possessionsAgainst = bucket.possessionsAgainst;
+    const combinedPossessions = Math.max(1, 0.5 * (possessionsFor + possessionsAgainst));
+    return {
+      gameId: String(game.gameId || ""),
+      gameDate: String(game.gameDate || ""),
+      opponent,
+      value: 0,
+      result,
+      teamScore,
+      opponentScore,
+      margin: teamScore - opponentScore,
+      isHome,
+      seasonType: String(game?.seasonType || ""),
+      groupKey: bucketKey,
+      groupLabel: bucketKey === "on" ? "On" : "Off",
+      metrics: {
+        points: bucket.pointsFor,
+        offensive_rating: possessionsFor > 0 ? (bucket.pointsFor / possessionsFor) * 100 : 0,
+        defensive_rating: possessionsAgainst > 0 ? (bucket.pointsAgainst / possessionsAgainst) * 100 : 0,
+        net_rating: combinedPossessions > 0 ? ((bucket.pointsFor - bucket.pointsAgainst) / combinedPossessions) * 100 : 0,
+      },
+      opponentMetrics: {},
+    } satisfies CachedTeamGameRow;
+  });
+}
+
+async function buildTeamOnOffDataset(
+  season: string,
+  team: (typeof NBA_TEAMS)[number],
+  targetPlayerIds: string[],
+) {
+  const cacheKey = `${season}:${team.teamId}:${targetPlayerIds.slice().sort().join(",")}`;
+  if (!TEAM_ON_OFF_DATASET_CACHE.has(cacheKey)) {
+    TEAM_ON_OFF_DATASET_CACHE.set(cacheKey, (async () => {
+      const seasonGames = await fetchSeasonGames(season);
+      const teamGames = seasonGames.filter((game) => (
+        String((game as Record<string, unknown>)?.homeTeam?.teamId || "") === team.teamId ||
+        String((game as Record<string, unknown>)?.awayTeam?.teamId || "") === team.teamId
+      ));
+
+      const detailedGames = await Promise.all(
+        teamGames.map(async (game) => {
+          const gameId = String((game as Record<string, unknown>).gameId || "");
+          const [gameEntry, minutesEntry] = await Promise.all([
+            fetchGameDetailsSafe(gameId),
+            fetchGameMinutes(gameId).then((value) => ({ data: value, error: null })).catch((error) => ({
+              data: null,
+              error: error instanceof Error ? error.message : String(error),
+            })),
+          ]);
+          return { game, gameEntry, minutesEntry };
+        }),
+      );
+
+      const skippedGames: Array<{ gameId: string; gameDate: string; error: string }> = [];
+      const rows = detailedGames.flatMap(({ game, gameEntry, minutesEntry }) => {
+        const gameId = String((game as Record<string, unknown>).gameId || "");
+        const gameDate = String((game as Record<string, unknown>).gameDate || "");
+        if (!gameEntry.game || !minutesEntry.data) {
+          skippedGames.push({
+            gameId,
+            gameDate,
+            error: gameEntry.error || minutesEntry.error || "Unable to load game or minutes data.",
+          });
+          return [];
+        }
+        const hydratedGame = {
+          ...gameEntry.game,
+          gameDate,
+        } as AnyRecord;
+        return buildTeamOnOffRows(hydratedGame, minutesEntry.data as AnyRecord, team, targetPlayerIds);
+      });
+
+      if (skippedGames.length) {
+        TEAM_ON_OFF_DATASET_CACHE.delete(cacheKey);
+      }
+
+      return { rows, skippedGames };
+    })());
+  }
+
+  return TEAM_ON_OFF_DATASET_CACHE.get(cacheKey)!;
+}
+
+async function executeComparisonQuery(
+  prompt: string,
+  season: string,
+  metric: MetricDefinition,
+  baseQuery: ParsedQuery,
+  matchedPlayers: Array<{ playerName: string; playerId: string; team: (typeof NBA_TEAMS)[number] }>,
+) {
+  const uniquePlayers = uniqueByKey(matchedPlayers, (entry) => `${entry.team.teamId}:${entry.playerId}`).slice(0, 4);
+  const tableColumns = [
+    { key: "player", label: "Player" },
+    { key: "team", label: "Team" },
+    { key: "group", label: "Group" },
+    { key: "value", label: "Value" },
+    { key: "games", label: "Games" },
+    { key: "record", label: "Record" },
+    { key: "avg", label: "Avg" },
+    { key: "total", label: "Total" },
+  ];
+
+  const tableRows: Array<{ gameId: string; gameDate: string; opponent: { teamId: string; tricode: string; fullName: string }; result: string; teamScore: number; opponentScore: number; values: Record<string, string> }> = [];
+
+  for (const player of uniquePlayers) {
+    const query = {
+      ...baseQuery,
+      playerId: player.playerId,
+      playerName: player.playerName,
+      teamId: player.team.teamId,
+    } satisfies ParsedQuery;
+
+    const playerDataset = query.groupBy === "period" && PERIOD_SUPPORTED_METRIC_KEYS.has(metric.key)
+      ? await buildPlayerPeriodPointsDataset(season, player.team)
+      : await buildPlayerSeasonDataset(season, player.team);
+    const rowsForQuery = playerDataset.rows.filter((row) => row.playerId === player.playerId);
+    const result = executeQuery(rowsForQuery, metric, query, player.team, player.playerName);
+
+    if (Array.isArray(result.groups) && result.groups.length) {
+      result.groups.forEach((group, index) => {
+        tableRows.push({
+          gameId: `${player.team.teamId}:${player.playerId}:${index}`,
+          gameDate: "",
+          opponent: { teamId: "", tricode: "", fullName: "" },
+          result: "",
+          teamScore: 0,
+          opponentScore: 0,
+          values: {
+            player: player.playerName,
+            team: player.team.tricode,
+            group: group.label,
+            value: String(group.displayValue || "-"),
+            games: String(group.sampleSize || 0),
+            record: `${group.wins}-${group.losses}`,
+            avg: String(group.averageDisplayValue || "-"),
+            total: String(group.totalDisplayValue || "-"),
+          },
+        });
+      });
+    } else {
+      tableRows.push({
+        gameId: `${player.team.teamId}:${player.playerId}`,
+        gameDate: "",
+        opponent: { teamId: "", tricode: "", fullName: "" },
+        result: "",
+        teamScore: 0,
+        opponentScore: 0,
+        values: {
+          player: player.playerName,
+          team: player.team.tricode,
+          group: "All",
+          value: String(result.displayValue || "-"),
+          games: String(result.sampleSize || 0),
+          record: result.record ? `${result.record.wins}-${result.record.losses}` : "-",
+          avg: Array.isArray(result.games) && result.games.length && baseQuery.aggregation !== "season_average"
+            ? formatAverageValue(result.games.reduce((sum, row) => sum + row.value, 0) / result.games.length, metric)
+            : String(result.displayValue || "-"),
+          total: baseQuery.aggregation === "season_total"
+            ? String(result.displayValue || "-")
+            : Array.isArray(result.games) ? formatValue(result.games.reduce((sum, row) => sum + row.value, 0), metric) : "-",
+        },
+      });
+    }
+  }
+
+  return {
+    prompt,
+    season,
+    team: {
+      teamId: uniquePlayers[0]?.team.teamId || "",
+      tricode: uniquePlayers[0]?.team.tricode || "NBA",
+      fullName: uniquePlayers.length === 1 ? uniquePlayers[0]?.team.fullName || "" : "Multiple Teams",
+    },
+    filters: {
+      opponent: baseQuery.opponentTeamId
+        ? NBA_TEAMS.find((entry) => entry.teamId === baseQuery.opponentTeamId) || null
+        : null,
+      resultFilter: baseQuery.resultFilter || "all",
+      seasonScope: baseQuery.seasonScope || "all",
+      sort: baseQuery.sort || null,
+      limit: null,
+      groupBy: baseQuery.groupBy || "none",
+    },
+    stat: {
+      key: metric.key,
+      label: `${metric.label} Comparison`,
+    },
+    parsedQuery: {
+      ...baseQuery,
+      teamId: uniquePlayers[0]?.team.teamId || "",
+    },
+    result: {
+      aggregation: "comparison_table",
+      value: tableRows.length,
+      displayValue: `${tableRows.length}`,
+      answer: `Comparison table for ${metric.label.toLowerCase()} across ${uniquePlayers.map((player) => player.playerName).join(" vs ")}.`,
+      sampleSize: tableRows.length,
+      games: [],
+      groups: [],
+      table: {
+        columns: tableColumns,
+        rows: tableRows,
+      },
+    },
+    skippedGames: [],
+    supportedStats: METRICS.map((entry) => ({ key: entry.key, label: entry.label })),
+  };
 }
 
 function executeQuery(
@@ -2898,6 +3457,17 @@ Deno.serve(async (request) => {
     const season = currentSeasonString();
     const explicitTeam = findTeamFromPrompt(prompt);
     const inferredPlayerTeam = explicitTeam ? null : await inferTeamFromPlayerPrompt(prompt, season).catch(() => null);
+    const metricForComparison = findMetricFromPrompt(prompt);
+    if (metricForComparison && isComparisonPrompt(prompt)) {
+      const comparisonPlayers = await inferPlayersFromPrompt(prompt, season, explicitTeam || inferredPlayerTeam?.team || null);
+      if (comparisonPlayers.length >= 2) {
+        const baseQuery = normalizeParsedQuery(buildFallbackParse(prompt, explicitTeam || inferredPlayerTeam?.team || comparisonPlayers[0]?.team || null));
+        if (baseQuery) {
+          const comparisonPayload = await executeComparisonQuery(prompt, season, metricForComparison, baseQuery, comparisonPlayers);
+          return jsonResponse(200, comparisonPayload);
+        }
+      }
+    }
 
     const tableRequest = parseGameTableRequest(prompt);
     if (tableRequest) {
@@ -3021,10 +3591,30 @@ Deno.serve(async (request) => {
       }
     }
 
-    if (parsed.groupBy === "period" && metric.key !== "points") {
+    if (parsed.groupBy === "period" && !PERIOD_SUPPORTED_METRIC_KEYS.has(metric.key)) {
       return jsonResponse(400, {
-        error: "Quarter or period splits are currently supported for points requests only.",
+        error: "Quarter or period splits are currently supported for player box-score style stats and related shooting rates.",
       });
+    }
+
+    if (parsed.groupBy === "on_off" && !ON_OFF_SUPPORTED_METRIC_KEYS.has(metric.key)) {
+      return jsonResponse(400, {
+        error: "On/off splits are currently supported for points, offensive rating, defensive rating, and net rating.",
+      });
+    }
+
+    if (parsed.groupBy === "on_off") {
+      const onOffPlayers = uniqueByKey(
+        await inferPlayersFromPrompt(prompt, season, team),
+        (entry) => `${entry.team.teamId}:${entry.playerId}`,
+      ).filter((entry) => entry.team.teamId === team.teamId);
+      if (!onOffPlayers.length) {
+        return jsonResponse(400, {
+          error: `I could not identify a player from ${team.fullName} for that on/off request.`,
+        });
+      }
+      parsed.contextPlayerIds = onOffPlayers.map((entry) => entry.playerId);
+      parsed.contextPlayerNames = onOffPlayers.map((entry) => entry.playerName);
     }
 
     const dataset = await buildTeamSeasonDataset(season, team);
@@ -3037,8 +3627,13 @@ Deno.serve(async (request) => {
     }
 
     let rowsForQuery: Array<CachedTeamGameRow | CachedPlayerGameRow> = dataset.rows;
-    if (parsed.playerId) {
-      if (parsed.groupBy === "period" && metric.key === "points") {
+    let subjectLabel = parsed.playerName || team.fullName;
+    if (parsed.groupBy === "on_off" && parsed.contextPlayerIds?.length) {
+      const onOffDataset = await buildTeamOnOffDataset(season, team, parsed.contextPlayerIds);
+      rowsForQuery = onOffDataset.rows;
+      subjectLabel = `${team.fullName} with ${parsed.contextPlayerNames?.join(" + ") || "selected players"} on/off`;
+    } else if (parsed.playerId) {
+      if (parsed.groupBy === "period" && PERIOD_SUPPORTED_METRIC_KEYS.has(metric.key)) {
         const playerPeriodDataset = await buildPlayerPeriodPointsDataset(season, team);
         rowsForQuery = playerPeriodDataset.rows.filter((row) => row.playerId === parsed.playerId);
       } else {
@@ -3048,7 +3643,7 @@ Deno.serve(async (request) => {
       const teamPeriodDataset = await buildTeamPeriodPointsDataset(season, team);
       rowsForQuery = teamPeriodDataset.rows;
     }
-    const result = executeQuery(rowsForQuery, metric, parsed, team, parsed.playerName || team.fullName);
+    const result = executeQuery(rowsForQuery, metric, parsed, team, subjectLabel);
 
     return jsonResponse(200, {
       prompt,
