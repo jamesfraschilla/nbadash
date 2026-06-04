@@ -63,6 +63,19 @@ const IMAGE_MODULE_LOADERS = import.meta.glob(
 let staticRefereeHeadshotItems = [];
 let staticRefereeHeadshotItemsPromise = null;
 
+function encodePublicPathSegment(value) {
+  return encodeURIComponent(String(value || ""))
+    .replace(/%2F/g, "/");
+}
+
+function buildFullResolutionRefereeHeadshotUrl(path, fileName) {
+  const baseUrl = import.meta.env.BASE_URL || "/";
+  const root = path.includes("/referees_review_duplicates/")
+    ? "referees_review_duplicates"
+    : "referees";
+  return `${baseUrl}referees-full/${root}/${encodePublicPathSegment(fileName)}`;
+}
+
 export function normalizeNameKey(value) {
   return String(value || "")
     .normalize("NFKD")
@@ -448,6 +461,7 @@ function buildStaticRefereeHeadshotItems(assetEntries) {
         fullName,
         nameKey: normalizeNameKey(fullName),
         url,
+        exportUrl: buildFullResolutionRefereeHeadshotUrl(path, fileName),
         source: isDuplicate ? "duplicate review" : "production",
         isDuplicate,
       };
@@ -483,6 +497,7 @@ export function buildRefereeHeadshotImageItems(preferences = DEFAULT_REFEREE_HEA
         fullName: String(displayName || "").trim(),
         nameKey: normalizedKey,
         url: String(uploaded?.dataUrl || "").trim(),
+        exportUrl: String(uploaded?.dataUrl || "").trim(),
         source: "manual",
         isDuplicate: false,
         isManual: true,
@@ -590,15 +605,16 @@ export function choosePreferredRefereeHeadshot(groupItems, nameKey, preferences 
   const visibleItems = groupItems.filter((item) => !preferences.hiddenImageIds.includes(item.id));
   const preferredId = preferences.preferredImageIdsByNameKey?.[nameKey];
   if (preferredId === buildUploadedRefereeImageId(nameKey) && uploaded?.dataUrl) {
-    return {
-      id: preferredId,
-      fileName: uploaded.fileName,
-      fullName: nameKey,
-      nameKey,
-      url: uploaded.dataUrl,
-      source: "uploaded replacement",
-      isDuplicate: false,
-      isUploaded: true,
+      return {
+        id: preferredId,
+        fileName: uploaded.fileName,
+        fullName: nameKey,
+        nameKey,
+        url: uploaded.dataUrl,
+        exportUrl: uploaded.dataUrl,
+        source: "uploaded replacement",
+        isDuplicate: false,
+        isUploaded: true,
     };
   }
   if (!visibleItems.length) {
@@ -609,6 +625,7 @@ export function choosePreferredRefereeHeadshot(groupItems, nameKey, preferences 
         fullName: nameKey,
         nameKey,
         url: uploaded.dataUrl,
+        exportUrl: uploaded.dataUrl,
         source: "uploaded replacement",
         isDuplicate: false,
         isUploaded: true,
@@ -622,14 +639,19 @@ export function choosePreferredRefereeHeadshot(groupItems, nameKey, preferences 
 }
 
 export function buildRefereeHeadshotLookup(preferences = DEFAULT_REFEREE_HEADSHOT_PREFERENCES) {
+  return buildRefereeHeadshotLookupByField("url", preferences);
+}
+
+function buildRefereeHeadshotLookupByField(field, preferences = DEFAULT_REFEREE_HEADSHOT_PREFERENCES) {
   const items = buildRefereeHeadshotImageItems(preferences);
   const groups = buildRefereeHeadshotGroups(items, preferences);
   const lookup = new Map();
   groups.forEach((group, nameKey) => {
     const groupNameKeys = buildRefereeHeadshotGroupNameKeys(group, preferences);
     const preferred = choosePreferredRefereeHeadshot(group.items, nameKey, preferences);
-    if (preferred?.url) {
-      groupNameKeys.forEach((groupNameKey) => lookup.set(groupNameKey, preferred.url));
+    const value = preferred?.[field] || preferred?.url || null;
+    if (value) {
+      groupNameKeys.forEach((groupNameKey) => lookup.set(groupNameKey, value));
     }
   });
   return lookup;
@@ -642,10 +664,23 @@ export function getRefereeHeadshotUrl(fullName, preferences = null) {
   return lookup.get(resolvedKey) || lookup.get(normalizeNameKey(fullName)) || null;
 }
 
+export function getRefereeHeadshotExportUrl(fullName, preferences = null) {
+  const effectivePreferences = preferences || readStoredRefereeHeadshotPreferences();
+  const lookup = buildRefereeHeadshotLookupByField("exportUrl", effectivePreferences);
+  const resolvedKey = resolveRefereeHeadshotNameKey(fullName, effectivePreferences);
+  return lookup.get(resolvedKey) || lookup.get(normalizeNameKey(fullName)) || getRefereeHeadshotUrl(fullName, effectivePreferences);
+}
+
 export async function loadRefereeHeadshotUrl(fullName, preferences = null) {
   const effectivePreferences = preferences || readStoredRefereeHeadshotPreferences();
   await ensureStaticRefereeHeadshotItemsLoaded();
   return getRefereeHeadshotUrl(fullName, effectivePreferences);
+}
+
+export async function loadRefereeHeadshotExportUrl(fullName, preferences = null) {
+  const effectivePreferences = preferences || readStoredRefereeHeadshotPreferences();
+  await ensureStaticRefereeHeadshotItemsLoaded();
+  return getRefereeHeadshotExportUrl(fullName, effectivePreferences);
 }
 
 export function resolveRefereeHeadshotOverrideKey(fullName, overrides = null, preferences = null) {

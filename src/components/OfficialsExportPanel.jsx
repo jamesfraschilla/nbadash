@@ -7,6 +7,7 @@ import {
   buildCanvasAvatarPlacement,
   buildRefereeHeadshotTransform,
   getRefereeHeadshotOverride,
+  loadRefereeHeadshotExportUrl,
   loadRefereeHeadshotUrl,
 } from "../refereeHeadshots.js";
 import styles from "./OfficialsExportPanel.module.css";
@@ -135,6 +136,7 @@ async function hydrateOfficialsData(officialsData) {
   const hydrate = async (official) => ({
     ...official,
     headshotUrl: await loadRefereeHeadshotUrl(official.fullName),
+    exportHeadshotUrl: await loadRefereeHeadshotExportUrl(official.fullName),
   });
   return {
     primary: await Promise.all((officialsData?.primary || []).map(hydrate)),
@@ -304,6 +306,7 @@ function loadImage(url) {
   const promise = new Promise((resolve) => {
     const image = new Image();
     image.decoding = "async";
+    image.crossOrigin = "anonymous";
     image.onload = () => resolve(image);
     image.onerror = () => resolve(null);
     image.src = url;
@@ -315,7 +318,10 @@ function loadImage(url) {
 
 async function buildLoadedImageMap(officials) {
   const entries = await Promise.all(
-    officials.map(async (official) => [official.id, await loadImage(official.headshotUrl)])
+    officials.map(async (official) => [
+      official.id,
+      await loadImage(official.exportHeadshotUrl || official.headshotUrl),
+    ])
   );
   return new Map(entries);
 }
