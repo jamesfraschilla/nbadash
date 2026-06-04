@@ -1233,6 +1233,27 @@ function findPlayerMatchFromRows(prompt: string, rows: CachedPlayerGameRow[]) {
   return bestScore >= 30 ? bestMatch : null;
 }
 
+function extractLikelyPlayerName(prompt: string, team: (typeof NBA_TEAMS)[number]) {
+  const matches = [...String(prompt || "").matchAll(/\b([A-Z][a-z]+(?:\s+[A-Z][A-Za-z'.-]+)+)\b/g)]
+    .map((match) => String(match[1] || "").trim())
+    .filter(Boolean);
+  if (!matches.length) return null;
+
+  const teamNameParts = new Set([
+    normalizePlayerName(team.fullName),
+    ...team.fullName.split(/\s+/).map(normalizePlayerName),
+    ...team.aliases.map(normalizePlayerName),
+  ]);
+
+  return matches.find((candidate) => {
+    const normalized = normalizePlayerName(candidate);
+    if (!normalized) return false;
+    if (teamNameParts.has(normalized)) return false;
+    if ([...teamNameParts].some((part) => part && normalized === part)) return false;
+    return candidate.split(/\s+/).length >= 2;
+  }) || null;
+}
+
 function scoreSearchAliases(prompt: string, searchEntries: Array<{ alias: string; tokens: string[] }>) {
   const normalizedPrompt = normalizeText(prompt);
   const paddedPrompt = ` ${normalizedPrompt} `;
@@ -2476,6 +2497,13 @@ Deno.serve(async (request) => {
     if (matchedPlayer) {
       parsed.playerId = matchedPlayer.playerId;
       parsed.playerName = matchedPlayer.playerName;
+    } else {
+      const likelyPlayerName = extractLikelyPlayerName(prompt, team);
+      if (likelyPlayerName) {
+        return jsonResponse(400, {
+          error: `${likelyPlayerName} was not found in ${team.fullName}'s ${season} game data. If you meant a different team, change the team in the prompt. If you meant games against ${team.fullName}, phrase it as "against ${team.tricode}" or "vs ${team.fullName}".`,
+        });
+      }
     }
 
     const dataset = await buildTeamSeasonDataset(season, team);
