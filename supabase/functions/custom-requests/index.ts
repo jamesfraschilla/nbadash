@@ -69,7 +69,7 @@ type QueryAggregation =
   | "record_when_lte"
   | "record_when_nonzero";
 
-type QueryGroupBy = "none" | "opponent" | "result" | "period";
+type QueryGroupBy = "none" | "opponent" | "result" | "period" | "home_away" | "month" | "season_scope";
 type QuerySortBy = "value" | "date";
 
 type ParsedQuery = {
@@ -167,28 +167,28 @@ type ParsedGameTableRequest = {
 };
 
 const METRICS: MetricDefinition[] = [
-  { key: "minutes", label: "Minutes", aliases: ["minutes", "minute", "mins", "min"], kind: "count", formatter: "decimal" },
-  { key: "points", label: "Points", aliases: ["points", "pts"], kind: "count" },
+  { key: "minutes", label: "Minutes", aliases: ["minutes", "minute", "mins", "min", "mp"], kind: "count", formatter: "decimal" },
+  { key: "points", label: "Points", aliases: ["points", "pts", "scoring"], kind: "count" },
   { key: "field_goals_made", label: "Field Goals Made", aliases: ["field goals made", "fg made", "fgm", "made field goals"], kind: "count" },
   { key: "field_goals_attempted", label: "Field Goals Attempted", aliases: ["field goals attempted", "fg attempted", "fga", "field goal attempts"], kind: "count" },
-  { key: "three_pointers_made", label: "3FG Made", aliases: ["3fg made", "3fgm", "3fgs", "3s made", "made 3s", "made threes", "three pointers made", "three point makes", "3pt made", "3pt makes"], kind: "count" },
-  { key: "three_pointers_attempted", label: "3FG Attempted", aliases: ["3fg attempted", "3fga", "3 point attempts", "3pt attempts", "three pointers attempted", "three point attempts", "3s attempted"], kind: "count" },
-  { key: "free_throws_made", label: "Free Throws Made", aliases: ["free throws made", "ft made", "ftm"], kind: "count" },
-  { key: "free_throws_attempted", label: "Free Throws Attempted", aliases: ["free throws attempted", "ft attempted", "fta"], kind: "count" },
-  { key: "rebounds_total", label: "Rebounds", aliases: ["rebounds", "total rebounds", "reb"], kind: "count" },
+  { key: "three_pointers_made", label: "3FG Made", aliases: ["3fg made", "3fgm", "3fgs", "3s made", "made 3s", "made threes", "three pointers made", "three point makes", "3pt made", "3pt makes", "3pm", "treys made"], kind: "count" },
+  { key: "three_pointers_attempted", label: "3FG Attempted", aliases: ["3fg attempted", "3fga", "3 point attempts", "3pt attempts", "three pointers attempted", "three point attempts", "3s attempted", "3pa", "trey attempts"], kind: "count" },
+  { key: "free_throws_made", label: "Free Throws Made", aliases: ["free throws made", "ft made", "ftm", "fts made"], kind: "count" },
+  { key: "free_throws_attempted", label: "Free Throws Attempted", aliases: ["free throws attempted", "ft attempted", "fta", "free throw attempts"], kind: "count" },
+  { key: "rebounds_total", label: "Rebounds", aliases: ["rebounds", "total rebounds", "reb", "boards", "rebs"], kind: "count" },
   { key: "rebounds_offensive", label: "Offensive Rebounds", aliases: ["offensive rebounds", "oreb", "orb"], kind: "count" },
-  { key: "assists", label: "Assists", aliases: ["assists", "ast"], kind: "count" },
-  { key: "steals", label: "Steals", aliases: ["steals", "stl"], kind: "count" },
-  { key: "blocks", label: "Blocks", aliases: ["blocks", "blk"], kind: "count" },
-  { key: "turnovers", label: "Turnovers", aliases: ["turnovers", "tos", "to"], kind: "count" },
-  { key: "fouls_personal", label: "Personal Fouls", aliases: ["personal fouls", "fouls"], kind: "count" },
+  { key: "assists", label: "Assists", aliases: ["assists", "ast", "dimes"], kind: "count" },
+  { key: "steals", label: "Steals", aliases: ["steals", "stl", "picks"], kind: "count" },
+  { key: "blocks", label: "Blocks", aliases: ["blocks", "blk", "swats"], kind: "count" },
+  { key: "turnovers", label: "Turnovers", aliases: ["turnovers", "tos", "to", "giveaways"], kind: "count" },
+  { key: "fouls_personal", label: "Personal Fouls", aliases: ["personal fouls", "fouls", "pf"], kind: "count" },
   { key: "transition_points", label: "Transition Points", aliases: ["transition points", "fastbreak points", "fast break points"], kind: "count" },
   { key: "transition_possessions", label: "Transition Possessions", aliases: ["transition possessions", "fastbreak possessions", "fast break possessions"], kind: "count" },
   { key: "transition_turnovers", label: "Transition Turnovers", aliases: ["transition turnovers", "fastbreak turnovers", "fast break turnovers"], kind: "count" },
   { key: "transition_rate", label: "Transition Rate", aliases: ["transition rate", "fastbreak rate", "fast break rate"], kind: "rate", formatter: "percent" },
   { key: "transition_ppp", label: "Transition PPP", aliases: ["transition ppp", "fastbreak ppp", "fast break ppp"], kind: "rate", formatter: "decimal" },
   { key: "second_chance_points", label: "Second-Chance Points", aliases: ["second chance points", "2nd chance points"], kind: "count" },
-  { key: "points_off_turnovers", label: "Points Off Turnovers", aliases: ["points off turnovers", "pot"], kind: "count" },
+  { key: "points_off_turnovers", label: "Points Off Turnovers", aliases: ["points off turnovers", "pot", "points off tos"], kind: "count" },
   { key: "paint_points", label: "Paint Points", aliases: ["paint points", "points in the paint"], kind: "count" },
   { key: "dynamite_3s_made", label: "Dynamite 3s", aliases: ["dynamite 3s", "dynamite threes", "second chance 3s", "second-chance 3s"], kind: "count" },
   { key: "dynamite_3s_attempted", label: "Dynamite 3s Attempted", aliases: ["dynamite 3 attempts", "dynamite 3s attempted", "second chance 3 attempts"], kind: "count" },
@@ -206,8 +206,8 @@ const METRICS: MetricDefinition[] = [
   { key: "deflections", label: "Deflections", aliases: ["deflections"], kind: "count" },
   { key: "disruptions", label: "Disruptions", aliases: ["disruptions"], kind: "count" },
   { key: "kills", label: "Kills", aliases: ["kills"], kind: "count" },
-  { key: "offensive_rating", label: "Offensive Rating", aliases: ["offensive rating", "ortg"], kind: "rate", formatter: "decimal" },
-  { key: "defensive_rating", label: "Defensive Rating", aliases: ["defensive rating", "drtg"], kind: "rate", formatter: "decimal" },
+  { key: "offensive_rating", label: "Offensive Rating", aliases: ["offensive rating", "ortg", "off rating"], kind: "rate", formatter: "decimal" },
+  { key: "defensive_rating", label: "Defensive Rating", aliases: ["defensive rating", "drtg", "def rating"], kind: "rate", formatter: "decimal" },
   { key: "net_rating", label: "Net Rating", aliases: ["net rating", "netrtg"], kind: "rate", formatter: "decimal" },
   { key: "efg_pct", label: "eFG%", aliases: ["efg", "efg%", "effective field goal percentage"], kind: "rate", formatter: "percent" },
   { key: "tov_pct", label: "TOV%", aliases: ["tov%", "turnover percentage"], kind: "rate", formatter: "percent" },
@@ -235,6 +235,15 @@ const PLAYER_PERIOD_POINTS_DATASET_CACHE = new Map<string, Promise<{
   rows: CachedPlayerGameRow[];
   skippedGames: Array<{ gameId: string; gameDate: string; error: string }>;
 }>>();
+const TEAM_PERIOD_POINTS_DATASET_CACHE = new Map<string, Promise<{
+  rows: CachedTeamGameRow[];
+  skippedGames: Array<{ gameId: string; gameDate: string; error: string }>;
+}>>();
+const TEAM_ROSTERS_CACHE = new Map<string, Promise<Array<{
+  teamId: string;
+  team: (typeof NBA_TEAMS)[number];
+  players: Array<{ playerId: string; playerName: string }>;
+}>>>();
 
 function normalizeText(value: string) {
   return String(value || "")
@@ -630,6 +639,63 @@ async function fetchGameDetailsSafe(gameId: string) {
       error: error instanceof Error ? error.message : "Unknown error.",
     };
   }
+}
+
+async function fetchTeamRoster(team: (typeof NBA_TEAMS)[number], season: string) {
+  const url = new URL("https://stats.nba.com/stats/commonteamroster");
+  url.searchParams.set("LeagueID", "00");
+  url.searchParams.set("Season", season);
+  url.searchParams.set("TeamID", team.teamId);
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      Accept: "application/json, text/plain, */*",
+      "Accept-Language": "en-US,en;q=0.9",
+      Connection: "keep-alive",
+      Host: "stats.nba.com",
+      Origin: "https://www.nba.com",
+      Referer: "https://www.nba.com/",
+      "User-Agent": "Mozilla/5.0 (compatible; NBA Dashboard Custom Requests)",
+      "x-nba-stats-origin": "stats",
+      "x-nba-stats-token": "true",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Roster fetch failed (${response.status}) for ${team.tricode}`);
+  }
+
+  const payload = await response.json() as AnyRecord;
+  const resultSets = Array.isArray(payload?.resultSets)
+    ? payload.resultSets as AnyRecord[]
+    : payload?.resultSet
+      ? [payload.resultSet as AnyRecord]
+      : [];
+  const rosterSet = resultSets.find((entry) => String(entry?.name || "").toLowerCase() === "commonteamroster");
+  const headers = Array.isArray(rosterSet?.headers) ? rosterSet.headers.map((value) => String(value || "")) : [];
+  const rows = Array.isArray(rosterSet?.rowSet) ? rosterSet.rowSet as unknown[][] : [];
+
+  return {
+    teamId: team.teamId,
+    team,
+    players: rows
+      .map((row) => headers.reduce<Record<string, unknown>>((accumulator, header, index) => {
+        accumulator[header] = row[index];
+        return accumulator;
+      }, {}))
+      .map((row) => ({
+        playerId: String(row.PLAYER_ID || "").trim(),
+        playerName: String(row.PLAYER || "").trim(),
+      }))
+      .filter((player) => player.playerId && player.playerName),
+  };
+}
+
+async function fetchAllTeamRosters(season: string) {
+  if (!TEAM_ROSTERS_CACHE.has(season)) {
+    TEAM_ROSTERS_CACHE.set(season, Promise.all(NBA_TEAMS.map((team) => fetchTeamRoster(team, season))));
+  }
+  return TEAM_ROSTERS_CACHE.get(season)!;
 }
 
 function classifyShot(action: Record<string, unknown>) {
@@ -1289,6 +1355,57 @@ function buildPlayerPeriodPointRows(game: AnyRecord, team: (typeof NBA_TEAMS)[nu
   });
 }
 
+function buildTeamPeriodPointRows(game: AnyRecord, team: (typeof NBA_TEAMS)[number]) {
+  const perspective = selectTeamPerspective(game, team.teamId);
+  const actions = Array.isArray(game?.playByPlayActions) ? game.playByPlayActions as Array<Record<string, unknown>> : [];
+  const teamScore = safeNumber(perspective.team?.score, safeNumber((perspective.teamBox?.totals as Record<string, unknown> | undefined)?.points, 0));
+  const opponentScore = safeNumber(perspective.opponent?.score, safeNumber((perspective.opponentBox?.totals as Record<string, unknown> | undefined)?.points, 0));
+  const result: "W" | "L" = teamScore >= opponentScore ? "W" : "L";
+  const opponent = {
+    teamId: String(perspective.opponent?.teamId || ""),
+    tricode: String(perspective.opponent?.teamTricode || ""),
+    fullName: `${String(perspective.opponent?.teamCity || "").trim()} ${String(perspective.opponent?.teamName || "").trim()}`.trim(),
+  };
+
+  const pointsByPeriod = new Map<number, number>();
+  actions.forEach((action) => {
+    const teamId = String(action.teamId || "");
+    const period = safeNumber(action.period, 0);
+    if (teamId !== team.teamId || period < 1 || period > 4) return;
+    const actionType = String(action.actionType || "").toLowerCase();
+    const shotResult = String(action.shotResult || "");
+    let points = 0;
+    if ((actionType === "2pt" || actionType === "3pt") && shotResult === "Made") {
+      points = actionType === "3pt" ? 3 : 2;
+    } else if (actionType === "freethrow" && shotResult === "Made") {
+      points = 1;
+    } else {
+      points = safeNumber(action.pointsTotal, 0);
+    }
+    if (!points) return;
+    pointsByPeriod.set(period, safeNumber(pointsByPeriod.get(period), 0) + points);
+  });
+
+  return [1, 2, 3, 4].map((period) => ({
+    gameId: String(game.gameId || ""),
+    gameDate: String(game.gameDate || ""),
+    opponent,
+    value: 0,
+    result,
+    teamScore,
+    opponentScore,
+    margin: teamScore - opponentScore,
+    isHome: String(game?.homeTeam?.teamId || "") === team.teamId,
+    seasonType: String(game?.seasonType || ""),
+    groupKey: `Q${period}`,
+    groupLabel: `Q${period}`,
+    metrics: {
+      points: safeNumber(pointsByPeriod.get(period), 0),
+    },
+    opponentMetrics: {},
+  } satisfies CachedTeamGameRow));
+}
+
 function findPlayerMatchFromRows(prompt: string, rows: CachedPlayerGameRow[]) {
   const normalizedPrompt = normalizePlayerName(prompt);
   if (!normalizedPrompt) return null;
@@ -1351,11 +1468,15 @@ function findPlayerByExactName(rows: CachedPlayerGameRow[], playerName: string) 
   return candidates.find((candidate) => normalizePlayerName(candidate.playerName) === normalizedTarget) || null;
 }
 
-function extractLikelyPlayerName(prompt: string, team: (typeof NBA_TEAMS)[number]) {
+function extractLikelyPlayerName(prompt: string, team?: (typeof NBA_TEAMS)[number] | null) {
   const matches = [...String(prompt || "").matchAll(/\b([A-Z][a-z]+(?:\s+[A-Z][A-Za-z'.-]+)+)\b/g)]
     .map((match) => String(match[1] || "").trim())
     .filter(Boolean);
   if (!matches.length) return null;
+
+  if (!team) {
+    return matches.find((candidate) => candidate.split(/\s+/).length >= 2) || null;
+  }
 
   const teamNameParts = new Set([
     normalizePlayerName(team.fullName),
@@ -1370,6 +1491,39 @@ function extractLikelyPlayerName(prompt: string, team: (typeof NBA_TEAMS)[number
     if ([...teamNameParts].some((part) => part && normalized === part)) return false;
     return candidate.split(/\s+/).length >= 2;
   }) || null;
+}
+
+async function inferTeamFromPlayerPrompt(prompt: string, season: string) {
+  const likelyPlayerName = extractLikelyPlayerName(prompt, null);
+  if (!likelyPlayerName) return null;
+
+  const normalizedTarget = normalizePlayerName(likelyPlayerName);
+  const rosters = await fetchAllTeamRosters(season);
+
+  let bestMatch: { team: (typeof NBA_TEAMS)[number]; playerName: string; score: number } | null = null;
+  rosters.forEach((roster) => {
+    roster.players.forEach((player) => {
+      const normalizedPlayerName = normalizePlayerName(player.playerName);
+      let score = 0;
+      if (normalizedPlayerName === normalizedTarget) {
+        score = 100;
+      } else {
+        const distance = boundedLevenshtein(normalizedTarget, normalizedPlayerName, 2);
+        if (distance <= 2) {
+          score = 90 - (distance * 10);
+        }
+      }
+      if (!bestMatch || score > bestMatch.score) {
+        bestMatch = {
+          team: roster.team,
+          playerName: player.playerName,
+          score,
+        };
+      }
+    });
+  });
+
+  return bestMatch && bestMatch.score >= 70 ? bestMatch : null;
 }
 
 function scoreSearchAliases(prompt: string, searchEntries: Array<{ alias: string; tokens: string[] }>) {
@@ -1598,6 +1752,10 @@ function parseGroupBy(prompt: string): QueryGroupBy {
   const normalizedPrompt = normalizeText(prompt);
   const referencesWins = /\bwins?\b/.test(normalizedPrompt);
   const referencesLosses = /\bloss(?:es)?\b/.test(normalizedPrompt);
+  const referencesHome = /\bhome\b/.test(normalizedPrompt);
+  const referencesAway = /\baway\b/.test(normalizedPrompt);
+  const referencesRegular = normalizedPrompt.includes("regular season");
+  const referencesPlayoffs = normalizedPrompt.includes("playoff") || normalizedPrompt.includes("playoffs") || normalizedPrompt.includes("postseason");
   if (
     normalizedPrompt.includes("which quarter")
     || normalizedPrompt.includes("by quarter")
@@ -1607,6 +1765,25 @@ function parseGroupBy(prompt: string): QueryGroupBy {
     || normalizedPrompt.includes("per period")
     || normalizedPrompt.includes("each period")
   ) return "period";
+  if (
+    (referencesHome && referencesAway && /\b(vs\.?|versus|split|compare|comparison)\b/.test(normalizedPrompt))
+    || normalizedPrompt.includes("by home away")
+    || normalizedPrompt.includes("home vs away")
+    || normalizedPrompt.includes("away vs home")
+  ) return "home_away";
+  if (
+    (referencesRegular && referencesPlayoffs && /\b(vs\.?|versus|split|compare|comparison)\b/.test(normalizedPrompt))
+    || normalizedPrompt.includes("regular season vs playoffs")
+    || normalizedPrompt.includes("playoffs vs regular season")
+    || normalizedPrompt.includes("by season type")
+  ) return "season_scope";
+  if (
+    normalizedPrompt.includes("by month")
+    || normalizedPrompt.includes("per month")
+    || normalizedPrompt.includes("each month")
+    || normalizedPrompt.includes("which month")
+    || normalizedPrompt.includes("month by month")
+  ) return "month";
   if (
     /\bwins?\s+vs\.?\s+losses?\b/.test(normalizedPrompt)
     || /\bwins?\s+versus\s+losses?\b/.test(normalizedPrompt)
@@ -1632,13 +1809,16 @@ function parseGroupBy(prompt: string): QueryGroupBy {
 
 function parseSeasonScope(prompt: string): QuerySeasonScope {
   const normalizedPrompt = normalizeText(prompt);
-  if (
-    normalizedPrompt.includes("playoff")
+  const referencesPlayoffs = normalizedPrompt.includes("playoff")
     || normalizedPrompt.includes("playoffs")
     || normalizedPrompt.includes("postseason")
-    || normalizedPrompt.includes("post season")
+    || normalizedPrompt.includes("post season");
+  const referencesRegular = normalizedPrompt.includes("regular season");
+  if (referencesRegular && referencesPlayoffs) return "all";
+  if (
+    referencesPlayoffs
   ) return "playoffs";
-  if (normalizedPrompt.includes("regular season")) return "regular";
+  if (referencesRegular) return "regular";
   return "all";
 }
 
@@ -1728,8 +1908,8 @@ function parseGameTableRequest(prompt: string): ParsedGameTableRequest | null {
   };
 }
 
-function buildFallbackParse(prompt: string): ParsedQuery | null {
-  const team = findTeamFromPrompt(prompt);
+function buildFallbackParse(prompt: string, teamOverride: (typeof NBA_TEAMS)[number] | null = null): ParsedQuery | null {
+  const team = teamOverride || findTeamFromPrompt(prompt);
   const metric = findMetricFromPrompt(prompt);
   if (!team || !metric) return null;
 
@@ -1807,7 +1987,7 @@ const CUSTOM_REQUEST_QUERY_SCHEMA = {
     },
     groupBy: {
       type: "string",
-      enum: ["none", "opponent", "result", "period"],
+      enum: ["none", "opponent", "result", "period", "home_away", "month", "season_scope"],
     },
   },
 };
@@ -1939,7 +2119,7 @@ function normalizeParsedQuery(value: unknown): ParsedQuery | null {
     sort: sort === "asc" || sort === "desc" ? sort : undefined,
     sortBy: sortBy === "date" || sortBy === "value" ? sortBy : undefined,
     limit,
-    groupBy: groupBy === "opponent" || groupBy === "result" || groupBy === "period" ? groupBy : "none",
+    groupBy: ["opponent", "result", "period", "home_away", "month", "season_scope"].includes(groupBy) ? groupBy : "none",
   };
 }
 
@@ -2048,6 +2228,48 @@ function compareRows(
   }
   if (left.value !== right.value) return (left.value - right.value) * direction;
   return String(right.gameDate).localeCompare(String(left.gameDate));
+}
+
+function groupByLabel(groupBy: QueryGroupBy) {
+  if (groupBy === "result") return "result";
+  if (groupBy === "period") return "quarter";
+  if (groupBy === "home_away") return "home/away";
+  if (groupBy === "month") return "month";
+  if (groupBy === "season_scope") return "season type";
+  return "opponent";
+}
+
+function resolveGroupIdentity(row: QueryGameRow, groupBy: QueryGroupBy) {
+  if (groupBy === "opponent") {
+    return {
+      key: row.opponent.teamId,
+      label: row.opponent.tricode || row.opponent.fullName || row.opponent.teamId,
+    };
+  }
+  if (groupBy === "period") {
+    return {
+      key: String(row.groupKey || row.groupLabel || ""),
+      label: String(row.groupLabel || row.groupKey || "-"),
+    };
+  }
+  if (groupBy === "home_away") {
+    return {
+      key: row.isHome ? "home" : "away",
+      label: row.isHome ? "Home" : "Away",
+    };
+  }
+  if (groupBy === "month") {
+    const key = String(row.gameDate || "").slice(0, 7);
+    return { key, label: key || "-" };
+  }
+  if (groupBy === "season_scope") {
+    const isPlayoff = String(row.seasonType || "").toLowerCase().includes("playoff") || String(row.gameId || "").startsWith("004");
+    return {
+      key: isPlayoff ? "playoffs" : "regular",
+      label: isPlayoff ? "Playoffs" : "Regular Season",
+    };
+  }
+  return { key: row.result, label: row.result };
 }
 
 function matchesSeasonScope(row: { seasonType?: string; gameId?: string }, seasonScope: QuerySeasonScope = "all") {
@@ -2159,16 +2381,7 @@ function buildGroupedSummaries(
 
   const groups = new Map<string, { label: string; rows: QueryGameRow[] }>();
   rows.forEach((row) => {
-    const key = query.groupBy === "opponent"
-      ? row.opponent.teamId
-      : query.groupBy === "period"
-        ? String(row.groupKey || row.groupLabel || "")
-        : row.result;
-    const label = query.groupBy === "opponent"
-      ? (row.opponent.tricode || row.opponent.fullName || row.opponent.teamId)
-      : query.groupBy === "period"
-        ? String(row.groupLabel || row.groupKey || "-")
-        : row.result;
+    const { key, label } = resolveGroupIdentity(row, query.groupBy);
     if (!key) return;
     if (!groups.has(key)) {
       groups.set(key, { label, rows: [] });
@@ -2406,6 +2619,55 @@ async function buildPlayerPeriodPointsDataset(
   return PLAYER_PERIOD_POINTS_DATASET_CACHE.get(cacheKey)!;
 }
 
+async function buildTeamPeriodPointsDataset(
+  season: string,
+  team: (typeof NBA_TEAMS)[number],
+) {
+  const cacheKey = `${season}:${team.teamId}`;
+  if (!TEAM_PERIOD_POINTS_DATASET_CACHE.has(cacheKey)) {
+    TEAM_PERIOD_POINTS_DATASET_CACHE.set(cacheKey, (async () => {
+      const seasonGames = await fetchSeasonGames(season);
+      const teamGames = seasonGames.filter((game) => (
+        String((game as Record<string, unknown>)?.homeTeam?.teamId || "") === team.teamId ||
+        String((game as Record<string, unknown>)?.awayTeam?.teamId || "") === team.teamId
+      ));
+
+      const detailedGames = await Promise.all(
+        teamGames.map((game) => fetchGameDetailsSafe(String((game as Record<string, unknown>).gameId || ""))),
+      );
+
+      const skippedGames = detailedGames
+        .map((entry, index) => (
+          entry.error
+            ? {
+              gameId: String((teamGames[index] as Record<string, unknown>).gameId || ""),
+              gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
+              error: entry.error,
+            }
+            : null
+        ))
+        .filter(Boolean) as Array<{ gameId: string; gameDate: string; error: string }>;
+
+      const rows = detailedGames.flatMap((entry, index) => {
+        if (!entry.game) return [];
+        const game = {
+          ...entry.game,
+          gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
+        } as AnyRecord;
+        return buildTeamPeriodPointRows(game, team);
+      });
+
+      if (skippedGames.length) {
+        TEAM_PERIOD_POINTS_DATASET_CACHE.delete(cacheKey);
+      }
+
+      return { rows, skippedGames };
+    })());
+  }
+
+  return TEAM_PERIOD_POINTS_DATASET_CACHE.get(cacheKey)!;
+}
+
 function executeQuery(
   rowsWithMetrics: Array<CachedTeamGameRow | CachedPlayerGameRow>,
   metric: MetricDefinition,
@@ -2437,6 +2699,8 @@ function executeQuery(
     margin: row.margin,
     isHome: row.isHome,
     seasonType: row.seasonType,
+    groupKey: row.groupKey,
+    groupLabel: row.groupLabel,
   }));
 
   const filteredRows = rows.filter((row) => {
@@ -2549,7 +2813,7 @@ function executeQuery(
       ? (
         query.groupBy === "period" && bestGroup
           ? `${subjectScopeLabel} averaged the most ${metric.label.toLowerCase()} in ${bestGroup.label} (${bestGroup.displayValue}).`
-          : `Showing ${metric.label.toLowerCase()} averages for ${subjectScopeLabel}, grouped by ${query.groupBy === "result" ? "result" : query.groupBy === "period" ? "quarter" : "opponent"}.`
+          : `Showing ${metric.label.toLowerCase()} averages for ${subjectScopeLabel}, grouped by ${groupByLabel(query.groupBy)}.`
       )
       : `${subjectScopeLabel} averaged ${displayAverage} ${metric.label.toLowerCase()} across ${orderedRows.length} game${orderedRows.length === 1 ? "" : "s"}.`;
     return {
@@ -2631,10 +2895,12 @@ Deno.serve(async (request) => {
     const body = await request.json().catch(() => ({}));
     const prompt = String(body?.prompt || "").trim();
     if (!prompt) return jsonResponse(400, { error: "Prompt is required." });
+    const season = currentSeasonString();
+    const explicitTeam = findTeamFromPrompt(prompt);
+    const inferredPlayerTeam = explicitTeam ? null : await inferTeamFromPlayerPrompt(prompt, season).catch(() => null);
 
     const tableRequest = parseGameTableRequest(prompt);
     if (tableRequest) {
-      const season = currentSeasonString();
       const team = NBA_TEAMS.find((entry) => entry.teamId === tableRequest.teamId) || null;
       if (!team) {
         return jsonResponse(400, { error: "I could not match that table request to a single NBA team." });
@@ -2680,10 +2946,9 @@ Deno.serve(async (request) => {
       });
     }
 
-    const fallbackParsed = normalizeParsedQuery(buildFallbackParse(prompt));
+    const fallbackParsed = normalizeParsedQuery(buildFallbackParse(prompt, inferredPlayerTeam?.team || explicitTeam || null));
     const promptThreshold = parseThreshold(prompt);
     const promptHasExplicitOpponent = hasExplicitOpponentContext(prompt);
-    const season = currentSeasonString();
     const openAiParsedPromise = parsePromptWithOpenAI(prompt)
       .then((value) => normalizeParsedQuery(value))
       .catch(() => null);
@@ -2717,8 +2982,10 @@ Deno.serve(async (request) => {
         const filterBonus = (candidate.resultFilter && candidate.resultFilter !== "all" ? 2 : 0)
           + (matchedOpponent ? 2 : 0);
         const thresholdBonus = promptThreshold != null && candidate.threshold === promptThreshold ? 4 : 0;
-        const candidateScore = teamScore + metricScore + opponentScore + sourceBonus + filterBonus + thresholdBonus;
-        if (teamScore < 6 || metricScore < 5 || candidateScore <= bestCandidateScore) continue;
+        const inferredTeamBonus = inferredPlayerTeam?.team.teamId === matchedTeam.teamId ? 12 : 0;
+        const effectiveTeamScore = Math.max(teamScore, inferredTeamBonus);
+        const candidateScore = effectiveTeamScore + metricScore + opponentScore + sourceBonus + filterBonus + thresholdBonus;
+        if (effectiveTeamScore < 6 || metricScore < 5 || candidateScore <= bestCandidateScore) continue;
         bestCandidateScore = candidateScore;
         if (candidate.opponentTeamId === candidate.teamId) {
           candidate.opponentTeamId = undefined;
@@ -2756,7 +3023,7 @@ Deno.serve(async (request) => {
 
     if (parsed.groupBy === "period" && metric.key !== "points") {
       return jsonResponse(400, {
-        error: "Quarter or period splits are currently supported for player points requests only.",
+        error: "Quarter or period splits are currently supported for points requests only.",
       });
     }
 
@@ -2777,6 +3044,9 @@ Deno.serve(async (request) => {
       } else {
         rowsForQuery = playerDataset.rows.filter((row) => row.playerId === parsed.playerId);
       }
+    } else if (parsed.groupBy === "period" && metric.key === "points") {
+      const teamPeriodDataset = await buildTeamPeriodPointsDataset(season, team);
+      rowsForQuery = teamPeriodDataset.rows;
     }
     const result = executeQuery(rowsForQuery, metric, parsed, team, parsed.playerName || team.fullName);
 
