@@ -76,6 +76,8 @@ type ParsedQuery = {
   teamId: string;
   statKey: string;
   aggregation: QueryAggregation;
+  playerId?: string;
+  playerName?: string;
   threshold?: number;
   opponentTeamId?: string;
   resultFilter?: ResultFilter;
@@ -135,6 +137,13 @@ type BuiltGameMetrics = {
 type CachedTeamGameRow = QueryGameRow & {
   metrics: Record<string, number>;
   opponentMetrics: Record<string, number>;
+};
+
+type CachedPlayerGameRow = QueryGameRow & {
+  playerId: string;
+  playerName: string;
+  teamId: string;
+  metrics: Record<string, number>;
 };
 
 type GameTableColumn = {
@@ -213,6 +222,10 @@ const SEASON_GAMES_CACHE = new Map<string, Promise<Record<string, unknown>[]>>()
 const GAME_DETAILS_CACHE = new Map<string, Promise<Record<string, unknown>>>();
 const TEAM_SEASON_DATASET_CACHE = new Map<string, Promise<{
   rows: Array<QueryGameRow & { metrics: Record<string, number> }>;
+  skippedGames: Array<{ gameId: string; gameDate: string; error: string }>;
+}>>();
+const PLAYER_SEASON_DATASET_CACHE = new Map<string, Promise<{
+  rows: CachedPlayerGameRow[];
   skippedGames: Array<{ gameId: string; gameDate: string; error: string }>;
 }>>();
 
@@ -1101,6 +1114,125 @@ function buildGameMetrics(game: AnyRecord, teamId: string): BuiltGameMetrics {
   };
 }
 
+function buildPlayerMetricMap(player: Record<string, unknown>) {
+  const fieldGoalsAttempted = safeNumber(player.fieldGoalsAttempted, 0);
+  const threePointersAttempted = safeNumber(player.threePointersAttempted, 0);
+  const freeThrowsAttempted = safeNumber(player.freeThrowsAttempted, 0);
+  const reboundsOffensive = safeNumber(player.reboundsOffensive, 0);
+  const reboundsTotal = safeNumber(player.reboundsTotal, 0);
+  const opponentDefRebWhileOnCourt = Math.max(0, safeNumber(player.opponentDRBWhileOnCourt, 0));
+  const rimFieldGoalsAttempted = safeNumber(player.rimFieldGoalsAttempted, 0);
+  const rimFieldGoalsMade = safeNumber(player.rimFieldGoalsMade, 0);
+  const midFieldGoalsAttempted = safeNumber(player.midFieldGoalsAttempted, 0);
+  const midFieldGoalsMade = safeNumber(player.midFieldGoalsMade, 0);
+
+  return {
+    points: safeNumber(player.points, 0),
+    field_goals_made: safeNumber(player.fieldGoalsMade, 0),
+    field_goals_attempted: fieldGoalsAttempted,
+    three_pointers_made: safeNumber(player.threePointersMade, 0),
+    three_pointers_attempted: threePointersAttempted,
+    free_throws_made: safeNumber(player.freeThrowsMade, 0),
+    free_throws_attempted: freeThrowsAttempted,
+    rebounds_total: reboundsTotal,
+    rebounds_offensive: reboundsOffensive,
+    assists: safeNumber(player.assists, 0),
+    steals: safeNumber(player.steals, 0),
+    blocks: safeNumber(player.blocks, 0),
+    turnovers: safeNumber(player.turnovers, 0),
+    fouls_personal: safeNumber(player.foulsPersonal, 0),
+    offensive_rating: safeNumber(player.offensiveRating, 0),
+    defensive_rating: safeNumber(player.defensiveRating, 0),
+    rim_rate: fieldGoalsAttempted > 0 ? (rimFieldGoalsAttempted / fieldGoalsAttempted) * 100 : 0,
+    mid_rate: fieldGoalsAttempted > 0 ? (midFieldGoalsAttempted / fieldGoalsAttempted) * 100 : 0,
+    three_rate: fieldGoalsAttempted > 0 ? (threePointersAttempted / fieldGoalsAttempted) * 100 : 0,
+    rim_fg_pct: rimFieldGoalsAttempted > 0 ? (rimFieldGoalsMade / rimFieldGoalsAttempted) * 100 : 0,
+    mid_fg_pct: midFieldGoalsAttempted > 0 ? (midFieldGoalsMade / midFieldGoalsAttempted) * 100 : 0,
+    three_fg_pct: threePointersAttempted > 0 ? (safeNumber(player.threePointersMade, 0) / threePointersAttempted) * 100 : 0,
+    efg_pct: fieldGoalsAttempted > 0
+      ? ((safeNumber(player.fieldGoalsMade, 0) + (0.5 * safeNumber(player.threePointersMade, 0))) / fieldGoalsAttempted) * 100
+      : 0,
+    tov_pct: (fieldGoalsAttempted || freeThrowsAttempted || safeNumber(player.turnovers, 0))
+      ? (safeNumber(player.turnovers, 0) / (fieldGoalsAttempted + (0.44 * freeThrowsAttempted) + safeNumber(player.turnovers, 0))) * 100
+      : 0,
+    orb_pct: (reboundsOffensive || opponentDefRebWhileOnCourt)
+      ? (reboundsOffensive / (reboundsOffensive + opponentDefRebWhileOnCourt)) * 100
+      : 0,
+    ftr: fieldGoalsAttempted > 0 ? freeThrowsAttempted / fieldGoalsAttempted : 0,
+    charges_drawn: safeNumber(player.chargesDrawn, 0),
+    deflections: safeNumber(player.deflections, 0),
+    disruptions: safeNumber(player.steals, 0)
+      + safeNumber(player.blocks, 0)
+      + safeNumber(player.chargesDrawn, 0)
+      + safeNumber(player.deflections, 0),
+  };
+}
+
+function buildPlayerSeasonRows(game: AnyRecord, team: (typeof NBA_TEAMS)[number]) {
+  const perspective = selectTeamPerspective(game, team.teamId);
+  const players = Array.isArray(perspective.teamBox?.players) ? perspective.teamBox.players as Array<Record<string, unknown>> : [];
+  const teamScore = safeNumber(perspective.team?.score, safeNumber((perspective.teamBox?.totals as Record<string, unknown> | undefined)?.points, 0));
+  const opponentScore = safeNumber(perspective.opponent?.score, safeNumber((perspective.opponentBox?.totals as Record<string, unknown> | undefined)?.points, 0));
+  const result: "W" | "L" = teamScore >= opponentScore ? "W" : "L";
+  const opponent = {
+    teamId: String(perspective.opponent?.teamId || ""),
+    tricode: String(perspective.opponent?.teamTricode || ""),
+    fullName: `${String(perspective.opponent?.teamCity || "").trim()} ${String(perspective.opponent?.teamName || "").trim()}`.trim(),
+  };
+
+  return players
+    .map((player) => {
+      const playerId = String(player.personId || "").trim();
+      const playerName = toDisplayName(player.firstName, player.familyName);
+      if (!playerId || !playerName) return null;
+      return {
+        gameId: String(game.gameId || ""),
+        gameDate: String(game.gameDate || ""),
+        opponent,
+        value: 0,
+        result,
+        teamScore,
+        opponentScore,
+        margin: teamScore - opponentScore,
+        isHome: String(game?.homeTeam?.teamId || "") === team.teamId,
+        seasonType: String(game?.seasonType || ""),
+        playerId,
+        playerName,
+        teamId: team.teamId,
+        metrics: buildPlayerMetricMap(player),
+      } satisfies CachedPlayerGameRow;
+    })
+    .filter(Boolean) as CachedPlayerGameRow[];
+}
+
+function findPlayerMatchFromRows(prompt: string, rows: CachedPlayerGameRow[]) {
+  const normalizedPrompt = normalizePlayerName(prompt);
+  if (!normalizedPrompt) return null;
+
+  const candidates = uniqueByKey(
+    rows.map((row) => ({ playerId: row.playerId, playerName: row.playerName })),
+    (entry) => entry.playerId,
+  );
+
+  let bestMatch: { playerId: string; playerName: string } | null = null;
+  let bestScore = 0;
+
+  candidates.forEach((candidate) => {
+    const fullName = normalizePlayerName(candidate.playerName);
+    const parts = candidate.playerName.split(/\s+/).filter(Boolean);
+    const lastName = normalizePlayerName(parts[parts.length - 1] || "");
+    let score = 0;
+    if (fullName && ` ${normalizedPrompt} `.includes(` ${fullName} `)) score = Math.max(score, 100);
+    if (lastName && ` ${normalizedPrompt} `.includes(` ${lastName} `)) score = Math.max(score, 30);
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = candidate;
+    }
+  });
+
+  return bestScore >= 30 ? bestMatch : null;
+}
+
 function scoreSearchAliases(prompt: string, searchEntries: Array<{ alias: string; tokens: string[] }>) {
   const normalizedPrompt = normalizeText(prompt);
   const paddedPrompt = ` ${normalizedPrompt} `;
@@ -1210,8 +1342,11 @@ function parseResultFilter(prompt: string): ResultFilter {
     " when it loses",
     " in defeats",
   ];
-  if (winPatterns.some((pattern) => normalizedPrompt.includes(pattern))) return "win";
-  if (lossPatterns.some((pattern) => normalizedPrompt.includes(pattern))) return "loss";
+  const hasWin = winPatterns.some((pattern) => normalizedPrompt.includes(pattern));
+  const hasLoss = lossPatterns.some((pattern) => normalizedPrompt.includes(pattern));
+  if (hasWin && hasLoss) return "all";
+  if (hasWin) return "win";
+  if (hasLoss) return "loss";
   return "all";
 }
 
@@ -1320,6 +1455,11 @@ function parseSortBy(prompt: string, aggregation: QueryAggregation): QuerySortBy
 
 function parseGroupBy(prompt: string): QueryGroupBy {
   const normalizedPrompt = normalizeText(prompt);
+  if (
+    /\bwins?\s+vs\.?\s+losses?\b/.test(normalizedPrompt)
+    || /\bwins?\s+versus\s+losses?\b/.test(normalizedPrompt)
+    || (normalizedPrompt.includes(" in wins") && normalizedPrompt.includes(" in losses"))
+  ) return "result";
   if (
     normalizedPrompt.includes("by opponent")
     || normalizedPrompt.includes("per opponent")
@@ -1655,6 +1795,27 @@ function formatValue(value: number, metric: MetricDefinition) {
   return `${Math.round(value)}`;
 }
 
+function toDisplayName(firstName: unknown, familyName: unknown) {
+  return `${String(firstName || "").trim()} ${String(familyName || "").trim()}`.trim();
+}
+
+function normalizePlayerName(value: string) {
+  return normalizeText(value)
+    .replace(/\b(jr|sr|ii|iii|iv|v)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function uniqueByKey<T>(items: T[], getKey: (item: T) => string) {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = getKey(item);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function formatRecordDisplay(wins: number, losses: number) {
   return `${wins}-${losses}`;
 }
@@ -1936,11 +2097,62 @@ async function buildTeamSeasonDataset(
   return TEAM_SEASON_DATASET_CACHE.get(cacheKey)!;
 }
 
+async function buildPlayerSeasonDataset(
+  season: string,
+  team: (typeof NBA_TEAMS)[number],
+) {
+  const cacheKey = `${season}:${team.teamId}`;
+  if (!PLAYER_SEASON_DATASET_CACHE.has(cacheKey)) {
+    PLAYER_SEASON_DATASET_CACHE.set(cacheKey, (async () => {
+      const seasonGames = await fetchSeasonGames(season);
+      const teamGames = seasonGames.filter((game) => (
+        String((game as Record<string, unknown>)?.homeTeam?.teamId || "") === team.teamId ||
+        String((game as Record<string, unknown>)?.awayTeam?.teamId || "") === team.teamId
+      ));
+
+      const detailedGames = await Promise.all(
+        teamGames.map((game) => fetchGameDetailsSafe(String((game as Record<string, unknown>).gameId || ""))),
+      );
+
+      const skippedGames = detailedGames
+        .map((entry, index) => (
+          entry.error
+            ? {
+              gameId: String((teamGames[index] as Record<string, unknown>).gameId || ""),
+              gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
+              error: entry.error,
+            }
+            : null
+        ))
+        .filter(Boolean) as Array<{ gameId: string; gameDate: string; error: string }>;
+
+      const rows = detailedGames
+        .flatMap((entry, index) => {
+          if (!entry.game) return [];
+          const game = {
+            ...entry.game,
+            gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
+          } as AnyRecord;
+          return buildPlayerSeasonRows(game, team);
+        });
+
+      if (skippedGames.length) {
+        PLAYER_SEASON_DATASET_CACHE.delete(cacheKey);
+      }
+
+      return { rows, skippedGames };
+    })());
+  }
+
+  return PLAYER_SEASON_DATASET_CACHE.get(cacheKey)!;
+}
+
 function executeQuery(
-  rowsWithMetrics: CachedTeamGameRow[],
+  rowsWithMetrics: Array<CachedTeamGameRow | CachedPlayerGameRow>,
   metric: MetricDefinition,
   query: ParsedQuery,
   team: (typeof NBA_TEAMS)[number],
+  subjectLabel = team.fullName,
 ) {
   const threshold = safeNumber(query.threshold, 0);
   const requestedAggregation = query.aggregation || "season_total";
@@ -1951,6 +2163,9 @@ function executeQuery(
     ? NBA_TEAMS.find((entry) => entry.teamId === query.opponentTeamId) || null
     : null;
   const scopedLabel = describeScope(team, opponentTeam, query.resultFilter || "all");
+  const subjectScopeLabel = query.playerName
+    ? `${query.playerName} for ${scopedLabel}`
+    : scopedLabel;
 
   const rows: QueryGameRow[] = rowsWithMetrics.map((row) => ({
     gameId: row.gameId,
@@ -1987,10 +2202,10 @@ function executeQuery(
   const groupedSummaries = buildGroupedSummaries(orderedRows, metric, query, aggregation, threshold, sortDirection);
 
   const buildCountAnswer = (matchingRows: QueryGameRow[], comparatorText: string) => ({
-    aggregation,
-    value: matchingRows.length,
+      aggregation,
+      value: matchingRows.length,
       displayValue: `${matchingRows.length}`,
-      answer: `${scopedLabel} had ${matchingRows.length} game${matchingRows.length === 1 ? "" : "s"} this season with ${comparatorText} ${metric.label.toLowerCase()}.`,
+      answer: `${subjectScopeLabel} had ${matchingRows.length} game${matchingRows.length === 1 ? "" : "s"} this season with ${comparatorText} ${metric.label.toLowerCase()}.`,
       games: matchingRows,
       sampleSize: filteredRows.length,
       groups: groupedSummaries,
@@ -2004,7 +2219,7 @@ function executeQuery(
       aggregation,
       value: wins - losses,
       displayValue: formatRecordDisplay(wins, losses),
-      answer: `${scopedLabel}'s record${qualifier} was ${wins}-${losses}.`,
+      answer: `${subjectScopeLabel}'s record${qualifier} was ${wins}-${losses}.`,
       games: matchingRows,
       sampleSize: filteredRows.length,
       groups: groupedSummaries,
@@ -2021,7 +2236,7 @@ function executeQuery(
       aggregation,
       value: 0,
       displayValue: aggregation === "record" || aggregation.startsWith("record_when") ? "0-0" : "0",
-      answer: `No completed games matched that filter for ${scopedLabel}.`,
+      answer: `No completed games matched that filter for ${subjectScopeLabel}.`,
       games: [],
       sampleSize: 0,
       groups: groupedSummaries,
@@ -2044,7 +2259,7 @@ function executeQuery(
       aggregation,
       value: matchingRows.length,
       displayValue: `${matchingRows.length}`,
-      answer: `${scopedLabel} recorded ${metric.label.toLowerCase()} in ${matchingRows.length} game${matchingRows.length === 1 ? "" : "s"} this season.`,
+      answer: `${subjectScopeLabel} recorded ${metric.label.toLowerCase()} in ${matchingRows.length} game${matchingRows.length === 1 ? "" : "s"} this season.`,
       games: matchingRows,
       sampleSize: filteredRows.length,
       groups: groupedSummaries,
@@ -2073,7 +2288,7 @@ function executeQuery(
       aggregation,
       value: average,
       displayValue: formatValue(average, metric),
-      answer: `${scopedLabel} averaged ${formatValue(average, metric)} ${metric.label.toLowerCase()} across ${orderedRows.length} game${orderedRows.length === 1 ? "" : "s"}.`,
+      answer: `${subjectScopeLabel} averaged ${formatValue(average, metric)} ${metric.label.toLowerCase()} across ${orderedRows.length} game${orderedRows.length === 1 ? "" : "s"}.`,
       games: orderedRows,
       sampleSize: orderedRows.length,
       groups: groupedSummaries,
@@ -2087,8 +2302,8 @@ function executeQuery(
       value: best?.value || 0,
       displayValue: formatValue(best?.value || 0, metric),
       answer: best
-        ? `${scopedLabel}'s highest single-game ${metric.label.toLowerCase()} total was ${formatValue(best.value, metric)} on ${best.gameDate} against ${best.opponent.tricode || best.opponent.fullName}.`
-        : `No completed games found for ${scopedLabel}.`,
+        ? `${subjectScopeLabel}'s highest single-game ${metric.label.toLowerCase()} total was ${formatValue(best.value, metric)} on ${best.gameDate} against ${best.opponent.tricode || best.opponent.fullName}.`
+        : `No completed games found for ${subjectScopeLabel}.`,
       games: best ? [best] : [],
       sampleSize: orderedRows.length,
       groups: groupedSummaries,
@@ -2102,8 +2317,8 @@ function executeQuery(
       value: best?.value || 0,
       displayValue: formatValue(best?.value || 0, metric),
       answer: best
-        ? `${scopedLabel}'s lowest single-game ${metric.label.toLowerCase()} total was ${formatValue(best.value, metric)} on ${best.gameDate} against ${best.opponent.tricode || best.opponent.fullName}.`
-        : `No completed games found for ${scopedLabel}.`,
+        ? `${subjectScopeLabel}'s lowest single-game ${metric.label.toLowerCase()} total was ${formatValue(best.value, metric)} on ${best.gameDate} against ${best.opponent.tricode || best.opponent.fullName}.`
+        : `No completed games found for ${subjectScopeLabel}.`,
       games: best ? [best] : [],
       sampleSize: orderedRows.length,
       groups: groupedSummaries,
@@ -2116,7 +2331,7 @@ function executeQuery(
       aggregation,
       value: listedGames.length,
       displayValue: `${listedGames.length}`,
-      answer: `Showing ${listedGames.length} ${metric.label.toLowerCase()} game${listedGames.length === 1 ? "" : "s"} for ${scopedLabel}, sorted by ${sortBy === "date" ? "date" : metric.label.toLowerCase()} ${sortDirection === "asc" ? "ascending" : "descending"}.`,
+      answer: `Showing ${listedGames.length} ${metric.label.toLowerCase()} game${listedGames.length === 1 ? "" : "s"} for ${subjectScopeLabel}, sorted by ${sortBy === "date" ? "date" : metric.label.toLowerCase()} ${sortDirection === "asc" ? "ascending" : "descending"}.`,
       games: listedGames,
       sampleSize: orderedRows.length,
       groups: groupedSummaries,
@@ -2128,7 +2343,7 @@ function executeQuery(
     aggregation: "season_total",
     value: total,
     displayValue: formatValue(total, metric),
-    answer: `${scopedLabel}'s total ${metric.label.toLowerCase()} was ${formatValue(total, metric)} across ${orderedRows.length} game${orderedRows.length === 1 ? "" : "s"}.`,
+    answer: `${subjectScopeLabel}'s total ${metric.label.toLowerCase()} was ${formatValue(total, metric)} across ${orderedRows.length} game${orderedRows.length === 1 ? "" : "s"}.`,
     games: orderedRows,
     sampleSize: orderedRows.length,
     groups: groupedSummaries,
@@ -2256,6 +2471,13 @@ Deno.serve(async (request) => {
     }
 
     await seasonGamesPromise;
+    const playerDataset = await buildPlayerSeasonDataset(season, team);
+    const matchedPlayer = findPlayerMatchFromRows(prompt, playerDataset.rows);
+    if (matchedPlayer) {
+      parsed.playerId = matchedPlayer.playerId;
+      parsed.playerName = matchedPlayer.playerName;
+    }
+
     const dataset = await buildTeamSeasonDataset(season, team);
 
     if (!dataset.rows.length) {
@@ -2265,7 +2487,10 @@ Deno.serve(async (request) => {
       });
     }
 
-    const result = executeQuery(dataset.rows, metric, parsed, team);
+    const rowsForQuery = parsed.playerId
+      ? playerDataset.rows.filter((row) => row.playerId === parsed.playerId)
+      : dataset.rows;
+    const result = executeQuery(rowsForQuery, metric, parsed, team, parsed.playerName || team.fullName);
 
     return jsonResponse(200, {
       prompt,
@@ -2289,6 +2514,12 @@ Deno.serve(async (request) => {
         key: metric.key,
         label: metric.label,
       },
+      player: parsed.playerId
+        ? {
+          playerId: parsed.playerId,
+          fullName: parsed.playerName || "",
+        }
+        : null,
       parsedQuery: parsed,
       result: {
         ...result,
