@@ -69,7 +69,7 @@ type QueryAggregation =
   | "record_when_lte"
   | "record_when_nonzero";
 
-type QueryGroupBy = "none" | "opponent" | "result";
+type QueryGroupBy = "none" | "opponent" | "result" | "period";
 type QuerySortBy = "value" | "date";
 
 type ParsedQuery = {
@@ -103,6 +103,8 @@ type QueryGameRow = {
   margin: number;
   isHome: boolean;
   seasonType: string;
+  groupKey?: string;
+  groupLabel?: string;
 };
 
 type AnyRecord = Record<string, unknown>;
@@ -226,6 +228,10 @@ const TEAM_SEASON_DATASET_CACHE = new Map<string, Promise<{
   skippedGames: Array<{ gameId: string; gameDate: string; error: string }>;
 }>>();
 const PLAYER_SEASON_DATASET_CACHE = new Map<string, Promise<{
+  rows: CachedPlayerGameRow[];
+  skippedGames: Array<{ gameId: string; gameDate: string; error: string }>;
+}>>();
+const PLAYER_PERIOD_POINTS_DATASET_CACHE = new Map<string, Promise<{
   rows: CachedPlayerGameRow[];
   skippedGames: Array<{ gameId: string; gameDate: string; error: string }>;
 }>>();
@@ -1214,9 +1220,79 @@ function buildPlayerSeasonRows(game: AnyRecord, team: (typeof NBA_TEAMS)[number]
     .filter(Boolean) as CachedPlayerGameRow[];
 }
 
+function buildPlayerPeriodPointRows(game: AnyRecord, team: (typeof NBA_TEAMS)[number]) {
+  const perspective = selectTeamPerspective(game, team.teamId);
+  const players = Array.isArray(perspective.teamBox?.players) ? perspective.teamBox.players as Array<Record<string, unknown>> : [];
+  const actions = Array.isArray(game?.playByPlayActions) ? game.playByPlayActions as Array<Record<string, unknown>> : [];
+  const teamScore = safeNumber(perspective.team?.score, safeNumber((perspective.teamBox?.totals as Record<string, unknown> | undefined)?.points, 0));
+  const opponentScore = safeNumber(perspective.opponent?.score, safeNumber((perspective.opponentBox?.totals as Record<string, unknown> | undefined)?.points, 0));
+  const result: "W" | "L" = teamScore >= opponentScore ? "W" : "L";
+  const opponent = {
+    teamId: String(perspective.opponent?.teamId || ""),
+    tricode: String(perspective.opponent?.teamTricode || ""),
+    fullName: `${String(perspective.opponent?.teamCity || "").trim()} ${String(perspective.opponent?.teamName || "").trim()}`.trim(),
+  };
+
+  const orderedActions = [...actions].sort((a, b) => {
+    const aOrder = safeNumber(a.orderNumber ?? a.actionNumber, 0);
+    const bOrder = safeNumber(b.orderNumber ?? b.actionNumber, 0);
+    return aOrder - bOrder;
+  });
+
+  const pointsByPlayerPeriod = new Map<string, number>();
+  orderedActions.forEach((action) => {
+    const teamId = String(action.teamId || "");
+    const playerId = String(action.personId || "");
+    const period = safeNumber(action.period, 0);
+    if (teamId !== team.teamId || !playerId || period < 1 || period > 4) return;
+
+    const actionType = String(action.actionType || "").toLowerCase();
+    const shotResult = String(action.shotResult || "");
+    let points = 0;
+    if ((actionType === "2pt" || actionType === "3pt") && shotResult === "Made") {
+      points = actionType === "3pt" ? 3 : 2;
+    } else if (actionType === "freethrow" && shotResult === "Made") {
+      points = 1;
+    } else {
+      points = safeNumber(action.pointsTotal, 0);
+    }
+    if (!points) return;
+
+    const key = `${playerId}:Q${period}`;
+    pointsByPlayerPeriod.set(key, safeNumber(pointsByPlayerPeriod.get(key), 0) + points);
+  });
+
+  return players.flatMap((player) => {
+    const playerId = String(player.personId || "").trim();
+    const playerName = toDisplayName(player.firstName, player.familyName);
+    if (!playerId || !playerName) return [];
+    return [1, 2, 3, 4].map((period) => ({
+      gameId: String(game.gameId || ""),
+      gameDate: String(game.gameDate || ""),
+      opponent,
+      value: 0,
+      result,
+      teamScore,
+      opponentScore,
+      margin: teamScore - opponentScore,
+      isHome: String(game?.homeTeam?.teamId || "") === team.teamId,
+      seasonType: String(game?.seasonType || ""),
+      groupKey: `Q${period}`,
+      groupLabel: `Q${period}`,
+      playerId,
+      playerName,
+      teamId: team.teamId,
+      metrics: {
+        points: safeNumber(pointsByPlayerPeriod.get(`${playerId}:Q${period}`), 0),
+      },
+    } satisfies CachedPlayerGameRow));
+  });
+}
+
 function findPlayerMatchFromRows(prompt: string, rows: CachedPlayerGameRow[]) {
   const normalizedPrompt = normalizePlayerName(prompt);
   if (!normalizedPrompt) return null;
+  const promptTokens = normalizedPrompt.split(/\s+/).filter(Boolean);
 
   const candidates = uniqueByKey(
     rows.map((row) => ({ playerId: row.playerId, playerName: row.playerName })),
@@ -1233,6 +1309,27 @@ function findPlayerMatchFromRows(prompt: string, rows: CachedPlayerGameRow[]) {
     let score = 0;
     if (fullName && ` ${normalizedPrompt} `.includes(` ${fullName} `)) score = Math.max(score, 100);
     if (lastName && ` ${normalizedPrompt} `.includes(` ${lastName} `)) score = Math.max(score, 30);
+
+    if (!score && fullName) {
+      const partCount = Math.max(1, fullName.split(/\s+/).filter(Boolean).length);
+      for (let index = 0; index <= promptTokens.length - partCount; index += 1) {
+        const window = promptTokens.slice(index, index + partCount).join(" ");
+        const distance = boundedLevenshtein(window, fullName, 2);
+        if (distance <= 2) {
+          score = Math.max(score, 90 - (distance * 10));
+        }
+      }
+    }
+
+    if (!score && lastName) {
+      promptTokens.forEach((token) => {
+        const distance = boundedLevenshtein(token, lastName, 2);
+        if (distance <= 2) {
+          score = Math.max(score, 40 - (distance * 5));
+        }
+      });
+    }
+
     if (score > bestScore) {
       bestScore = score;
       bestMatch = candidate;
@@ -1502,6 +1599,15 @@ function parseGroupBy(prompt: string): QueryGroupBy {
   const referencesWins = /\bwins?\b/.test(normalizedPrompt);
   const referencesLosses = /\bloss(?:es)?\b/.test(normalizedPrompt);
   if (
+    normalizedPrompt.includes("which quarter")
+    || normalizedPrompt.includes("by quarter")
+    || normalizedPrompt.includes("per quarter")
+    || normalizedPrompt.includes("each quarter")
+    || normalizedPrompt.includes("by period")
+    || normalizedPrompt.includes("per period")
+    || normalizedPrompt.includes("each period")
+  ) return "period";
+  if (
     /\bwins?\s+vs\.?\s+losses?\b/.test(normalizedPrompt)
     || /\bwins?\s+versus\s+losses?\b/.test(normalizedPrompt)
     || /\bwin\s*\/\s*loss\b/.test(normalizedPrompt)
@@ -1701,7 +1807,7 @@ const CUSTOM_REQUEST_QUERY_SCHEMA = {
     },
     groupBy: {
       type: "string",
-      enum: ["none", "opponent", "result"],
+      enum: ["none", "opponent", "result", "period"],
     },
   },
 };
@@ -1833,7 +1939,7 @@ function normalizeParsedQuery(value: unknown): ParsedQuery | null {
     sort: sort === "asc" || sort === "desc" ? sort : undefined,
     sortBy: sortBy === "date" || sortBy === "value" ? sortBy : undefined,
     limit,
-    groupBy: groupBy === "opponent" || groupBy === "result" ? groupBy : "none",
+    groupBy: groupBy === "opponent" || groupBy === "result" || groupBy === "period" ? groupBy : "none",
   };
 }
 
@@ -1873,6 +1979,33 @@ function normalizePlayerName(value: string) {
     .replace(/\b(jr|sr|ii|iii|iv|v)\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function boundedLevenshtein(leftRaw: string, rightRaw: string, maxDistance = 2) {
+  const left = String(leftRaw || "").trim();
+  const right = String(rightRaw || "").trim();
+  if (!left || !right) return Number.MAX_SAFE_INTEGER;
+  if (left === right) return 0;
+  if (Math.abs(left.length - right.length) > maxDistance) return Number.MAX_SAFE_INTEGER;
+
+  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let rowIndex = 1; rowIndex <= left.length; rowIndex += 1) {
+    const current = [rowIndex];
+    let rowMin = current[0];
+    for (let columnIndex = 1; columnIndex <= right.length; columnIndex += 1) {
+      const substitutionCost = left[rowIndex - 1] === right[columnIndex - 1] ? 0 : 1;
+      const value = Math.min(
+        previous[columnIndex] + 1,
+        current[columnIndex - 1] + 1,
+        previous[columnIndex - 1] + substitutionCost,
+      );
+      current.push(value);
+      if (value < rowMin) rowMin = value;
+    }
+    if (rowMin > maxDistance) return Number.MAX_SAFE_INTEGER;
+    previous = current;
+  }
+  return previous[right.length];
 }
 
 function uniqueByKey<T>(items: T[], getKey: (item: T) => string) {
@@ -2026,10 +2159,17 @@ function buildGroupedSummaries(
 
   const groups = new Map<string, { label: string; rows: QueryGameRow[] }>();
   rows.forEach((row) => {
-    const key = query.groupBy === "opponent" ? row.opponent.teamId : row.result;
+    const key = query.groupBy === "opponent"
+      ? row.opponent.teamId
+      : query.groupBy === "period"
+        ? String(row.groupKey || row.groupLabel || "")
+        : row.result;
     const label = query.groupBy === "opponent"
       ? (row.opponent.tricode || row.opponent.fullName || row.opponent.teamId)
-      : row.result;
+      : query.groupBy === "period"
+        ? String(row.groupLabel || row.groupKey || "-")
+        : row.result;
+    if (!key) return;
     if (!groups.has(key)) {
       groups.set(key, { label, rows: [] });
     }
@@ -2216,6 +2356,56 @@ async function buildPlayerSeasonDataset(
   return PLAYER_SEASON_DATASET_CACHE.get(cacheKey)!;
 }
 
+async function buildPlayerPeriodPointsDataset(
+  season: string,
+  team: (typeof NBA_TEAMS)[number],
+) {
+  const cacheKey = `${season}:${team.teamId}`;
+  if (!PLAYER_PERIOD_POINTS_DATASET_CACHE.has(cacheKey)) {
+    PLAYER_PERIOD_POINTS_DATASET_CACHE.set(cacheKey, (async () => {
+      const seasonGames = await fetchSeasonGames(season);
+      const teamGames = seasonGames.filter((game) => (
+        String((game as Record<string, unknown>)?.homeTeam?.teamId || "") === team.teamId ||
+        String((game as Record<string, unknown>)?.awayTeam?.teamId || "") === team.teamId
+      ));
+
+      const detailedGames = await Promise.all(
+        teamGames.map((game) => fetchGameDetailsSafe(String((game as Record<string, unknown>).gameId || ""))),
+      );
+
+      const skippedGames = detailedGames
+        .map((entry, index) => (
+          entry.error
+            ? {
+              gameId: String((teamGames[index] as Record<string, unknown>).gameId || ""),
+              gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
+              error: entry.error,
+            }
+            : null
+        ))
+        .filter(Boolean) as Array<{ gameId: string; gameDate: string; error: string }>;
+
+      const rows = detailedGames
+        .flatMap((entry, index) => {
+          if (!entry.game) return [];
+          const game = {
+            ...entry.game,
+            gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
+          } as AnyRecord;
+          return buildPlayerPeriodPointRows(game, team);
+        });
+
+      if (skippedGames.length) {
+        PLAYER_PERIOD_POINTS_DATASET_CACHE.delete(cacheKey);
+      }
+
+      return { rows, skippedGames };
+    })());
+  }
+
+  return PLAYER_PERIOD_POINTS_DATASET_CACHE.get(cacheKey)!;
+}
+
 function executeQuery(
   rowsWithMetrics: Array<CachedTeamGameRow | CachedPlayerGameRow>,
   metric: MetricDefinition,
@@ -2354,15 +2544,20 @@ function executeQuery(
   if (aggregation === "season_average") {
     const average = orderedRows.reduce((sum, entry) => sum + entry.value, 0) / orderedRows.length;
     const displayAverage = formatAverageValue(average, metric);
+    const bestGroup = groupedSummaries[0] || null;
     const answer = groupedSummaries.length && query.groupBy !== "none"
-      ? `Showing ${metric.label.toLowerCase()} averages for ${subjectScopeLabel}, grouped by ${query.groupBy === "result" ? "result" : "opponent"}.`
+      ? (
+        query.groupBy === "period" && bestGroup
+          ? `${subjectScopeLabel} averaged the most ${metric.label.toLowerCase()} in ${bestGroup.label} (${bestGroup.displayValue}).`
+          : `Showing ${metric.label.toLowerCase()} averages for ${subjectScopeLabel}, grouped by ${query.groupBy === "result" ? "result" : query.groupBy === "period" ? "quarter" : "opponent"}.`
+      )
       : `${subjectScopeLabel} averaged ${displayAverage} ${metric.label.toLowerCase()} across ${orderedRows.length} game${orderedRows.length === 1 ? "" : "s"}.`;
     return {
       aggregation,
       value: average,
       displayValue: displayAverage,
       answer,
-      games: orderedRows,
+      games: query.groupBy === "period" ? [] : orderedRows,
       sampleSize: orderedRows.length,
       groups: groupedSummaries,
     };
@@ -2559,6 +2754,12 @@ Deno.serve(async (request) => {
       }
     }
 
+    if (parsed.groupBy === "period" && metric.key !== "points") {
+      return jsonResponse(400, {
+        error: "Quarter or period splits are currently supported for player points requests only.",
+      });
+    }
+
     const dataset = await buildTeamSeasonDataset(season, team);
 
     if (!dataset.rows.length) {
@@ -2568,9 +2769,15 @@ Deno.serve(async (request) => {
       });
     }
 
-    const rowsForQuery = parsed.playerId
-      ? playerDataset.rows.filter((row) => row.playerId === parsed.playerId)
-      : dataset.rows;
+    let rowsForQuery: Array<CachedTeamGameRow | CachedPlayerGameRow> = dataset.rows;
+    if (parsed.playerId) {
+      if (parsed.groupBy === "period" && metric.key === "points") {
+        const playerPeriodDataset = await buildPlayerPeriodPointsDataset(season, team);
+        rowsForQuery = playerPeriodDataset.rows.filter((row) => row.playerId === parsed.playerId);
+      } else {
+        rowsForQuery = playerDataset.rows.filter((row) => row.playerId === parsed.playerId);
+      }
+    }
     const result = executeQuery(rowsForQuery, metric, parsed, team, parsed.playerName || team.fullName);
 
     return jsonResponse(200, {
