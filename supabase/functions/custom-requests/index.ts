@@ -1950,6 +1950,15 @@ function isSingleQuarterThresholdPrompt(prompt: string) {
     || normalizedPrompt.includes("any quarter");
 }
 
+function parseSpecificPeriod(prompt: string) {
+  const normalizedPrompt = normalizeText(prompt);
+  if (/\b1st quarter\b|\bfirst quarter\b|\bq1\b/.test(normalizedPrompt)) return "Q1";
+  if (/\b2nd quarter\b|\bsecond quarter\b|\bq2\b/.test(normalizedPrompt)) return "Q2";
+  if (/\b3rd quarter\b|\bthird quarter\b|\bq3\b/.test(normalizedPrompt)) return "Q3";
+  if (/\b4th quarter\b|\bfourth quarter\b|\bq4\b/.test(normalizedPrompt)) return "Q4";
+  return null;
+}
+
 function parseListLimit(prompt: string) {
   const normalizedPrompt = normalizeText(prompt);
   const topBottomMatch = /\b(?:top|bottom|highest|lowest|best|worst)\s+(\d{1,2})\b/.exec(normalizedPrompt);
@@ -2066,6 +2075,14 @@ function parseGroupBy(prompt: string): QueryGroupBy {
     || normalizedPrompt.includes("by quarter")
     || normalizedPrompt.includes("per quarter")
     || normalizedPrompt.includes("each quarter")
+    || normalizedPrompt.includes("in the 1st quarter")
+    || normalizedPrompt.includes("in the first quarter")
+    || normalizedPrompt.includes("in the 2nd quarter")
+    || normalizedPrompt.includes("in the second quarter")
+    || normalizedPrompt.includes("in the 3rd quarter")
+    || normalizedPrompt.includes("in the third quarter")
+    || normalizedPrompt.includes("in the 4th quarter")
+    || normalizedPrompt.includes("in the fourth quarter")
     || normalizedPrompt.includes("by period")
     || normalizedPrompt.includes("per period")
     || normalizedPrompt.includes("each period")
@@ -3619,7 +3636,9 @@ Deno.serve(async (request) => {
 
     const fallbackParsed = normalizeParsedQuery(buildFallbackParse(prompt, inferredPlayerTeam?.team || explicitTeam || null));
     const promptThreshold = parseThreshold(prompt);
+    const explicitOrImplicitThreshold = promptThreshold ?? parseImplicitThreshold(prompt, metricForComparison || findMetricFromPrompt(prompt));
     const promptHasExplicitOpponent = hasExplicitOpponentContext(prompt);
+    const specificPeriod = parseSpecificPeriod(prompt);
     const openAiParsedPromise = parsePromptWithOpenAI(prompt)
       .then((value) => normalizeParsedQuery(value))
       .catch(() => null);
@@ -3640,7 +3659,7 @@ Deno.serve(async (request) => {
         if (candidate.opponentTeamId && !promptHasExplicitOpponent) {
           candidate.opponentTeamId = undefined;
         }
-        if (promptThreshold != null && candidate.threshold == null) {
+        if (explicitOrImplicitThreshold != null && candidate.threshold == null) {
           continue;
         }
         const teamScore = scoreTeamPrompt(matchedTeam, prompt);
@@ -3652,7 +3671,7 @@ Deno.serve(async (request) => {
         const sourceBonus = candidate === fallbackParsed ? 5 : 0;
         const filterBonus = (candidate.resultFilter && candidate.resultFilter !== "all" ? 2 : 0)
           + (matchedOpponent ? 2 : 0);
-        const thresholdBonus = promptThreshold != null && candidate.threshold === promptThreshold ? 4 : 0;
+        const thresholdBonus = explicitOrImplicitThreshold != null && candidate.threshold === explicitOrImplicitThreshold ? 4 : 0;
         const inferredTeamBonus = inferredPlayerTeam?.team.teamId === matchedTeam.teamId ? 12 : 0;
         const effectiveTeamScore = Math.max(teamScore, inferredTeamBonus);
         const candidateScore = effectiveTeamScore + metricScore + opponentScore + sourceBonus + filterBonus + thresholdBonus;
@@ -3674,23 +3693,6 @@ Deno.serve(async (request) => {
         openAiParsed,
         supportedStats: METRICS.map((entry) => entry.label),
       });
-    }
-
-    await seasonGamesPromise;
-    const playerDataset = await buildPlayerSeasonDataset(season, team);
-    const likelyPlayerName = extractLikelyPlayerName(prompt, team);
-    const matchedPlayer = likelyPlayerName
-      ? (findPlayerByExactName(playerDataset.rows, likelyPlayerName) || findPlayerMatchFromRows(likelyPlayerName, playerDataset.rows))
-      : null;
-    if (matchedPlayer) {
-      parsed.playerId = matchedPlayer.playerId;
-      parsed.playerName = matchedPlayer.playerName;
-    } else {
-      if (likelyPlayerName) {
-        return jsonResponse(400, {
-          error: `${likelyPlayerName} was not found in ${team.fullName}'s ${season} game data. If you meant a different team, change the team in the prompt. If you meant games against ${team.fullName}, phrase it as "against ${team.tricode}" or "vs ${team.fullName}".`,
-        });
-      }
     }
 
     if (parsed.groupBy === "period" && !PERIOD_SUPPORTED_METRIC_KEYS.has(metric.key)) {
@@ -3719,6 +3721,23 @@ Deno.serve(async (request) => {
       parsed.contextPlayerNames = onOffPlayers.map((entry) => entry.playerName);
     }
 
+    await seasonGamesPromise;
+    const playerDataset = await buildPlayerSeasonDataset(season, team);
+    const likelyPlayerName = extractLikelyPlayerName(prompt, team);
+    const matchedPlayer = likelyPlayerName
+      ? (findPlayerByExactName(playerDataset.rows, likelyPlayerName) || findPlayerMatchFromRows(likelyPlayerName, playerDataset.rows))
+      : null;
+    if (matchedPlayer) {
+      parsed.playerId = matchedPlayer.playerId;
+      parsed.playerName = matchedPlayer.playerName;
+    } else {
+      if (likelyPlayerName) {
+        return jsonResponse(400, {
+          error: `${likelyPlayerName} was not found in ${team.fullName}'s ${season} game data. If you meant a different team, change the team in the prompt. If you meant games against ${team.fullName}, phrase it as "against ${team.tricode}" or "vs ${team.fullName}".`,
+        });
+      }
+    }
+
     const dataset = await buildTeamSeasonDataset(season, team);
 
     if (!dataset.rows.length) {
@@ -3744,6 +3763,9 @@ Deno.serve(async (request) => {
     } else if (parsed.groupBy === "period" && metric.key === "points") {
       const teamPeriodDataset = await buildTeamPeriodPointsDataset(season, team);
       rowsForQuery = teamPeriodDataset.rows;
+    }
+    if (parsed.groupBy === "period" && specificPeriod) {
+      rowsForQuery = rowsForQuery.filter((row) => row.groupKey === specificPeriod);
     }
     if (parsed.groupBy === "period" && isSingleQuarterThresholdPrompt(prompt) && (
       parsed.aggregation === "count_games_gte"
