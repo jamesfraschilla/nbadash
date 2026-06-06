@@ -53,6 +53,7 @@ type MetricDefinition = {
 };
 
 type ResultFilter = "all" | "win" | "loss";
+type HomeAwayFilter = "all" | "home" | "away";
 type SortDirection = "asc" | "desc";
 type QuerySeasonScope = "all" | "regular" | "playoffs";
 type QueryAggregation =
@@ -81,6 +82,7 @@ type ParsedQuery = {
   threshold?: number;
   opponentTeamId?: string;
   resultFilter?: ResultFilter;
+  homeAwayFilter?: HomeAwayFilter;
   seasonScope?: QuerySeasonScope;
   sort?: SortDirection;
   sortBy?: QuerySortBy;
@@ -208,6 +210,7 @@ const METRICS: MetricDefinition[] = [
   { key: "deflections", label: "Deflections", aliases: ["deflections"], kind: "count" },
   { key: "disruptions", label: "Disruptions", aliases: ["disruptions"], kind: "count" },
   { key: "kills", label: "Kills", aliases: ["kills"], kind: "count" },
+  { key: "first_half_margin", label: "First-Half Margin", aliases: ["first half margin", "halftime margin", "margin at halftime", "lead at halftime", "winning at halftime", "were winning at halftime", "ahead at halftime", "halftime lead", "outscored opponents in the first half", "outscored opponents in first half"], kind: "count", formatter: "decimal" },
   { key: "offensive_rating", label: "Offensive Rating", aliases: ["offensive rating", "ortg", "off rating"], kind: "rate", formatter: "decimal" },
   { key: "defensive_rating", label: "Defensive Rating", aliases: ["defensive rating", "drtg", "def rating"], kind: "rate", formatter: "decimal" },
   { key: "net_rating", label: "Net Rating", aliases: ["net rating", "netrtg"], kind: "rate", formatter: "decimal" },
@@ -1195,6 +1198,24 @@ function buildGameMetrics(game: AnyRecord, teamId: string): BuiltGameMetrics {
   const opponentDefReb = Math.max(0, safeNumber(opponentTotals.reboundsTotal, 0) - safeNumber(opponentTotals.reboundsOffensive, 0));
   const transitionPossessions = safeNumber(teamTotals.transitionPossessions, 0);
   const transitionPoints = safeNumber(teamTotals.transitionPoints, 0);
+  const actions = Array.isArray(game?.playByPlayActions) ? game.playByPlayActions as Array<Record<string, unknown>> : [];
+  let firstHalfTeamPoints = 0;
+  let firstHalfOpponentPoints = 0;
+  actions.forEach((action) => {
+    const period = safeNumber(action.period, 0);
+    if (period < 1 || period > 2) return;
+    const actionType = String(action.actionType || "").toLowerCase();
+    const shotResult = String(action.shotResult || "");
+    let points = 0;
+    if ((actionType === "2pt" || actionType === "3pt") && shotResult === "Made") {
+      points = actionType === "3pt" ? 3 : 2;
+    } else if (actionType === "freethrow" && shotResult === "Made") {
+      points = 1;
+    }
+    if (!points) return;
+    if (String(action.teamId || "") === teamId) firstHalfTeamPoints += points;
+    else firstHalfOpponentPoints += points;
+  });
 
   return {
     teamId,
@@ -1249,11 +1270,12 @@ function buildGameMetrics(game: AnyRecord, teamId: string): BuiltGameMetrics {
       deflections,
       disruptions,
       kills: computeDisplayedKills(
-        Array.isArray(game?.playByPlayActions) ? game.playByPlayActions as Array<Record<string, unknown>> : [],
+        actions,
         teamId,
         homeTeamId,
         awayTeamId,
       ),
+      first_half_margin: firstHalfTeamPoints - firstHalfOpponentPoints,
       offensive_rating: possessions > 0 ? (safeNumber(teamTotals.points, 0) / possessions) * 100 : 0,
       defensive_rating: possessions > 0 ? (opponentPoints / possessions) * 100 : 0,
       net_rating: possessions > 0 ? ((safeNumber(teamTotals.points, 0) - opponentPoints) / possessions) * 100 : 0,
@@ -1890,6 +1912,44 @@ function parseResultFilter(prompt: string): ResultFilter {
   return "all";
 }
 
+function parseHomeAwayFilter(prompt: string, groupBy: QueryGroupBy = "none"): HomeAwayFilter {
+  if (groupBy === "home_away") return "all";
+  const normalizedPrompt = normalizeText(prompt);
+  const hasAway = /\b(road|away)\b/.test(normalizedPrompt);
+  const hasHome = /\bhome\b/.test(normalizedPrompt);
+  if (hasAway && !hasHome) return "away";
+  if (hasHome && !hasAway) return "home";
+  return "all";
+}
+
+function parseImplicitThreshold(prompt: string, metric: MetricDefinition | null) {
+  if (!metric) return null;
+  const normalizedPrompt = normalizeText(prompt);
+  if (
+    metric.key === "first_half_margin"
+    && (
+      normalizedPrompt.includes("winning at halftime")
+      || normalizedPrompt.includes("winning at half")
+      || normalizedPrompt.includes("lead at halftime")
+      || normalizedPrompt.includes("halftime lead")
+      || normalizedPrompt.includes("outscored opponents in the first half")
+      || normalizedPrompt.includes("outscored opponents in first half")
+    )
+  ) {
+    return 1;
+  }
+  return null;
+}
+
+function isSingleQuarterThresholdPrompt(prompt: string) {
+  const normalizedPrompt = normalizeText(prompt);
+  return normalizedPrompt.includes("single quarter")
+    || normalizedPrompt.includes("a single quarter")
+    || normalizedPrompt.includes("in a quarter")
+    || normalizedPrompt.includes("in any quarter")
+    || normalizedPrompt.includes("any quarter");
+}
+
 function parseListLimit(prompt: string) {
   const normalizedPrompt = normalizeText(prompt);
   const topBottomMatch = /\b(?:top|bottom|highest|lowest|best|worst)\s+(\d{1,2})\b/.exec(normalizedPrompt);
@@ -2168,15 +2228,16 @@ function buildFallbackParse(prompt: string, teamOverride: (typeof NBA_TEAMS)[num
   const metric = findMetricFromPrompt(prompt);
   if (!team || !metric) return null;
 
-  const threshold = parseThreshold(prompt);
+  const groupBy = parseGroupBy(prompt);
+  const threshold = parseThreshold(prompt) ?? parseImplicitThreshold(prompt, metric);
   const aggregation = detectAggregation(prompt, threshold);
   const opponent = parseOpponentTeamFromPrompt(prompt, team.teamId);
   const resultFilter = parseResultFilter(prompt);
+  const homeAwayFilter = parseHomeAwayFilter(prompt, groupBy);
   const seasonScope = parseSeasonScope(prompt);
   const limit = parseListLimit(prompt);
   const sort = parseSortDirection(prompt, aggregation);
   const sortBy = parseSortBy(prompt, aggregation);
-  const groupBy = parseGroupBy(prompt);
 
   return {
     teamId: team.teamId,
@@ -2185,6 +2246,7 @@ function buildFallbackParse(prompt: string, teamOverride: (typeof NBA_TEAMS)[num
     threshold: threshold != null ? threshold : undefined,
     opponentTeamId: opponent?.teamId,
     resultFilter,
+    homeAwayFilter,
     seasonScope,
     sort,
     sortBy,
@@ -2196,7 +2258,7 @@ function buildFallbackParse(prompt: string, teamOverride: (typeof NBA_TEAMS)[num
 const CUSTOM_REQUEST_QUERY_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["teamId", "statKey", "aggregation", "resultFilter", "groupBy", "seasonScope"],
+  required: ["teamId", "statKey", "aggregation", "resultFilter", "homeAwayFilter", "groupBy", "seasonScope"],
   properties: {
     teamId: { type: "string" },
     statKey: { type: "string" },
@@ -2222,6 +2284,10 @@ const CUSTOM_REQUEST_QUERY_SCHEMA = {
     resultFilter: {
       type: "string",
       enum: ["all", "win", "loss"],
+    },
+    homeAwayFilter: {
+      type: "string",
+      enum: ["all", "home", "away"],
     },
     seasonScope: {
       type: "string",
@@ -2358,6 +2424,7 @@ function normalizeParsedQuery(value: unknown): ParsedQuery | null {
   if (!teamId || !statKey || !isSupportedAggregation(aggregation)) return null;
   const opponentTeamId = String(candidate.opponentTeamId || "").trim();
   const resultFilter = String(candidate.resultFilter || "all").trim() as ResultFilter;
+  const homeAwayFilter = String(candidate.homeAwayFilter || "all").trim() as HomeAwayFilter;
   const seasonScope = String(candidate.seasonScope || "all").trim() as QuerySeasonScope;
   const sort = String(candidate.sort || "").trim() as SortDirection;
   const sortBy = String(candidate.sortBy || "").trim() as QuerySortBy;
@@ -2370,6 +2437,7 @@ function normalizeParsedQuery(value: unknown): ParsedQuery | null {
     threshold: candidate.threshold != null ? safeNumber(candidate.threshold, 0) : undefined,
     opponentTeamId: opponentTeamId && opponentTeamId !== teamId ? opponentTeamId : undefined,
     resultFilter: resultFilter === "win" || resultFilter === "loss" ? resultFilter : "all",
+    homeAwayFilter: homeAwayFilter === "home" || homeAwayFilter === "away" ? homeAwayFilter : "all",
     seasonScope: seasonScope === "regular" || seasonScope === "playoffs" ? seasonScope : "all",
     sort: sort === "asc" || sort === "desc" ? sort : undefined,
     sortBy: sortBy === "date" || sortBy === "value" ? sortBy : undefined,
@@ -2712,6 +2780,35 @@ function buildGroupedSummaries(
       return sortDirection === "asc" ? left.value - right.value : right.value - left.value;
     }
     return left.label.localeCompare(right.label);
+  });
+}
+
+function collapsePeriodRowsToGameThresholdRows(
+  rows: Array<CachedTeamGameRow | CachedPlayerGameRow>,
+  aggregation: QueryAggregation,
+) {
+  const byGame = new Map<string, Array<CachedTeamGameRow | CachedPlayerGameRow>>();
+  rows.forEach((row) => {
+    if (!byGame.has(row.gameId)) byGame.set(row.gameId, []);
+    byGame.get(row.gameId)?.push(row);
+  });
+
+  const selectValue = (gameRows: Array<CachedTeamGameRow | CachedPlayerGameRow>) => {
+    const values = gameRows.map((row) => safeNumber(row.value, 0));
+    if (aggregation === "count_games_lte" || aggregation === "record_when_lte") {
+      return Math.min(...values);
+    }
+    return Math.max(...values);
+  };
+
+  return [...byGame.values()].map((gameRows) => {
+    const source = gameRows[0];
+    return {
+      ...source,
+      value: selectValue(gameRows),
+      groupKey: undefined,
+      groupLabel: undefined,
+    };
   });
 }
 
@@ -3196,6 +3293,7 @@ async function executeComparisonQuery(
         ? NBA_TEAMS.find((entry) => entry.teamId === baseQuery.opponentTeamId) || null
         : null,
       resultFilter: baseQuery.resultFilter || "all",
+      homeAwayFilter: baseQuery.homeAwayFilter || "all",
       seasonScope: baseQuery.seasonScope || "all",
       sort: baseQuery.sort || null,
       limit: null,
@@ -3267,6 +3365,8 @@ function executeQuery(
     if (query.opponentTeamId && row.opponent.teamId !== query.opponentTeamId) return false;
     if (query.resultFilter === "win" && row.result !== "W") return false;
     if (query.resultFilter === "loss" && row.result !== "L") return false;
+    if (query.homeAwayFilter === "home" && !row.isHome) return false;
+    if (query.homeAwayFilter === "away" && row.isHome) return false;
     return true;
   });
 
@@ -3497,6 +3597,7 @@ Deno.serve(async (request) => {
             ? NBA_TEAMS.find((entry) => entry.teamId === tableRequest.opponentTeamId) || null
             : null,
           resultFilter: tableRequest.resultFilter || "all",
+          homeAwayFilter: "all",
           sort: tableRequest.sort || null,
           limit: null,
           groupBy: "none",
@@ -3578,8 +3679,9 @@ Deno.serve(async (request) => {
     await seasonGamesPromise;
     const playerDataset = await buildPlayerSeasonDataset(season, team);
     const likelyPlayerName = extractLikelyPlayerName(prompt, team);
-    const matchedPlayer = findPlayerMatchFromRows(prompt, playerDataset.rows)
-      || (likelyPlayerName ? findPlayerByExactName(playerDataset.rows, likelyPlayerName) : null);
+    const matchedPlayer = likelyPlayerName
+      ? (findPlayerByExactName(playerDataset.rows, likelyPlayerName) || findPlayerMatchFromRows(likelyPlayerName, playerDataset.rows))
+      : null;
     if (matchedPlayer) {
       parsed.playerId = matchedPlayer.playerId;
       parsed.playerName = matchedPlayer.playerName;
@@ -3643,6 +3745,17 @@ Deno.serve(async (request) => {
       const teamPeriodDataset = await buildTeamPeriodPointsDataset(season, team);
       rowsForQuery = teamPeriodDataset.rows;
     }
+    if (parsed.groupBy === "period" && isSingleQuarterThresholdPrompt(prompt) && (
+      parsed.aggregation === "count_games_gte"
+      || parsed.aggregation === "count_games_lte"
+      || parsed.aggregation === "count_games_nonzero"
+      || parsed.aggregation === "record_when_gte"
+      || parsed.aggregation === "record_when_lte"
+      || parsed.aggregation === "record_when_nonzero"
+    )) {
+      rowsForQuery = collapsePeriodRowsToGameThresholdRows(rowsForQuery, parsed.aggregation);
+      parsed.groupBy = "none";
+    }
     const result = executeQuery(rowsForQuery, metric, parsed, team, subjectLabel);
 
     return jsonResponse(200, {
@@ -3658,6 +3771,7 @@ Deno.serve(async (request) => {
           ? NBA_TEAMS.find((entry) => entry.teamId === parsed.opponentTeamId) || null
           : null,
         resultFilter: parsed.resultFilter || "all",
+        homeAwayFilter: parsed.homeAwayFilter || "all",
         seasonScope: parsed.seasonScope || "all",
         sort: parsed.sort || null,
         limit: parsed.limit || null,
