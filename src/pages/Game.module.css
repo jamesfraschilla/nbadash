@@ -814,8 +814,35 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   font-feature-settings: "tnum" 1;
 }
 
-.possessionTable {
+.possessionTableWrap {
   margin-top: 6px;
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.possessionTableLabels {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.possessionTableLabelSpacer {
+  min-height: 58px;
+}
+
+.possessionTeamCodeLabel {
+  min-height: 29px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  text-transform: uppercase;
+}
+
+.possessionTable {
   border: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -849,13 +876,24 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 }
 
 .possessionLogo,
-.possessionPlaceholder {
+.possessionPlaceholder,
+.pbpHeadshotLogo {
   width: 18px;
   height: 18px;
 }
 
 .possessionLogo {
   object-fit: contain;
+}
+
+.pbpHeadshotLogo {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background-color: var(--panel-strong);
+  padding: 3px;
 }
 
 .strategyPanel {

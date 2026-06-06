@@ -228,6 +228,11 @@
   background-color: var(--panel-strong);
 }
 
+.eventLogo {
+  object-fit: contain !important;
+  padding: 3px;
+}
+
 .scoring {
   font-weight: 700;
 }

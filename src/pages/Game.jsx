@@ -1177,6 +1177,38 @@ export default function Game({ variant = "full" }) {
     ];
   }, [openingJumpTeamId, awayTeam, homeTeam]);
 
+  const quarterPoints = useMemo(() => {
+    const totals = {
+      away: [0, 0, 0, 0],
+      home: [0, 0, 0, 0],
+    };
+
+    (game?.playByPlayActions || []).forEach((action) => {
+      const period = Number(action?.period);
+      if (!Number.isFinite(period) || period < 1 || period > 4) return;
+      if (action?.shotResult !== "Made") return;
+
+      const points =
+        action.actionType === "3pt"
+          ? 3
+          : action.actionType === "2pt"
+            ? 2
+            : action.actionType === "freethrow"
+              ? 1
+              : 0;
+      if (!points) return;
+
+      const normalizedTeamId = String(action.teamId || "");
+      if (normalizedTeamId && normalizedTeamId === String(awayTeamId || "")) {
+        totals.away[period - 1] += points;
+      } else if (normalizedTeamId && normalizedTeamId === String(homeTeamId || "")) {
+        totals.home[period - 1] += points;
+      }
+    });
+
+    return totals;
+  }, [awayTeamId, game?.playByPlayActions, homeTeamId]);
+
   const clearHoldTimer = () => {
     if (holdTimerRef.current) {
       clearTimeout(holdTimerRef.current);
@@ -2662,7 +2694,12 @@ export default function Game({ variant = "full" }) {
             {status || game.gameStatusText}
           </div>
           {clock && <div className={styles.clock}>{clock}</div>}
-          {isAtc && (
+          <div className={styles.possessionTableWrap}>
+            <div className={styles.possessionTableLabels}>
+              <div className={styles.possessionTableLabelSpacer} />
+              <div className={styles.possessionTeamCodeLabel}>{awayTeam?.teamTricode || "AWY"}</div>
+              <div className={styles.possessionTeamCodeLabel}>{homeTeam?.teamTricode || "HME"}</div>
+            </div>
             <div className={styles.possessionTable}>
               <div className={styles.possessionRow}>
                 {["Q1", "Q2", "Q3", "Q4"].map((label) => (
@@ -2684,8 +2721,22 @@ export default function Game({ variant = "full" }) {
                   </div>
                 ))}
               </div>
+              <div className={styles.possessionRow}>
+                {quarterPoints.away.map((points, index) => (
+                  <div key={`away-quarter-points-${index}`} className={styles.possessionCell}>
+                    {points}
+                  </div>
+                ))}
+              </div>
+              <div className={styles.possessionRow}>
+                {quarterPoints.home.map((points, index) => (
+                  <div key={`home-quarter-points-${index}`} className={styles.possessionCell}>
+                    {points}
+                  </div>
+                ))}
+              </div>
             </div>
-          )}
+          </div>
           </div>
 
           <div className={`${styles.teamStatsColumn} ${styles.homeStatsColumn}`}>
@@ -2932,6 +2983,8 @@ export default function Game({ variant = "full" }) {
                           }}
                           fallback={<div className={styles.pbpHeadshotPlaceholder} />}
                         />
+                      ) : teamLogo ? (
+                        <img className={styles.pbpHeadshotLogo} src={teamLogo} alt={`${teamAlt} logo`} />
                       ) : (
                         <div className={styles.pbpHeadshotPlaceholder} />
                       )}

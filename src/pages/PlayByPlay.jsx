@@ -266,14 +266,20 @@ export default function PlayByPlay() {
                 {isAway && (
                   <div className={`${styles.eventContent} ${action.scoringEvent ? styles.scoring : ""}`}>
                     <span>{describePlayByPlayAction(action)}</span>
-                    {action.personId && (
+                    {action.personId ? (
                       <PlayerHeadshot
                         personId={action.personId}
                         teamId={action.teamId}
                         alt={action.playerNameI || "player"}
                         fallback={null}
                       />
-                    )}
+                    ) : action.teamId ? (
+                      <img
+                        className={styles.eventLogo}
+                        src={teamLogoUrl(action.teamId)}
+                        alt={`${game.awayTeam?.teamName || "team"} logo`}
+                      />
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -300,14 +306,20 @@ export default function PlayByPlay() {
               <div className={styles.homeColumn}>
                 {isHome && (
                   <div className={`${styles.eventContent} ${action.scoringEvent ? styles.scoring : ""}`}>
-                    {action.personId && (
+                    {action.personId ? (
                       <PlayerHeadshot
                         personId={action.personId}
                         teamId={action.teamId}
                         alt={action.playerNameI || "player"}
                         fallback={null}
                       />
-                    )}
+                    ) : action.teamId ? (
+                      <img
+                        className={styles.eventLogo}
+                        src={teamLogoUrl(action.teamId)}
+                        alt={`${game.homeTeam?.teamName || "team"} logo`}
+                      />
+                    ) : null}
                     <span>{describePlayByPlayAction(action)}</span>
                   </div>
                 )}

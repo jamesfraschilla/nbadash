@@ -1276,7 +1276,7 @@ function buildInsightSignals(features: ReturnType<typeof buildFeaturePayload>) {
       strength: Math.abs(home.totals.paintPoints - away.totals.paintPoints),
       items: [
         `${home.tricode} paint points: ${home.totals.paintPoints}. ${away.tricode} paint points: ${away.totals.paintPoints}.`,
-        `${home.tricode} rim scoring was ${home.totals.rimFieldGoalsMade}-${home.totals.rimFieldGoalsAttempted}; ${away.tricode} was ${away.totals.rimFieldGoalsMade}-${away.totals.rimFieldGoalsAttempted}.`,
+        `${home.tricode} rim scoring was ${home.totals.rimFieldGoalsMade}/${home.totals.rimFieldGoalsAttempted}; ${away.tricode} was ${away.totals.rimFieldGoalsMade}/${away.totals.rimFieldGoalsAttempted}.`,
       ],
     },
     {
@@ -1293,8 +1293,8 @@ function buildInsightSignals(features: ReturnType<typeof buildFeaturePayload>) {
       title: "Shooting",
       strength: Math.abs(home.shooting.fgPct - away.shooting.fgPct) + (margin * 0.5),
       items: [
-        `${home.tricode} shot ${home.totals.fieldGoalsMade}-${home.totals.fieldGoalsAttempted} (${home.shooting.fgPct}%) versus ${away.tricode} at ${away.totals.fieldGoalsMade}-${away.totals.fieldGoalsAttempted} (${away.shooting.fgPct}%).`,
-        `${home.tricode} from three: ${home.totals.threePointersMade}-${home.totals.threePointersAttempted}; ${away.tricode}: ${away.totals.threePointersMade}-${away.totals.threePointersAttempted}.`,
+        `${home.tricode} shot ${home.totals.fieldGoalsMade}/${home.totals.fieldGoalsAttempted} (${home.shooting.fgPct}%) versus ${away.tricode} at ${away.totals.fieldGoalsMade}/${away.totals.fieldGoalsAttempted} (${away.shooting.fgPct}%).`,
+        `${home.tricode} from three: ${home.totals.threePointersMade}/${home.totals.threePointersAttempted}; ${away.tricode}: ${away.totals.threePointersMade}/${away.totals.threePointersAttempted}.`,
       ],
     },
     {
@@ -1314,7 +1314,7 @@ function buildInsightSignals(features: ReturnType<typeof buildFeaturePayload>) {
       title: "Free Throws",
       strength: Math.abs(home.totals.freeThrowsAttempted - away.totals.freeThrowsAttempted),
       items: [
-        `${home.tricode} free throws: ${home.totals.freeThrowsMade}-${home.totals.freeThrowsAttempted}. ${away.tricode}: ${away.totals.freeThrowsMade}-${away.totals.freeThrowsAttempted}.`,
+        `${home.tricode} free throws: ${home.totals.freeThrowsMade}/${home.totals.freeThrowsAttempted}. ${away.tricode}: ${away.totals.freeThrowsMade}/${away.totals.freeThrowsAttempted}.`,
       ],
     },
     {
@@ -1421,12 +1421,12 @@ function buildStatOutliers(features: ReturnType<typeof buildFeaturePayload>) {
     notes.push(...features.playerNotes.slice(0, 2));
   }
 
-  notes.push(`${home.tricode} shot ${home.totals.fieldGoalsMade}-${home.totals.fieldGoalsAttempted} (${home.shooting.fgPct}%) versus ${away.tricode} at ${away.totals.fieldGoalsMade}-${away.totals.fieldGoalsAttempted} (${away.shooting.fgPct}%).`);
-  notes.push(`${home.tricode} rim scoring was ${home.totals.rimFieldGoalsMade}-${home.totals.rimFieldGoalsAttempted}; ${away.tricode} was ${away.totals.rimFieldGoalsMade}-${away.totals.rimFieldGoalsAttempted}.`);
-  notes.push(`${home.tricode} from three: ${home.totals.threePointersMade}-${home.totals.threePointersAttempted}; ${away.tricode}: ${away.totals.threePointersMade}-${away.totals.threePointersAttempted}.`);
+  notes.push(`${home.tricode} shot ${home.totals.fieldGoalsMade}/${home.totals.fieldGoalsAttempted} (${home.shooting.fgPct}%) versus ${away.tricode} at ${away.totals.fieldGoalsMade}/${away.totals.fieldGoalsAttempted} (${away.shooting.fgPct}%).`);
+  notes.push(`${home.tricode} rim scoring was ${home.totals.rimFieldGoalsMade}/${home.totals.rimFieldGoalsAttempted}; ${away.tricode} was ${away.totals.rimFieldGoalsMade}/${away.totals.rimFieldGoalsAttempted}.`);
+  notes.push(`${home.tricode} from three: ${home.totals.threePointersMade}/${home.totals.threePointersAttempted}; ${away.tricode}: ${away.totals.threePointersMade}/${away.totals.threePointersAttempted}.`);
 
   if (home.totals.freeThrowsAttempted !== away.totals.freeThrowsAttempted) {
-    notes.push(`${home.tricode} free throws: ${home.totals.freeThrowsMade}-${home.totals.freeThrowsAttempted}; ${away.tricode}: ${away.totals.freeThrowsMade}-${away.totals.freeThrowsAttempted}.`);
+    notes.push(`${home.tricode} free throws: ${home.totals.freeThrowsMade}/${home.totals.freeThrowsAttempted}; ${away.tricode}: ${away.totals.freeThrowsMade}/${away.totals.freeThrowsAttempted}.`);
   }
 
   return notes.slice(0, 4);
