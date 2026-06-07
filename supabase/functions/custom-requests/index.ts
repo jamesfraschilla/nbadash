@@ -1,3 +1,5 @@
+import rosterSnapshot from "../../../src/data/rosters.json" with { type: "json" };
+
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const OPENAI_API_URL = "https://api.openai.com/v1/responses";
 const DEFAULT_OPENAI_MODEL =
@@ -264,6 +266,8 @@ const TEAM_ON_OFF_DATASET_CACHE = new Map<string, Promise<{
   rows: CachedTeamGameRow[];
   skippedGames: Array<{ gameId: string; gameDate: string; error: string }>;
 }>>();
+
+const ROSTER_SNAPSHOT_BY_TEAM = rosterSnapshot as Record<string, Array<Record<string, unknown>>>;
 
 const PERIOD_SUPPORTED_METRIC_KEYS = new Set([
   "minutes",
@@ -772,7 +776,28 @@ async function fetchGameMinutes(gameId: string) {
   return GAME_MINUTES_CACHE.get(gameId)!;
 }
 
+function getSnapshotRoster(team: (typeof NBA_TEAMS)[number]) {
+  const players = Array.isArray(ROSTER_SNAPSHOT_BY_TEAM[team.teamId])
+    ? ROSTER_SNAPSHOT_BY_TEAM[team.teamId]
+    : [];
+  return {
+    teamId: team.teamId,
+    team,
+    players: players
+      .map((player) => ({
+        playerId: String(player.personId || player.playerId || "").trim(),
+        playerName: String(player.fullName || `${String(player.firstName || "").trim()} ${String(player.familyName || "").trim()}`).trim(),
+      }))
+      .filter((player) => player.playerId && player.playerName),
+  };
+}
+
 async function fetchTeamRoster(team: (typeof NBA_TEAMS)[number], season: string) {
+  const snapshotRoster = getSnapshotRoster(team);
+  if (snapshotRoster.players.length) {
+    return snapshotRoster;
+  }
+
   const url = new URL("https://stats.nba.com/stats/commonteamroster");
   url.searchParams.set("LeagueID", "00");
   url.searchParams.set("Season", season);
@@ -824,7 +849,19 @@ async function fetchTeamRoster(team: (typeof NBA_TEAMS)[number], season: string)
 
 async function fetchAllTeamRosters(season: string) {
   if (!TEAM_ROSTERS_CACHE.has(season)) {
-    TEAM_ROSTERS_CACHE.set(season, Promise.all(NBA_TEAMS.map((team) => fetchTeamRoster(team, season))));
+    TEAM_ROSTERS_CACHE.set(
+      season,
+      Promise.resolve(
+        NBA_TEAMS.map((team) => {
+          const snapshotRoster = getSnapshotRoster(team);
+          return snapshotRoster.players.length ? snapshotRoster : null;
+        }).filter(Boolean) as Array<{
+          teamId: string;
+          team: (typeof NBA_TEAMS)[number];
+          players: Array<{ playerId: string; playerName: string }>;
+        }>,
+      ),
+    );
   }
   return TEAM_ROSTERS_CACHE.get(season)!;
 }
