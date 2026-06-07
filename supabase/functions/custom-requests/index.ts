@@ -3721,48 +3721,60 @@ Deno.serve(async (request) => {
       parsed.contextPlayerNames = onOffPlayers.map((entry) => entry.playerName);
     }
 
-    await seasonGamesPromise;
-    const playerDataset = await buildPlayerSeasonDataset(season, team);
     const likelyPlayerName = extractLikelyPlayerName(prompt, team);
-    const matchedPlayer = likelyPlayerName
-      ? (findPlayerByExactName(playerDataset.rows, likelyPlayerName) || findPlayerMatchFromRows(likelyPlayerName, playerDataset.rows))
-      : null;
-    if (matchedPlayer) {
-      parsed.playerId = matchedPlayer.playerId;
-      parsed.playerName = matchedPlayer.playerName;
-    } else {
-      if (likelyPlayerName) {
+    if (likelyPlayerName) {
+      const inferredPlayers = await inferPlayersFromPrompt(prompt, season, team);
+      const matchedPlayer = inferredPlayers.find((entry) => entry.team.teamId === team.teamId) || null;
+      if (matchedPlayer) {
+        parsed.playerId = matchedPlayer.playerId;
+        parsed.playerName = matchedPlayer.playerName;
+      } else {
         return jsonResponse(400, {
           error: `${likelyPlayerName} was not found in ${team.fullName}'s ${season} game data. If you meant a different team, change the team in the prompt. If you meant games against ${team.fullName}, phrase it as "against ${team.tricode}" or "vs ${team.fullName}".`,
         });
       }
     }
 
-    const dataset = await buildTeamSeasonDataset(season, team);
-
-    if (!dataset.rows.length) {
-      return jsonResponse(502, {
-        error: "Unable to load any completed game details for this request.",
-        skippedGames: dataset.skippedGames,
-      });
-    }
-
-    let rowsForQuery: Array<CachedTeamGameRow | CachedPlayerGameRow> = dataset.rows;
+    let rowsForQuery: Array<CachedTeamGameRow | CachedPlayerGameRow> = [];
     let subjectLabel = parsed.playerName || team.fullName;
+    let skippedGames: Array<{ gameId: string; gameDate: string; error: string }> = [];
+
     if (parsed.groupBy === "on_off" && parsed.contextPlayerIds?.length) {
       const onOffDataset = await buildTeamOnOffDataset(season, team, parsed.contextPlayerIds);
       rowsForQuery = onOffDataset.rows;
+      skippedGames = onOffDataset.skippedGames;
       subjectLabel = `${team.fullName} with ${parsed.contextPlayerNames?.join(" + ") || "selected players"} on/off`;
+    } else if (parsed.playerId && parsed.groupBy === "period" && PERIOD_SUPPORTED_METRIC_KEYS.has(metric.key)) {
+      const playerPeriodDataset = await buildPlayerPeriodPointsDataset(season, team);
+      rowsForQuery = playerPeriodDataset.rows.filter((row) => row.playerId === parsed.playerId);
+      skippedGames = playerPeriodDataset.skippedGames;
     } else if (parsed.playerId) {
-      if (parsed.groupBy === "period" && PERIOD_SUPPORTED_METRIC_KEYS.has(metric.key)) {
-        const playerPeriodDataset = await buildPlayerPeriodPointsDataset(season, team);
-        rowsForQuery = playerPeriodDataset.rows.filter((row) => row.playerId === parsed.playerId);
-      } else {
-        rowsForQuery = playerDataset.rows.filter((row) => row.playerId === parsed.playerId);
-      }
+      await seasonGamesPromise;
+      const playerDataset = await buildPlayerSeasonDataset(season, team);
+      rowsForQuery = playerDataset.rows.filter((row) => row.playerId === parsed.playerId);
+      skippedGames = playerDataset.skippedGames;
     } else if (parsed.groupBy === "period" && metric.key === "points") {
       const teamPeriodDataset = await buildTeamPeriodPointsDataset(season, team);
       rowsForQuery = teamPeriodDataset.rows;
+      skippedGames = teamPeriodDataset.skippedGames;
+    } else {
+      await seasonGamesPromise;
+      const dataset = await buildTeamSeasonDataset(season, team);
+      if (!dataset.rows.length) {
+        return jsonResponse(502, {
+          error: "Unable to load any completed game details for this request.",
+          skippedGames: dataset.skippedGames,
+        });
+      }
+      rowsForQuery = dataset.rows;
+      skippedGames = dataset.skippedGames;
+    }
+
+    if (!rowsForQuery.length) {
+      return jsonResponse(502, {
+        error: "Unable to load any completed game details for this request.",
+        skippedGames,
+      });
     }
     if (parsed.groupBy === "period" && specificPeriod) {
       rowsForQuery = rowsForQuery.filter((row) => row.groupKey === specificPeriod);
@@ -3814,7 +3826,7 @@ Deno.serve(async (request) => {
         ...result,
         games: result.games,
       },
-      skippedGames: dataset.skippedGames,
+      skippedGames,
       supportedStats: METRICS.map((entry) => ({ key: entry.key, label: entry.label })),
     });
   } catch (error) {
