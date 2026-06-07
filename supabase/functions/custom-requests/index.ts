@@ -1620,7 +1620,9 @@ function buildPlayerPeriodMetricRows(game: AnyRecord, team: (typeof NBA_TEAMS)[n
       }
     }
 
-    if (actionType === "assist") periodMetrics.assists += 1;
+    if (safeNumber(action.assistPersonId, 0) === safeNumber(playerId, 0) && points > 0) {
+      periodMetrics.assists += 1;
+    }
     if (actionType === "steal") periodMetrics.steals += 1;
     if (actionType === "block") periodMetrics.blocks += 1;
     if (actionType === "turnover") periodMetrics.turnovers += 1;
@@ -2180,6 +2182,8 @@ function isSingleQuarterThresholdPrompt(prompt: string) {
 
 function parseSpecificPeriod(prompt: string) {
   const normalizedPrompt = normalizeText(prompt);
+  if (/\b1st half\b|\bfirst half\b|\bhalftime\b/.test(normalizedPrompt)) return "H1";
+  if (/\b2nd half\b|\bsecond half\b/.test(normalizedPrompt)) return "H2";
   if (/\b1st quarter\b|\bfirst quarter\b|\bq1\b/.test(normalizedPrompt)) return "Q1";
   if (/\b2nd quarter\b|\bsecond quarter\b|\bq2\b/.test(normalizedPrompt)) return "Q2";
   if (/\b3rd quarter\b|\bthird quarter\b|\bq3\b/.test(normalizedPrompt)) return "Q3";
@@ -3057,6 +3061,29 @@ function collapsePeriodRowsToGameThresholdRows(
   });
 }
 
+function collapsePeriodRowsToCombinedSpanRows(
+  rows: Array<CachedTeamGameRow | CachedPlayerGameRow>,
+  groupLabel: string,
+  groupKeys: string[],
+) {
+  const byGame = new Map<string, Array<CachedTeamGameRow | CachedPlayerGameRow>>();
+  rows.forEach((row) => {
+    if (!groupKeys.includes(String(row.groupKey || ""))) return;
+    if (!byGame.has(row.gameId)) byGame.set(row.gameId, []);
+    byGame.get(row.gameId)?.push(row);
+  });
+
+  return [...byGame.values()].map((gameRows) => {
+    const source = gameRows[0];
+    return {
+      ...source,
+      value: gameRows.reduce((sum, row) => sum + safeNumber(row.value, 0), 0),
+      groupKey: groupLabel,
+      groupLabel,
+    };
+  });
+}
+
 async function buildTeamSeasonDataset(
   season: string,
   team: (typeof NBA_TEAMS)[number],
@@ -3122,6 +3149,68 @@ async function buildTeamSeasonDataset(
   }
 
   return TEAM_SEASON_DATASET_CACHE.get(cacheKey)!;
+}
+
+async function buildTeamSubsetDataset(
+  season: string,
+  team: (typeof NBA_TEAMS)[number],
+  opponentTeamIds: string[],
+) {
+  const opponentSet = new Set(opponentTeamIds);
+  const seasonGames = await fetchSeasonGames(season);
+  const teamGames = seasonGames.filter((game) => {
+    const homeTeamId = String((game as Record<string, unknown>)?.homeTeam?.teamId || "");
+    const awayTeamId = String((game as Record<string, unknown>)?.awayTeam?.teamId || "");
+    const involvesTeam = homeTeamId === team.teamId || awayTeamId === team.teamId;
+    const opponentId = homeTeamId === team.teamId ? awayTeamId : awayTeamId === team.teamId ? homeTeamId : "";
+    return involvesTeam && opponentSet.has(opponentId);
+  });
+
+  const detailedGames = await mapWithConcurrency(
+    teamGames,
+    (game) => fetchGameDetailsSafe(String((game as Record<string, unknown>).gameId || "")),
+    4,
+  );
+
+  const skippedGames = detailedGames
+    .map((entry, index) => (
+      entry.error
+        ? {
+          gameId: String((teamGames[index] as Record<string, unknown>).gameId || ""),
+          gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
+          error: entry.error,
+        }
+        : null
+    ))
+    .filter(Boolean) as Array<{ gameId: string; gameDate: string; error: string }>;
+
+  const rows = detailedGames
+    .map((entry, index) => {
+      if (!entry.game) return null;
+      const game = {
+        ...entry.game,
+        gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
+      } as AnyRecord;
+      const metrics = buildGameMetrics(game, team.teamId);
+      const opponentMetrics = buildGameMetrics(game, metrics.opponent.teamId);
+      return {
+        gameId: String(game.gameId || ""),
+        gameDate: String(game.gameDate || ""),
+        opponent: metrics.opponent,
+        value: 0,
+        result: metrics.result,
+        teamScore: safeNumber(metrics.teamScore, 0),
+        opponentScore: safeNumber(metrics.opponentScore, 0),
+        margin: safeNumber(metrics.margin, 0),
+        isHome: Boolean(metrics.isHome),
+        seasonType: String(metrics.seasonType || ""),
+        metrics: metrics.metrics,
+        opponentMetrics: opponentMetrics.metrics,
+      } satisfies CachedTeamGameRow;
+    })
+    .filter(Boolean) as CachedTeamGameRow[];
+
+  return { rows, skippedGames };
 }
 
 async function buildPlayerSeasonDataset(
@@ -3824,12 +3913,18 @@ function executeQuery(
   const buildRecordAnswer = (matchingRows: QueryGameRow[], comparatorText: string | null) => {
     const wins = matchingRows.filter((row) => row.result === "W").length;
     const losses = matchingRows.filter((row) => row.result === "L").length;
-    const qualifier = comparatorText ? ` when posting ${comparatorText} ${metric.label.toLowerCase()}` : "";
+    const qualifier = comparatorText
+      ? (
+        query.playerName
+          ? ` when ${query.playerName} posted ${comparatorText} ${metric.label.toLowerCase()}`
+          : ` when posting ${comparatorText} ${metric.label.toLowerCase()}`
+      )
+      : "";
     return {
       aggregation,
       value: wins - losses,
       displayValue: formatRecordDisplay(wins, losses),
-      answer: `${subjectScopeLabel}'s record${qualifier} was ${wins}-${losses}.`,
+      answer: `${query.playerName ? team.fullName : subjectScopeLabel}'s record${qualifier} was ${wins}-${losses}.`,
       games: matchingRows,
       sampleSize: distinctGameSampleSize,
       groups: groupedSummaries,
@@ -3982,7 +4077,11 @@ Deno.serve(async (request) => {
     const inferredPlayerTeam = explicitTeam ? null : await inferTeamFromPlayerPrompt(prompt, season).catch(() => null);
     const opponentRecordRequest = parseOpponentRecordRequest(prompt, explicitTeam, inferredPlayerTeam?.team || null);
     if (opponentRecordRequest) {
-      const dataset = await buildTeamSeasonDataset(season, opponentRecordRequest.team);
+      const dataset = await buildTeamSubsetDataset(
+        season,
+        opponentRecordRequest.team,
+        opponentRecordRequest.opponents.map((entry) => entry.teamId),
+      );
       if (!dataset.rows.length) {
         return jsonResponse(502, {
           error: "Unable to load any completed game details for this request.",
@@ -4447,7 +4546,15 @@ Deno.serve(async (request) => {
       });
     }
     if (parsed.groupBy === "period" && specificPeriod) {
-      rowsForQuery = rowsForQuery.filter((row) => row.groupKey === specificPeriod);
+      if (specificPeriod === "H1") {
+        rowsForQuery = collapsePeriodRowsToCombinedSpanRows(rowsForQuery, "H1", ["Q1", "Q2"]);
+        parsed.groupBy = "none";
+      } else if (specificPeriod === "H2") {
+        rowsForQuery = collapsePeriodRowsToCombinedSpanRows(rowsForQuery, "H2", ["Q3", "Q4"]);
+        parsed.groupBy = "none";
+      } else {
+        rowsForQuery = rowsForQuery.filter((row) => row.groupKey === specificPeriod);
+      }
     }
     if (parsed.groupBy === "period" && isSingleQuarterThresholdPrompt(prompt) && (
       parsed.aggregation === "count_games_gte"
