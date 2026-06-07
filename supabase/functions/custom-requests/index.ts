@@ -102,6 +102,14 @@ type OpponentRelativeRequest = {
   homeAwayFilter: HomeAwayFilter;
 };
 
+type OpponentRecordRequest = {
+  team: (typeof NBA_TEAMS)[number];
+  opponents: Array<(typeof NBA_TEAMS)[number]>;
+  seasonScope: QuerySeasonScope;
+  resultFilter: ResultFilter;
+  homeAwayFilter: HomeAwayFilter;
+};
+
 type QueryGameRow = {
   gameId: string;
   gameDate: string;
@@ -261,6 +269,10 @@ const TEAM_ROSTERS_CACHE = new Map<string, Promise<Array<{
 }>>>();
 const GAME_MINUTES_CACHE = new Map<string, Promise<Record<string, unknown>>>();
 const TEAM_ON_OFF_DATASET_CACHE = new Map<string, Promise<{
+  rows: CachedTeamGameRow[];
+  skippedGames: Array<{ gameId: string; gameDate: string; error: string }>;
+}>>();
+const LEAGUE_TEAM_DATASET_CACHE = new Map<string, Promise<{
   rows: CachedTeamGameRow[];
   skippedGames: Array<{ gameId: string; gameDate: string; error: string }>;
 }>>();
@@ -525,16 +537,18 @@ const METRIC_SEARCH_INDEX = METRICS.map((metric) => ({
 }));
 
 function parseThreshold(prompt: string) {
+  const loweredPrompt = String(prompt || "").toLowerCase();
   const normalizedPrompt = normalizeText(prompt);
-  const numericMatch = /(\d+(?:\.\d+)?)\s*\+/.exec(normalizedPrompt)
-    || /(\d+(?:\.\d+)?)\s*(?:or more|or greater|at least|plus|>=)/.exec(normalizedPrompt)
-    || /at least\s+(\d+(?:\.\d+)?)/.exec(normalizedPrompt)
-    || /over\s+(\d+(?:\.\d+)?)/.exec(normalizedPrompt)
-    || /more than\s+(\d+(?:\.\d+)?)/.exec(normalizedPrompt)
-    || /under\s+(\d+(?:\.\d+)?)/.exec(normalizedPrompt)
-    || /below\s+(\d+(?:\.\d+)?)/.exec(normalizedPrompt)
-    || /less than\s+(\d+(?:\.\d+)?)/.exec(normalizedPrompt)
-    || /fewer than\s+(\d+(?:\.\d+)?)/.exec(normalizedPrompt);
+  const numericMatch = /(\d+(?:\.\d+)?)\s*\+/.exec(loweredPrompt)
+    || /(\d+(?:\.\d+)?)\s*(?:or more|or greater|at least|plus|>=)/.exec(loweredPrompt)
+    || /at least\s+(\d+(?:\.\d+)?)/.exec(loweredPrompt)
+    || /over\s+(\d+(?:\.\d+)?)/.exec(loweredPrompt)
+    || /more than\s+(\d+(?:\.\d+)?)/.exec(loweredPrompt)
+    || /under\s+(\d+(?:\.\d+)?)/.exec(loweredPrompt)
+    || /below\s+(\d+(?:\.\d+)?)/.exec(loweredPrompt)
+    || /less than\s+(\d+(?:\.\d+)?)/.exec(loweredPrompt)
+    || /fewer than\s+(\d+(?:\.\d+)?)/.exec(loweredPrompt)
+    || /(\d+(?:\.\d+)?)\s*(?:or more|or greater|at least|plus)/.exec(normalizedPrompt);
   if (numericMatch) return safeNumber(numericMatch[1], 0);
   return null;
 }
@@ -1990,6 +2004,18 @@ function hasExplicitOpponentContext(prompt: string) {
   ].some((pattern) => pattern.test(normalizedPrompt));
 }
 
+function hasExplicitOnOffContext(prompt: string) {
+  const normalizedPrompt = normalizeText(prompt);
+  return normalizedPrompt.includes("on off")
+    || normalizedPrompt.includes("on/off")
+    || normalizedPrompt.includes("on the floor")
+    || normalizedPrompt.includes("off the floor")
+    || normalizedPrompt.includes("on court")
+    || normalizedPrompt.includes("off court")
+    || /\bwith\s+[a-z0-9 .'-]+\s+on\b/.test(normalizedPrompt)
+    || /\bwith\s+[a-z0-9 .'-]+\s+off\b/.test(normalizedPrompt);
+}
+
 function parseOpponentTeamFromPrompt(prompt: string, subjectTeamId: string) {
   if (!hasExplicitOpponentContext(prompt)) return null;
 
@@ -2096,6 +2122,32 @@ function parseOpponentRelativeRequest(
     resultFilter: parseResultFilter(prompt),
     homeAwayFilter: parseHomeAwayFilter(prompt),
   } satisfies OpponentRelativeRequest;
+}
+
+function parseOpponentRecordRequest(
+  prompt: string,
+  explicitTeam: (typeof NBA_TEAMS)[number] | null,
+  inferredTeam: (typeof NBA_TEAMS)[number] | null,
+) {
+  if (!isRecordPrompt(prompt)) return null;
+  if (!hasExplicitOpponentContext(prompt)) return null;
+  if (findMetricFromPrompt(prompt)) return null;
+
+  const team = explicitTeam || inferredTeam;
+  if (!team) return null;
+
+  const opponents = findTeamMatches(prompt)
+    .map((entry) => entry.team)
+    .filter((entry, index, list) => entry.teamId !== team.teamId && list.findIndex((other) => other.teamId === entry.teamId) === index);
+  if (!opponents.length) return null;
+
+  return {
+    team,
+    opponents,
+    seasonScope: parseSeasonScope(prompt),
+    resultFilter: parseResultFilter(prompt),
+    homeAwayFilter: parseHomeAwayFilter(prompt),
+  } satisfies OpponentRecordRequest;
 }
 
 function parseImplicitThreshold(prompt: string, metric: MetricDefinition | null) {
@@ -3479,6 +3531,100 @@ async function buildTeamOnOffDataset(
   return TEAM_ON_OFF_DATASET_CACHE.get(cacheKey)!;
 }
 
+async function buildLeagueTeamSeasonDataset(season: string) {
+  if (!LEAGUE_TEAM_DATASET_CACHE.has(season)) {
+    LEAGUE_TEAM_DATASET_CACHE.set(season, (async () => {
+      const seasonGames = await fetchSeasonGames(season);
+      const detailedGames = await mapWithConcurrency(
+        seasonGames,
+        (game) => fetchGameDetailsSafe(String((game as Record<string, unknown>).gameId || "")),
+      );
+
+      const skippedGames = detailedGames
+        .map((entry, index) => (
+          entry.error
+            ? {
+              gameId: String((seasonGames[index] as Record<string, unknown>).gameId || ""),
+              gameDate: String((seasonGames[index] as Record<string, unknown>).gameDate || ""),
+              error: entry.error,
+            }
+            : null
+        ))
+        .filter(Boolean) as Array<{ gameId: string; gameDate: string; error: string }>;
+
+      const rows = detailedGames.flatMap((entry, index) => {
+        if (!entry.game) return [];
+        const game = {
+          ...entry.game,
+          gameDate: String((seasonGames[index] as Record<string, unknown>).gameDate || ""),
+        } as AnyRecord;
+        const homeTeamId = String(game?.homeTeam?.teamId || "");
+        const awayTeamId = String(game?.awayTeam?.teamId || "");
+        const homeTeam = NBA_TEAMS.find((team) => team.teamId === homeTeamId) || null;
+        const awayTeam = NBA_TEAMS.find((team) => team.teamId === awayTeamId) || null;
+        const builtRows: CachedTeamGameRow[] = [];
+        if (homeTeam) {
+          const metrics = buildGameMetrics(game, homeTeam.teamId);
+          const opponentMetrics = buildGameMetrics(game, metrics.opponent.teamId);
+          builtRows.push({
+            teamId: homeTeam.teamId,
+            gameId: String(game.gameId || ""),
+            gameDate: String(game.gameDate || ""),
+            opponent: metrics.opponent,
+            value: 0,
+            result: metrics.result,
+            teamScore: safeNumber(metrics.teamScore, 0),
+            opponentScore: safeNumber(metrics.opponentScore, 0),
+            margin: safeNumber(metrics.margin, 0),
+            isHome: Boolean(metrics.isHome),
+            seasonType: String(metrics.seasonType || ""),
+            metrics: metrics.metrics,
+            opponentMetrics: opponentMetrics.metrics,
+          });
+        }
+        if (awayTeam) {
+          const metrics = buildGameMetrics(game, awayTeam.teamId);
+          const opponentMetrics = buildGameMetrics(game, metrics.opponent.teamId);
+          builtRows.push({
+            teamId: awayTeam.teamId,
+            gameId: String(game.gameId || ""),
+            gameDate: String(game.gameDate || ""),
+            opponent: metrics.opponent,
+            value: 0,
+            result: metrics.result,
+            teamScore: safeNumber(metrics.teamScore, 0),
+            opponentScore: safeNumber(metrics.opponentScore, 0),
+            margin: safeNumber(metrics.margin, 0),
+            isHome: Boolean(metrics.isHome),
+            seasonType: String(metrics.seasonType || ""),
+            metrics: metrics.metrics,
+            opponentMetrics: opponentMetrics.metrics,
+          });
+        }
+        return builtRows;
+      });
+
+      return { rows, skippedGames };
+    })());
+  }
+
+  return LEAGUE_TEAM_DATASET_CACHE.get(season)!;
+}
+
+function parseLeagueRankingRequest(prompt: string) {
+  const normalizedPrompt = normalizeText(prompt);
+  if (!/\b(team|teams)\b/.test(normalizedPrompt)) return null;
+  const metric = findMetricFromPrompt(prompt);
+  if (!metric) return null;
+  const aggregation = normalizedPrompt.includes("average")
+    || normalizedPrompt.includes("per game")
+    || normalizedPrompt.includes("averaged")
+    ? "season_average"
+    : "season_total";
+  const seasonScope = parseSeasonScope(prompt);
+  return { metric, aggregation, seasonScope } as const;
+}
+
 async function executeComparisonQuery(
   prompt: string,
   season: string,
@@ -3834,6 +3980,88 @@ Deno.serve(async (request) => {
     const season = currentSeasonString();
     const explicitTeam = findTeamFromPrompt(prompt);
     const inferredPlayerTeam = explicitTeam ? null : await inferTeamFromPlayerPrompt(prompt, season).catch(() => null);
+    const opponentRecordRequest = parseOpponentRecordRequest(prompt, explicitTeam, inferredPlayerTeam?.team || null);
+    if (opponentRecordRequest) {
+      const dataset = await buildTeamSeasonDataset(season, opponentRecordRequest.team);
+      if (!dataset.rows.length) {
+        return jsonResponse(502, {
+          error: "Unable to load any completed game details for this request.",
+          skippedGames: dataset.skippedGames,
+        });
+      }
+
+      const opponentIds = new Set(opponentRecordRequest.opponents.map((entry) => entry.teamId));
+      const matchingRows = dataset.rows.filter((row) => {
+        if (!matchesSeasonScope(row, opponentRecordRequest.seasonScope)) return false;
+        if (!opponentIds.has(row.opponent.teamId)) return false;
+        if (opponentRecordRequest.resultFilter === "win" && row.result !== "W") return false;
+        if (opponentRecordRequest.resultFilter === "loss" && row.result !== "L") return false;
+        if (opponentRecordRequest.homeAwayFilter === "home" && !row.isHome) return false;
+        if (opponentRecordRequest.homeAwayFilter === "away" && row.isHome) return false;
+        return true;
+      }).map((row) => ({
+        gameId: row.gameId,
+        gameDate: row.gameDate,
+        opponent: row.opponent,
+        value: 0,
+        result: row.result,
+        teamScore: row.teamScore,
+        opponentScore: row.opponentScore,
+        margin: row.margin,
+        isHome: row.isHome,
+        seasonType: row.seasonType,
+      }));
+
+      const wins = matchingRows.filter((row) => row.result === "W").length;
+      const losses = matchingRows.filter((row) => row.result === "L").length;
+      const opponentLabel = opponentRecordRequest.opponents.map((entry) => entry.tricode).join(", ");
+      return jsonResponse(200, {
+        prompt,
+        season,
+        team: {
+          teamId: opponentRecordRequest.team.teamId,
+          tricode: opponentRecordRequest.team.tricode,
+          fullName: opponentRecordRequest.team.fullName,
+        },
+        filters: {
+          opponent: opponentRecordRequest.opponents.map((entry) => ({
+            teamId: entry.teamId,
+            tricode: entry.tricode,
+            fullName: entry.fullName,
+          })),
+          resultFilter: opponentRecordRequest.resultFilter,
+          homeAwayFilter: opponentRecordRequest.homeAwayFilter,
+          seasonScope: opponentRecordRequest.seasonScope,
+          sort: "desc",
+          limit: null,
+          groupBy: "none",
+        },
+        stat: {
+          key: "record",
+          label: "Record",
+        },
+        parsedQuery: {
+          aggregation: "record",
+          seasonScope: opponentRecordRequest.seasonScope,
+        },
+        result: {
+          aggregation: "record",
+          value: wins - losses,
+          displayValue: `${wins}-${losses}`,
+          answer: `${opponentRecordRequest.team.fullName}'s record against ${opponentLabel} was ${wins}-${losses}.`,
+          games: matchingRows,
+          sampleSize: matchingRows.length,
+          groups: [],
+          record: {
+            wins,
+            losses,
+            winPct: matchingRows.length ? (wins / matchingRows.length) * 100 : 0,
+          },
+        },
+        skippedGames: dataset.skippedGames,
+      });
+    }
+
     const opponentRelativeRequest = parseOpponentRelativeRequest(prompt, explicitTeam, inferredPlayerTeam?.team || null);
     if (opponentRelativeRequest) {
       const dataset = await buildTeamSeasonDataset(season, opponentRelativeRequest.team);
@@ -3922,6 +4150,95 @@ Deno.serve(async (request) => {
         supportedStats: METRICS.map((entry) => ({ key: entry.key, label: entry.label })),
       });
     }
+    const leagueRankingRequest = !explicitTeam && !extractLikelyPlayerName(prompt, null)
+      ? parseLeagueRankingRequest(prompt)
+      : null;
+    if (leagueRankingRequest) {
+      const dataset = await buildLeagueTeamSeasonDataset(season);
+      if (!dataset.rows.length) {
+        return jsonResponse(502, {
+          error: "Unable to load any completed game details for this request.",
+          skippedGames: dataset.skippedGames,
+        });
+      }
+
+      const rows = dataset.rows.filter((row) => matchesSeasonScope(row, leagueRankingRequest.seasonScope));
+      const byTeam = new Map<string, { team: (typeof NBA_TEAMS)[number]; games: CachedTeamGameRow[] }>();
+      rows.forEach((row) => {
+        const resolvedTeam = NBA_TEAMS.find((entry) => entry.teamId === String((row as Record<string, unknown>).teamId || "")) || null;
+        if (!resolvedTeam) return;
+        const key = `${row.gameId}:${resolvedTeam.teamId}`;
+        const rowWithTeam = { ...row } as CachedTeamGameRow & { teamId: string };
+        if (!byTeam.has(resolvedTeam.teamId)) {
+          byTeam.set(resolvedTeam.teamId, { team: resolvedTeam, games: [] });
+        }
+        const group = byTeam.get(resolvedTeam.teamId)!;
+        if (!group.games.some((entry) => `${entry.gameId}:${String((entry as Record<string, unknown>).teamId || resolvedTeam.teamId)}` === key)) {
+          group.games.push(rowWithTeam);
+        }
+      });
+
+      const ranked = [...byTeam.values()].map((entry) => {
+        const total = entry.games.reduce((sum, game) => sum + safeNumber((game.metrics as Record<string, unknown>)[leagueRankingRequest.metric.key], 0), 0);
+        const average = entry.games.length ? total / entry.games.length : 0;
+        const wins = entry.games.filter((game) => game.result === "W").length;
+        const losses = entry.games.filter((game) => game.result === "L").length;
+        return {
+          team: entry.team,
+          games: entry.games.length,
+          wins,
+          losses,
+          total,
+          average,
+          value: leagueRankingRequest.aggregation === "season_average" ? average : total,
+        };
+      }).sort((left, right) => right.value - left.value);
+
+      return jsonResponse(200, {
+        prompt,
+        season,
+        team: null,
+        filters: {
+          seasonScope: leagueRankingRequest.seasonScope,
+        },
+        stat: {
+          key: leagueRankingRequest.metric.key,
+          label: leagueRankingRequest.metric.label,
+        },
+        parsedQuery: {
+          aggregation: "league_ranking",
+          seasonScope: leagueRankingRequest.seasonScope,
+        },
+        result: {
+          aggregation: "league_ranking",
+          value: ranked.length,
+          displayValue: `${ranked.length}`,
+          answer: `Showing teams ranked by ${leagueRankingRequest.metric.label.toLowerCase()} ${leagueRankingRequest.aggregation === "season_average" ? "per game" : "total"}${leagueRankingRequest.seasonScope !== "all" ? ` in the ${leagueRankingRequest.seasonScope}` : ""}.`,
+          games: [],
+          sampleSize: ranked.length,
+          groups: [],
+          table: {
+            columns: [
+              { key: "rank", label: "Rank" },
+              { key: "team", label: "Team" },
+              { key: "value", label: leagueRankingRequest.aggregation === "season_average" ? "AVG" : "TOTAL" },
+              { key: "games", label: "Games" },
+              { key: "record", label: "Record" },
+            ],
+            rows: ranked.map((entry, index) => ({
+              rank: index + 1,
+              team: entry.team.tricode,
+              value: leagueRankingRequest.aggregation === "season_average"
+                ? formatAverageValue(entry.average, leagueRankingRequest.metric)
+                : formatValue(entry.total, leagueRankingRequest.metric),
+              games: entry.games,
+              record: `${entry.wins}-${entry.losses}`,
+            })),
+          },
+        },
+        skippedGames: dataset.skippedGames,
+      });
+    }
     const metricForComparison = findMetricFromPrompt(prompt);
     if (metricForComparison && isComparisonPrompt(prompt)) {
       const comparisonPlayers = await inferPlayersFromPrompt(prompt, season, explicitTeam || inferredPlayerTeam?.team || null);
@@ -4006,6 +4323,9 @@ Deno.serve(async (request) => {
       if (matchedTeam && matchedMetric) {
         if (candidate.opponentTeamId && !promptHasExplicitOpponent) {
           candidate.opponentTeamId = undefined;
+        }
+        if (candidate.groupBy === "on_off" && !hasExplicitOnOffContext(prompt)) {
+          candidate.groupBy = "none";
         }
         if (explicitOrImplicitThreshold != null && candidate.threshold == null) {
           continue;
