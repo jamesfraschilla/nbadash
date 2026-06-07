@@ -538,7 +538,7 @@ html[data-theme="dark"] .pbpWheel {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   min-width: 220px;
 }
 
@@ -567,13 +567,14 @@ html[data-theme="dark"] .pbpWheel {
   font-weight: 400;
   color: var(--muted);
   line-height: 1.2;
+  margin-top: 2px;
 }
 
 .metaBlock {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   color: var(--text);
 }
 
@@ -595,7 +596,7 @@ html[data-theme="dark"] .pbpWheel {
 }
 
 .metaSpacer {
-  height: 8px;
+  height: 2px;
 }
 
 .timeoutsNumbers {
@@ -719,7 +720,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   padding-top: 10px;
 }
 
@@ -744,7 +745,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   font-weight: 400;
   color: var(--text);
   line-height: 1;
-  margin: 8px 0 20px;
+  margin: 8px 0 12px;
 }
 
 .statValue {
@@ -758,7 +759,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   padding-top: 10px;
   grid-area: center;
 }
@@ -777,7 +778,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   font-weight: 400;
   color: var(--text);
   line-height: 1;
-  margin: 8px 0 20px;
+  margin: 8px 0 10px;
 }
 
 .statLabel {
@@ -791,7 +792,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   font-size: 22px;
   font-weight: 300;
   color: var(--text);
-  margin-top: 2px;
+  margin-top: 0;
 }
 
 .status {
@@ -799,7 +800,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   font-weight: 600;
   color: var(--muted);
   line-height: 1.2;
-  margin-top: 8px;
+  margin-top: 2px;
 }
 
 .statusLive {
@@ -815,7 +816,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 }
 
 .possessionTableWrap {
-  margin-top: 6px;
+  margin-top: 0;
   display: flex;
   align-items: stretch;
   gap: 8px;

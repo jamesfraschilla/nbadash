@@ -1751,15 +1751,6 @@ export default function Game({ variant = "full" }) {
         100
     );
 
-  const netAway = useOfficialRatings
-    ? Math.round(teamStats.away.netRating)
-    : ortgAway -
-      drtgAway;
-  const netHome = useOfficialRatings
-    ? Math.round(teamStats.home.netRating)
-    : ortgHome -
-      drtgHome;
-
   const officialAwayPossessions = teamStats?.away?.possessions;
   const officialHomePossessions = teamStats?.home?.possessions;
   const useOfficialPossessions = officialAwayPossessions && officialHomePossessions;
@@ -2673,7 +2664,6 @@ export default function Game({ variant = "full" }) {
           {showExtras && (
             <>
               <div className={styles.statValue}>{ortgAway}</div>
-              <div className={styles.statValue}>{netAway >= 0 ? "+" : ""}{netAway}</div>
             </>
           )}
           {showExtras && <div className={styles.statValue}>{formatChancesValue(displayAwayChances)}</div>}
@@ -2685,7 +2675,6 @@ export default function Game({ variant = "full" }) {
           {showExtras && (
             <>
               <div className={styles.statLabel}>ORTG</div>
-              <div className={styles.statLabel}>NET</div>
             </>
           )}
           {showExtras && <div className={styles.statLabel}>CHANCES</div>}
@@ -2745,7 +2734,6 @@ export default function Game({ variant = "full" }) {
           {showExtras && (
             <>
               <div className={styles.statValue}>{ortgHome}</div>
-              <div className={styles.statValue}>{netHome >= 0 ? "+" : ""}{netHome}</div>
             </>
           )}
           {showExtras && <div className={styles.statValue}>{formatChancesValue(displayHomeChances)}</div>}
