@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createNote } from "../accountData.js";
 import { requestGameAnalysis } from "../analysisData.js";
+import { requestCustomDashboardRequest } from "../customRequestsData.js";
 import {
   fetchCurrentGLeagueRosters,
   fetchCurrentNbaRosters,
@@ -136,6 +137,20 @@ const SEGMENT_STAT_DEFAULTS = {
   possessionsFor: 0,
   possessionsAgainst: 0,
 };
+
+function compareSortableValues(left, right) {
+  const leftNumber = Number(left);
+  const rightNumber = Number(right);
+  const leftIsNumber = Number.isFinite(leftNumber);
+  const rightIsNumber = Number.isFinite(rightNumber);
+  if (leftIsNumber && rightIsNumber && leftNumber !== rightNumber) {
+    return leftNumber - rightNumber;
+  }
+  return String(left ?? "").localeCompare(String(right ?? ""), undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
 
 const normalizeRosterPersonId = (value) => String(value || "").trim();
 const normalizeRosterName = (value) => String(value || "").trim().replace(/\s+/g, " ");
@@ -626,6 +641,11 @@ export default function Game({ variant = "full" }) {
   const [analysisSaveStatus, setAnalysisSaveStatus] = useState("");
   const [analysisSaving, setAnalysisSaving] = useState(false);
   const [analysisForm, setAnalysisForm] = useState(() => buildInitialAnalysisForm(null, false));
+  const [analysisCustomPrompt, setAnalysisCustomPrompt] = useState("");
+  const [analysisCustomLoading, setAnalysisCustomLoading] = useState(false);
+  const [analysisCustomError, setAnalysisCustomError] = useState("");
+  const [analysisCustomResult, setAnalysisCustomResult] = useState(null);
+  const [analysisCustomTableSort, setAnalysisCustomTableSort] = useState({ table: "", column: "", direction: "asc" });
   const [strategyVantageTeamId, setStrategyVantageTeamId] = useState("");
   const [strategyFeedback, setStrategyFeedback] = useState(() => buildDefaultStrategyFeedback());
   const [strategyOverrides, setStrategyOverrides] = useState(() => buildDefaultStrategyOverrides());
@@ -1261,6 +1281,10 @@ export default function Game({ variant = "full" }) {
     setAnalysisResult(null);
     setAnalysisUniformOpen(false);
     setAnalysisSaveStatus("");
+    setAnalysisCustomPrompt("");
+    setAnalysisCustomError("");
+    setAnalysisCustomResult(null);
+    setAnalysisCustomTableSort({ table: "", column: "", direction: "asc" });
     setAnalysisModalOpen(true);
   };
 
@@ -1284,6 +1308,10 @@ export default function Game({ variant = "full" }) {
     setAnalysisResult(null);
     setAnalysisUniformOpen(false);
     setAnalysisSaveStatus("");
+    setAnalysisCustomLoading(false);
+    setAnalysisCustomError("");
+    setAnalysisCustomResult(null);
+    setAnalysisCustomTableSort({ table: "", column: "", direction: "asc" });
   };
 
   const requestCancelNote = () => {
@@ -1366,6 +1394,123 @@ export default function Game({ variant = "full" }) {
     } finally {
       setAnalysisLoading(false);
     }
+  };
+
+  const runAnalysisCustomRequest = async () => {
+    const prompt = String(analysisCustomPrompt || "").trim();
+    if (!prompt || analysisCustomLoading) return;
+
+    try {
+      setAnalysisCustomLoading(true);
+      setAnalysisCustomError("");
+      const result = await requestCustomDashboardRequest({ prompt });
+      setAnalysisCustomResult(result);
+      setAnalysisCustomTableSort({ table: "", column: "", direction: "asc" });
+    } catch (error) {
+      setAnalysisCustomError(error?.message || "Unable to complete the custom request.");
+    } finally {
+      setAnalysisCustomLoading(false);
+    }
+  };
+
+  const resetAnalysisCustomRequest = () => {
+    setAnalysisCustomPrompt("");
+    setAnalysisCustomError("");
+    setAnalysisCustomResult(null);
+    setAnalysisCustomTableSort({ table: "", column: "", direction: "asc" });
+  };
+
+  const sortedAnalysisRequestGroups = useMemo(() => {
+    const groups = Array.isArray(analysisCustomResult?.result?.groups) ? analysisCustomResult.result.groups : [];
+    if (!groups.length || analysisCustomTableSort.table !== "groups" || !analysisCustomTableSort.column) return groups;
+
+    const direction = analysisCustomTableSort.direction === "desc" ? -1 : 1;
+    return [...groups].sort((left, right) => {
+      const leftValue = analysisCustomTableSort.column === "group"
+        ? left.label
+        : analysisCustomTableSort.column === "value"
+          ? left.displayValue
+          : analysisCustomTableSort.column === "games"
+            ? left.sampleSize
+            : analysisCustomTableSort.column === "record"
+              ? `${left.wins}-${left.losses}`
+              : analysisCustomTableSort.column === "avg"
+                ? left.averageDisplayValue
+                : left.totalDisplayValue;
+      const rightValue = analysisCustomTableSort.column === "group"
+        ? right.label
+        : analysisCustomTableSort.column === "value"
+          ? right.displayValue
+          : analysisCustomTableSort.column === "games"
+            ? right.sampleSize
+            : analysisCustomTableSort.column === "record"
+              ? `${right.wins}-${right.losses}`
+              : analysisCustomTableSort.column === "avg"
+                ? right.averageDisplayValue
+                : right.totalDisplayValue;
+      const comparison = compareSortableValues(leftValue, rightValue);
+      if (comparison !== 0) return comparison * direction;
+      return String(left.label || "").localeCompare(String(right.label || ""));
+    });
+  }, [analysisCustomResult, analysisCustomTableSort]);
+
+  const sortedAnalysisRequestTableRows = useMemo(() => {
+    const rows = Array.isArray(analysisCustomResult?.result?.table?.rows) ? analysisCustomResult.result.table.rows : [];
+    if (!rows.length || analysisCustomTableSort.table !== "game-table" || !analysisCustomTableSort.column) return rows;
+
+    const direction = analysisCustomTableSort.direction === "desc" ? -1 : 1;
+    return [...rows].sort((left, right) => {
+      const comparison = compareSortableValues(left.values?.[analysisCustomTableSort.column], right.values?.[analysisCustomTableSort.column]);
+      if (comparison !== 0) return comparison * direction;
+      return String(left.gameDate || "").localeCompare(String(right.gameDate || ""));
+    });
+  }, [analysisCustomResult, analysisCustomTableSort]);
+
+  const sortedAnalysisRequestGames = useMemo(() => {
+    const games = Array.isArray(analysisCustomResult?.result?.games) ? analysisCustomResult.result.games : [];
+    if (!games.length || analysisCustomTableSort.table !== "game-log" || !analysisCustomTableSort.column) return games;
+
+    const direction = analysisCustomTableSort.direction === "desc" ? -1 : 1;
+    return [...games].sort((left, right) => {
+      const leftValue = analysisCustomTableSort.column === "gameDate"
+        ? left.gameDate
+        : analysisCustomTableSort.column === "opponent"
+          ? left?.opponent?.tricode || left?.opponent?.fullName || "-"
+          : analysisCustomTableSort.column === "result"
+            ? left.result || "-"
+            : analysisCustomTableSort.column === "score"
+              ? `${left.teamScore}-${left.opponentScore}`
+              : analysisCustomTableSort.column === "value"
+                ? left.value
+                : left.gameId;
+      const rightValue = analysisCustomTableSort.column === "gameDate"
+        ? right.gameDate
+        : analysisCustomTableSort.column === "opponent"
+          ? right?.opponent?.tricode || right?.opponent?.fullName || "-"
+          : analysisCustomTableSort.column === "result"
+            ? right.result || "-"
+            : analysisCustomTableSort.column === "score"
+              ? `${right.teamScore}-${right.opponentScore}`
+              : analysisCustomTableSort.column === "value"
+                ? right.value
+                : right.gameId;
+      const comparison = compareSortableValues(leftValue, rightValue);
+      if (comparison !== 0) return comparison * direction;
+      return String(left.gameDate || "").localeCompare(String(right.gameDate || ""));
+    });
+  }, [analysisCustomResult, analysisCustomTableSort]);
+
+  const handleAnalysisRequestTableSort = (table, column) => {
+    setAnalysisCustomTableSort((current) => (
+      current.table === table && current.column === column
+        ? { table, column, direction: current.direction === "asc" ? "desc" : "asc" }
+        : { table, column, direction: "asc" }
+    ));
+  };
+
+  const analysisSortIndicator = (table, column) => {
+    if (analysisCustomTableSort.table !== table || analysisCustomTableSort.column !== column) return "";
+    return analysisCustomTableSort.direction === "asc" ? " ▲" : " ▼";
   };
 
   const saveAnalysisToVault = async () => {
@@ -2637,63 +2782,65 @@ export default function Game({ variant = "full" }) {
               src={teamLogoUrl(awayTeam.teamId)}
               alt={`${awayTeam.teamName} logo`}
             />
-            {(timeouts || isPregame) && (
+            <div className={styles.teamMetaStack}>
+              {(timeouts || isPregame) && (
+                <div className={styles.teamMetaRow}>
+                  {renderTimeouts(
+                    awayTimeoutsRemaining,
+                    mandatoryTimeoutTeam === "away",
+                    isGLeagueGame && !isSummerLeagueMatch,
+                    awayResetUsed,
+                    isSummerLeagueMatch ? 2 : 7
+                  )}
+                </div>
+              )}
+              {(challenges || isPregame) && (
+                <div className={styles.teamMetaRow}>
+                  {renderChallenges(awayChallenges)}
+                </div>
+              )}
               <div className={styles.teamMetaRow}>
-                {renderTimeouts(
-                  awayTimeoutsRemaining,
-                  mandatoryTimeoutTeam === "away",
-                  isGLeagueGame && !isSummerLeagueMatch,
-                  awayResetUsed,
-                  isSummerLeagueMatch ? 2 : 7
-                )}
+                {renderFouls(awayFoulsDisplay)}
               </div>
-          )}
-          {(challenges || isPregame) && (
-            <div className={styles.teamMetaRow}>
-              {renderChallenges(awayChallenges)}
             </div>
-          )}
-          <div className={styles.teamMetaRow}>
-            {renderFouls(awayFoulsDisplay)}
           </div>
-        </div>
 
           <div className={`${styles.teamStatsColumn} ${styles.awayStatsColumn}`}>
-          <div className={styles.teamTricode}>{awayTeam.teamTricode}</div>
-          <div className={styles.teamScore}>{displayAwayScore}</div>
-          {showExtras && (
-            <>
-              <div className={styles.statValue}>{ortgAway}</div>
-            </>
-          )}
-          {showExtras && <div className={styles.statValue}>{formatChancesValue(displayAwayChances)}</div>}
+            <div className={styles.teamTricode}>{awayTeam.teamTricode}</div>
+            <div className={styles.teamScore}>{displayAwayScore}</div>
+            {showExtras && (
+              <>
+                <div className={styles.statValue}>{ortgAway}</div>
+              </>
+            )}
+            {showExtras && <div className={styles.statValue}>{formatChancesValue(displayAwayChances)}</div>}
           </div>
 
           <div className={styles.centerColumn}>
             <div className={styles.vs}>vs</div>
             <div className={styles.dash}>-</div>
-          {showExtras && (
-            <>
-              <div className={styles.statLabel}>ORTG</div>
-            </>
-          )}
-          {showExtras && <div className={styles.statLabel}>CHANCES</div>}
-          {showExtras && <div className={styles.paceRow}>PACE: {displayPaceValue.toFixed(1)}</div>}
-          <div className={`${styles.status} ${isLive ? styles.statusLive : ""}`}>
-            {status || game.gameStatusText}
-          </div>
-          {clock && <div className={styles.clock}>{clock}</div>}
+            {showExtras && (
+              <>
+                <div className={styles.statLabel}>ORTG</div>
+              </>
+            )}
+            {showExtras && <div className={styles.statLabel}>CHANCES</div>}
+            {showExtras && <div className={styles.paceRow}>PACE: {displayPaceValue.toFixed(1)}</div>}
+            <div className={`${styles.status} ${isLive ? styles.statusLive : ""}`}>
+              {status || game.gameStatusText}
+            </div>
+            {clock && <div className={styles.clock}>{clock}</div>}
           </div>
 
           <div className={`${styles.teamStatsColumn} ${styles.homeStatsColumn}`}>
-          <div className={styles.teamTricode}>{homeTeam.teamTricode}</div>
-          <div className={styles.teamScore}>{displayHomeScore}</div>
-          {showExtras && (
-            <>
-              <div className={styles.statValue}>{ortgHome}</div>
-            </>
-          )}
-          {showExtras && <div className={styles.statValue}>{formatChancesValue(displayHomeChances)}</div>}
+            <div className={styles.teamTricode}>{homeTeam.teamTricode}</div>
+            <div className={styles.teamScore}>{displayHomeScore}</div>
+            {showExtras && (
+              <>
+                <div className={styles.statValue}>{ortgHome}</div>
+              </>
+            )}
+            {showExtras && <div className={styles.statValue}>{formatChancesValue(displayHomeChances)}</div>}
           </div>
 
           <div className={`${styles.teamLogoColumn} ${styles.homeLogoColumn}`}>
@@ -2702,27 +2849,29 @@ export default function Game({ variant = "full" }) {
               src={teamLogoUrl(homeTeam.teamId)}
               alt={`${homeTeam.teamName} logo`}
             />
-            {(timeouts || isPregame) && (
+            <div className={styles.teamMetaStack}>
+              {(timeouts || isPregame) && (
+                <div className={styles.teamMetaRow}>
+                  {renderTimeouts(
+                    homeTimeoutsRemaining,
+                    mandatoryTimeoutTeam === "home",
+                    isGLeagueGame && !isSummerLeagueMatch,
+                    homeResetUsed,
+                    isSummerLeagueMatch ? 2 : 7
+                  )}
+                </div>
+              )}
+              {(challenges || isPregame) && (
+                <div className={styles.teamMetaRow}>
+                  {renderChallenges(homeChallenges)}
+                </div>
+              )}
               <div className={styles.teamMetaRow}>
-                {renderTimeouts(
-                  homeTimeoutsRemaining,
-                  mandatoryTimeoutTeam === "home",
-                  isGLeagueGame && !isSummerLeagueMatch,
-                  homeResetUsed,
-                  isSummerLeagueMatch ? 2 : 7
-                )}
+                {renderFouls(homeFoulsDisplay)}
               </div>
-          )}
-          {(challenges || isPregame) && (
-            <div className={styles.teamMetaRow}>
-              {renderChallenges(homeChallenges)}
             </div>
-          )}
-          <div className={styles.teamMetaRow}>
-            {renderFouls(homeFoulsDisplay)}
           </div>
-        </div>
-      </section>
+        </section>
 
       {showExtras && (
         <>
@@ -3076,242 +3225,407 @@ export default function Game({ variant = "full" }) {
           >
             <h3>Analysis</h3>
 
-            <div className={styles.noteTimeRow}>
-              <div className={styles.noteTimeLabel}>Min time</div>
-              <div className={styles.noteTimeControls}>
-                <select
-                  className={styles.noteSelect}
-                  value={analysisForm.minPeriod}
-                  onChange={(event) => updateAnalysisPoint("min", "Period", event.target.value)}
-                >
-                  {analysisPeriodOptions.map((option) => (
-                    <option key={`min-${option.value}`} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <div className={styles.noteClockSelects}>
-                  <select
-                    className={styles.noteSelect}
-                    value={analysisForm.minMinutes}
-                    onChange={(event) => updateAnalysisPoint("min", "Minutes", event.target.value)}
-                  >
-                    {minMinuteOptions.map((option) => (
-                      <option key={`min-minute-${option}`} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                  <span className={styles.noteClockSeparator}>:</span>
-                  <select
-                    className={styles.noteSelect}
-                    value={analysisForm.minSeconds}
-                    onChange={(event) => updateAnalysisPoint("min", "Seconds", event.target.value)}
-                  >
-                    {minSecondOptions.map((option) => (
-                      <option key={`min-second-${option}`} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
+            <div className={styles.analysisWorkspace}>
+              <section className={styles.analysisPane}>
+                <div className={styles.analysisPaneHeader}>
+                  <div className={styles.analysisPaneTitle}>Segment Recap</div>
+                  <div className={styles.analysisPaneCaption}>Select a range and generate a recap for that slice of the game.</div>
                 </div>
-              </div>
-            </div>
 
-            <div className={styles.noteTimeRow}>
-              <div className={styles.noteTimeLabel}>Max time</div>
-              <div className={styles.noteTimeControls}>
-                <select
-                  className={styles.noteSelect}
-                  value={analysisForm.maxPeriod}
-                  onChange={(event) => updateAnalysisPoint("max", "Period", event.target.value)}
-                  disabled={isLive}
-                >
-                  {analysisPeriodOptions.map((option) => (
-                    <option key={`max-${option.value}`} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <div className={styles.noteClockSelects}>
-                  <select
-                    className={styles.noteSelect}
-                    value={analysisForm.maxMinutes}
-                    onChange={(event) => updateAnalysisPoint("max", "Minutes", event.target.value)}
-                    disabled={isLive}
-                  >
-                    {maxMinuteOptions.map((option) => (
-                      <option key={`max-minute-${option}`} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                  <span className={styles.noteClockSeparator}>:</span>
-                  <select
-                    className={styles.noteSelect}
-                    value={analysisForm.maxSeconds}
-                    onChange={(event) => updateAnalysisPoint("max", "Seconds", event.target.value)}
-                    disabled={isLive}
-                  >
-                    {maxSecondOptions.map((option) => (
-                      <option key={`max-second-${option}`} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                {isLive ? (
-                  <span className={styles.analysisLiveCap}>
-                    Live max: {analysisPeriodLabel(game?.period)} {clock}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-
-            <div className={styles.noteTimeRow}>
-              <div className={styles.noteTimeLabel}>Segment shortcut</div>
-              <div className={styles.noteTimeControls}>
-                <select
-                  className={styles.noteSelect}
-                  value={analysisForm.segmentShortcut || "custom"}
-                  onChange={(event) => updateAnalysisSegmentShortcut(event.target.value)}
-                >
-                  {analysisSegmentOptions.map((option) => (
-                    <option key={`segment-${option.value}`} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {analysisValidation.error ? (
-              <div className={styles.analysisError}>{analysisValidation.error}</div>
-            ) : (
-              <div className={styles.analysisRangeSummary}>{analysisValidation.rangeLabel}</div>
-            )}
-
-            {analysisError ? <div className={styles.analysisError}>{analysisError}</div> : null}
-            {analysisSaveStatus ? <div className={styles.analysisRangeSummary}>{analysisSaveStatus}</div> : null}
-
-            {analysisResult ? (
-              <div className={styles.analysisResult}>
-                {analysisResult.headline ? (
-                  <div className={styles.analysisHeadline}>{analysisResult.headline}</div>
-                ) : null}
-                {analysisResult.summary ? (
-                  <p className={styles.analysisSummary}>{analysisResult.summary}</p>
-                ) : null}
-                {Array.isArray(analysisResult.sections) && analysisResult.sections.length ? (
-                  analysisResult.sections.map((section) => (
-                    <div key={section.title} className={styles.analysisSection}>
-                      <div className={styles.analysisSectionTitle}>{section.title}</div>
-                      <ul className={styles.analysisList}>
-                        {Array.isArray(section.items) ? section.items.map((item) => (
-                          <li key={item}>{item}</li>
-                        )) : null}
-                      </ul>
-                    </div>
-                  ))
-                ) : null}
-                {!Array.isArray(analysisResult.sections) || !analysisResult.sections.length ? (
-                  Array.isArray(analysisResult.swingFactors) && analysisResult.swingFactors.length ? (
-                  <div className={styles.analysisSection}>
-                    <div className={styles.analysisSectionTitle}>Swing Factors</div>
-                    <ul className={styles.analysisList}>
-                      {analysisResult.swingFactors.map((item) => (
-                        <li key={item}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                  ) : null
-                ) : null}
-                {!Array.isArray(analysisResult.sections) || !analysisResult.sections.length ? (
-                  Array.isArray(analysisResult.lineupNotes) && analysisResult.lineupNotes.length ? (
-                  <div className={styles.analysisSection}>
-                    <div className={styles.analysisSectionTitle}>Lineup Notes</div>
-                    <ul className={styles.analysisList}>
-                      {analysisResult.lineupNotes.map((item) => (
-                        <li key={item}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                  ) : null
-                ) : null}
-                {!Array.isArray(analysisResult.sections) || !analysisResult.sections.length ? (
-                  Array.isArray(analysisResult.statOutliers) && analysisResult.statOutliers.length ? (
-                  <div className={styles.analysisSection}>
-                    <div className={styles.analysisSectionTitle}>Stat Outliers</div>
-                    <ul className={styles.analysisList}>
-                      {analysisResult.statOutliers.map((item) => (
-                        <li key={item}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                  ) : null
-                ) : null}
-                {analysisResult.uniformDetails && (
-                  <div className={styles.analysisUniformWrap}>
-                    <button
-                      type="button"
-                      className={styles.analysisUniformToggle}
-                      onClick={() => setAnalysisUniformOpen((prev) => !prev)}
+                <div className={styles.noteTimeRow}>
+                  <div className={styles.noteTimeLabel}>Min time</div>
+                  <div className={styles.noteTimeControls}>
+                    <select
+                      className={styles.noteSelect}
+                      value={analysisForm.minPeriod}
+                      onChange={(event) => updateAnalysisPoint("min", "Period", event.target.value)}
                     >
-                      {analysisUniformOpen ? "Hide Uniform View" : "Show Uniform View"}
-                    </button>
-                    {analysisUniformOpen ? (
-                      <div className={styles.analysisUniformPanel}>
-                        {Array.isArray(analysisResult.uniformDetails.swingFactors) && analysisResult.uniformDetails.swingFactors.length ? (
-                          <div className={styles.analysisSection}>
-                            <div className={styles.analysisSectionTitle}>Swing Factors</div>
-                            <ul className={styles.analysisList}>
-                              {analysisResult.uniformDetails.swingFactors.map((item) => (
-                                <li key={item}>{item}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        ) : null}
-                        {Array.isArray(analysisResult.uniformDetails.lineupNotes) && analysisResult.uniformDetails.lineupNotes.length ? (
-                          <div className={styles.analysisSection}>
-                            <div className={styles.analysisSectionTitle}>Lineup Notes</div>
-                            <ul className={styles.analysisList}>
-                              {analysisResult.uniformDetails.lineupNotes.map((item) => (
-                                <li key={item}>{item}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        ) : null}
-                        {Array.isArray(analysisResult.uniformDetails.statOutliers) && analysisResult.uniformDetails.statOutliers.length ? (
-                          <div className={styles.analysisSection}>
-                            <div className={styles.analysisSectionTitle}>Stat Outliers</div>
-                            <ul className={styles.analysisList}>
-                              {analysisResult.uniformDetails.statOutliers.map((item) => (
-                                <li key={item}>{item}</li>
-                              ))}
-                            </ul>
+                      {analysisPeriodOptions.map((option) => (
+                        <option key={`min-${option.value}`} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <div className={styles.noteClockSelects}>
+                      <select
+                        className={styles.noteSelect}
+                        value={analysisForm.minMinutes}
+                        onChange={(event) => updateAnalysisPoint("min", "Minutes", event.target.value)}
+                      >
+                        {minMinuteOptions.map((option) => (
+                          <option key={`min-minute-${option}`} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                      <span className={styles.noteClockSeparator}>:</span>
+                      <select
+                        className={styles.noteSelect}
+                        value={analysisForm.minSeconds}
+                        onChange={(event) => updateAnalysisPoint("min", "Seconds", event.target.value)}
+                      >
+                        {minSecondOptions.map((option) => (
+                          <option key={`min-second-${option}`} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={styles.noteTimeRow}>
+                  <div className={styles.noteTimeLabel}>Max time</div>
+                  <div className={styles.noteTimeControls}>
+                    <select
+                      className={styles.noteSelect}
+                      value={analysisForm.maxPeriod}
+                      onChange={(event) => updateAnalysisPoint("max", "Period", event.target.value)}
+                      disabled={isLive}
+                    >
+                      {analysisPeriodOptions.map((option) => (
+                        <option key={`max-${option.value}`} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <div className={styles.noteClockSelects}>
+                      <select
+                        className={styles.noteSelect}
+                        value={analysisForm.maxMinutes}
+                        onChange={(event) => updateAnalysisPoint("max", "Minutes", event.target.value)}
+                        disabled={isLive}
+                      >
+                        {maxMinuteOptions.map((option) => (
+                          <option key={`max-minute-${option}`} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                      <span className={styles.noteClockSeparator}>:</span>
+                      <select
+                        className={styles.noteSelect}
+                        value={analysisForm.maxSeconds}
+                        onChange={(event) => updateAnalysisPoint("max", "Seconds", event.target.value)}
+                        disabled={isLive}
+                      >
+                        {maxSecondOptions.map((option) => (
+                          <option key={`max-second-${option}`} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {isLive ? (
+                      <span className={styles.analysisLiveCap}>
+                        Live max: {analysisPeriodLabel(game?.period)} {clock}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className={styles.noteTimeRow}>
+                  <div className={styles.noteTimeLabel}>Segment shortcut</div>
+                  <div className={styles.noteTimeControls}>
+                    <select
+                      className={styles.noteSelect}
+                      value={analysisForm.segmentShortcut || "custom"}
+                      onChange={(event) => updateAnalysisSegmentShortcut(event.target.value)}
+                    >
+                      {analysisSegmentOptions.map((option) => (
+                        <option key={`segment-${option.value}`} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {analysisValidation.error ? (
+                  <div className={styles.analysisError}>{analysisValidation.error}</div>
+                ) : (
+                  <div className={styles.analysisRangeSummary}>{analysisValidation.rangeLabel}</div>
+                )}
+
+                {analysisError ? <div className={styles.analysisError}>{analysisError}</div> : null}
+                {analysisSaveStatus ? <div className={styles.analysisRangeSummary}>{analysisSaveStatus}</div> : null}
+
+                {analysisResult ? (
+                  <div className={styles.analysisResult}>
+                    {analysisResult.headline ? (
+                      <div className={styles.analysisHeadline}>{analysisResult.headline}</div>
+                    ) : null}
+                    {analysisResult.summary ? (
+                      <p className={styles.analysisSummary}>{analysisResult.summary}</p>
+                    ) : null}
+                    {Array.isArray(analysisResult.sections) && analysisResult.sections.length ? (
+                      analysisResult.sections.map((section) => (
+                        <div key={section.title} className={styles.analysisSection}>
+                          <div className={styles.analysisSectionTitle}>{section.title}</div>
+                          <ul className={styles.analysisList}>
+                            {Array.isArray(section.items) ? section.items.map((item) => (
+                              <li key={item}>{item}</li>
+                            )) : null}
+                          </ul>
+                        </div>
+                      ))
+                    ) : null}
+                    {!Array.isArray(analysisResult.sections) || !analysisResult.sections.length ? (
+                      Array.isArray(analysisResult.swingFactors) && analysisResult.swingFactors.length ? (
+                        <div className={styles.analysisSection}>
+                          <div className={styles.analysisSectionTitle}>Swing Factors</div>
+                          <ul className={styles.analysisList}>
+                            {analysisResult.swingFactors.map((item) => (
+                              <li key={item}>{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null
+                    ) : null}
+                    {!Array.isArray(analysisResult.sections) || !analysisResult.sections.length ? (
+                      Array.isArray(analysisResult.lineupNotes) && analysisResult.lineupNotes.length ? (
+                        <div className={styles.analysisSection}>
+                          <div className={styles.analysisSectionTitle}>Lineup Notes</div>
+                          <ul className={styles.analysisList}>
+                            {analysisResult.lineupNotes.map((item) => (
+                              <li key={item}>{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null
+                    ) : null}
+                    {!Array.isArray(analysisResult.sections) || !analysisResult.sections.length ? (
+                      Array.isArray(analysisResult.statOutliers) && analysisResult.statOutliers.length ? (
+                        <div className={styles.analysisSection}>
+                          <div className={styles.analysisSectionTitle}>Stat Outliers</div>
+                          <ul className={styles.analysisList}>
+                            {analysisResult.statOutliers.map((item) => (
+                              <li key={item}>{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null
+                    ) : null}
+                    {analysisResult.uniformDetails && (
+                      <div className={styles.analysisUniformWrap}>
+                        <button
+                          type="button"
+                          className={styles.analysisUniformToggle}
+                          onClick={() => setAnalysisUniformOpen((prev) => !prev)}
+                        >
+                          {analysisUniformOpen ? "Hide Uniform View" : "Show Uniform View"}
+                        </button>
+                        {analysisUniformOpen ? (
+                          <div className={styles.analysisUniformPanel}>
+                            {Array.isArray(analysisResult.uniformDetails.swingFactors) && analysisResult.uniformDetails.swingFactors.length ? (
+                              <div className={styles.analysisSection}>
+                                <div className={styles.analysisSectionTitle}>Swing Factors</div>
+                                <ul className={styles.analysisList}>
+                                  {analysisResult.uniformDetails.swingFactors.map((item) => (
+                                    <li key={item}>{item}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ) : null}
+                            {Array.isArray(analysisResult.uniformDetails.lineupNotes) && analysisResult.uniformDetails.lineupNotes.length ? (
+                              <div className={styles.analysisSection}>
+                                <div className={styles.analysisSectionTitle}>Lineup Notes</div>
+                                <ul className={styles.analysisList}>
+                                  {analysisResult.uniformDetails.lineupNotes.map((item) => (
+                                    <li key={item}>{item}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ) : null}
+                            {Array.isArray(analysisResult.uniformDetails.statOutliers) && analysisResult.uniformDetails.statOutliers.length ? (
+                              <div className={styles.analysisSection}>
+                                <div className={styles.analysisSectionTitle}>Stat Outliers</div>
+                                <ul className={styles.analysisList}>
+                                  {analysisResult.uniformDetails.statOutliers.map((item) => (
+                                    <li key={item}>{item}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ) : null}
                           </div>
                         ) : null}
                       </div>
+                    )}
+                  </div>
+                ) : null}
+
+                <div className={styles.analysisPaneActions}>
+                  {analysisResult ? (
+                    <button type="button" className={styles.noteCancel} onClick={saveAnalysisToVault} disabled={analysisLoading || analysisSaving}>
+                      {analysisSaving ? "Saving..." : "Save"}
+                    </button>
+                  ) : <span />}
+                  <button type="button" className={styles.noteSave} onClick={generateAnalysis} disabled={analysisLoading || analysisSaving || Boolean(analysisValidation.error)}>
+                    {analysisLoading ? "Generating..." : "Generate Recap"}
+                  </button>
+                </div>
+              </section>
+
+              <section className={styles.analysisPane}>
+                <div className={styles.analysisPaneHeader}>
+                  <div className={styles.analysisPaneTitle}>Custom Request</div>
+                  <div className={styles.analysisPaneCaption}>Ask a stat question directly from this game dashboard.</div>
+                </div>
+
+                <label className={styles.analysisPromptField}>
+                  <span className={styles.noteTimeLabel}>Request</span>
+                  <textarea
+                    rows={6}
+                    value={analysisCustomPrompt}
+                    onChange={(event) => setAnalysisCustomPrompt(event.target.value)}
+                    placeholder="Example: How many games this season did Oklahoma City have 15+ steals?"
+                  />
+                </label>
+
+                {analysisCustomError ? <div className={styles.analysisError}>{analysisCustomError}</div> : null}
+
+                {analysisCustomResult ? (
+                  <div className={styles.analysisCustomResult}>
+                    <div className={styles.analysisHeadline}>
+                      {analysisCustomResult?.result?.answer || "Custom request"}
+                    </div>
+
+                    <div className={styles.analysisMetaGrid}>
+                      <div className={styles.analysisMetaCard}>
+                        <div className={styles.analysisSectionTitle}>Parsed Stat</div>
+                        <div>{analysisCustomResult?.result?.metric?.label || analysisCustomResult?.result?.table?.label || "-"}</div>
+                      </div>
+                      <div className={styles.analysisMetaCard}>
+                        <div className={styles.analysisSectionTitle}>Filters</div>
+                        <div>{analysisCustomResult?.result?.filtersLabel || "All results"}</div>
+                      </div>
+                      <div className={styles.analysisMetaCard}>
+                        <div className={styles.analysisSectionTitle}>Aggregation</div>
+                        <div>{String(analysisCustomResult?.result?.aggregation || "").replaceAll("_", " ")}</div>
+                      </div>
+                      <div className={styles.analysisMetaCard}>
+                        <div className={styles.analysisSectionTitle}>Sample Size</div>
+                        <div>{analysisCustomResult?.result?.sampleSize || 0} games</div>
+                      </div>
+                      <div className={styles.analysisMetaCard}>
+                        <div className={styles.analysisSectionTitle}>Value</div>
+                        <div>{analysisCustomResult?.result?.displayValue || "0"}</div>
+                      </div>
+                    </div>
+
+                    {Array.isArray(analysisCustomResult?.result?.groups) && analysisCustomResult.result.groups.length ? (
+                      <div className={styles.analysisCustomTableSection}>
+                        <div className={styles.analysisSectionTitle}>Grouped Summary</div>
+                        <div className={styles.analysisTableWrap}>
+                          <table className={styles.analysisTable}>
+                            <thead>
+                              <tr>
+                                <th><button type="button" className={styles.analysisTableSortButton} onClick={() => handleAnalysisRequestTableSort("groups", "group")}>Group{analysisSortIndicator("groups", "group")}</button></th>
+                                <th><button type="button" className={styles.analysisTableSortButton} onClick={() => handleAnalysisRequestTableSort("groups", "value")}>Value{analysisSortIndicator("groups", "value")}</button></th>
+                                <th><button type="button" className={styles.analysisTableSortButton} onClick={() => handleAnalysisRequestTableSort("groups", "games")}>Games{analysisSortIndicator("groups", "games")}</button></th>
+                                <th><button type="button" className={styles.analysisTableSortButton} onClick={() => handleAnalysisRequestTableSort("groups", "record")}>Record{analysisSortIndicator("groups", "record")}</button></th>
+                                <th><button type="button" className={styles.analysisTableSortButton} onClick={() => handleAnalysisRequestTableSort("groups", "avg")}>Avg{analysisSortIndicator("groups", "avg")}</button></th>
+                                <th><button type="button" className={styles.analysisTableSortButton} onClick={() => handleAnalysisRequestTableSort("groups", "total")}>Total{analysisSortIndicator("groups", "total")}</button></th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {sortedAnalysisRequestGroups.map((group) => (
+                                <tr key={group.key}>
+                                  <td>{group.label}</td>
+                                  <td>{group.displayValue}</td>
+                                  <td>{group.sampleSize}</td>
+                                  <td>{Number.isFinite(Number(group.wins)) && Number.isFinite(Number(group.losses)) ? `${group.wins}-${group.losses}` : "-"}</td>
+                                  <td>{group.averageDisplayValue || "-"}</td>
+                                  <td>{group.totalDisplayValue || "-"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {Array.isArray(analysisCustomResult?.result?.table?.columns) && Array.isArray(analysisCustomResult?.result?.table?.rows) ? (
+                      <div className={styles.analysisCustomTableSection}>
+                        <div className={styles.analysisSectionTitle}>Game Table</div>
+                        <div className={styles.analysisTableWrap}>
+                          <table className={styles.analysisTable}>
+                            <thead>
+                              <tr>
+                                {analysisCustomResult.result.table.columns.map((column) => (
+                                  <th key={column.key}>
+                                    <button
+                                      type="button"
+                                      className={styles.analysisTableSortButton}
+                                      onClick={() => handleAnalysisRequestTableSort("game-table", column.key)}
+                                    >
+                                      {column.label}{analysisSortIndicator("game-table", column.key)}
+                                    </button>
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {sortedAnalysisRequestTableRows.map((row) => (
+                                <tr key={`${row.gameId}-${row.gameDate}`}>
+                                  {analysisCustomResult.result.table.columns.map((column) => (
+                                    <td key={`${row.gameId}-${column.key}`}>{row.values?.[column.key] ?? "-"}</td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : Array.isArray(analysisCustomResult?.result?.games) && analysisCustomResult.result.games.length ? (
+                      <div className={styles.analysisCustomTableSection}>
+                        <div className={styles.analysisSectionTitle}>Game Log</div>
+                        <div className={styles.analysisTableWrap}>
+                          <table className={styles.analysisTable}>
+                            <thead>
+                              <tr>
+                                <th><button type="button" className={styles.analysisTableSortButton} onClick={() => handleAnalysisRequestTableSort("game-log", "gameDate")}>Date{analysisSortIndicator("game-log", "gameDate")}</button></th>
+                                <th><button type="button" className={styles.analysisTableSortButton} onClick={() => handleAnalysisRequestTableSort("game-log", "opponent")}>Opponent{analysisSortIndicator("game-log", "opponent")}</button></th>
+                                <th><button type="button" className={styles.analysisTableSortButton} onClick={() => handleAnalysisRequestTableSort("game-log", "result")}>Result{analysisSortIndicator("game-log", "result")}</button></th>
+                                <th><button type="button" className={styles.analysisTableSortButton} onClick={() => handleAnalysisRequestTableSort("game-log", "score")}>Score{analysisSortIndicator("game-log", "score")}</button></th>
+                                <th><button type="button" className={styles.analysisTableSortButton} onClick={() => handleAnalysisRequestTableSort("game-log", "value")}>Value{analysisSortIndicator("game-log", "value")}</button></th>
+                                <th><button type="button" className={styles.analysisTableSortButton} onClick={() => handleAnalysisRequestTableSort("game-log", "gameId")}>Game ID{analysisSortIndicator("game-log", "gameId")}</button></th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {sortedAnalysisRequestGames.map((item) => (
+                                <tr key={`${item.gameId}-${item.gameDate}`}>
+                                  <td>{item.gameDate}</td>
+                                  <td>{item?.opponent?.tricode || item?.opponent?.fullName || "-"}</td>
+                                  <td>{item.result || "-"}</td>
+                                  <td>{Number.isFinite(Number(item.teamScore)) && Number.isFinite(Number(item.opponentScore)) ? `${item.teamScore}-${item.opponentScore}` : "-"}</td>
+                                  <td>{Number.isFinite(Number(item.value)) ? Number(item.value).toFixed(Math.abs(Number(item.value) % 1) > 0 ? 1 : 0) : item.value}</td>
+                                  <td>{item.gameId}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
                     ) : null}
                   </div>
-                )}
-              </div>
-            ) : null}
+                ) : null}
+
+                <div className={styles.analysisPaneActions}>
+                  <button type="button" className={styles.noteCancel} onClick={resetAnalysisCustomRequest} disabled={analysisCustomLoading}>
+                    Reset
+                  </button>
+                  <button type="button" className={styles.noteSave} onClick={runAnalysisCustomRequest} disabled={analysisCustomLoading || !String(analysisCustomPrompt || "").trim()}>
+                    {analysisCustomLoading ? "Running..." : "Run Request"}
+                  </button>
+                </div>
+              </section>
+            </div>
 
             <div className={styles.noteActions}>
-              <button type="button" className={styles.noteCancel} onClick={requestCancelAnalysis} disabled={analysisLoading || analysisSaving}>
+              <button type="button" className={styles.noteCancel} onClick={requestCancelAnalysis} disabled={analysisLoading || analysisSaving || analysisCustomLoading}>
                 Cancel
               </button>
-              <div className={styles.noteActionsRight}>
-                {analysisResult ? (
-                  <button type="button" className={styles.noteSave} onClick={saveAnalysisToVault} disabled={analysisLoading || analysisSaving}>
-                    {analysisSaving ? "Saving..." : "Save"}
-                  </button>
-                ) : null}
-                <button type="button" className={styles.noteSave} onClick={generateAnalysis} disabled={analysisLoading || analysisSaving || Boolean(analysisValidation.error)}>
-                  {analysisLoading ? "Generating..." : "Generate"}
-                </button>
-              </div>
             </div>
           </div>
         </div>

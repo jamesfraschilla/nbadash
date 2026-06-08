@@ -266,9 +266,56 @@ html[data-theme="dark"] .pbpWheel {
 }
 
 .analysisModal {
-  width: min(680px, 100%);
+  width: min(1180px, 100%);
   max-height: min(80vh, 760px);
   overflow-y: auto;
+}
+
+.analysisWorkspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.analysisPane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.analysisPaneHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.analysisPaneTitle {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text);
+}
+
+.analysisPaneCaption {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.analysisPromptField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.analysisPaneActions {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: auto;
 }
 
 .noteModal h3 {
@@ -512,6 +559,74 @@ html[data-theme="dark"] .pbpWheel {
   padding-top: 2px;
 }
 
+.analysisCustomResult {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.analysisMetaGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.analysisMetaCard {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.analysisCustomTableSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.analysisTableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.analysisTable {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 560px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.analysisTable th,
+.analysisTable td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.analysisTable tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.analysisTableSortButton {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  padding: 0;
+}
+
 .pbpEmpty {
   font-size: 12px;
   color: var(--muted);
@@ -521,6 +636,10 @@ html[data-theme="dark"] .pbpWheel {
 @media (max-width: 900px) {
   .statsGrid {
     gap: 16px;
+  }
+
+  .analysisWorkspace {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -538,7 +657,7 @@ html[data-theme="dark"] .pbpWheel {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 10px;
   min-width: 220px;
 }
 
@@ -567,7 +686,14 @@ html[data-theme="dark"] .pbpWheel {
   font-weight: 400;
   color: var(--muted);
   line-height: 1.2;
-  margin-top: 2px;
+  margin-top: 0;
+}
+
+.teamMetaStack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
 }
 
 .metaBlock {
@@ -720,8 +846,8 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding-top: 10px;
+  gap: 10px;
+  padding-top: 30px;
 }
 
 .awayStatsColumn {
@@ -745,7 +871,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   font-weight: 400;
   color: var(--text);
   line-height: 1;
-  margin: 8px 0 12px;
+  margin: 8px 0 18px;
 }
 
 .statValue {
@@ -759,8 +885,8 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding-top: 10px;
+  gap: 8px;
+  padding-top: 30px;
   grid-area: center;
 }
 
@@ -792,7 +918,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   font-size: 22px;
   font-weight: 300;
   color: var(--text);
-  margin-top: 0;
+  margin-top: 4px;
 }
 
 .status {
@@ -800,7 +926,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   font-weight: 600;
   color: var(--muted);
   line-height: 1.2;
-  margin-top: 2px;
+  margin-top: 10px;
 }
 
 .statusLive {
