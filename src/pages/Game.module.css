@@ -822,6 +822,13 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   gap: 8px;
 }
 
+.possessionSummarySection {
+  width: min(100%, 860px);
+  margin: 0 auto 18px;
+  display: flex;
+  justify-content: center;
+}
+
 .possessionTableLabels {
   display: flex;
   flex-direction: column;

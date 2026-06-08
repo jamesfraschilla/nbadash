@@ -2683,49 +2683,6 @@ export default function Game({ variant = "full" }) {
             {status || game.gameStatusText}
           </div>
           {clock && <div className={styles.clock}>{clock}</div>}
-          <div className={styles.possessionTableWrap}>
-            <div className={styles.possessionTableLabels}>
-              <div className={styles.possessionTableLabelSpacer} />
-              <div className={styles.possessionTeamCodeLabel}>{awayTeam?.teamTricode || "AWY"}</div>
-              <div className={styles.possessionTeamCodeLabel}>{homeTeam?.teamTricode || "HME"}</div>
-            </div>
-            <div className={styles.possessionTable}>
-              <div className={styles.possessionRow}>
-                {["Q1", "Q2", "Q3", "Q4"].map((label) => (
-                  <div key={label} className={styles.possessionCell}>{label}</div>
-                ))}
-              </div>
-              <div className={`${styles.possessionRow} ${styles.possessionRowTeams}`}>
-                {possessionTeams.map((team, index) => (
-                  <div key={`possession-${index}`} className={styles.possessionCell}>
-                    {team ? (
-                      <img
-                        className={styles.possessionLogo}
-                        src={teamLogoUrl(team.teamId)}
-                        alt={`${team.teamName} logo`}
-                      />
-                    ) : (
-                      <div className={styles.possessionPlaceholder} />
-                    )}
-                  </div>
-                ))}
-              </div>
-              <div className={styles.possessionRow}>
-                {quarterPoints.away.map((points, index) => (
-                  <div key={`away-quarter-points-${index}`} className={styles.possessionCell}>
-                    {points}
-                  </div>
-                ))}
-              </div>
-              <div className={styles.possessionRow}>
-                {quarterPoints.home.map((points, index) => (
-                  <div key={`home-quarter-points-${index}`} className={styles.possessionCell}>
-                    {points}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
           </div>
 
           <div className={`${styles.teamStatsColumn} ${styles.homeStatsColumn}`}>
@@ -3482,6 +3439,51 @@ export default function Game({ variant = "full" }) {
           variant={variant}
           minuteCapsByPersonId={homeMinuteCapsByPersonId}
         />
+      </section>
+      <section className={styles.possessionSummarySection}>
+        <div className={styles.possessionTableWrap}>
+          <div className={styles.possessionTableLabels}>
+            <div className={styles.possessionTableLabelSpacer} />
+            <div className={styles.possessionTeamCodeLabel}>{awayTeam?.teamTricode || "AWY"}</div>
+            <div className={styles.possessionTeamCodeLabel}>{homeTeam?.teamTricode || "HME"}</div>
+          </div>
+          <div className={styles.possessionTable}>
+            <div className={styles.possessionRow}>
+              {["Q1", "Q2", "Q3", "Q4"].map((label) => (
+                <div key={label} className={styles.possessionCell}>{label}</div>
+              ))}
+            </div>
+            <div className={`${styles.possessionRow} ${styles.possessionRowTeams}`}>
+              {possessionTeams.map((team, index) => (
+                <div key={`possession-${index}`} className={styles.possessionCell}>
+                  {team ? (
+                    <img
+                      className={styles.possessionLogo}
+                      src={teamLogoUrl(team.teamId)}
+                      alt={`${team.teamName} logo`}
+                    />
+                  ) : (
+                    <div className={styles.possessionPlaceholder} />
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className={styles.possessionRow}>
+              {quarterPoints.away.map((points, index) => (
+                <div key={`away-quarter-points-${index}`} className={styles.possessionCell}>
+                  {points}
+                </div>
+              ))}
+            </div>
+            <div className={styles.possessionRow}>
+              {quarterPoints.home.map((points, index) => (
+                <div key={`home-quarter-points-${index}`} className={styles.possessionCell}>
+                  {points}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </section>
       <OfficialsExportPanel
         officials={officials}
