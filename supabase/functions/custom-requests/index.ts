@@ -3037,9 +3037,20 @@ function buildGroupedSummaries(
   });
 }
 
+function sumMetricMaps(metricMaps: Array<Record<string, number>>) {
+  const merged: Record<string, number> = {};
+  metricMaps.forEach((metrics) => {
+    Object.entries(metrics || {}).forEach(([key, value]) => {
+      merged[key] = safeNumber(merged[key], 0) + safeNumber(value, 0);
+    });
+  });
+  return merged;
+}
+
 function collapsePeriodRowsToGameThresholdRows(
   rows: Array<CachedTeamGameRow | CachedPlayerGameRow>,
   aggregation: QueryAggregation,
+  statKey: string,
 ) {
   const byGame = new Map<string, Array<CachedTeamGameRow | CachedPlayerGameRow>>();
   rows.forEach((row) => {
@@ -3048,7 +3059,7 @@ function collapsePeriodRowsToGameThresholdRows(
   });
 
   const selectValue = (gameRows: Array<CachedTeamGameRow | CachedPlayerGameRow>) => {
-    const values = gameRows.map((row) => safeNumber(row.value, 0));
+    const values = gameRows.map((row) => safeNumber(row.metrics?.[statKey], 0));
     if (aggregation === "count_games_lte" || aggregation === "record_when_lte") {
       return Math.min(...values);
     }
@@ -3080,11 +3091,16 @@ function collapsePeriodRowsToCombinedSpanRows(
 
   return [...byGame.values()].map((gameRows) => {
     const source = gameRows[0];
+    const mergedMetrics = sumMetricMaps(gameRows.map((row) => row.metrics || {}));
     return {
       ...source,
-      value: gameRows.reduce((sum, row) => sum + safeNumber(row.value, 0), 0),
+      value: 0,
       groupKey: groupLabel,
       groupLabel,
+      metrics: mergedMetrics,
+      ...("opponentMetrics" in source
+        ? { opponentMetrics: sumMetricMaps(gameRows.map((row) => ("opponentMetrics" in row ? row.opponentMetrics || {} : {}))) }
+        : {}),
     };
   });
 }
@@ -4569,7 +4585,7 @@ Deno.serve(async (request) => {
       || parsed.aggregation === "record_when_lte"
       || parsed.aggregation === "record_when_nonzero"
     )) {
-      rowsForQuery = collapsePeriodRowsToGameThresholdRows(rowsForQuery, parsed.aggregation);
+      rowsForQuery = collapsePeriodRowsToGameThresholdRows(rowsForQuery, parsed.aggregation, metric.key);
       parsed.groupBy = "none";
     }
     const result = executeQuery(rowsForQuery, metric, parsed, team, subjectLabel);
