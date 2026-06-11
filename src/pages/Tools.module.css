@@ -282,8 +282,8 @@
 .primaryButton,
 .secondaryButton {
   min-width: 108px;
-  min-height: 46px;
-  border-radius: 12px;
+  min-height: var(--control-height-md);
+  border-radius: var(--radius-md);
   padding: 0 16px;
   font-size: 0.95rem;
   font-weight: 700;
@@ -291,15 +291,25 @@
 }
 
 .primaryButton {
-  border: 1px solid var(--highlight-text);
-  background: var(--highlight-text);
-  color: var(--bg);
+  border: 1px solid var(--button-primary-bg);
+  background: var(--button-primary-bg);
+  color: var(--button-primary-text);
 }
 
 .secondaryButton {
   border: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--button-bg);
   color: var(--text);
+}
+
+.primaryButton:hover:not(:disabled) {
+  border-color: var(--button-primary-hover);
+  background: var(--button-primary-hover);
+}
+
+.secondaryButton:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--button-hover);
 }
 
 .primaryButton:disabled,
@@ -319,16 +329,17 @@
   gap: 18px;
   padding: 20px;
   border: 1px solid var(--border);
-  border-radius: 18px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 88%, var(--bg)), var(--panel));
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
 }
 
 .requestTextarea {
   width: 100%;
   min-height: 140px;
   border: 1px solid var(--border);
-  border-radius: 14px;
-  background: var(--bg);
+  border-radius: var(--radius-md);
+  background: var(--input-bg);
   color: var(--text);
   padding: 14px;
   font: inherit;
@@ -362,11 +373,13 @@
 
 .requestMetaCard {
   display: grid;
-  gap: 8px;
+  gap: 7px;
   padding: 14px;
   border: 1px solid var(--border);
-  border-radius: 14px;
-  background: var(--bg);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  min-height: 84px;
+  align-content: start;
 }
 
 .requestGamesWrap {
@@ -376,34 +389,58 @@
 
 .requestTableWrap {
   overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
 }
 
 .requestTable {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   min-width: 560px;
+  font-variant-numeric: tabular-nums;
 }
 
 .requestTable th,
 .requestTable td {
-  padding: 10px 12px;
+  padding: 11px 12px;
   border-bottom: 1px solid var(--border);
   text-align: left;
+  vertical-align: middle;
 }
 
 .requestTable th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--table-header-bg);
   font-size: 0.78rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
 }
 
+.requestTable tbody tr:nth-child(even) td {
+  background: var(--table-stripe-bg);
+}
+
+.requestTable tbody tr:hover td {
+  background: var(--row-hover);
+}
+
+.requestTable tbody tr:last-child td {
+  border-bottom: none;
+}
+
 .tableSortButton {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 0;
+  min-height: 24px;
+  padding: 0 2px;
   border: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: inherit;
   font: inherit;

@@ -1,12 +1,18 @@
 .tableWrapper {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  display: inline-block;
+  display: block;
+  width: min(100%, 1120px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
 }
 
 .table {
-  width: auto;
-  border-collapse: collapse;
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 14px;
   min-width: 720px;
   color: var(--text);
@@ -14,20 +20,33 @@
 }
 
 .headerRow {
-  border-top: 2px solid var(--text);
-  border-bottom: 2px solid var(--text);
+  background: var(--table-header-bg);
 }
 
 .table th,
 .table td {
-  padding: 5px 4px;
+  padding: 7px 7px;
+  border-bottom: 1px solid var(--border);
   text-align: center;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
+.table th {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.table tbody tr:nth-child(even):not(.totalsRow):not(.totalsPercentRow) td {
+  background-color: var(--table-stripe-bg);
+}
+
 .atcSeparator {
-  border-right: 0.5px solid #9ca3af;
+  border-right: 1px solid var(--border-strong);
 }
 
 .playerNumberCol {
@@ -38,7 +57,7 @@
   padding-right: 6px;
   position: sticky;
   left: 0;
-  background-color: var(--bg);
+  background-color: var(--table-sticky-bg);
   z-index: 1;
 }
 
@@ -49,8 +68,9 @@
   padding-right: 20px;
   position: sticky;
   left: var(--player-number-width);
-  background-color: var(--bg);
+  background-color: var(--table-sticky-bg);
   z-index: 1;
+  box-shadow: var(--shadow-inset-left);
 }
 
 .table th.playerNameCol,
@@ -77,7 +97,8 @@
 
 .teamHeaderText {
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
+  color: var(--text);
 }
 
 .playerName {
@@ -103,8 +124,14 @@
   background-color: var(--row-hover);
 }
 
+.table tbody tr:hover td,
+.table tbody tr:hover .playerNumberCol,
+.table tbody tr:hover .playerNameCol {
+  background-color: var(--row-hover);
+}
+
 .shadedColumn {
-  background-color: var(--panel);
+  background-color: var(--table-numeric-bg);
 }
 
 .table tbody tr:hover .shadedColumn {
@@ -112,8 +139,12 @@
 }
 
 .totalsRow {
-  font-weight: 600;
-  border-top: 1px solid var(--border);
+  font-weight: 800;
+  background: var(--panel-strong);
+}
+
+.totalsRow td {
+  border-top: 1px solid var(--border-strong);
 }
 
 .totalsRowAtc {
@@ -123,6 +154,11 @@
 .totalsPercentRow {
   font-size: 12px;
   color: var(--muted);
+  background: var(--panel);
+}
+
+.totalsPercentRow td {
+  border-bottom: none;
 }
 
 .pfBlack {
