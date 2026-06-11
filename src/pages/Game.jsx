@@ -2808,23 +2808,21 @@ export default function Game({ variant = "full" }) {
           <div className={`${styles.teamStatsColumn} ${styles.awayStatsColumn}`}>
             <div className={styles.teamTricode}>{awayTeam.teamTricode}</div>
             <div className={styles.teamScore}>{displayAwayScore}</div>
-            {showExtras && (
-              <>
-                <div className={styles.statValue}>{ortgAway}</div>
-              </>
-            )}
-            {showExtras && <div className={styles.statValue}>{formatChancesValue(displayAwayChances)}</div>}
           </div>
 
           <div className={styles.centerColumn}>
             <div className={styles.vs}>vs</div>
             <div className={styles.dash}>-</div>
             {showExtras && (
-              <>
-                <div className={styles.statLabel}>ORTG</div>
-              </>
+              <div className={styles.headerMetricGrid}>
+                <div className={styles.headerMetricValue}>{ortgAway}</div>
+                <div className={styles.headerMetricLabel}>ORTG</div>
+                <div className={styles.headerMetricValue}>{ortgHome}</div>
+                <div className={styles.headerMetricValue}>{formatChancesValue(displayAwayChances)}</div>
+                <div className={styles.headerMetricLabel}>CHANCES</div>
+                <div className={styles.headerMetricValue}>{formatChancesValue(displayHomeChances)}</div>
+              </div>
             )}
-            {showExtras && <div className={styles.statLabel}>CHANCES</div>}
             {showExtras && <div className={styles.paceRow}>PACE: {displayPaceValue.toFixed(1)}</div>}
             <div className={`${styles.status} ${isLive ? styles.statusLive : ""}`}>
               {status || game.gameStatusText}
@@ -2835,12 +2833,6 @@ export default function Game({ variant = "full" }) {
           <div className={`${styles.teamStatsColumn} ${styles.homeStatsColumn}`}>
             <div className={styles.teamTricode}>{homeTeam.teamTricode}</div>
             <div className={styles.teamScore}>{displayHomeScore}</div>
-            {showExtras && (
-              <>
-                <div className={styles.statValue}>{ortgHome}</div>
-              </>
-            )}
-            {showExtras && <div className={styles.statValue}>{formatChancesValue(displayHomeChances)}</div>}
           </div>
 
           <div className={`${styles.teamLogoColumn} ${styles.homeLogoColumn}`}>
@@ -3229,7 +3221,6 @@ export default function Game({ variant = "full" }) {
               <section className={styles.analysisPane}>
                 <div className={styles.analysisPaneHeader}>
                   <div className={styles.analysisPaneTitle}>Segment Recap</div>
-                  <div className={styles.analysisPaneCaption}>Select a range and generate a recap for that slice of the game.</div>
                 </div>
 
                 <div className={styles.noteTimeRow}>
@@ -3469,7 +3460,6 @@ export default function Game({ variant = "full" }) {
               <section className={styles.analysisPane}>
                 <div className={styles.analysisPaneHeader}>
                   <div className={styles.analysisPaneTitle}>Custom Request</div>
-                  <div className={styles.analysisPaneCaption}>Ask a stat question directly from this game dashboard.</div>
                 </div>
 
                 <label className={styles.analysisPromptField}>

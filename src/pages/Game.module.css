@@ -81,8 +81,8 @@
   justify-content: center;
   align-items: start;
   column-gap: clamp(14px, 2.8vw, 34px);
-  margin-top: calc(16px + env(safe-area-inset-top));
-  margin-bottom: 16px;
+  margin-top: calc(12px + env(safe-area-inset-top));
+  margin-bottom: 12px;
 }
 
 .statsGrid {
@@ -274,22 +274,23 @@ html[data-theme="dark"] .pbpWheel {
 
 .analysisModal {
   width: min(1180px, 100%);
-  max-height: min(80vh, 760px);
+  max-height: min(84vh, 800px);
   overflow-y: auto;
 }
 
 .analysisWorkspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 16px;
-  align-items: start;
+  gap: 18px;
+  align-items: stretch;
 }
 
 .analysisPane {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
+  padding: 10px 0 0;
 }
 
 .analysisPaneHeader {
@@ -306,12 +307,6 @@ html[data-theme="dark"] .pbpWheel {
   color: var(--text);
 }
 
-.analysisPaneCaption {
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--muted);
-}
-
 .analysisPromptField {
   display: flex;
   flex-direction: column;
@@ -320,7 +315,7 @@ html[data-theme="dark"] .pbpWheel {
 
 .analysisPaneActions {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 10px;
   margin-top: auto;
 }
@@ -674,6 +669,11 @@ html[data-theme="dark"] .pbpWheel {
 
   .analysisWorkspace {
     grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .analysisModal {
+    max-height: min(88vh, 820px);
   }
 }
 
@@ -691,9 +691,9 @@ html[data-theme="dark"] .pbpWheel {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
-  padding-top: 8px;
+  padding-top: 6px;
 }
 
 .awayLogoColumn {
@@ -705,8 +705,8 @@ html[data-theme="dark"] .pbpWheel {
 }
 
 .teamLogo {
-  width: clamp(86px, 10vw, 142px);
-  height: clamp(86px, 10vw, 142px);
+  width: clamp(82px, 9.4vw, 132px);
+  height: clamp(82px, 9.4vw, 132px);
   object-fit: contain;
 }
 
@@ -725,21 +725,21 @@ html[data-theme="dark"] .pbpWheel {
 }
 
 .teamMetaStack {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
   align-items: center;
-  min-height: 112px;
-  justify-content: flex-start;
+  min-height: 0;
+  justify-content: start;
 }
 
 .metaBlock {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
   color: var(--text);
-  min-height: 31px;
+  min-height: 0;
 }
 
 .metaLabel {
@@ -887,8 +887,8 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding-top: 28px;
+  gap: 10px;
+  padding-top: 30px;
   min-width: 0;
 }
 
@@ -913,24 +913,36 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   font-weight: 400;
   color: var(--text);
   line-height: 1;
-  margin: 4px 0 14px;
+  margin: 2px 0 0;
   font-variant-numeric: tabular-nums;
 }
 
-.statValue {
+.headerMetricGrid {
+  display: grid;
+  grid-template-columns: minmax(44px, 1fr) minmax(74px, auto) minmax(44px, 1fr);
+  column-gap: clamp(10px, 1.3vw, 18px);
+  row-gap: 7px;
+  align-items: baseline;
+  justify-items: center;
+  margin-top: 2px;
+}
+
+.headerMetricValue {
   font-size: clamp(17px, 1.7vw, 22px);
   font-weight: 300;
   color: var(--text);
-  line-height: 1.3;
+  line-height: 1.15;
   font-variant-numeric: tabular-nums;
+  min-width: 38px;
+  text-align: center;
 }
 
 .centerColumn {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 7px;
-  padding-top: 28px;
+  gap: 8px;
+  padding-top: 30px;
   grid-area: center;
   min-width: 0;
 }
@@ -949,21 +961,23 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   font-weight: 400;
   color: var(--text);
   line-height: 1;
-  margin: 4px 0 8px;
+  margin: 0 0 2px;
 }
 
+.headerMetricLabel,
 .statLabel {
   font-size: clamp(17px, 1.7vw, 22px);
   font-weight: 300;
   color: var(--text);
-  line-height: 1.3;
+  line-height: 1.15;
+  text-align: center;
 }
 
 .paceRow {
   font-size: clamp(16px, 1.6vw, 21px);
   font-weight: 300;
   color: var(--text);
-  margin-top: 2px;
+  margin-top: 1px;
   white-space: nowrap;
 }
 
@@ -1883,8 +1897,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   }
 
   .teamMetaStack {
-    min-height: 96px;
-    gap: 6px;
+    gap: 5px;
   }
 
   .teamTricode,
@@ -1893,7 +1906,8 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   }
 
   .statLabel,
-  .statValue,
+  .headerMetricLabel,
+  .headerMetricValue,
   .paceRow {
     font-size: 16px;
   }
@@ -1941,8 +1955,10 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
       "awayStats homeStats"
       "center center";
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    row-gap: 10px;
-    column-gap: 12px;
+    row-gap: 6px;
+    column-gap: 14px;
+    margin-top: calc(8px + env(safe-area-inset-top));
+    margin-bottom: 8px;
   }
 
   .teamStatsColumn,
@@ -1950,41 +1966,67 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
     padding-top: 0;
   }
 
-  .centerColumn {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, auto));
-    justify-content: center;
-    align-items: center;
-    column-gap: 14px;
-    row-gap: 5px;
-    margin-top: 4px;
+  .teamLogoColumn {
+    gap: 7px;
   }
 
-  .vs,
-  .dash,
-  .paceRow,
-  .status,
-  .clock {
-    grid-column: 1 / -1;
-    justify-self: center;
+  .teamLogo {
+    width: 64px;
+    height: 64px;
+  }
+
+  .teamStatsColumn {
+    gap: 5px;
+  }
+
+  .centerColumn {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+    margin-top: 0;
+  }
+
+  .headerMetricGrid {
+    grid-template-columns: minmax(38px, 1fr) minmax(68px, auto) minmax(38px, 1fr);
+    column-gap: 10px;
+    row-gap: 5px;
+    padding: 6px 10px;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .teamTricode {
+    font-size: 32px;
+  }
+
+  .teamScore {
+    font-size: 38px;
   }
 
   .statLabel,
-  .statValue {
+  .headerMetricLabel,
+  .headerMetricValue {
     text-align: center;
   }
 
   .teamMetaStack {
-    min-height: 86px;
+    grid-template-columns: 1fr 1fr;
+    gap: 7px 10px;
+    width: min(100%, 160px);
+  }
+
+  .teamMetaRow:first-child {
+    grid-column: 1 / -1;
   }
 
   .timeoutsNumbers,
   .metaValue {
-    font-size: 15px;
+    font-size: 14px;
   }
 
   .metaLabel {
-    font-size: 12px;
+    font-size: 11px;
   }
 
   .paceRow,
@@ -1993,16 +2035,64 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
     text-align: center;
   }
 
+  .paceRow,
+  .status,
+  .clock {
+    line-height: 1.15;
+  }
+
+  .noteOverlay {
+    align-items: flex-start;
+    padding: calc(14px + env(safe-area-inset-top)) 10px 14px;
+  }
+
+  .analysisModal {
+    max-height: calc(100vh - 28px - env(safe-area-inset-top));
+    padding: 14px;
+  }
+
+  .analysisPane {
+    gap: 8px;
+    padding-top: 6px;
+  }
+
+  .analysisPromptField textarea {
+    min-height: 120px;
+  }
+
+  .noteTimeRow {
+    margin-bottom: 6px;
+  }
+
+  .noteTimeControls {
+    gap: 8px;
+  }
+
+  .analysisPaneActions {
+    position: sticky;
+    bottom: -14px;
+    padding: 8px 0 0;
+    background: linear-gradient(180deg, transparent, var(--surface) 32%);
+  }
+
   .navRow {
     width: 100%;
     justify-content: flex-start;
     overflow-x: auto;
     padding-bottom: 6px;
     -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    mask-image: linear-gradient(90deg, #000 0%, #000 calc(100% - 26px), transparent 100%);
+  }
+
+  .navRow::-webkit-scrollbar {
+    display: none;
   }
 
   .navRow a,
   .navButton {
     flex: 0 0 auto;
+    min-height: 38px;
+    padding: 7px 10px;
   }
 }
