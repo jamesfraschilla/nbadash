@@ -326,6 +326,36 @@ html[data-theme="dark"] .pbpWheel {
   color: var(--text);
 }
 
+.noteModalHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.noteModalHeader h3 {
+  margin: 0;
+}
+
+.noteModalHeaderLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-height-sm);
+  padding: 0 var(--control-padding-x);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  background-color: var(--button-bg);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.noteModalHeaderLink:hover {
+  border-color: var(--border-strong);
+  background-color: var(--button-hover);
+}
+
 .noteSourceSummary {
   white-space: pre-wrap;
   margin-bottom: 12px;
@@ -887,7 +917,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   padding-top: 30px;
   min-width: 0;
 }
@@ -906,6 +936,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   color: var(--text);
   line-height: 1;
   letter-spacing: 0;
+  display: none;
 }
 
 .teamScore {
@@ -913,7 +944,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   font-weight: 400;
   color: var(--text);
   line-height: 1;
-  margin: 2px 0 0;
+  margin: 0;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1951,11 +1982,11 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 @media (max-width: 620px) {
   .scoreboard {
     grid-template-areas:
-      "awayLogo homeLogo"
       "awayStats homeStats"
+      "awayLogo homeLogo"
       "center center";
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    row-gap: 6px;
+    row-gap: 8px;
     column-gap: 14px;
     margin-top: calc(8px + env(safe-area-inset-top));
     margin-bottom: 8px;
@@ -1966,6 +1997,10 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
     padding-top: 0;
   }
 
+  .teamStatsColumn {
+    gap: 0;
+  }
+
   .teamLogoColumn {
     gap: 7px;
   }
@@ -1973,10 +2008,6 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   .teamLogo {
     width: 64px;
     height: 64px;
-  }
-
-  .teamStatsColumn {
-    gap: 5px;
   }
 
   .centerColumn {
@@ -1994,10 +2025,6 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
     padding: 6px 10px;
     border-top: 1px solid var(--border);
     border-bottom: 1px solid var(--border);
-  }
-
-  .teamTricode {
-    font-size: 32px;
   }
 
   .teamScore {
@@ -2073,6 +2100,15 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
     bottom: -14px;
     padding: 8px 0 0;
     background: linear-gradient(180deg, transparent, var(--surface) 32%);
+  }
+
+  .noteModalHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .noteModalHeaderLink {
+    align-self: flex-end;
   }
 
   .navRow {
