@@ -7,7 +7,7 @@ import PasswordResetGate from "./components/PasswordResetGate.jsx";
 import { useAuth } from "./auth/useAuth.js";
 import { readLocalStorage, writeLocalStorage } from "./storage.js";
 
-const UPDATE_CHECK_INTERVAL_MS = 2 * 60 * 1000;
+const UPDATE_CHECK_INTERVAL_MS = 10 * 60 * 1000;
 const Home = lazy(() => import("./pages/Home.jsx"));
 const Game = lazy(() => import("./pages/Game.jsx"));
 const PlayByPlay = lazy(() => import("./pages/PlayByPlay.jsx"));
@@ -42,6 +42,16 @@ function RouteLoadingFallback() {
   return <div style={{ padding: "40px 16px", textAlign: "center" }}>Loading page...</div>;
 }
 
+function scheduleIdleWork(callback, timeout = 5000) {
+  if (typeof window === "undefined") return () => {};
+  if (typeof window.requestIdleCallback === "function") {
+    const callbackId = window.requestIdleCallback(callback, { timeout });
+    return () => window.cancelIdleCallback?.(callbackId);
+  }
+  const timeoutId = window.setTimeout(callback, Math.min(timeout, 1500));
+  return () => window.clearTimeout(timeoutId);
+}
+
 export default function App() {
   const [theme, setTheme] = useState(() => readLocalStorage("theme") || "light");
   const [updateFingerprint, setUpdateFingerprint] = useState("");
@@ -68,10 +78,13 @@ export default function App() {
 
   useEffect(() => {
     if (user?.id) {
-      import("./refereeHeadshots.js")
-        .then(({ syncRemoteRefereeHeadshotState }) => syncRemoteRefereeHeadshotState(user.id))
-        .catch(() => {});
+      return scheduleIdleWork(() => {
+        import("./refereeHeadshots.js")
+          .then(({ syncRemoteRefereeHeadshotState }) => syncRemoteRefereeHeadshotState(user.id))
+          .catch(() => {});
+      });
     }
+    return undefined;
   }, [user?.id]);
 
   useEffect(() => {

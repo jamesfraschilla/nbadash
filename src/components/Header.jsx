@@ -21,6 +21,8 @@ export default function Header({ theme, onToggleTheme, onSignOut, profile, isAdm
   const { data: games = [] } = useQuery({
     queryKey: ["headerGames", dateInput],
     queryFn: () => fetchGamesByDate(dateInput),
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
     refetchInterval: (query) =>
       query.state.data?.some((g) => g.gameStatus === 2) ? 30_000 : false,
   });

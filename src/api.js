@@ -16,7 +16,8 @@ const SUPABASE_FUNCTIONS_BASE = SUPABASE_URL
   ? `${String(SUPABASE_URL).replace(/\/$/, "")}/functions/v1`
   : "";
 
-async function requestJson(url) {
+async function requestJson(url, options = {}) {
+  const { timeoutMs = 0 } = options;
   const headers = { Accept: "application/json" };
   if (SUPABASE_FUNCTIONS_BASE && String(url || "").startsWith(SUPABASE_FUNCTIONS_BASE)) {
     if (SUPABASE_ANON_KEY) {
@@ -29,7 +30,16 @@ async function requestJson(url) {
       headers.Authorization = `Bearer ${accessToken}`;
     }
   }
-  const res = await fetch(url, { headers });
+  const controller = timeoutMs > 0 ? new AbortController() : null;
+  const timeoutId = controller
+    ? setTimeout(() => controller.abort(), timeoutMs)
+    : null;
+  const res = await fetch(url, {
+    headers,
+    signal: controller?.signal,
+  }).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
   if (!res.ok) {
     const error = new Error(`Request failed: ${res.status}`);
     error.status = res.status;
@@ -1649,22 +1659,19 @@ export async function fetchTeamSeasonGames(teamId, opponentTeamId = "", season =
   let seasonGames = TEAM_SEASON_GAMES_CACHE.get(teamSeasonCacheKey) || loadTeamSeasonGamesFromStorage(safeTeamId, season);
 
   if (!seasonGames) {
-    const cachedFullSeasonGames = SEASON_GAMES_CACHE.get(season) || loadSeasonGamesFromStorage(season);
-    if (cachedFullSeasonGames?.length) {
-      seasonGames = filterSeasonGamesForTeam(cachedFullSeasonGames, safeTeamId);
-      TEAM_SEASON_GAMES_CACHE.set(teamSeasonCacheKey, seasonGames);
-      saveTeamSeasonGamesToStorage(safeTeamId, season, seasonGames);
-    }
-  }
-
-  if (!seasonGames) {
     const pending = TEAM_SEASON_GAMES_PROMISES.get(teamSeasonCacheKey);
     if (pending) {
       seasonGames = await pending;
     } else {
       const nextPromise = (
         SUPABASE_FUNCTIONS_BASE
-          ? fetchTeamSeasonGamesFromFunction(safeTeamId, season).catch(() => fetchAllSeasonGames(season))
+          ? fetchTeamSeasonGamesFromFunction(safeTeamId, season).catch(() => {
+            const cachedFullSeasonGames = SEASON_GAMES_CACHE.get(season) || loadSeasonGamesFromStorage(season);
+            if (cachedFullSeasonGames?.length) {
+              return filterSeasonGamesForTeam(cachedFullSeasonGames, safeTeamId);
+            }
+            return fetchAllSeasonGames(season);
+          })
           : fetchAllSeasonGames(season)
       ).then((games) => {
         TEAM_SEASON_GAMES_CACHE.set(teamSeasonCacheKey, games);
@@ -1795,7 +1802,7 @@ async function fetchTeamSeasonGamesFromFunction(teamId, season = currentSeasonSt
   const url = new URL(`${SUPABASE_FUNCTIONS_BASE}/team-games`);
   url.searchParams.set("teamId", String(teamId || "").trim());
   url.searchParams.set("season", season);
-  const payload = await requestJson(url.toString());
+  const payload = await requestJson(url.toString(), { timeoutMs: 8000 });
   return Array.isArray(payload?.games) ? payload.games : [];
 }
 

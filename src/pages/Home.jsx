@@ -1,7 +1,7 @@
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { fetchGamesByDate, fetchTeamSeasonGames, prefetchCurrentSeasonGames, teamLogoUrl } from "../api.js";
+import { fetchGamesByDate, fetchTeamSeasonGames, teamLogoUrl } from "../api.js";
 import { NBA_TEAMS } from "../data/nbaTeams.js";
 import {
   formatDateInput,
@@ -67,30 +67,6 @@ export default function Home() {
     nextParams.delete("opponent");
     setParams(nextParams);
   }
-
-  useEffect(() => {
-    if (selectedTeamId) return undefined;
-
-    let cancelled = false;
-    const runPrefetch = () => {
-      if (cancelled) return;
-      prefetchCurrentSeasonGames().catch(() => {});
-    };
-
-    if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
-      const callbackId = window.requestIdleCallback(runPrefetch, { timeout: 1500 });
-      return () => {
-        cancelled = true;
-        window.cancelIdleCallback?.(callbackId);
-      };
-    }
-
-    const timeoutId = window.setTimeout(runPrefetch, 250);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timeoutId);
-    };
-  }, [selectedTeamId]);
 
   const { data: games = [], isLoading, error } = useQuery({
     queryKey: selectedTeamId ? ["teamSeasonGames", selectedTeamId, selectedOpponentTeamId] : ["games", dateInput],
