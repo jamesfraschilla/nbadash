@@ -77,10 +77,10 @@
   width: min(100%, 1040px);
   display: grid;
   grid-template-areas: "awayLogo awayStats center homeStats homeLogo";
-  grid-template-columns: minmax(120px, 1fr) minmax(98px, 0.55fr) minmax(170px, 0.7fr) minmax(98px, 0.55fr) minmax(120px, 1fr);
+  grid-template-columns: minmax(88px, 0.72fr) minmax(88px, 0.52fr) minmax(170px, 0.82fr) minmax(88px, 0.52fr) minmax(88px, 0.72fr);
   justify-content: center;
   align-items: start;
-  column-gap: clamp(14px, 2.8vw, 34px);
+  column-gap: clamp(12px, 2vw, 24px);
   margin-top: calc(12px + env(safe-area-inset-top));
   margin-bottom: 12px;
 }
@@ -721,7 +721,7 @@ html[data-theme="dark"] .pbpWheel {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
   padding-top: 6px;
 }
@@ -757,7 +757,7 @@ html[data-theme="dark"] .pbpWheel {
 .teamMetaStack {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 6px;
+  gap: 3px;
   align-items: center;
   min-height: 0;
   justify-content: start;
@@ -918,7 +918,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  padding-top: 30px;
+  padding-top: 22px;
   min-width: 0;
 }
 
@@ -972,8 +972,8 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding-top: 30px;
+  gap: 6px;
+  padding-top: 22px;
   grid-area: center;
   min-width: 0;
 }
@@ -1913,7 +1913,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 @media (max-width: 900px) {
   .scoreboard {
     grid-template-areas: "awayLogo awayStats center homeStats homeLogo";
-    grid-template-columns: minmax(62px, 0.8fr) minmax(60px, 0.65fr) minmax(86px, 0.7fr) minmax(60px, 0.65fr) minmax(62px, 0.8fr);
+    grid-template-columns: minmax(58px, 0.72fr) minmax(56px, 0.56fr) minmax(86px, 0.76fr) minmax(56px, 0.56fr) minmax(58px, 0.72fr);
     column-gap: 8px;
     width: 100%;
   }
@@ -1982,8 +1982,8 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 @media (max-width: 620px) {
   .scoreboard {
     grid-template-areas:
-      "awayStats homeStats"
       "awayLogo homeLogo"
+      "awayStats homeStats"
       "center center";
     grid-template-columns: repeat(2, minmax(0, 1fr));
     row-gap: 8px;
@@ -2038,13 +2038,9 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   }
 
   .teamMetaStack {
-    grid-template-columns: 1fr 1fr;
-    gap: 7px 10px;
-    width: min(100%, 160px);
-  }
-
-  .teamMetaRow:first-child {
-    grid-column: 1 / -1;
+    grid-template-columns: 1fr;
+    gap: 3px;
+    width: min(100%, 140px);
   }
 
   .timeoutsNumbers,

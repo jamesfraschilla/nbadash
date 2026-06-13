@@ -2811,7 +2811,6 @@ export default function Game({ variant = "full" }) {
           </div>
 
           <div className={styles.centerColumn}>
-            <div className={styles.vs}>vs</div>
             <div className={styles.dash}>-</div>
             {showExtras && (
               <div className={styles.headerMetricGrid}>
