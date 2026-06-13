@@ -2284,17 +2284,16 @@ export default function Game({ variant = "full" }) {
           );
         })}
       </div>
-      <div className={styles.resetLine}>
-        {showReset ? (
+      {showReset ? (
+        <div className={styles.resetLine}>
           <span className={`${styles.resetLabel} ${resetUsed ? styles.resetUsed : ""}`}>RESET</span>
-        ) : null}
-      </div>
-      <div className={styles.mandatoryLine}>
-        {isLive && showMandatory ? (
+        </div>
+      ) : null}
+      {isLive && showMandatory ? (
+        <div className={styles.mandatoryLine}>
           <span className={styles.mandatoryActive}>NEXT MANDATORY</span>
-        ) : null}
-      </div>
-      <div className={styles.metaSpacer} />
+        </div>
+      ) : null}
     </div>
   );
   const summerLeagueTimeoutsRemaining = (teamId) => {
@@ -2635,7 +2634,6 @@ export default function Game({ variant = "full" }) {
           />
         ))}
       </div>
-      <div className={styles.metaSpacer} />
     </div>
   );
 
@@ -2782,6 +2780,7 @@ export default function Game({ variant = "full" }) {
               src={teamLogoUrl(awayTeam.teamId)}
               alt={`${awayTeam.teamName} logo`}
             />
+            <div className={styles.mobileTeamScore}>{displayAwayScore}</div>
             <div className={styles.teamMetaStack}>
               {(timeouts || isPregame) && (
                 <div className={styles.teamMetaRow}>
@@ -2840,6 +2839,7 @@ export default function Game({ variant = "full" }) {
               src={teamLogoUrl(homeTeam.teamId)}
               alt={`${homeTeam.teamName} logo`}
             />
+            <div className={styles.mobileTeamScore}>{displayHomeScore}</div>
             <div className={styles.teamMetaStack}>
               {(timeouts || isPregame) && (
                 <div className={styles.teamMetaRow}>

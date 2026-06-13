@@ -74,13 +74,13 @@
 }
 
 .scoreboard {
-  width: min(100%, 1040px);
+  width: min(100%, 860px);
   display: grid;
   grid-template-areas: "awayLogo awayStats center homeStats homeLogo";
-  grid-template-columns: minmax(88px, 0.72fr) minmax(88px, 0.52fr) minmax(170px, 0.82fr) minmax(88px, 0.52fr) minmax(88px, 0.72fr);
+  grid-template-columns: minmax(110px, 0.82fr) minmax(68px, 0.4fr) minmax(150px, 0.7fr) minmax(68px, 0.4fr) minmax(110px, 0.82fr);
   justify-content: center;
   align-items: start;
-  column-gap: clamp(12px, 2vw, 24px);
+  column-gap: clamp(8px, 1.4vw, 16px);
   margin-top: calc(12px + env(safe-area-inset-top));
   margin-bottom: 12px;
 }
@@ -721,7 +721,7 @@ html[data-theme="dark"] .pbpWheel {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
   padding-top: 6px;
 }
@@ -738,6 +738,10 @@ html[data-theme="dark"] .pbpWheel {
   width: clamp(82px, 9.4vw, 132px);
   height: clamp(82px, 9.4vw, 132px);
   object-fit: contain;
+}
+
+.mobileTeamScore {
+  display: none;
 }
 
 .teamRecord {
@@ -757,7 +761,7 @@ html[data-theme="dark"] .pbpWheel {
 .teamMetaStack {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 3px;
+  gap: 1px;
   align-items: center;
   min-height: 0;
   justify-content: start;
@@ -789,10 +793,6 @@ html[data-theme="dark"] .pbpWheel {
   display: flex;
   align-items: center;
   gap: 6px;
-}
-
-.metaSpacer {
-  height: 2px;
 }
 
 .timeoutsNumbers {
@@ -1913,9 +1913,9 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 @media (max-width: 900px) {
   .scoreboard {
     grid-template-areas: "awayLogo awayStats center homeStats homeLogo";
-    grid-template-columns: minmax(58px, 0.72fr) minmax(56px, 0.56fr) minmax(86px, 0.76fr) minmax(56px, 0.56fr) minmax(58px, 0.72fr);
-    column-gap: 8px;
-    width: 100%;
+    grid-template-columns: minmax(72px, 0.82fr) minmax(50px, 0.4fr) minmax(96px, 0.62fr) minmax(50px, 0.4fr) minmax(72px, 0.82fr);
+    column-gap: 6px;
+    width: min(100%, 820px);
   }
 
   .teamLogo {
@@ -1928,7 +1928,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   }
 
   .teamMetaStack {
-    gap: 5px;
+    gap: 2px;
   }
 
   .teamTricode,
@@ -1983,7 +1983,6 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   .scoreboard {
     grid-template-areas:
       "awayLogo homeLogo"
-      "awayStats homeStats"
       "center center";
     grid-template-columns: repeat(2, minmax(0, 1fr));
     row-gap: 8px;
@@ -1992,22 +1991,30 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
     margin-bottom: 8px;
   }
 
-  .teamStatsColumn,
   .centerColumn {
     padding-top: 0;
   }
 
   .teamStatsColumn {
-    gap: 0;
+    display: none;
   }
 
   .teamLogoColumn {
-    gap: 7px;
+    gap: 6px;
   }
 
   .teamLogo {
     width: 64px;
     height: 64px;
+  }
+
+  .mobileTeamScore {
+    display: block;
+    font-size: 38px;
+    font-weight: 400;
+    line-height: 1;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
   }
 
   .centerColumn {
@@ -2025,10 +2032,6 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
     padding: 6px 10px;
     border-top: 1px solid var(--border);
     border-bottom: 1px solid var(--border);
-  }
-
-  .teamScore {
-    font-size: 38px;
   }
 
   .statLabel,
