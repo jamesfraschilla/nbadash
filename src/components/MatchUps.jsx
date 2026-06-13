@@ -653,6 +653,20 @@ function buildStarterSlotIds(teamBoxPlayers) {
   return starters.slice(0, ROW_SLOT_COUNT);
 }
 
+function buildStarterResetSlotIds(teamBoxPlayers, row, profileMap) {
+  const starterSlotIds = buildStarterSlotIds(teamBoxPlayers).filter((personId) => row.rosterMap.has(personId));
+  if (starterSlotIds.length >= ROW_SLOT_COUNT) {
+    return sortRowSlotIdsByHeight(row, starterSlotIds, profileMap);
+  }
+
+  const fallbackSlotIds = (teamBoxPlayers || [])
+    .map((player) => String(player?.personId || ""))
+    .filter((personId) => personId && row.rosterMap.has(personId))
+    .slice(0, ROW_SLOT_COUNT);
+
+  return sortRowSlotIdsByHeight(row, fallbackSlotIds, profileMap);
+}
+
 function buildCurrentStintSlotIds(stintPlayers) {
   const slotIds = [];
   const used = new Set();
@@ -1744,20 +1758,13 @@ export default function MatchUps({
   const handleResetToDefault = () => {
     setPickerState(null);
     setRefreshMenuOpen(false);
-    const awayStarterSlotIds = buildStarterSlotIds(boxScore?.away?.players).filter((personId) => awayRow.rosterMap.has(personId));
-    const homeStarterSlotIds = buildStarterSlotIds(boxScore?.home?.players).filter((personId) => homeRow.rosterMap.has(personId));
-    const nextAwayRow = awayStarterSlotIds.length
-      ? reorderRowToSlotIds(awayRow, awayStarterSlotIds)
-      : awayRow;
-    const nextHomeRow = homeStarterSlotIds.length
-      ? reorderRowToSlotIds(homeRow, homeStarterSlotIds)
-      : homeRow;
-    const smartSlotIds = buildSmartMatchupSlotIds(nextAwayRow, nextHomeRow, matchupProfileMap, remoteMatchupProfileMap);
+    const awayStarterSlotIds = buildStarterResetSlotIds(boxScore?.away?.players, awayRow, matchupProfileMap);
+    const homeStarterSlotIds = buildStarterResetSlotIds(boxScore?.home?.players, homeRow, matchupProfileMap);
     setPersistedState((current) => ({
       ...current,
       slots: {
-        away: awayStarterSlotIds.length ? smartSlotIds.away : current.slots.away,
-        home: homeStarterSlotIds.length ? smartSlotIds.home : current.slots.home,
+        away: awayStarterSlotIds.length ? awayStarterSlotIds : current.slots.away,
+        home: homeStarterSlotIds.length ? homeStarterSlotIds : current.slots.home,
       },
     }));
   };
@@ -2125,7 +2132,7 @@ export default function MatchUps({
         <div ref={refreshMenuRef} className={styles.refreshMenu}>
           <div className={styles.refreshMenuTitle}>Refresh Match-Ups</div>
           <button type="button" className={styles.refreshMenuButton} onClick={handleResetToDefault}>
-            Refresh to Default
+            Reset to Starters
           </button>
           <button type="button" className={styles.refreshMenuButton} onClick={() => handleRefreshRow("away")}>
             {`Refresh ${awayTeam?.teamTricode || "Away"}`}

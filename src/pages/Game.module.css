@@ -761,7 +761,7 @@ html[data-theme="dark"] .pbpWheel {
 .teamMetaStack {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 1px;
+  gap: 5px;
   align-items: center;
   min-height: 0;
   justify-content: start;
@@ -1928,7 +1928,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   }
 
   .teamMetaStack {
-    gap: 2px;
+    gap: 5px;
   }
 
   .teamTricode,
@@ -2042,7 +2042,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 
   .teamMetaStack {
     grid-template-columns: 1fr;
-    gap: 3px;
+    gap: 5px;
     width: min(100%, 140px);
   }
 

@@ -2793,14 +2793,14 @@ export default function Game({ variant = "full" }) {
                   )}
                 </div>
               )}
+              <div className={styles.teamMetaRow}>
+                {renderFouls(awayFoulsDisplay)}
+              </div>
               {(challenges || isPregame) && (
                 <div className={styles.teamMetaRow}>
                   {renderChallenges(awayChallenges)}
                 </div>
               )}
-              <div className={styles.teamMetaRow}>
-                {renderFouls(awayFoulsDisplay)}
-              </div>
             </div>
           </div>
 
@@ -2852,14 +2852,14 @@ export default function Game({ variant = "full" }) {
                   )}
                 </div>
               )}
+              <div className={styles.teamMetaRow}>
+                {renderFouls(homeFoulsDisplay)}
+              </div>
               {(challenges || isPregame) && (
                 <div className={styles.teamMetaRow}>
                   {renderChallenges(homeChallenges)}
                 </div>
               )}
-              <div className={styles.teamMetaRow}>
-                {renderFouls(homeFoulsDisplay)}
-              </div>
             </div>
           </div>
         </section>
