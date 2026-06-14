@@ -2,7 +2,7 @@
   max-width: 1400px;
   margin: 0 auto;
   padding: calc(16px + env(safe-area-inset-top)) 24px 40px;
-  --pbp-card-width: 200px;
+  --pbp-card-width: 190px;
   --pbp-away-bg: var(--panel);
   --pbp-home-bg: #ffffff;
 }
@@ -98,7 +98,7 @@
 .pbpWheel {
   margin: 10px 0 18px;
   overflow-x: auto;
-  max-width: calc(var(--pbp-card-width) * 3 + 56px);
+  max-width: 860px;
   width: 100%;
   margin-left: auto;
   margin-right: auto;
@@ -867,14 +867,6 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   line-height: 1;
   margin: 0;
   font-variant-numeric: tabular-nums;
-}
-
-.teamNickname {
-  color: var(--text);
-  font-size: clamp(17px, 1.65vw, 24px);
-  font-weight: 500;
-  line-height: 1;
-  text-transform: uppercase;
 }
 
 .headerMetricGrid {
@@ -1847,10 +1839,6 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
     font-size: 28px;
   }
 
-  .teamNickname {
-    font-size: 14px;
-  }
-
   .statLabel,
   .headerMetricLabel,
   .headerMetricValue,
@@ -1935,10 +1923,6 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
     line-height: 1;
     color: var(--text);
     font-variant-numeric: tabular-nums;
-  }
-
-  .teamNickname {
-    display: none;
   }
 
   .teamScore {

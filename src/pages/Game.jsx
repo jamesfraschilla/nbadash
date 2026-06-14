@@ -1261,10 +1261,6 @@ export default function Game({ variant = "full" }) {
     setAnalysisResult(null);
     setAnalysisUniformOpen(false);
     setAnalysisSaveStatus("");
-    setAnalysisCustomPrompt("");
-    setAnalysisCustomError("");
-    setAnalysisCustomResult(null);
-    setAnalysisCustomTableSort({ table: "", column: "", direction: "asc" });
     setAnalysisModalOpen(true);
   };
 
@@ -1288,10 +1284,6 @@ export default function Game({ variant = "full" }) {
     setAnalysisResult(null);
     setAnalysisUniformOpen(false);
     setAnalysisSaveStatus("");
-    setAnalysisCustomLoading(false);
-    setAnalysisCustomError("");
-    setAnalysisCustomResult(null);
-    setAnalysisCustomTableSort({ table: "", column: "", direction: "asc" });
   };
 
   const requestCancelNote = () => {
@@ -2647,7 +2639,6 @@ export default function Game({ variant = "full" }) {
               <div className={styles.teamValueColumn}>
                 <div className={styles.teamScore}>{displayAwayScore}</div>
                 <div className={styles.mobileTeamScore}>{displayAwayScore}</div>
-                <div className={styles.teamNickname}>{awayTeam.teamName}</div>
                 <div className={styles.teamMetaStack}>
                   {(timeouts || isPregame) && (
                     <div className={styles.teamMetaRow}>
@@ -2696,7 +2687,6 @@ export default function Game({ variant = "full" }) {
               <div className={styles.teamValueColumn}>
                 <div className={styles.teamScore}>{displayHomeScore}</div>
                 <div className={styles.mobileTeamScore}>{displayHomeScore}</div>
-                <div className={styles.teamNickname}>{homeTeam.teamName}</div>
                 <div className={styles.teamMetaStack}>
                   {(timeouts || isPregame) && (
                     <div className={styles.teamMetaRow}>
