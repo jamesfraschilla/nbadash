@@ -939,10 +939,10 @@ function buildLateSwingInsight(
   const team = teamLookup[bestCandidate.teamId];
   const opponent = teamLookup[bestCandidate.opponentId];
   const finishText = bestCandidate.finalMargin < 0
-    ? `ended the span trailing by ${Math.abs(bestCandidate.finalMargin)}`
+    ? `were outscored by ${Math.abs(bestCandidate.finalMargin)} over the rest of the span`
     : bestCandidate.finalMargin === 0
-      ? "only got to the horn tied"
-      : `still finished ahead by ${bestCandidate.finalMargin}`;
+      ? "played the rest of the span even"
+      : `won the rest of the span by ${bestCandidate.finalMargin}`;
   const title = bestCandidate.type === "collapse" ? "Late Collapse" : "Late Comeback";
 
   return {
@@ -1546,6 +1546,8 @@ async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayloa
     "The headline follows the same rule: do not use bare 'N-point lead' wording unless N is the actual ending margin of the selected span.",
     "If you say 'by the end of the quarter', 'by the end of the span', or similar, that statement must match score.end exactly.",
     "If you mention the largest lead, label it explicitly as the largest lead or say the lead peaked there, and not the ending margin unless they are the same.",
+    "If a team won the selected quarter or span by N but did not finish the full game ahead by N, describe it as winning the quarter/span by N or outscoring the opponent by N in that stretch, not as finishing ahead/up by N.",
+    "Keep segment analysis anchored to full-game context when relevant: distinguish the scoring margin within the selected span from the actual game margin at the end of the game.",
     "Call out notable individual player stretches when the provided data clearly supports it, especially when one player drove a large share of a team's scoring in the selected window.",
     "Only mention lineup notes when they materially matter in the range.",
     "Return compact JSON with keys: headline, summary, sections.",
