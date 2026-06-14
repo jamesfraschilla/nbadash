@@ -3,7 +3,6 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createNote } from "../accountData.js";
 import { requestGameAnalysis } from "../analysisData.js";
-import { requestCustomDashboardRequest } from "../customRequestsData.js";
 import {
   fetchCurrentGLeagueRosters,
   fetchCurrentNbaRosters,
@@ -137,20 +136,6 @@ const SEGMENT_STAT_DEFAULTS = {
   possessionsFor: 0,
   possessionsAgainst: 0,
 };
-
-function compareSortableValues(left, right) {
-  const leftNumber = Number(left);
-  const rightNumber = Number(right);
-  const leftIsNumber = Number.isFinite(leftNumber);
-  const rightIsNumber = Number.isFinite(rightNumber);
-  if (leftIsNumber && rightIsNumber && leftNumber !== rightNumber) {
-    return leftNumber - rightNumber;
-  }
-  return String(left ?? "").localeCompare(String(right ?? ""), undefined, {
-    numeric: true,
-    sensitivity: "base",
-  });
-}
 
 const normalizeRosterPersonId = (value) => String(value || "").trim();
 const normalizeRosterName = (value) => String(value || "").trim().replace(/\s+/g, " ");
@@ -641,11 +626,6 @@ export default function Game({ variant = "full" }) {
   const [analysisSaveStatus, setAnalysisSaveStatus] = useState("");
   const [analysisSaving, setAnalysisSaving] = useState(false);
   const [analysisForm, setAnalysisForm] = useState(() => buildInitialAnalysisForm(null, false));
-  const [analysisCustomPrompt, setAnalysisCustomPrompt] = useState("");
-  const [analysisCustomLoading, setAnalysisCustomLoading] = useState(false);
-  const [analysisCustomError, setAnalysisCustomError] = useState("");
-  const [analysisCustomResult, setAnalysisCustomResult] = useState(null);
-  const [analysisCustomTableSort, setAnalysisCustomTableSort] = useState({ table: "", column: "", direction: "asc" });
   const [strategyVantageTeamId, setStrategyVantageTeamId] = useState("");
   const [strategyFeedback, setStrategyFeedback] = useState(() => buildDefaultStrategyFeedback());
   const [strategyOverrides, setStrategyOverrides] = useState(() => buildDefaultStrategyOverrides());
@@ -1394,123 +1374,6 @@ export default function Game({ variant = "full" }) {
     } finally {
       setAnalysisLoading(false);
     }
-  };
-
-  const runAnalysisCustomRequest = async () => {
-    const prompt = String(analysisCustomPrompt || "").trim();
-    if (!prompt || analysisCustomLoading) return;
-
-    try {
-      setAnalysisCustomLoading(true);
-      setAnalysisCustomError("");
-      const result = await requestCustomDashboardRequest({ prompt });
-      setAnalysisCustomResult(result);
-      setAnalysisCustomTableSort({ table: "", column: "", direction: "asc" });
-    } catch (error) {
-      setAnalysisCustomError(error?.message || "Unable to complete the custom request.");
-    } finally {
-      setAnalysisCustomLoading(false);
-    }
-  };
-
-  const resetAnalysisCustomRequest = () => {
-    setAnalysisCustomPrompt("");
-    setAnalysisCustomError("");
-    setAnalysisCustomResult(null);
-    setAnalysisCustomTableSort({ table: "", column: "", direction: "asc" });
-  };
-
-  const sortedAnalysisRequestGroups = useMemo(() => {
-    const groups = Array.isArray(analysisCustomResult?.result?.groups) ? analysisCustomResult.result.groups : [];
-    if (!groups.length || analysisCustomTableSort.table !== "groups" || !analysisCustomTableSort.column) return groups;
-
-    const direction = analysisCustomTableSort.direction === "desc" ? -1 : 1;
-    return [...groups].sort((left, right) => {
-      const leftValue = analysisCustomTableSort.column === "group"
-        ? left.label
-        : analysisCustomTableSort.column === "value"
-          ? left.displayValue
-          : analysisCustomTableSort.column === "games"
-            ? left.sampleSize
-            : analysisCustomTableSort.column === "record"
-              ? `${left.wins}-${left.losses}`
-              : analysisCustomTableSort.column === "avg"
-                ? left.averageDisplayValue
-                : left.totalDisplayValue;
-      const rightValue = analysisCustomTableSort.column === "group"
-        ? right.label
-        : analysisCustomTableSort.column === "value"
-          ? right.displayValue
-          : analysisCustomTableSort.column === "games"
-            ? right.sampleSize
-            : analysisCustomTableSort.column === "record"
-              ? `${right.wins}-${right.losses}`
-              : analysisCustomTableSort.column === "avg"
-                ? right.averageDisplayValue
-                : right.totalDisplayValue;
-      const comparison = compareSortableValues(leftValue, rightValue);
-      if (comparison !== 0) return comparison * direction;
-      return String(left.label || "").localeCompare(String(right.label || ""));
-    });
-  }, [analysisCustomResult, analysisCustomTableSort]);
-
-  const sortedAnalysisRequestTableRows = useMemo(() => {
-    const rows = Array.isArray(analysisCustomResult?.result?.table?.rows) ? analysisCustomResult.result.table.rows : [];
-    if (!rows.length || analysisCustomTableSort.table !== "game-table" || !analysisCustomTableSort.column) return rows;
-
-    const direction = analysisCustomTableSort.direction === "desc" ? -1 : 1;
-    return [...rows].sort((left, right) => {
-      const comparison = compareSortableValues(left.values?.[analysisCustomTableSort.column], right.values?.[analysisCustomTableSort.column]);
-      if (comparison !== 0) return comparison * direction;
-      return String(left.gameDate || "").localeCompare(String(right.gameDate || ""));
-    });
-  }, [analysisCustomResult, analysisCustomTableSort]);
-
-  const sortedAnalysisRequestGames = useMemo(() => {
-    const games = Array.isArray(analysisCustomResult?.result?.games) ? analysisCustomResult.result.games : [];
-    if (!games.length || analysisCustomTableSort.table !== "game-log" || !analysisCustomTableSort.column) return games;
-
-    const direction = analysisCustomTableSort.direction === "desc" ? -1 : 1;
-    return [...games].sort((left, right) => {
-      const leftValue = analysisCustomTableSort.column === "gameDate"
-        ? left.gameDate
-        : analysisCustomTableSort.column === "opponent"
-          ? left?.opponent?.tricode || left?.opponent?.fullName || "-"
-          : analysisCustomTableSort.column === "result"
-            ? left.result || "-"
-            : analysisCustomTableSort.column === "score"
-              ? `${left.teamScore}-${left.opponentScore}`
-              : analysisCustomTableSort.column === "value"
-                ? left.value
-                : left.gameId;
-      const rightValue = analysisCustomTableSort.column === "gameDate"
-        ? right.gameDate
-        : analysisCustomTableSort.column === "opponent"
-          ? right?.opponent?.tricode || right?.opponent?.fullName || "-"
-          : analysisCustomTableSort.column === "result"
-            ? right.result || "-"
-            : analysisCustomTableSort.column === "score"
-              ? `${right.teamScore}-${right.opponentScore}`
-              : analysisCustomTableSort.column === "value"
-                ? right.value
-                : right.gameId;
-      const comparison = compareSortableValues(leftValue, rightValue);
-      if (comparison !== 0) return comparison * direction;
-      return String(left.gameDate || "").localeCompare(String(right.gameDate || ""));
-    });
-  }, [analysisCustomResult, analysisCustomTableSort]);
-
-  const handleAnalysisRequestTableSort = (table, column) => {
-    setAnalysisCustomTableSort((current) => (
-      current.table === table && current.column === column
-        ? { table, column, direction: current.direction === "asc" ? "desc" : "asc" }
-        : { table, column, direction: "asc" }
-    ));
-  };
-
-  const analysisSortIndicator = (table, column) => {
-    if (analysisCustomTableSort.table !== table || analysisCustomTableSort.column !== column) return "";
-    return analysisCustomTableSort.direction === "asc" ? " ▲" : " ▼";
   };
 
   const saveAnalysisToVault = async () => {
@@ -2774,12 +2637,13 @@ export default function Game({ variant = "full" }) {
       </div>
       <div className={styles.contentAlign}>
         <section className={styles.scoreboard}>
-          <div className={`${styles.teamLogoColumn} ${styles.awayLogoColumn}`}>
+          <div className={`${styles.teamBlock} ${styles.awayTeamBlock}`}>
             <img
               className={styles.teamLogo}
               src={teamLogoUrl(awayTeam.teamId)}
               alt={`${awayTeam.teamName} logo`}
             />
+            <div className={styles.teamScore}>{displayAwayScore}</div>
             <div className={styles.mobileTeamScore}>{displayAwayScore}</div>
             <div className={styles.teamMetaStack}>
               {(timeouts || isPregame) && (
@@ -2804,13 +2668,7 @@ export default function Game({ variant = "full" }) {
             </div>
           </div>
 
-          <div className={`${styles.teamStatsColumn} ${styles.awayStatsColumn}`}>
-            <div className={styles.teamTricode}>{awayTeam.teamTricode}</div>
-            <div className={styles.teamScore}>{displayAwayScore}</div>
-          </div>
-
           <div className={styles.centerColumn}>
-            <div className={styles.dash}>-</div>
             {showExtras && (
               <div className={styles.headerMetricGrid}>
                 <div className={styles.headerMetricValue}>{ortgAway}</div>
@@ -2828,17 +2686,13 @@ export default function Game({ variant = "full" }) {
             {clock && <div className={styles.clock}>{clock}</div>}
           </div>
 
-          <div className={`${styles.teamStatsColumn} ${styles.homeStatsColumn}`}>
-            <div className={styles.teamTricode}>{homeTeam.teamTricode}</div>
-            <div className={styles.teamScore}>{displayHomeScore}</div>
-          </div>
-
-          <div className={`${styles.teamLogoColumn} ${styles.homeLogoColumn}`}>
+          <div className={`${styles.teamBlock} ${styles.homeTeamBlock}`}>
             <img
               className={styles.teamLogo}
               src={teamLogoUrl(homeTeam.teamId)}
               alt={`${homeTeam.teamName} logo`}
             />
+            <div className={styles.teamScore}>{displayHomeScore}</div>
             <div className={styles.mobileTeamScore}>{displayHomeScore}</div>
             <div className={styles.teamMetaStack}>
               {(timeouts || isPregame) && (
@@ -3400,7 +3254,7 @@ export default function Game({ variant = "full" }) {
                           className={styles.analysisUniformToggle}
                           onClick={() => setAnalysisUniformOpen((prev) => !prev)}
                         >
-                          {analysisUniformOpen ? "Hide Uniform View" : "Show Uniform View"}
+                          {analysisUniformOpen ? "Hide More" : "Show More"}
                         </button>
                         {analysisUniformOpen ? (
                           <div className={styles.analysisUniformPanel}>
@@ -3452,164 +3306,10 @@ export default function Game({ variant = "full" }) {
                   </button>
                 </div>
               </section>
-
-              <section className={styles.analysisPane}>
-                <div className={styles.analysisPaneHeader}>
-                  <div className={styles.analysisPaneTitle}>Custom Request</div>
-                </div>
-
-                <label className={styles.analysisPromptField}>
-                  <span className={styles.noteTimeLabel}>Request</span>
-                  <textarea
-                    rows={6}
-                    value={analysisCustomPrompt}
-                    onChange={(event) => setAnalysisCustomPrompt(event.target.value)}
-                    placeholder="Example: How many games this season did Oklahoma City have 15+ steals?"
-                  />
-                </label>
-
-                {analysisCustomError ? <div className={styles.analysisError}>{analysisCustomError}</div> : null}
-
-                {analysisCustomResult ? (
-                  <div className={styles.analysisCustomResult}>
-                    <div className={styles.analysisHeadline}>
-                      {analysisCustomResult?.result?.answer || "Custom request"}
-                    </div>
-
-                    <div className={styles.analysisMetaGrid}>
-                      <div className={styles.analysisMetaCard}>
-                        <div className={styles.analysisSectionTitle}>Parsed Stat</div>
-                        <div>{analysisCustomResult?.result?.metric?.label || analysisCustomResult?.result?.table?.label || "-"}</div>
-                      </div>
-                      <div className={styles.analysisMetaCard}>
-                        <div className={styles.analysisSectionTitle}>Filters</div>
-                        <div>{analysisCustomResult?.result?.filtersLabel || "All results"}</div>
-                      </div>
-                      <div className={styles.analysisMetaCard}>
-                        <div className={styles.analysisSectionTitle}>Aggregation</div>
-                        <div>{String(analysisCustomResult?.result?.aggregation || "").replaceAll("_", " ")}</div>
-                      </div>
-                      <div className={styles.analysisMetaCard}>
-                        <div className={styles.analysisSectionTitle}>Sample Size</div>
-                        <div>{analysisCustomResult?.result?.sampleSize || 0} games</div>
-                      </div>
-                      <div className={styles.analysisMetaCard}>
-                        <div className={styles.analysisSectionTitle}>Value</div>
-                        <div>{analysisCustomResult?.result?.displayValue || "0"}</div>
-                      </div>
-                    </div>
-
-                    {Array.isArray(analysisCustomResult?.result?.groups) && analysisCustomResult.result.groups.length ? (
-                      <div className={styles.analysisCustomTableSection}>
-                        <div className={styles.analysisSectionTitle}>Grouped Summary</div>
-                        <div className={styles.analysisTableWrap}>
-                          <table className={styles.analysisTable}>
-                            <thead>
-                              <tr>
-                                <th><button type="button" className={styles.analysisTableSortButton} onClick={() => handleAnalysisRequestTableSort("groups", "group")}>Group{analysisSortIndicator("groups", "group")}</button></th>
-                                <th><button type="button" className={styles.analysisTableSortButton} onClick={() => handleAnalysisRequestTableSort("groups", "value")}>Value{analysisSortIndicator("groups", "value")}</button></th>
-                                <th><button type="button" className={styles.analysisTableSortButton} onClick={() => handleAnalysisRequestTableSort("groups", "games")}>Games{analysisSortIndicator("groups", "games")}</button></th>
-                                <th><button type="button" className={styles.analysisTableSortButton} onClick={() => handleAnalysisRequestTableSort("groups", "record")}>Record{analysisSortIndicator("groups", "record")}</button></th>
-                                <th><button type="button" className={styles.analysisTableSortButton} onClick={() => handleAnalysisRequestTableSort("groups", "avg")}>Avg{analysisSortIndicator("groups", "avg")}</button></th>
-                                <th><button type="button" className={styles.analysisTableSortButton} onClick={() => handleAnalysisRequestTableSort("groups", "total")}>Total{analysisSortIndicator("groups", "total")}</button></th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {sortedAnalysisRequestGroups.map((group) => (
-                                <tr key={group.key}>
-                                  <td>{group.label}</td>
-                                  <td>{group.displayValue}</td>
-                                  <td>{group.sampleSize}</td>
-                                  <td>{Number.isFinite(Number(group.wins)) && Number.isFinite(Number(group.losses)) ? `${group.wins}-${group.losses}` : "-"}</td>
-                                  <td>{group.averageDisplayValue || "-"}</td>
-                                  <td>{group.totalDisplayValue || "-"}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    ) : null}
-
-                    {Array.isArray(analysisCustomResult?.result?.table?.columns) && Array.isArray(analysisCustomResult?.result?.table?.rows) ? (
-                      <div className={styles.analysisCustomTableSection}>
-                        <div className={styles.analysisSectionTitle}>Game Table</div>
-                        <div className={styles.analysisTableWrap}>
-                          <table className={styles.analysisTable}>
-                            <thead>
-                              <tr>
-                                {analysisCustomResult.result.table.columns.map((column) => (
-                                  <th key={column.key}>
-                                    <button
-                                      type="button"
-                                      className={styles.analysisTableSortButton}
-                                      onClick={() => handleAnalysisRequestTableSort("game-table", column.key)}
-                                    >
-                                      {column.label}{analysisSortIndicator("game-table", column.key)}
-                                    </button>
-                                  </th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {sortedAnalysisRequestTableRows.map((row) => (
-                                <tr key={`${row.gameId}-${row.gameDate}`}>
-                                  {analysisCustomResult.result.table.columns.map((column) => (
-                                    <td key={`${row.gameId}-${column.key}`}>{row.values?.[column.key] ?? "-"}</td>
-                                  ))}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    ) : Array.isArray(analysisCustomResult?.result?.games) && analysisCustomResult.result.games.length ? (
-                      <div className={styles.analysisCustomTableSection}>
-                        <div className={styles.analysisSectionTitle}>Game Log</div>
-                        <div className={styles.analysisTableWrap}>
-                          <table className={styles.analysisTable}>
-                            <thead>
-                              <tr>
-                                <th><button type="button" className={styles.analysisTableSortButton} onClick={() => handleAnalysisRequestTableSort("game-log", "gameDate")}>Date{analysisSortIndicator("game-log", "gameDate")}</button></th>
-                                <th><button type="button" className={styles.analysisTableSortButton} onClick={() => handleAnalysisRequestTableSort("game-log", "opponent")}>Opponent{analysisSortIndicator("game-log", "opponent")}</button></th>
-                                <th><button type="button" className={styles.analysisTableSortButton} onClick={() => handleAnalysisRequestTableSort("game-log", "result")}>Result{analysisSortIndicator("game-log", "result")}</button></th>
-                                <th><button type="button" className={styles.analysisTableSortButton} onClick={() => handleAnalysisRequestTableSort("game-log", "score")}>Score{analysisSortIndicator("game-log", "score")}</button></th>
-                                <th><button type="button" className={styles.analysisTableSortButton} onClick={() => handleAnalysisRequestTableSort("game-log", "value")}>Value{analysisSortIndicator("game-log", "value")}</button></th>
-                                <th><button type="button" className={styles.analysisTableSortButton} onClick={() => handleAnalysisRequestTableSort("game-log", "gameId")}>Game ID{analysisSortIndicator("game-log", "gameId")}</button></th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {sortedAnalysisRequestGames.map((item) => (
-                                <tr key={`${item.gameId}-${item.gameDate}`}>
-                                  <td>{item.gameDate}</td>
-                                  <td>{item?.opponent?.tricode || item?.opponent?.fullName || "-"}</td>
-                                  <td>{item.result || "-"}</td>
-                                  <td>{Number.isFinite(Number(item.teamScore)) && Number.isFinite(Number(item.opponentScore)) ? `${item.teamScore}-${item.opponentScore}` : "-"}</td>
-                                  <td>{Number.isFinite(Number(item.value)) ? Number(item.value).toFixed(Math.abs(Number(item.value) % 1) > 0 ? 1 : 0) : item.value}</td>
-                                  <td>{item.gameId}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                <div className={styles.analysisPaneActions}>
-                  <button type="button" className={styles.noteCancel} onClick={resetAnalysisCustomRequest} disabled={analysisCustomLoading}>
-                    Reset
-                  </button>
-                  <button type="button" className={styles.noteSave} onClick={runAnalysisCustomRequest} disabled={analysisCustomLoading || !String(analysisCustomPrompt || "").trim()}>
-                    {analysisCustomLoading ? "Running..." : "Run Request"}
-                  </button>
-                </div>
-              </section>
             </div>
 
             <div className={styles.noteActions}>
-              <button type="button" className={styles.noteCancel} onClick={requestCancelAnalysis} disabled={analysisLoading || analysisSaving || analysisCustomLoading}>
+              <button type="button" className={styles.noteCancel} onClick={requestCancelAnalysis} disabled={analysisLoading || analysisSaving}>
                 Cancel
               </button>
             </div>
