@@ -7,6 +7,8 @@ export const REFEREE_HEADSHOT_EDITOR_REFERENCE_SIZE = 308;
 export const REFEREE_HEADSHOT_CHANGE_EVENT = "referee-headshots-updated";
 export const REFEREE_HEADSHOT_REMOTE_RECORD_ID = "shared-referee-headshots";
 export const REFEREE_HEADSHOT_REMOTE_RECORD_TYPE = "referee_headshots";
+export const REFEREE_HEADSHOT_PREVIEW_BUCKET = "referee-headshots-preview";
+export const REFEREE_HEADSHOT_FULL_BUCKET = "referee-headshots-full";
 const REFEREE_HEADSHOT_SHARED_TABLE = "rotations_shared_state";
 const REFEREE_HEADSHOT_SHARED_SCOPE_TYPE = "shared_referee_headshots";
 const REFEREE_HEADSHOT_SHARED_SCOPE_KEY = "global";
@@ -74,6 +76,12 @@ function buildFullResolutionRefereeHeadshotUrl(path, fileName) {
     ? "referees_review_duplicates"
     : "referees";
   return `${baseUrl}referees-full/${root}/${encodePublicPathSegment(fileName)}`;
+}
+
+function buildSupabaseStoragePublicUrl(bucket, path) {
+  if (!supabase || !bucket || !path) return "";
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  return String(data?.publicUrl || "").trim();
 }
 
 export function normalizeNameKey(value) {
@@ -184,10 +192,22 @@ export function sanitizeRefereeHeadshotPreferences(rawPreferences) {
     const normalizedKey = normalizeNameKey(nameKey);
     const fileName = String(record?.fileName || "").trim();
     const dataUrl = String(record?.dataUrl || "").trim();
-    if (normalizedKey && dataUrl) {
+    const previewBucket = String(record?.previewBucket || "").trim();
+    const previewPath = String(record?.previewPath || "").trim();
+    const previewUrl = String(record?.previewUrl || "").trim() || buildSupabaseStoragePublicUrl(previewBucket, previewPath);
+    const fullBucket = String(record?.fullBucket || "").trim();
+    const fullPath = String(record?.fullPath || "").trim();
+    const fullUrl = String(record?.fullUrl || "").trim() || buildSupabaseStoragePublicUrl(fullBucket, fullPath);
+    if (normalizedKey && (dataUrl || previewUrl || fullUrl)) {
       uploadedImagesByNameKey[normalizedKey] = {
         fileName: fileName || `${normalizedKey}.jpg`,
         dataUrl,
+        previewBucket,
+        previewPath,
+        previewUrl,
+        fullBucket,
+        fullPath,
+        fullUrl,
       };
     }
   });
@@ -496,8 +516,8 @@ export function buildRefereeHeadshotImageItems(preferences = DEFAULT_REFEREE_HEA
         fileName: String(displayName || "").trim(),
         fullName: String(displayName || "").trim(),
         nameKey: normalizedKey,
-        url: String(uploaded?.dataUrl || "").trim(),
-        exportUrl: String(uploaded?.dataUrl || "").trim(),
+        url: String(uploaded?.previewUrl || uploaded?.dataUrl || "").trim(),
+        exportUrl: String(uploaded?.fullUrl || uploaded?.previewUrl || uploaded?.dataUrl || "").trim(),
         source: "manual",
         isDuplicate: false,
         isManual: true,
@@ -604,28 +624,30 @@ export function choosePreferredRefereeHeadshot(groupItems, nameKey, preferences 
   const uploaded = preferences.uploadedImagesByNameKey?.[nameKey];
   const visibleItems = groupItems.filter((item) => !preferences.hiddenImageIds.includes(item.id));
   const preferredId = preferences.preferredImageIdsByNameKey?.[nameKey];
-  if (preferredId === buildUploadedRefereeImageId(nameKey) && uploaded?.dataUrl) {
+  const uploadedPreviewUrl = String(uploaded?.previewUrl || uploaded?.dataUrl || "").trim();
+  const uploadedFullUrl = String(uploaded?.fullUrl || uploaded?.previewUrl || uploaded?.dataUrl || "").trim();
+  if (preferredId === buildUploadedRefereeImageId(nameKey) && uploadedPreviewUrl) {
       return {
         id: preferredId,
         fileName: uploaded.fileName,
         fullName: nameKey,
         nameKey,
-        url: uploaded.dataUrl,
-        exportUrl: uploaded.dataUrl,
+        url: uploadedPreviewUrl,
+        exportUrl: uploadedFullUrl,
         source: "uploaded replacement",
         isDuplicate: false,
         isUploaded: true,
     };
   }
   if (!visibleItems.length) {
-    if (uploaded?.dataUrl) {
+    if (uploadedPreviewUrl) {
       return {
         id: buildUploadedRefereeImageId(nameKey),
         fileName: uploaded.fileName,
         fullName: nameKey,
         nameKey,
-        url: uploaded.dataUrl,
-        exportUrl: uploaded.dataUrl,
+        url: uploadedPreviewUrl,
+        exportUrl: uploadedFullUrl,
         source: "uploaded replacement",
         isDuplicate: false,
         isUploaded: true,
@@ -681,6 +703,72 @@ export async function loadRefereeHeadshotExportUrl(fullName, preferences = null)
   const effectivePreferences = preferences || readStoredRefereeHeadshotPreferences();
   await ensureStaticRefereeHeadshotItemsLoaded();
   return getRefereeHeadshotExportUrl(fullName, effectivePreferences);
+}
+
+export async function uploadRefereeHeadshotAssets({
+  nameKey,
+  originalFileName,
+  previewBlob,
+  fullBlob,
+}) {
+  const normalizedKey = normalizeNameKey(nameKey);
+  if (!normalizedKey) {
+    throw new Error("Missing referee name.");
+  }
+  if (!supabase) {
+    throw new Error("Supabase is not configured.");
+  }
+  const timestamp = Date.now();
+  const safeBaseName = normalizedKey || "referee";
+  const previewPath = `${safeBaseName}/${timestamp}-preview.jpg`;
+  const fullPath = `${safeBaseName}/${timestamp}-full.jpg`;
+
+  const previewUpload = await supabase.storage
+    .from(REFEREE_HEADSHOT_PREVIEW_BUCKET)
+    .upload(previewPath, previewBlob, {
+      contentType: "image/jpeg",
+      cacheControl: "31536000",
+      upsert: false,
+    });
+  if (previewUpload.error) {
+    throw previewUpload.error;
+  }
+
+  const fullUpload = await supabase.storage
+    .from(REFEREE_HEADSHOT_FULL_BUCKET)
+    .upload(fullPath, fullBlob, {
+      contentType: "image/jpeg",
+      cacheControl: "31536000",
+      upsert: false,
+    });
+  if (fullUpload.error) {
+    throw fullUpload.error;
+  }
+
+  return {
+    fileName: originalFileName || `${safeBaseName}.jpg`,
+    previewBucket: REFEREE_HEADSHOT_PREVIEW_BUCKET,
+    previewPath,
+    previewUrl: buildSupabaseStoragePublicUrl(REFEREE_HEADSHOT_PREVIEW_BUCKET, previewPath),
+    fullBucket: REFEREE_HEADSHOT_FULL_BUCKET,
+    fullPath,
+    fullUrl: buildSupabaseStoragePublicUrl(REFEREE_HEADSHOT_FULL_BUCKET, fullPath),
+  };
+}
+
+export async function deleteUploadedRefereeHeadshotAssets(uploadedRecord) {
+  if (!supabase || !uploadedRecord || typeof uploadedRecord !== "object") return;
+  const previewBucket = String(uploadedRecord.previewBucket || "").trim();
+  const previewPath = String(uploadedRecord.previewPath || "").trim();
+  const fullBucket = String(uploadedRecord.fullBucket || "").trim();
+  const fullPath = String(uploadedRecord.fullPath || "").trim();
+
+  if (previewBucket && previewPath) {
+    await supabase.storage.from(previewBucket).remove([previewPath]).catch(() => {});
+  }
+  if (fullBucket && fullPath) {
+    await supabase.storage.from(fullBucket).remove([fullPath]).catch(() => {});
+  }
 }
 
 export function resolveRefereeHeadshotOverrideKey(fullName, overrides = null, preferences = null) {

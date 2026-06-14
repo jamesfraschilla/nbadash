@@ -20,11 +20,13 @@ import {
   REFEREE_HEADSHOT_OVERRIDE_STORAGE_KEY,
   REFEREE_HEADSHOT_PREFERENCES_STORAGE_KEY,
   resolveRefereeHeadshotOverrideKey,
+  deleteUploadedRefereeHeadshotAssets,
   saveRemoteRefereeHeadshotState,
   sanitizeRefereeHeadshotPreferences,
   sanitizeRefereeHeadshotOverrides,
   serializeRefereeHeadshotPreferences,
   serializeRefereeHeadshotOverrides,
+  uploadRefereeHeadshotAssets,
   writeStoredRefereeHeadshotState,
 } from "../refereeHeadshots.js";
 import styles from "./RefereeHeadshotsPreview.module.css";
@@ -112,22 +114,27 @@ function sanitizeCopiedCropSettings(rawValue) {
   return next;
 }
 
-async function loadImageFileAsDataUrl(file) {
-  const rawDataUrl = await new Promise((resolve, reject) => {
+async function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result || ""));
     reader.onerror = () => reject(new Error("Unable to read image file."));
     reader.readAsDataURL(file);
   });
+}
 
-  const image = await new Promise((resolve, reject) => {
+async function loadImageElement(src) {
+  return new Promise((resolve, reject) => {
     const nextImage = new Image();
     nextImage.onload = () => resolve(nextImage);
     nextImage.onerror = () => reject(new Error("Unable to decode image file."));
-    nextImage.src = rawDataUrl;
+    nextImage.src = src;
   });
+}
 
-  const maxEdge = 1400;
+async function renderCompressedImageBlob(file, { maxEdge, quality }) {
+  const rawDataUrl = await readFileAsDataUrl(file);
+  const image = await loadImageElement(rawDataUrl);
   const sourceWidth = image.naturalWidth || image.width;
   const sourceHeight = image.naturalHeight || image.height;
   const scale = Math.min(1, maxEdge / Math.max(sourceWidth, sourceHeight));
@@ -140,7 +147,15 @@ async function loadImageFileAsDataUrl(file) {
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
   context.drawImage(image, 0, 0, width, height);
-  return canvas.toDataURL("image/jpeg", 0.9);
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error("Unable to encode image."));
+        return;
+      }
+      resolve(blob);
+    }, "image/jpeg", quality);
+  });
 }
 
 export default function RefereeHeadshotsPreview({ embedded = false }) {
@@ -258,8 +273,11 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
   const selectedUploadedImageId = selectedAssignedNameKey ? buildUploadedRefereeImageId(selectedAssignedNameKey) : "";
   const selectedUsesUploadedImage = selectedPreferredItem?.id === selectedUploadedImageId;
   const selectedPreviewSrc = selectedUsesUploadedImage && selectedUploadedImage
-    ? selectedUploadedImage.dataUrl
+    ? (selectedUploadedImage.previewUrl || selectedUploadedImage.dataUrl || "")
     : selectedItem?.url || "";
+  const selectedFullPreviewSrc = selectedUsesUploadedImage && selectedUploadedImage
+    ? (selectedUploadedImage.fullUrl || selectedUploadedImage.previewUrl || selectedUploadedImage.dataUrl || "")
+    : (selectedItem?.exportUrl || selectedItem?.url || "");
   const currentOverridesSignature = useMemo(() => serializeRefereeHeadshotOverrides(overrides), [overrides]);
   const currentPreferencesSignature = useMemo(() => serializeRefereeHeadshotPreferences(preferences), [preferences]);
   const hasUnsavedChanges =
@@ -538,18 +556,28 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
     const file = event.target.files?.[0];
     if (!file || !selectedAssignedNameKey) return;
     try {
-      const dataUrl = await loadImageFileAsDataUrl(file);
+      if (!user?.id) {
+        throw new Error("Sign in to upload referee photos.");
+      }
+      setUploadMessage("Uploading...");
+      const [previewBlob, fullBlob] = await Promise.all([
+        renderCompressedImageBlob(file, { maxEdge: 720, quality: 0.82 }),
+        renderCompressedImageBlob(file, { maxEdge: 2200, quality: 0.92 }),
+      ]);
+      const uploadedRecord = await uploadRefereeHeadshotAssets({
+        nameKey: selectedAssignedNameKey,
+        originalFileName: file.name,
+        previewBlob,
+        fullBlob,
+      });
       setPreferences((current) => sanitizeRefereeHeadshotPreferences({
         ...current,
         uploadedImagesByNameKey: {
           ...(current.uploadedImagesByNameKey || {}),
-          [selectedAssignedNameKey]: {
-            fileName: file.name,
-            dataUrl,
-          },
+          [selectedAssignedNameKey]: uploadedRecord,
         },
       }));
-      setUploadMessage("Replacement image saved.");
+      setUploadMessage("Replacement image uploaded.");
     } catch (error) {
       setUploadMessage(error?.message || "Upload failed.");
     } finally {
@@ -557,8 +585,12 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
     }
   };
 
-  const removeUploadedReplacement = () => {
+  const removeUploadedReplacement = async () => {
     if (!selectedAssignedNameKey) return;
+    const uploadedRecord = selectedUploadedImage;
+    if (uploadedRecord) {
+      await deleteUploadedRefereeHeadshotAssets(uploadedRecord);
+    }
     setPreferences((current) => {
       const nextUploads = { ...(current.uploadedImagesByNameKey || {}) };
       const nextPreferred = { ...(current.preferredImageIdsByNameKey || {}) };
@@ -701,9 +733,9 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
                   <span className={styles.fieldHint}>Shows the uncropped uploaded source.</span>
                 </div>
                 <div className={styles.fullPreviewFrame}>
-                  {selectedPreviewSrc ? (
+                  {selectedFullPreviewSrc ? (
                     <img
-                      src={selectedPreviewSrc}
+                      src={selectedFullPreviewSrc}
                       alt={`${selectedItem.fullName} full preview`}
                       className={styles.fullPreviewImage}
                     />
@@ -883,7 +915,7 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
                         className={styles.groupItem}
                         onClick={chooseUploadedPhoto}
                       >
-                        <img src={selectedUploadedImage.dataUrl} alt={selectedUploadedImage.fileName} className={styles.groupThumb} />
+                        <img src={selectedUploadedImage.previewUrl || selectedUploadedImage.dataUrl} alt={selectedUploadedImage.fileName} className={styles.groupThumb} />
                         <div className={styles.groupMeta}>
                           <span>{selectedUploadedImage.fileName}</span>
                           <span>uploaded replacement</span>

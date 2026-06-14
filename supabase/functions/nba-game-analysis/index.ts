@@ -343,10 +343,10 @@ function getActionPlayerIdentity(action: Record<string, unknown>) {
     "",
   ).trim();
   const name = String(
-    action.playerNameI ||
-    action.playerName ||
-    action.nameI ||
     action.fullName ||
+    action.playerName ||
+    action.playerNameI ||
+    action.nameI ||
     action.player ||
     "",
   ).trim();
@@ -997,7 +997,7 @@ function buildLineupInsights(
 
   const upsertPlayer = (teamId: string, player: Record<string, unknown>, margin: number, seconds: number) => {
     const personId = String(player?.personId || "");
-    const name = String(player?.nameI || player?.fullName || player?.playerName || "").trim();
+    const name = String(player?.fullName || player?.playerName || player?.nameI || "").trim();
     if (!personId || !name || seconds <= 0) return;
     const key = `${teamId}:${personId}`;
     if (!playerSplits.has(key)) {
@@ -1534,6 +1534,7 @@ async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayloa
   const systemPrompt = [
     "You are a basketball analyst.",
     "Use only the structured game data provided.",
+    "Use player names exactly as provided in the JSON input and do not expand initials into guessed full names.",
     "Do not invent stats, possessions, or player impact claims.",
     "Do not overstate player scoring share; if a player scored 10 points for a team that scored 38, do not say he scored all of the team's points.",
     "When citing team edges in categories like paint points or points off turnovers, name the team with the higher value.",
