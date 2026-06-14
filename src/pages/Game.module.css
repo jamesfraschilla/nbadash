@@ -74,13 +74,13 @@
 }
 
 .scoreboard {
-  width: min(100%, 820px);
+  width: min(100%, 900px);
   display: grid;
   grid-template-areas: "awayTeam center homeTeam";
-  grid-template-columns: minmax(220px, 1fr) minmax(170px, 0.78fr) minmax(220px, 1fr);
+  grid-template-columns: max-content minmax(230px, 260px) max-content;
   justify-content: center;
   align-items: start;
-  column-gap: clamp(6px, 1.4vw, 18px);
+  column-gap: clamp(30px, 4vw, 54px);
   margin-top: calc(12px + env(safe-area-inset-top));
   margin-bottom: 12px;
 }
@@ -632,14 +632,17 @@ html[data-theme="dark"] .pbpWheel {
   gap: 0;
   min-width: 0;
   padding-top: 4px;
+  width: max-content;
 }
 
 .awayTeamBlock {
   grid-area: awayTeam;
+  justify-self: end;
 }
 
 .homeTeamBlock {
   grid-area: homeTeam;
+  justify-self: start;
 }
 
 .teamLogo {
@@ -650,10 +653,10 @@ html[data-theme="dark"] .pbpWheel {
 
 .teamInfoRow {
   display: grid;
-  grid-template-columns: auto minmax(112px, 1fr);
+  grid-template-columns: auto max-content;
   align-items: start;
-  gap: clamp(10px, 1.5vw, 18px);
-  width: 100%;
+  gap: clamp(18px, 2vw, 30px);
+  width: max-content;
 }
 
 .awayTeamInfoRow {
@@ -661,7 +664,7 @@ html[data-theme="dark"] .pbpWheel {
 }
 
 .homeTeamInfoRow {
-  grid-template-columns: minmax(112px, 1fr) auto;
+  grid-template-columns: max-content auto;
   justify-items: end;
 }
 
@@ -669,9 +672,9 @@ html[data-theme="dark"] .pbpWheel {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
-  width: 100%;
+  width: max-content;
 }
 
 .mobileTeamScore {
@@ -695,7 +698,7 @@ html[data-theme="dark"] .pbpWheel {
 .teamMetaStack {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 9px;
+  gap: 8px;
   align-items: center;
   min-height: 0;
   justify-content: center;
@@ -788,11 +791,11 @@ html:not([data-theme="dark"]) .mandatoryActive {
 
   .teamInfoRow {
     gap: 10px;
-    grid-template-columns: auto minmax(96px, 1fr);
+    grid-template-columns: auto max-content;
   }
 
   .homeTeamInfoRow {
-    grid-template-columns: minmax(96px, 1fr) auto;
+    grid-template-columns: max-content auto;
   }
 }
 
@@ -866,6 +869,14 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   font-variant-numeric: tabular-nums;
 }
 
+.teamNickname {
+  color: var(--text);
+  font-size: clamp(17px, 1.65vw, 24px);
+  font-weight: 500;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
 .headerMetricGrid {
   display: grid;
   grid-template-columns: minmax(44px, 1fr) minmax(74px, auto) minmax(44px, 1fr);
@@ -891,7 +902,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  padding-top: clamp(126px, 11vw, 170px);
+  padding-top: clamp(58px, 6vw, 86px);
   grid-area: center;
   min-width: 0;
 }
@@ -1814,8 +1825,8 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 @media (max-width: 900px) {
   .scoreboard {
     grid-template-areas: "awayTeam center homeTeam";
-    grid-template-columns: minmax(156px, 1fr) minmax(114px, 0.68fr) minmax(156px, 1fr);
-    column-gap: 8px;
+    grid-template-columns: max-content minmax(160px, 210px) max-content;
+    column-gap: clamp(14px, 2.2vw, 24px);
     width: min(100%, 820px);
   }
 
@@ -1836,6 +1847,10 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
     font-size: 28px;
   }
 
+  .teamNickname {
+    font-size: 14px;
+  }
+
   .statLabel,
   .headerMetricLabel,
   .headerMetricValue,
@@ -1845,7 +1860,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 
   .centerColumn {
     gap: 9px;
-    padding-top: 92px;
+    padding-top: 48px;
   }
 
   .possessionTable {
@@ -1920,6 +1935,10 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
     line-height: 1;
     color: var(--text);
     font-variant-numeric: tabular-nums;
+  }
+
+  .teamNickname {
+    display: none;
   }
 
   .teamScore {
