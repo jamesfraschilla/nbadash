@@ -2638,33 +2638,37 @@ export default function Game({ variant = "full" }) {
       <div className={styles.contentAlign}>
         <section className={styles.scoreboard}>
           <div className={`${styles.teamBlock} ${styles.awayTeamBlock}`}>
-            <img
-              className={styles.teamLogo}
-              src={teamLogoUrl(awayTeam.teamId)}
-              alt={`${awayTeam.teamName} logo`}
-            />
-            <div className={styles.teamScore}>{displayAwayScore}</div>
-            <div className={styles.mobileTeamScore}>{displayAwayScore}</div>
-            <div className={styles.teamMetaStack}>
-              {(timeouts || isPregame) && (
-                <div className={styles.teamMetaRow}>
-                  {renderTimeouts(
-                    awayTimeoutsRemaining,
-                    mandatoryTimeoutTeam === "away",
-                    isGLeagueGame && !isSummerLeagueMatch,
-                    awayResetUsed,
-                    isSummerLeagueMatch ? 2 : 7
+            <div className={`${styles.teamInfoRow} ${styles.awayTeamInfoRow}`}>
+              <img
+                className={styles.teamLogo}
+                src={teamLogoUrl(awayTeam.teamId)}
+                alt={`${awayTeam.teamName} logo`}
+              />
+              <div className={styles.teamValueColumn}>
+                <div className={styles.teamScore}>{displayAwayScore}</div>
+                <div className={styles.mobileTeamScore}>{displayAwayScore}</div>
+                <div className={styles.teamMetaStack}>
+                  {(timeouts || isPregame) && (
+                    <div className={styles.teamMetaRow}>
+                      {renderTimeouts(
+                        awayTimeoutsRemaining,
+                        mandatoryTimeoutTeam === "away",
+                        isGLeagueGame && !isSummerLeagueMatch,
+                        awayResetUsed,
+                        isSummerLeagueMatch ? 2 : 7
+                      )}
+                    </div>
+                  )}
+                  <div className={styles.teamMetaRow}>
+                    {renderFouls(awayFoulsDisplay)}
+                  </div>
+                  {(challenges || isPregame) && (
+                    <div className={styles.teamMetaRow}>
+                      {renderChallenges(awayChallenges)}
+                    </div>
                   )}
                 </div>
-              )}
-              <div className={styles.teamMetaRow}>
-                {renderFouls(awayFoulsDisplay)}
               </div>
-              {(challenges || isPregame) && (
-                <div className={styles.teamMetaRow}>
-                  {renderChallenges(awayChallenges)}
-                </div>
-              )}
             </div>
           </div>
 
@@ -2687,33 +2691,37 @@ export default function Game({ variant = "full" }) {
           </div>
 
           <div className={`${styles.teamBlock} ${styles.homeTeamBlock}`}>
-            <img
-              className={styles.teamLogo}
-              src={teamLogoUrl(homeTeam.teamId)}
-              alt={`${homeTeam.teamName} logo`}
-            />
-            <div className={styles.teamScore}>{displayHomeScore}</div>
-            <div className={styles.mobileTeamScore}>{displayHomeScore}</div>
-            <div className={styles.teamMetaStack}>
-              {(timeouts || isPregame) && (
-                <div className={styles.teamMetaRow}>
-                  {renderTimeouts(
-                    homeTimeoutsRemaining,
-                    mandatoryTimeoutTeam === "home",
-                    isGLeagueGame && !isSummerLeagueMatch,
-                    homeResetUsed,
-                    isSummerLeagueMatch ? 2 : 7
+            <div className={`${styles.teamInfoRow} ${styles.homeTeamInfoRow}`}>
+              <div className={styles.teamValueColumn}>
+                <div className={styles.teamScore}>{displayHomeScore}</div>
+                <div className={styles.mobileTeamScore}>{displayHomeScore}</div>
+                <div className={styles.teamMetaStack}>
+                  {(timeouts || isPregame) && (
+                    <div className={styles.teamMetaRow}>
+                      {renderTimeouts(
+                        homeTimeoutsRemaining,
+                        mandatoryTimeoutTeam === "home",
+                        isGLeagueGame && !isSummerLeagueMatch,
+                        homeResetUsed,
+                        isSummerLeagueMatch ? 2 : 7
+                      )}
+                    </div>
+                  )}
+                  <div className={styles.teamMetaRow}>
+                    {renderFouls(homeFoulsDisplay)}
+                  </div>
+                  {(challenges || isPregame) && (
+                    <div className={styles.teamMetaRow}>
+                      {renderChallenges(homeChallenges)}
+                    </div>
                   )}
                 </div>
-              )}
-              <div className={styles.teamMetaRow}>
-                {renderFouls(homeFoulsDisplay)}
               </div>
-              {(challenges || isPregame) && (
-                <div className={styles.teamMetaRow}>
-                  {renderChallenges(homeChallenges)}
-                </div>
-              )}
+              <img
+                className={styles.teamLogo}
+                src={teamLogoUrl(homeTeam.teamId)}
+                alt={`${homeTeam.teamName} logo`}
+              />
             </div>
           </div>
         </section>
