@@ -5,7 +5,7 @@
   width: min(100%, 1120px);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  background: var(--surface);
+  background: var(--panel);
   box-shadow: var(--shadow-panel);
 }
 
@@ -131,16 +131,17 @@
 }
 
 .shadedColumn {
-  background-color: var(--table-numeric-bg);
+  background-color: color-mix(in srgb, var(--panel) 78%, var(--surface) 22%);
+  border-left: 1px solid color-mix(in srgb, var(--border) 76%, transparent 24%);
 }
 
 .table tbody tr:hover .shadedColumn {
-  background-color: var(--panel-hover);
+  background-color: var(--row-hover);
 }
 
 .totalsRow {
   font-weight: 800;
-  background: var(--panel-strong);
+  background: color-mix(in srgb, var(--panel-strong) 82%, var(--surface) 18%);
 }
 
 .totalsRow td {
@@ -154,7 +155,7 @@
 .totalsPercentRow {
   font-size: 12px;
   color: var(--muted);
-  background: var(--panel);
+  background: color-mix(in srgb, var(--panel) 88%, var(--surface) 12%);
 }
 
 .totalsPercentRow td {

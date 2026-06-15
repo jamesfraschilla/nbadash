@@ -82,7 +82,7 @@
   align-items: start;
   column-gap: clamp(30px, 4vw, 54px);
   margin-top: calc(12px + env(safe-area-inset-top));
-  margin-bottom: 12px;
+  margin-bottom: 24px;
 }
 
 .statsGrid {
@@ -320,6 +320,15 @@ html[data-theme="dark"] .pbpWheel {
   margin-top: auto;
 }
 
+.analysisPaneActions button {
+  min-height: var(--control-height-md);
+  padding: 8px 14px;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: var(--radius-md);
+  transition: border-color 0.2s ease, background-color 0.2s ease, filter 0.2s ease;
+}
+
 .noteModal h3 {
   margin: 0 0 10px;
   font-size: 16px;
@@ -487,10 +496,19 @@ html[data-theme="dark"] .pbpWheel {
   color: var(--text);
 }
 
+.noteCancel:hover {
+  border-color: var(--border-strong);
+  background-color: var(--button-hover);
+}
+
 .noteSave {
   background: var(--button-primary-bg);
   border-color: var(--button-primary-bg) !important;
   color: var(--button-primary-text);
+}
+
+.noteSave:hover {
+  filter: brightness(1.03);
 }
 
 .analysisLiveCap {
@@ -698,7 +716,7 @@ html[data-theme="dark"] .pbpWheel {
 .teamMetaStack {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
   min-height: 0;
   justify-content: center;
@@ -709,7 +727,7 @@ html[data-theme="dark"] .pbpWheel {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   color: var(--text);
   min-height: 0;
 }
@@ -1740,6 +1758,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   display: flex;
   justify-content: center;
   gap: 12px;
+  margin-top: 8px;
   margin-bottom: 20px;
   max-width: 100%;
 }

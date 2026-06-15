@@ -1946,6 +1946,12 @@ export default function Game({ variant = "full" }) {
     (advancedHomeTotals.blocks || 0) +
     (advancedHomeTotals.offensiveFoulsDrawn || 0) +
     homeDeflections;
+  const awayForcedTurnovers =
+    (advancedAwayTotals.steals || 0) +
+    (advancedAwayTotals.offensiveFoulsDrawn || 0);
+  const homeForcedTurnovers =
+    (advancedHomeTotals.steals || 0) +
+    (advancedHomeTotals.offensiveFoulsDrawn || 0);
   const buildCreatingStats = (teamTotals, fallback) => ({
     drivingFGMade: teamTotals.drivingFGMade ?? fallback?.drivingFGMade ?? 0,
     drivingFGAttempted: teamTotals.drivingFGAttempted ?? fallback?.drivingFGAttempted ?? 0,
@@ -1956,6 +1962,8 @@ export default function Game({ variant = "full" }) {
     secondChance3FGMade: teamTotals.secondChance3FGMade ?? fallback?.secondChance3FGMade ?? 0,
     secondChance3FGAttempted: teamTotals.secondChance3FGAttempted ?? fallback?.secondChance3FGAttempted ?? 0,
     offensiveFoulsDrawn: teamTotals.offensiveFoulsDrawn ?? fallback?.offensiveFoulsDrawn ?? 0,
+    steals: teamTotals.steals ?? fallback?.steals ?? 0,
+    turnovers: teamTotals.turnovers ?? fallback?.turnovers ?? 0,
   });
 
   const awayCreating = buildCreatingStats(advancedAwayTotals, teamStats?.away?.advancedStats);
@@ -3084,6 +3092,8 @@ export default function Game({ variant = "full" }) {
               homeDisruptions={homeDisruptions}
               awayKills={killStats.awayKills}
               homeKills={killStats.homeKills}
+              awayForcedTurnovers={awayForcedTurnovers}
+              homeForcedTurnovers={homeForcedTurnovers}
             />
           </div>
 
