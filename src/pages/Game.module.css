@@ -1,7 +1,8 @@
 .container {
-  max-width: 1400px;
+  width: 100%;
+  max-width: none;
   margin: 0 auto;
-  padding: calc(16px + env(safe-area-inset-top)) 24px 40px;
+  padding: calc(16px + env(safe-area-inset-top)) 28px 40px;
   --pbp-card-width: 190px;
   --pbp-away-bg: var(--panel);
   --pbp-home-bg: #ffffff;
@@ -74,13 +75,13 @@
 }
 
 .scoreboard {
-  width: min(100%, 900px);
+  width: min(100%, 1180px);
   display: grid;
   grid-template-areas: "awayTeam center homeTeam";
-  grid-template-columns: max-content minmax(230px, 260px) max-content;
+  grid-template-columns: max-content minmax(260px, 320px) max-content;
   justify-content: center;
   align-items: start;
-  column-gap: clamp(30px, 4vw, 54px);
+  column-gap: clamp(40px, 5vw, 84px);
   margin-top: calc(12px + env(safe-area-inset-top));
   margin-bottom: 24px;
 }
@@ -98,7 +99,7 @@
 .pbpWheel {
   margin: 10px 0 18px;
   overflow-x: auto;
-  max-width: 860px;
+  max-width: 1320px;
   width: 100%;
   margin-left: auto;
   margin-right: auto;
@@ -1845,7 +1846,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
     grid-template-areas: "awayTeam center homeTeam";
     grid-template-columns: max-content minmax(160px, 210px) max-content;
     column-gap: clamp(14px, 2.2vw, 24px);
-    width: min(100%, 820px);
+    width: min(100%, 900px);
   }
 
   .teamLogo {

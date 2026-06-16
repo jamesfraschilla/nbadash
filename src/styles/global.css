@@ -180,8 +180,9 @@ a {
 }
 
 main {
-  padding: 24px 16px 48px;
-  max-width: 1400px;
+  width: 100%;
+  padding: 24px 24px 48px;
+  max-width: 1760px;
   margin: 0 auto;
 }
 

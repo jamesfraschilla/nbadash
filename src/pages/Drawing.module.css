@@ -1,5 +1,6 @@
 .page {
-  max-width: 1400px;
+  width: 100%;
+  max-width: none;
   margin: 0 auto;
   padding: 8px 16px 32px;
   user-select: none;
