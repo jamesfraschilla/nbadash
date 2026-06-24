@@ -179,6 +179,7 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
 
   const savedOverridesSignatureRef = useRef(serializeRefereeHeadshotOverrides(readInitialOverrides()));
   const savedPreferencesSignatureRef = useRef(serializeRefereeHeadshotPreferences(readInitialPreferences()));
+  const remoteHydrationCompleteRef = useRef(!user?.id);
 
   useEffect(() => {
     let cancelled = false;
@@ -301,20 +302,57 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
 
   useEffect(() => {
     let cancelled = false;
-    if (!user?.id) return undefined;
+    if (!user?.id) {
+      remoteHydrationCompleteRef.current = true;
+      return undefined;
+    }
+    remoteHydrationCompleteRef.current = false;
     loadRemoteRefereeHeadshotState(user.id)
       .then((remoteState) => {
-        if (cancelled || !remoteState) return;
+        if (cancelled) return;
+        remoteHydrationCompleteRef.current = true;
+        if (!remoteState) return;
         setOverrides(remoteState.overrides);
         setPreferences(remoteState.preferences);
         savedOverridesSignatureRef.current = serializeRefereeHeadshotOverrides(remoteState.overrides);
         savedPreferencesSignatureRef.current = serializeRefereeHeadshotPreferences(remoteState.preferences);
       })
-      .catch(() => {});
+      .catch(() => {
+        remoteHydrationCompleteRef.current = true;
+      });
     return () => {
       cancelled = true;
     };
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || !remoteHydrationCompleteRef.current) return undefined;
+    if (
+      currentOverridesSignature === savedOverridesSignatureRef.current
+      && currentPreferencesSignature === savedPreferencesSignatureRef.current
+    ) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      saveRemoteRefereeHeadshotState(user.id, { overrides, preferences })
+        .then(() => {
+          savedOverridesSignatureRef.current = currentOverridesSignature;
+          savedPreferencesSignatureRef.current = currentPreferencesSignature;
+        })
+        .catch((error) => {
+          console.warn("Unable to auto-save referee headshot changes.", error);
+        });
+    }, 1200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [
+    currentOverridesSignature,
+    currentPreferencesSignature,
+    overrides,
+    preferences,
+    user?.id,
+  ]);
 
   useEffect(() => {
     setAssignmentDraft(selectedAssignedName);

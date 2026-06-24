@@ -198,10 +198,11 @@ export function sanitizeRefereeHeadshotPreferences(rawPreferences) {
     const fullBucket = String(record?.fullBucket || "").trim();
     const fullPath = String(record?.fullPath || "").trim();
     const fullUrl = String(record?.fullUrl || "").trim() || buildSupabaseStoragePublicUrl(fullBucket, fullPath);
-    if (normalizedKey && (dataUrl || previewUrl || fullUrl)) {
+    const shouldKeepDataUrl = !(previewUrl || fullUrl || previewPath || fullPath);
+    if (normalizedKey && ((shouldKeepDataUrl && dataUrl) || previewUrl || fullUrl)) {
       uploadedImagesByNameKey[normalizedKey] = {
         fileName: fileName || `${normalizedKey}.jpg`,
-        dataUrl,
+        dataUrl: shouldKeepDataUrl ? dataUrl : "",
         previewBucket,
         previewPath,
         previewUrl,
