@@ -72,22 +72,38 @@ export function AuthProvider({ children }) {
       }
     };
 
+    const handleAuthStateChange = async (event, nextSession) => {
+      if (cancelled) return;
+
+      if (event === "PASSWORD_RECOVERY") {
+        setRequiresPasswordReset(true);
+      } else if (event === "SIGNED_OUT") {
+        setRequiresPasswordReset(false);
+      }
+
+      setLoading(true);
+
+      try {
+        setSession(nextSession || null);
+        setEmailSentTo("");
+        setError("");
+        await loadProfile(nextSession?.user || null);
+      } catch (sessionError) {
+        if (!cancelled) {
+          setProfile(null);
+          setError(sessionError?.message || "Unable to refresh account session.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
     initialize();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
-      if (cancelled) return;
-      if (_event === "PASSWORD_RECOVERY") {
-        setRequiresPasswordReset(true);
-      } else if (_event === "SIGNED_OUT") {
-        setRequiresPasswordReset(false);
-      }
-      setLoading(true);
-      setSession(nextSession || null);
-      setEmailSentTo("");
-      await loadProfile(nextSession?.user || null);
-      if (!cancelled) setLoading(false);
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      void handleAuthStateChange(event, nextSession);
     });
 
     return () => {

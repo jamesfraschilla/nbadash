@@ -4,7 +4,7 @@ import { createManagedUser, createUserInvite, fetchPendingInvites, fetchVisibleP
 import { ACCOUNT_FEATURE_FLAGS, ACCOUNT_ROLES, ACCOUNT_TEAM_SCOPES } from "../authConfig.js";
 import { useAuth } from "../auth/useAuth.js";
 import { fetchCurrentGLeagueRosters, fetchCurrentNbaRosters } from "../api.js";
-import { GLEAGUE_TEAMS, NBA_TEAMS } from "../data/nbaTeams.js";
+import { GLEAGUE_TEAMS, getNbaTeamRoster, NBA_TEAMS } from "../data/nbaTeams.js";
 import {
   deleteMatchupProfile,
   listMatchupProfiles,
@@ -803,8 +803,17 @@ export default function Admin() {
       ? remoteNbaRostersPayload.teams
       : {};
     return NBA_TEAMS.reduce((accumulator, team) => {
-      const players = Array.isArray(remoteTeams?.[team.teamId]?.players) ? remoteTeams[team.teamId].players : [];
-      accumulator[team.teamId] = players.map((player) => ({
+      const remotePlayers = Array.isArray(remoteTeams?.[team.teamId]?.players)
+        ? remoteTeams[team.teamId].players.map((player) => ({
+          personId: String(player?.personId || "").trim(),
+          fullName: String(player?.fullName || "").trim(),
+          jerseyNum: String(player?.jerseyNum || "").trim(),
+          teamId: String(player?.teamId || team.teamId).trim() || team.teamId,
+          teamName: team.fullName,
+          heightIn: parseHeightToInches(player?.height),
+        })).filter((player) => player.personId && player.fullName)
+        : [];
+      const fallbackPlayers = getNbaTeamRoster(team.teamId).map((player) => ({
         personId: String(player?.personId || "").trim(),
         fullName: String(player?.fullName || "").trim(),
         jerseyNum: String(player?.jerseyNum || "").trim(),
@@ -812,6 +821,7 @@ export default function Admin() {
         teamName: team.fullName,
         heightIn: parseHeightToInches(player?.height),
       })).filter((player) => player.personId && player.fullName);
+      accumulator[team.teamId] = remotePlayers.length ? remotePlayers : fallbackPlayers;
       return accumulator;
     }, {});
   }, [remoteNbaRostersPayload]);
