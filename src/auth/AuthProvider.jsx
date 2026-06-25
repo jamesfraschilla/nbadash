@@ -62,7 +62,7 @@ export function AuthProvider({ children }) {
         if (cancelled) return;
         setSession(data.session || null);
         setError("");
-        loadProfile(data.session?.user || null);
+        await loadProfile(data.session?.user || null);
       } catch (sessionError) {
         if (!cancelled) {
           setError(sessionError?.message || "Unable to initialize account session.");
@@ -83,10 +83,11 @@ export function AuthProvider({ children }) {
       } else if (_event === "SIGNED_OUT") {
         setRequiresPasswordReset(false);
       }
+      setLoading(true);
       setSession(nextSession || null);
       setEmailSentTo("");
-      loadProfile(nextSession?.user || null);
-      setLoading(false);
+      await loadProfile(nextSession?.user || null);
+      if (!cancelled) setLoading(false);
     });
 
     return () => {

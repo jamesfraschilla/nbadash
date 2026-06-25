@@ -99,10 +99,11 @@
 .pbpWheel {
   margin: 10px 0 18px;
   overflow-x: auto;
-  max-width: 1320px;
-  width: 100%;
+  width: min(100%, 860px);
+  max-width: 100%;
   margin-left: auto;
   margin-right: auto;
+  box-sizing: border-box;
   -webkit-overflow-scrolling: touch;
   user-select: none;
   -webkit-user-select: none;

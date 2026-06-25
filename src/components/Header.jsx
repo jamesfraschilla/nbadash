@@ -18,7 +18,7 @@ export default function Header({ theme, onToggleTheme, onSignOut, profile, isAdm
   const date = parseDateInput(dateInput);
   const dateLabel = formatDateLabel(date);
 
-  const { data: games = [] } = useQuery({
+  const { data: games = [], isLoading, isFetching } = useQuery({
     queryKey: ["headerGames", dateInput],
     queryFn: () => fetchGamesByDate(dateInput),
     staleTime: 30_000,
@@ -159,7 +159,9 @@ export default function Header({ theme, onToggleTheme, onSignOut, profile, isAdm
 
         <div className={styles.gamesWrapper}>
           <div className={styles.gamesList}>
-            {orderedGames.length === 0 ? (
+            {isLoading || (isFetching && orderedGames.length === 0) ? (
+              <div className={styles.noGames}>Loading...</div>
+            ) : orderedGames.length === 0 ? (
               <div className={styles.noGames}>No games scheduled</div>
             ) : (
               orderedGames.map((game) => <GameCard key={game.gameId} game={game} />)

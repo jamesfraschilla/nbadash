@@ -173,7 +173,7 @@ export default function App() {
     if (!profile) {
       return (
         <div style={{ padding: "40px 16px", textAlign: "center" }}>
-          Your account is signed in, but no profile was found yet.
+          Loading...
         </div>
       );
     }
