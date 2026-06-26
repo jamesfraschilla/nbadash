@@ -2,7 +2,7 @@ import { gLeagueHeadshotOverrides } from "./gLeagueHeadshotOverrides.js";
 import { NBA_TEAMS } from "./data/nbaTeams.js";
 import { aggregateSegmentStats } from "./segmentStats.js";
 import { supabase } from "./supabaseClient.js";
-import { formatDateInput } from "./utils.js";
+import { currentSeasonString, formatDateInput, seasonBoundsForSeason } from "./utils.js";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const ALL_ORIGINS_RAW_URL = "https://api.allorigins.win/raw?url=";
@@ -1432,13 +1432,6 @@ export async function fetchGamesByDate(dateStr) {
   return [...merged.values()];
 }
 
-function currentSeasonString(date = new Date()) {
-  const month = date.getMonth() + 1;
-  const year = date.getFullYear();
-  const startYear = month >= 7 ? year : year - 1;
-  return `${startYear}-${String(startYear + 1).slice(-2)}`;
-}
-
 const SEASON_GAMES_CACHE = new Map();
 const SEASON_GAMES_PROMISES = new Map();
 const TEAM_SEASON_GAMES_CACHE = new Map();
@@ -1446,18 +1439,6 @@ const TEAM_SEASON_GAMES_PROMISES = new Map();
 const SEASON_GAMES_STORAGE_PREFIX = "nba-dashboard-season-games:";
 const TEAM_SEASON_GAMES_STORAGE_PREFIX = "nba-dashboard-team-season-games:";
 const SEASON_GAMES_STORAGE_TTL_MS = 6 * 60 * 60 * 1000;
-
-function currentSeasonBounds(date = new Date()) {
-  const month = date.getMonth() + 1;
-  const year = date.getFullYear();
-  const startYear = month >= 7 ? year : year - 1;
-  const seasonStart = new Date(startYear, 9, 1);
-  const seasonEnd = new Date(startYear + 1, 5, 30);
-  return {
-    start: seasonStart,
-    end: date < seasonEnd ? date : seasonEnd,
-  };
-}
 
 function enumerateDateInputs(start, end) {
   const dates = [];
@@ -1595,7 +1576,7 @@ async function fetchAllSeasonGames(season = currentSeasonString()) {
   if (pending) return pending;
 
   const nextPromise = (async () => {
-    const { start, end } = currentSeasonBounds(new Date());
+    const { start, end } = seasonBoundsForSeason(season, new Date());
     const dateInputs = enumerateDateInputs(start, end);
     const concurrency = 8;
     const aggregated = [];

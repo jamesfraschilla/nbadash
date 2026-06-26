@@ -6,12 +6,11 @@ import { requestGameAnalysis } from "../analysisData.js";
 import {
   fetchCurrentGLeagueRosters,
   fetchCurrentNbaRosters,
-  fetchGame,
-  fetchMinutes,
   inferLeagueFromTeamId,
   isSummerLeagueGame,
   teamLogoUrl,
 } from "../api.js";
+import { useGame, useMinutes } from "../queries.js";
 import { useAuth } from "../auth/useAuth.js";
 import {
   buildDefaultNoteForm,
@@ -57,6 +56,7 @@ import {
   buildDefaultStrategyOverrides,
   buildStrategyOverrideDraft,
   getMarginOptionLabel,
+  resolvePossessionDisplay,
 } from "../components/lateGamePanelHelpers.js";
 import { fetchPublishedOrderForOfficials } from "../officialAssignments.js";
 import {
@@ -782,19 +782,15 @@ export default function Game({ variant = "full" }) {
     setParams(nextParams);
   };
 
-  const { data: game, isLoading, error } = useQuery({
-    queryKey: ["game", gameId, segmentParam],
-    queryFn: () => fetchGame(gameId, segmentParam, { dateStr: dateParam }),
-    enabled: Boolean(gameId),
-    staleTime: 30_000,
-    refetchInterval: (data) => (data?.gameStatus === 3 ? false : 15_000),
+  const { data: game, isLoading, error } = useGame(gameId, {
+    segment: segmentParam,
+    dateStr: dateParam,
+    refetchInterval: (query) => (query.state.data?.gameStatus === 3 ? false : 15_000),
     refetchIntervalInBackground: true,
   });
 
-  const { data: minutesData } = useQuery({
-    queryKey: ["minutes", gameId],
-    queryFn: () => fetchMinutes(gameId, { optional: true }),
-    enabled: Boolean(gameId),
+  const { data: minutesData } = useMinutes(gameId, {
+    optional: true,
     refetchInterval: () => (game?.gameStatus === 3 ? false : 15_000),
     refetchIntervalInBackground: true,
   });

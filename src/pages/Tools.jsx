@@ -651,18 +651,6 @@ export default function Tools() {
     ));
   }, [defaultLateGameSetup]);
 
-  if (accountsEnabled && !canUseTools) {
-    return (
-      <div className={styles.page}>
-        <section className={styles.hero}>
-          <div className={styles.kicker}>Tools</div>
-          <h1 className={styles.title}>Access Required</h1>
-          <p className={styles.subtitle}>An admin needs to grant the Tools feature flag before you can use this page.</p>
-        </section>
-      </div>
-    );
-  }
-
   const handleTeamChange = (side, nextTeamId) => {
     setDraft((current) => ({
       ...current,
@@ -885,6 +873,18 @@ export default function Tools() {
       return String(left.gameDate || "").localeCompare(String(right.gameDate || ""));
     });
   }, [customRequestResult, customTableSort]);
+
+  if (accountsEnabled && !canUseTools) {
+    return (
+      <div className={styles.page}>
+        <section className={styles.hero}>
+          <div className={styles.kicker}>Tools</div>
+          <h1 className={styles.title}>Access Required</h1>
+          <p className={styles.subtitle}>An admin needs to grant the Tools feature flag before you can use this page.</p>
+        </section>
+      </div>
+    );
+  }
 
   const handleRequestTableSort = (table, column) => {
     setCustomTableSort((current) => (

@@ -13,6 +13,8 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+type AnyRecord = Record<string, any>;
+
 function jsonResponse(status: number, payload: Record<string, unknown>) {
   return new Response(JSON.stringify(payload), {
     status,
@@ -40,7 +42,7 @@ function getUserClient(authHeader: string) {
   });
 }
 
-async function requireActiveUser(userClient: ReturnType<typeof createClient>, req: Request) {
+async function requireActiveUser(userClient: any, req: Request) {
   const authHeader = req.headers.get("Authorization") || "";
   let token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
   if (!token) {
@@ -246,11 +248,11 @@ function isCompletedGame(game: Record<string, unknown>) {
   return safeNumber(game?.gameStatus, 0) === 3;
 }
 
-function involvesTeam(game: Record<string, unknown>, teamId: string) {
+function involvesTeam(game: AnyRecord, teamId: string) {
   return String(game?.homeTeam?.teamId || "") === teamId || String(game?.awayTeam?.teamId || "") === teamId;
 }
 
-function selectTeamPerspective(game: Record<string, unknown>, teamId: string) {
+function selectTeamPerspective(game: AnyRecord, teamId: string) {
   const homeTeamId = String(game?.homeTeam?.teamId || "");
   const awayTeamId = String(game?.awayTeam?.teamId || "");
   if (teamId === homeTeamId) {
@@ -1111,7 +1113,7 @@ Deno.serve(async (req) => {
     return jsonResponse(405, { error: "Method not allowed." });
   }
 
-  let userClient: ReturnType<typeof createClient>;
+  let userClient: any;
   try {
     userClient = getUserClient(req.headers.get("Authorization") || "");
   } catch (error) {

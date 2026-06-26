@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { fetchGamesByDate, fetchTeamSeasonGames, teamLogoUrl } from "../api.js";
+import { teamLogoUrl } from "../api.js";
 import { NBA_TEAMS } from "../data/nbaTeams.js";
+import { useGamesByDate, useTeamSeasonGames } from "../queries.js";
 import {
   formatDateInput,
   formatDateInputInTimeZone,
@@ -68,14 +68,16 @@ export default function Home() {
     setParams(nextParams);
   }
 
-  const { data: games = [], isLoading, error } = useQuery({
-    queryKey: selectedTeamId ? ["teamSeasonGames", selectedTeamId, selectedOpponentTeamId] : ["games", dateInput],
-    queryFn: () => (selectedTeamId
-      ? fetchTeamSeasonGames(selectedTeamId, selectedOpponentTeamId)
-      : fetchGamesByDate(dateInput)),
-    staleTime: selectedTeamId ? 5 * 60 * 1000 : 30_000,
-    refetchOnWindowFocus: false,
+  const dateGamesQuery = useGamesByDate(dateInput, {
+    enabled: !selectedTeamId,
   });
+  const teamGamesQuery = useTeamSeasonGames(selectedTeamId, selectedOpponentTeamId, "", {
+    enabled: Boolean(selectedTeamId),
+  });
+  const activeGamesQuery = selectedTeamId ? teamGamesQuery : dateGamesQuery;
+  const games = activeGamesQuery.data || [];
+  const isLoading = activeGamesQuery.isLoading;
+  const error = activeGamesQuery.error;
 
   const { nbaGames, gLeagueGames } = useMemo(() => {
     if (selectedTeamId) {

@@ -129,7 +129,7 @@ type QueryGameRow = {
   groupLabel?: string;
 };
 
-type AnyRecord = Record<string, unknown>;
+type AnyRecord = Record<string, any>;
 
 type TeamPerspective = {
   side: "home" | "away";
@@ -158,7 +158,17 @@ type BuiltGameMetrics = {
   metrics: Record<string, number>;
 };
 
+type GameMetricContext = {
+  homeTeamId: string;
+  awayTeamId: string;
+  actions: Array<Record<string, unknown>>;
+  derivedTotals: Record<string, Record<string, number>>;
+  firstHalfPointsByTeam: Record<string, number>;
+  killsByTeam: Record<string, number>;
+};
+
 type CachedTeamGameRow = QueryGameRow & {
+  teamId?: string;
   metrics: Record<string, number>;
   opponentMetrics: Record<string, number>;
 };
@@ -247,7 +257,7 @@ const METRICS: MetricDefinition[] = [
 const SEASON_GAMES_CACHE = new Map<string, Promise<Record<string, unknown>[]>>();
 const GAME_DETAILS_CACHE = new Map<string, Promise<Record<string, unknown>>>();
 const TEAM_SEASON_DATASET_CACHE = new Map<string, Promise<{
-  rows: Array<QueryGameRow & { metrics: Record<string, number> }>;
+  rows: CachedTeamGameRow[];
   skippedGames: Array<{ gameId: string; gameDate: string; error: string }>;
 }>>();
 const PLAYER_SEASON_DATASET_CACHE = new Map<string, Promise<{
@@ -330,9 +340,9 @@ function normalizeText(value: string) {
     .replace(/\bavgs?\b/g, "average")
     .replace(/\bper-game\b/g, "per game")
     .replace(/\bthrees\b/g, "3s")
-    .replace(/\bshoot(?:ing|s)?\s+3s\b/g, "3fg attempted")
+    .replace(/(?<!catch and )(?<!catch-and-)\bshoot(?:ing|s)?\s+3s\b/g, "3fg attempted")
     .replace(/\bshot\s+3s\b/g, "3fg attempted")
-    .replace(/\bshoot(?:ing|s)?\s+threes\b/g, "3fg attempted")
+    .replace(/(?<!catch and )(?<!catch-and-)\bshoot(?:ing|s)?\s+threes\b/g, "3fg attempted")
     .replace(/\btook\s+shots\b/g, "fg attempted")
     .replace(/\btake\s+shots\b/g, "fg attempted")
     .replace(/\bthree pointers\b/g, "3pt")
@@ -699,9 +709,9 @@ async function hasPreseasonStartedForSeasonStartYear(startYear: number, date = n
           batch.map(async (dateInput) => {
             const games = await fetchGamesByDate(dateInput).catch(() => []);
             return (Array.isArray(games) ? games : [])
-              .filter((game) => isNbaDashboardGame(game as Record<string, unknown>))
-              .filter((game) => isPlayedGame(game as Record<string, unknown>))
-              .filter((game) => isPreseasonGame(game as Record<string, unknown>));
+              .filter((game) => isNbaDashboardGame(game as AnyRecord))
+              .filter((game) => isPlayedGame(game as AnyRecord))
+              .filter((game) => isPreseasonGame(game as AnyRecord));
           }),
         );
         if (batchResults.some((games) => games.length > 0)) return "true";
@@ -786,10 +796,10 @@ async function fetchSeasonGames(season?: string) {
           batch.map(async (dateInput) => {
             const games = await fetchGamesByDate(dateInput).catch(() => []);
             return (Array.isArray(games) ? games : [])
-              .filter((game) => isNbaDashboardGame(game as Record<string, unknown>))
-              .filter((game) => isSupportedSeasonGame(game as Record<string, unknown>))
-              .filter((game) => isPlayedGame(game as Record<string, unknown>))
-              .map((game) => ({ ...(game as Record<string, unknown>), gameDate: dateInput }));
+              .filter((game) => isNbaDashboardGame(game as AnyRecord))
+              .filter((game) => isSupportedSeasonGame(game as AnyRecord))
+              .filter((game) => isPlayedGame(game as AnyRecord))
+              .map((game) => ({ ...(game as AnyRecord), gameDate: dateInput }));
           }),
         );
         aggregated.push(...batchResults.flat());
@@ -1013,6 +1023,9 @@ function buildDerivedTeamTotals(actions: Array<Record<string, unknown>>, homeTea
     const bOrder = safeNumber(b.orderNumber ?? b.actionNumber, 0);
     return aOrder - bOrder;
   });
+  const actionByNumber = new Map(
+    orderedActions.map((action) => [safeNumber(action.actionNumber, 0), action]),
+  );
 
   const teamTotals: Record<string, Record<string, number>> = {
     [homeTeamId]: {
@@ -1241,7 +1254,7 @@ function buildDerivedTeamTotals(actions: Array<Record<string, unknown>>, homeTea
           orebInPossession = Boolean(action.personId);
         }
         const shot = action.shotActionNumber
-          ? orderedActions.find((entry) => safeNumber(entry.actionNumber, 0) === safeNumber(action.shotActionNumber, 0))
+          ? actionByNumber.get(safeNumber(action.shotActionNumber, 0))
           : null;
         const lastMiss = lastMissedShotByTeam.get(teamId);
         if (shot?.actionType === "3pt" || lastMiss?.actionType === "3pt") {
@@ -1286,7 +1299,7 @@ function buildDerivedTeamTotals(actions: Array<Record<string, unknown>>, homeTea
   return teamTotals;
 }
 
-function computeDisplayedKills(actions: Array<Record<string, unknown>>, teamId: string, homeTeamId: string, awayTeamId: string) {
+function computeDisplayedKillsByTeam(actions: Array<Record<string, unknown>>, homeTeamId: string, awayTeamId: string) {
   const orderedActions = [...actions].sort((a, b) => {
     const aOrder = safeNumber(a.orderNumber ?? a.actionNumber, 0);
     const bOrder = safeNumber(b.orderNumber ?? b.actionNumber, 0);
@@ -1330,7 +1343,7 @@ function computeDisplayedKills(actions: Array<Record<string, unknown>>, teamId: 
   });
 
   finishPossession();
-  return kills[teamId] || 0;
+  return kills;
 }
 
 function selectTeamPerspective(game: AnyRecord, teamId: string): TeamPerspective {
@@ -1361,15 +1374,49 @@ function selectTeamPerspective(game: AnyRecord, teamId: string): TeamPerspective
   };
 }
 
-function buildGameMetrics(game: AnyRecord, teamId: string): BuiltGameMetrics {
-  const perspective = selectTeamPerspective(game, teamId);
+function buildGameMetricContext(game: AnyRecord): GameMetricContext {
   const homeTeamId = String(game?.homeTeam?.teamId || "");
   const awayTeamId = String(game?.awayTeam?.teamId || "");
-  const derivedTotals = buildDerivedTeamTotals(
-    Array.isArray(game?.playByPlayActions) ? game.playByPlayActions as Array<Record<string, unknown>> : [],
+  const actions = Array.isArray(game?.playByPlayActions)
+    ? game.playByPlayActions as Array<Record<string, unknown>>
+    : [];
+  const derivedTotals = buildDerivedTeamTotals(actions, homeTeamId, awayTeamId);
+  const firstHalfPointsByTeam: Record<string, number> = {
+    [homeTeamId]: 0,
+    [awayTeamId]: 0,
+  };
+
+  actions.forEach((action) => {
+    const period = safeNumber(action.period, 0);
+    if (period < 1 || period > 2) return;
+    const teamId = String(action.teamId || "");
+    if (!teamId) return;
+    const actionType = String(action.actionType || "").toLowerCase();
+    const shotResult = String(action.shotResult || "");
+    let points = 0;
+    if ((actionType === "2pt" || actionType === "3pt") && shotResult === "Made") {
+      points = actionType === "3pt" ? 3 : 2;
+    } else if (actionType === "freethrow" && shotResult === "Made") {
+      points = 1;
+    }
+    if (points) {
+      firstHalfPointsByTeam[teamId] = safeNumber(firstHalfPointsByTeam[teamId], 0) + points;
+    }
+  });
+
+  return {
     homeTeamId,
     awayTeamId,
-  );
+    actions,
+    derivedTotals,
+    firstHalfPointsByTeam,
+    killsByTeam: computeDisplayedKillsByTeam(actions, homeTeamId, awayTeamId),
+  };
+}
+
+function buildGameMetrics(game: AnyRecord, teamId: string, context = buildGameMetricContext(game)): BuiltGameMetrics {
+  const perspective = selectTeamPerspective(game, teamId);
+  const { homeTeamId, awayTeamId, derivedTotals } = context;
   const teamBoxTotals = (perspective.teamBox?.totals || {}) as Record<string, unknown>;
   const opponentBoxTotals = (perspective.opponentBox?.totals || {}) as Record<string, unknown>;
   const teamTotals = {
@@ -1392,24 +1439,8 @@ function buildGameMetrics(game: AnyRecord, teamId: string): BuiltGameMetrics {
   const opponentDefReb = Math.max(0, safeNumber(opponentTotals.reboundsTotal, 0) - safeNumber(opponentTotals.reboundsOffensive, 0));
   const transitionPossessions = safeNumber(teamTotals.transitionPossessions, 0);
   const transitionPoints = safeNumber(teamTotals.transitionPoints, 0);
-  const actions = Array.isArray(game?.playByPlayActions) ? game.playByPlayActions as Array<Record<string, unknown>> : [];
-  let firstHalfTeamPoints = 0;
-  let firstHalfOpponentPoints = 0;
-  actions.forEach((action) => {
-    const period = safeNumber(action.period, 0);
-    if (period < 1 || period > 2) return;
-    const actionType = String(action.actionType || "").toLowerCase();
-    const shotResult = String(action.shotResult || "");
-    let points = 0;
-    if ((actionType === "2pt" || actionType === "3pt") && shotResult === "Made") {
-      points = actionType === "3pt" ? 3 : 2;
-    } else if (actionType === "freethrow" && shotResult === "Made") {
-      points = 1;
-    }
-    if (!points) return;
-    if (String(action.teamId || "") === teamId) firstHalfTeamPoints += points;
-    else firstHalfOpponentPoints += points;
-  });
+  const firstHalfTeamPoints = safeNumber(context.firstHalfPointsByTeam[teamId], 0);
+  const firstHalfOpponentPoints = safeNumber(context.firstHalfPointsByTeam[opponentId], 0);
 
   return {
     teamId,
@@ -1463,12 +1494,7 @@ function buildGameMetrics(game: AnyRecord, teamId: string): BuiltGameMetrics {
       charges_drawn: safeNumber(advancedStats.chargesDrawn, 0),
       deflections,
       disruptions,
-      kills: computeDisplayedKills(
-        actions,
-        teamId,
-        homeTeamId,
-        awayTeamId,
-      ),
+      kills: safeNumber(context.killsByTeam[teamId], 0),
       first_half_margin: firstHalfTeamPoints - firstHalfOpponentPoints,
       offensive_rating: possessions > 0 ? (safeNumber(teamTotals.points, 0) / possessions) * 100 : 0,
       defensive_rating: possessions > 0 ? (opponentPoints / possessions) * 100 : 0,
@@ -2068,7 +2094,7 @@ function findMetricFromPrompt(prompt: string) {
   let bestMatch: MetricDefinition | null = null;
   let bestScore = 0;
   METRIC_SEARCH_INDEX.forEach(({ metric, aliases }) => {
-    const score = scoreSearchAliases(prompt, aliases);
+    const score = scoreSearchAliases(prompt, aliases) + scoreMetricIntent(metric, prompt);
     if (score > bestScore) {
       bestMatch = metric;
       bestScore = score;
@@ -2131,7 +2157,7 @@ function parseOpponentTeamFromPrompt(prompt: string, subjectTeamId: string) {
 }
 
 function usesAttemptIntent(prompt: string) {
-  const normalizedPrompt = normalizeText(prompt);
+  const normalizedPrompt = normalizeText(prompt).replace(/\bcatch and shoot\b/g, "catchshoot");
   return /\b(attempt|attempted|attempts|shot|shoot|took|take)\b/.test(normalizedPrompt);
 }
 
@@ -2799,6 +2825,69 @@ function normalizeParsedQuery(value: unknown): ParsedQuery | null {
   };
 }
 
+function scoreParsedCandidate(
+  candidate: ParsedQuery | null,
+  options: {
+    prompt: string;
+    promptHasExplicitOpponent: boolean;
+    explicitOrImplicitThreshold: number | null;
+    inferredPlayerTeam: { team: (typeof NBA_TEAMS)[number] } | null;
+    sourceBonus: number;
+  },
+) {
+  if (!candidate) return null;
+
+  const parsed: ParsedQuery = { ...candidate };
+  const matchedTeam = NBA_TEAMS.find((entry) => entry.teamId === parsed.teamId) || null;
+  const matchedMetric = METRICS.find((entry) => entry.key === parsed.statKey) || null;
+  if (!matchedTeam || !matchedMetric) return null;
+
+  if (parsed.opponentTeamId && !options.promptHasExplicitOpponent) {
+    parsed.opponentTeamId = undefined;
+  }
+  if (parsed.groupBy === "on_off" && !hasExplicitOnOffContext(options.prompt)) {
+    parsed.groupBy = "none";
+  }
+  if (parsed.opponentTeamId === parsed.teamId) {
+    parsed.opponentTeamId = undefined;
+  }
+  if (options.explicitOrImplicitThreshold != null && parsed.threshold == null) {
+    return null;
+  }
+
+  const parsedGroupBy = parseGroupBy(options.prompt);
+  const teamScore = scoreTeamPrompt(matchedTeam, options.prompt);
+  const metricScore = scoreMetricPrompt(matchedMetric, options.prompt);
+  const matchedOpponent = parsed.opponentTeamId
+    ? NBA_TEAMS.find((entry) => entry.teamId === parsed.opponentTeamId) || null
+    : null;
+  const opponentScore = matchedOpponent ? scoreTeamPrompt(matchedOpponent, options.prompt) : 0;
+  const filterBonus = (parsed.resultFilter && parsed.resultFilter !== "all" ? 2 : 0)
+    + (matchedOpponent ? 2 : 0);
+  const thresholdBonus = options.explicitOrImplicitThreshold != null && parsed.threshold === options.explicitOrImplicitThreshold ? 4 : 0;
+  const groupBonus = parsedGroupBy !== "none" && parsed.groupBy === parsedGroupBy ? 6 : 0;
+  const inferredTeamBonus = options.inferredPlayerTeam?.team.teamId === matchedTeam.teamId ? 12 : 0;
+  const metricIntentBonus = scoreMetricIntent(matchedMetric, options.prompt);
+  const effectiveTeamScore = Math.max(teamScore, inferredTeamBonus);
+  const score = effectiveTeamScore
+    + metricScore
+    + opponentScore
+    + options.sourceBonus
+    + filterBonus
+    + thresholdBonus
+    + groupBonus
+    + metricIntentBonus;
+
+  if (effectiveTeamScore < 6 || metricScore < 5) return null;
+
+  return {
+    parsed,
+    team: matchedTeam,
+    metric: matchedMetric,
+    score,
+  };
+}
+
 function formatValue(value: number, metric: MetricDefinition) {
   if (metric.formatter === "percent") return `${value.toFixed(1)}%`;
   if (metric.formatter === "decimal") return value.toFixed(1);
@@ -2883,7 +2972,7 @@ function describeScope(
   opponent: (typeof NBA_TEAMS)[number] | null,
   resultFilter: ResultFilter,
 ) {
-  const parts = [team.fullName];
+  const parts: string[] = [team.fullName];
   if (opponent) parts.push(`against ${opponent.fullName}`);
   if (resultFilter === "win") parts.push("in wins");
   if (resultFilter === "loss") parts.push("in losses");
@@ -3213,21 +3302,21 @@ async function buildTeamSeasonDataset(
     TEAM_SEASON_DATASET_CACHE.set(cacheKey, (async () => {
       const seasonGames = await fetchSeasonGames(season);
       const teamGames = seasonGames.filter((game) => (
-        String((game as Record<string, unknown>)?.homeTeam?.teamId || "") === team.teamId ||
-        String((game as Record<string, unknown>)?.awayTeam?.teamId || "") === team.teamId
+        String((game as AnyRecord)?.homeTeam?.teamId || "") === team.teamId ||
+        String((game as AnyRecord)?.awayTeam?.teamId || "") === team.teamId
       ));
 
       const detailedGames = await mapWithConcurrency(
         teamGames,
-        (game) => fetchGameDetailsSafe(String((game as Record<string, unknown>).gameId || "")),
+        (game) => fetchGameDetailsSafe(String((game as AnyRecord).gameId || "")),
       );
 
       const skippedGames = detailedGames
         .map((entry, index) => (
           entry.error
             ? {
-              gameId: String((teamGames[index] as Record<string, unknown>).gameId || ""),
-              gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
+              gameId: String((teamGames[index] as AnyRecord).gameId || ""),
+              gameDate: String((teamGames[index] as AnyRecord).gameDate || ""),
               error: entry.error,
             }
             : null
@@ -3239,10 +3328,11 @@ async function buildTeamSeasonDataset(
           if (!entry.game) return null;
           const game = {
             ...entry.game,
-            gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
+            gameDate: String((teamGames[index] as AnyRecord).gameDate || ""),
           } as AnyRecord;
-          const metrics = buildGameMetrics(game, team.teamId);
-          const opponentMetrics = buildGameMetrics(game, metrics.opponent.teamId);
+          const metricContext = buildGameMetricContext(game);
+          const metrics = buildGameMetrics(game, team.teamId, metricContext);
+          const opponentMetrics = buildGameMetrics(game, metrics.opponent.teamId, metricContext);
           return {
             gameId: String(game.gameId || ""),
             gameDate: String(game.gameDate || ""),
@@ -3279,8 +3369,8 @@ async function buildTeamSubsetDataset(
   const opponentSet = new Set(opponentTeamIds);
   const seasonGames = await fetchSeasonGames(season);
   const teamGames = seasonGames.filter((game) => {
-    const homeTeamId = String((game as Record<string, unknown>)?.homeTeam?.teamId || "");
-    const awayTeamId = String((game as Record<string, unknown>)?.awayTeam?.teamId || "");
+    const homeTeamId = String((game as AnyRecord)?.homeTeam?.teamId || "");
+    const awayTeamId = String((game as AnyRecord)?.awayTeam?.teamId || "");
     const involvesTeam = homeTeamId === team.teamId || awayTeamId === team.teamId;
     const opponentId = homeTeamId === team.teamId ? awayTeamId : awayTeamId === team.teamId ? homeTeamId : "";
     return involvesTeam && opponentSet.has(opponentId);
@@ -3288,7 +3378,7 @@ async function buildTeamSubsetDataset(
 
   const detailedGames = await mapWithConcurrency(
     teamGames,
-    (game) => fetchGameDetailsSafe(String((game as Record<string, unknown>).gameId || "")),
+    (game) => fetchGameDetailsSafe(String((game as AnyRecord).gameId || "")),
     4,
   );
 
@@ -3296,8 +3386,8 @@ async function buildTeamSubsetDataset(
     .map((entry, index) => (
       entry.error
         ? {
-          gameId: String((teamGames[index] as Record<string, unknown>).gameId || ""),
-          gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
+          gameId: String((teamGames[index] as AnyRecord).gameId || ""),
+          gameDate: String((teamGames[index] as AnyRecord).gameDate || ""),
           error: entry.error,
         }
         : null
@@ -3309,10 +3399,11 @@ async function buildTeamSubsetDataset(
       if (!entry.game) return null;
       const game = {
         ...entry.game,
-        gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
+        gameDate: String((teamGames[index] as AnyRecord).gameDate || ""),
       } as AnyRecord;
-      const metrics = buildGameMetrics(game, team.teamId);
-      const opponentMetrics = buildGameMetrics(game, metrics.opponent.teamId);
+      const metricContext = buildGameMetricContext(game);
+      const metrics = buildGameMetrics(game, team.teamId, metricContext);
+      const opponentMetrics = buildGameMetrics(game, metrics.opponent.teamId, metricContext);
       return {
         gameId: String(game.gameId || ""),
         gameDate: String(game.gameDate || ""),
@@ -3342,21 +3433,21 @@ async function buildPlayerSeasonDataset(
     PLAYER_SEASON_DATASET_CACHE.set(cacheKey, (async () => {
       const seasonGames = await fetchSeasonGames(season);
       const teamGames = seasonGames.filter((game) => (
-        String((game as Record<string, unknown>)?.homeTeam?.teamId || "") === team.teamId ||
-        String((game as Record<string, unknown>)?.awayTeam?.teamId || "") === team.teamId
+        String((game as AnyRecord)?.homeTeam?.teamId || "") === team.teamId ||
+        String((game as AnyRecord)?.awayTeam?.teamId || "") === team.teamId
       ));
 
       const detailedGames = await mapWithConcurrency(
         teamGames,
-        (game) => fetchGameDetailsSafe(String((game as Record<string, unknown>).gameId || "")),
+        (game) => fetchGameDetailsSafe(String((game as AnyRecord).gameId || "")),
       );
 
       const skippedGames = detailedGames
         .map((entry, index) => (
           entry.error
             ? {
-              gameId: String((teamGames[index] as Record<string, unknown>).gameId || ""),
-              gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
+              gameId: String((teamGames[index] as AnyRecord).gameId || ""),
+              gameDate: String((teamGames[index] as AnyRecord).gameDate || ""),
               error: entry.error,
             }
             : null
@@ -3368,7 +3459,7 @@ async function buildPlayerSeasonDataset(
           if (!entry.game) return [];
           const game = {
             ...entry.game,
-            gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
+            gameDate: String((teamGames[index] as AnyRecord).gameDate || ""),
           } as AnyRecord;
           return buildPlayerSeasonRows(game, team);
         });
@@ -3393,12 +3484,12 @@ async function buildPlayerPeriodPointsDataset(
     PLAYER_PERIOD_POINTS_DATASET_CACHE.set(cacheKey, (async () => {
       const seasonGames = await fetchSeasonGames(season);
       const teamGames = seasonGames.filter((game) => (
-        String((game as Record<string, unknown>)?.homeTeam?.teamId || "") === team.teamId ||
-        String((game as Record<string, unknown>)?.awayTeam?.teamId || "") === team.teamId
+        String((game as AnyRecord)?.homeTeam?.teamId || "") === team.teamId ||
+        String((game as AnyRecord)?.awayTeam?.teamId || "") === team.teamId
       ));
 
       const detailedGames = await mapWithConcurrency(teamGames, async (game) => {
-          const gameId = String((game as Record<string, unknown>).gameId || "");
+          const gameId = String((game as AnyRecord).gameId || "");
           const [gameEntry, minutesEntry] = await Promise.all([
             fetchGameDetailsSafe(gameId),
             fetchGameMinutes(gameId).then((value) => ({ data: value, error: null })).catch((error) => ({
@@ -3413,8 +3504,8 @@ async function buildPlayerPeriodPointsDataset(
         .map((entry, index) => (
           entry.gameEntry.error || entry.minutesEntry.error
             ? {
-              gameId: String((teamGames[index] as Record<string, unknown>).gameId || ""),
-              gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
+              gameId: String((teamGames[index] as AnyRecord).gameId || ""),
+              gameDate: String((teamGames[index] as AnyRecord).gameDate || ""),
               error: entry.gameEntry.error || entry.minutesEntry.error || "Unable to load game detail or minutes data.",
             }
             : null
@@ -3426,7 +3517,7 @@ async function buildPlayerPeriodPointsDataset(
           if (!entry.gameEntry.game || !entry.minutesEntry.data) return [];
           const game = {
             ...entry.gameEntry.game,
-            gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
+            gameDate: String((teamGames[index] as AnyRecord).gameDate || ""),
           } as AnyRecord;
           return buildPlayerPeriodMetricRows(game, team, entry.minutesEntry.data as AnyRecord);
         });
@@ -3449,21 +3540,21 @@ async function buildSinglePlayerSeasonDataset(
 ) {
   const seasonGames = await fetchSeasonGames(season);
   const teamGames = seasonGames.filter((game) => (
-    String((game as Record<string, unknown>)?.homeTeam?.teamId || "") === team.teamId ||
-    String((game as Record<string, unknown>)?.awayTeam?.teamId || "") === team.teamId
+    String((game as AnyRecord)?.homeTeam?.teamId || "") === team.teamId ||
+    String((game as AnyRecord)?.awayTeam?.teamId || "") === team.teamId
   ));
 
   const detailedGames = await mapWithConcurrency(
     teamGames,
-    (game) => fetchGameDetailsSafe(String((game as Record<string, unknown>).gameId || "")),
+    (game) => fetchGameDetailsSafe(String((game as AnyRecord).gameId || "")),
   );
 
   const skippedGames = detailedGames
     .map((entry, index) => (
       entry.error
         ? {
-          gameId: String((teamGames[index] as Record<string, unknown>).gameId || ""),
-          gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
+          gameId: String((teamGames[index] as AnyRecord).gameId || ""),
+          gameDate: String((teamGames[index] as AnyRecord).gameDate || ""),
           error: entry.error,
         }
         : null
@@ -3475,7 +3566,7 @@ async function buildSinglePlayerSeasonDataset(
       if (!entry.game) return null;
       const game = {
         ...entry.game,
-        gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
+        gameDate: String((teamGames[index] as AnyRecord).gameDate || ""),
       } as AnyRecord;
       return buildSinglePlayerSeasonRow(game, team, targetPlayerId);
     })
@@ -3491,12 +3582,12 @@ async function buildSinglePlayerPeriodDataset(
 ) {
   const seasonGames = await fetchSeasonGames(season);
   const teamGames = seasonGames.filter((game) => (
-    String((game as Record<string, unknown>)?.homeTeam?.teamId || "") === team.teamId ||
-    String((game as Record<string, unknown>)?.awayTeam?.teamId || "") === team.teamId
+    String((game as AnyRecord)?.homeTeam?.teamId || "") === team.teamId ||
+    String((game as AnyRecord)?.awayTeam?.teamId || "") === team.teamId
   ));
 
   const detailedGames = await mapWithConcurrency(teamGames, async (game) => {
-    const gameId = String((game as Record<string, unknown>).gameId || "");
+    const gameId = String((game as AnyRecord).gameId || "");
     const [gameEntry, minutesEntry] = await Promise.all([
       fetchGameDetailsSafe(gameId),
       fetchGameMinutes(gameId).then((value) => ({ data: value, error: null })).catch((error) => ({
@@ -3511,8 +3602,8 @@ async function buildSinglePlayerPeriodDataset(
     .map((entry, index) => (
       entry.gameEntry.error || entry.minutesEntry.error
         ? {
-          gameId: String((teamGames[index] as Record<string, unknown>).gameId || ""),
-          gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
+          gameId: String((teamGames[index] as AnyRecord).gameId || ""),
+          gameDate: String((teamGames[index] as AnyRecord).gameDate || ""),
           error: entry.gameEntry.error || entry.minutesEntry.error || "Unable to load game detail or minutes data.",
         }
         : null
@@ -3523,7 +3614,7 @@ async function buildSinglePlayerPeriodDataset(
     if (!entry.gameEntry.game || !entry.minutesEntry.data) return [];
     const game = {
       ...entry.gameEntry.game,
-      gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
+      gameDate: String((teamGames[index] as AnyRecord).gameDate || ""),
     } as AnyRecord;
     return buildSinglePlayerPeriodMetricRows(game, team, targetPlayerId, entry.minutesEntry.data as AnyRecord);
   });
@@ -3540,21 +3631,21 @@ async function buildTeamPeriodPointsDataset(
     TEAM_PERIOD_POINTS_DATASET_CACHE.set(cacheKey, (async () => {
       const seasonGames = await fetchSeasonGames(season);
       const teamGames = seasonGames.filter((game) => (
-        String((game as Record<string, unknown>)?.homeTeam?.teamId || "") === team.teamId ||
-        String((game as Record<string, unknown>)?.awayTeam?.teamId || "") === team.teamId
+        String((game as AnyRecord)?.homeTeam?.teamId || "") === team.teamId ||
+        String((game as AnyRecord)?.awayTeam?.teamId || "") === team.teamId
       ));
 
       const detailedGames = await mapWithConcurrency(
         teamGames,
-        (game) => fetchGameDetailsSafe(String((game as Record<string, unknown>).gameId || "")),
+        (game) => fetchGameDetailsSafe(String((game as AnyRecord).gameId || "")),
       );
 
       const skippedGames = detailedGames
         .map((entry, index) => (
           entry.error
             ? {
-              gameId: String((teamGames[index] as Record<string, unknown>).gameId || ""),
-              gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
+              gameId: String((teamGames[index] as AnyRecord).gameId || ""),
+              gameDate: String((teamGames[index] as AnyRecord).gameDate || ""),
               error: entry.error,
             }
             : null
@@ -3565,7 +3656,7 @@ async function buildTeamPeriodPointsDataset(
         if (!entry.game) return [];
         const game = {
           ...entry.game,
-          gameDate: String((teamGames[index] as Record<string, unknown>).gameDate || ""),
+          gameDate: String((teamGames[index] as AnyRecord).gameDate || ""),
         } as AnyRecord;
         return buildTeamPeriodPointRows(game, team);
       });
@@ -3694,12 +3785,12 @@ async function buildTeamOnOffDataset(
     TEAM_ON_OFF_DATASET_CACHE.set(cacheKey, (async () => {
       const seasonGames = await fetchSeasonGames(season);
       const teamGames = seasonGames.filter((game) => (
-        String((game as Record<string, unknown>)?.homeTeam?.teamId || "") === team.teamId ||
-        String((game as Record<string, unknown>)?.awayTeam?.teamId || "") === team.teamId
+        String((game as AnyRecord)?.homeTeam?.teamId || "") === team.teamId ||
+        String((game as AnyRecord)?.awayTeam?.teamId || "") === team.teamId
       ));
 
       const detailedGames = await mapWithConcurrency(teamGames, async (game) => {
-          const gameId = String((game as Record<string, unknown>).gameId || "");
+          const gameId = String((game as AnyRecord).gameId || "");
           const [gameEntry, minutesEntry] = await Promise.all([
             fetchGameDetailsSafe(gameId),
             fetchGameMinutes(gameId).then((value) => ({ data: value, error: null })).catch((error) => ({
@@ -3712,8 +3803,8 @@ async function buildTeamOnOffDataset(
 
       const skippedGames: Array<{ gameId: string; gameDate: string; error: string }> = [];
       const rows = detailedGames.flatMap(({ game, gameEntry, minutesEntry }) => {
-        const gameId = String((game as Record<string, unknown>).gameId || "");
-        const gameDate = String((game as Record<string, unknown>).gameDate || "");
+        const gameId = String((game as AnyRecord).gameId || "");
+        const gameDate = String((game as AnyRecord).gameDate || "");
         if (!gameEntry.game || !minutesEntry.data) {
           skippedGames.push({
             gameId,
@@ -3746,15 +3837,15 @@ async function buildLeagueTeamSeasonDataset(season: string) {
       const seasonGames = await fetchSeasonGames(season);
       const detailedGames = await mapWithConcurrency(
         seasonGames,
-        (game) => fetchGameDetailsSafe(String((game as Record<string, unknown>).gameId || "")),
+        (game) => fetchGameDetailsSafe(String((game as AnyRecord).gameId || "")),
       );
 
       const skippedGames = detailedGames
         .map((entry, index) => (
           entry.error
             ? {
-              gameId: String((seasonGames[index] as Record<string, unknown>).gameId || ""),
-              gameDate: String((seasonGames[index] as Record<string, unknown>).gameDate || ""),
+              gameId: String((seasonGames[index] as AnyRecord).gameId || ""),
+              gameDate: String((seasonGames[index] as AnyRecord).gameDate || ""),
               error: entry.error,
             }
             : null
@@ -3765,16 +3856,17 @@ async function buildLeagueTeamSeasonDataset(season: string) {
         if (!entry.game) return [];
         const game = {
           ...entry.game,
-          gameDate: String((seasonGames[index] as Record<string, unknown>).gameDate || ""),
+          gameDate: String((seasonGames[index] as AnyRecord).gameDate || ""),
         } as AnyRecord;
         const homeTeamId = String(game?.homeTeam?.teamId || "");
         const awayTeamId = String(game?.awayTeam?.teamId || "");
         const homeTeam = NBA_TEAMS.find((team) => team.teamId === homeTeamId) || null;
         const awayTeam = NBA_TEAMS.find((team) => team.teamId === awayTeamId) || null;
         const builtRows: CachedTeamGameRow[] = [];
+        const metricContext = buildGameMetricContext(game);
         if (homeTeam) {
-          const metrics = buildGameMetrics(game, homeTeam.teamId);
-          const opponentMetrics = buildGameMetrics(game, metrics.opponent.teamId);
+          const metrics = buildGameMetrics(game, homeTeam.teamId, metricContext);
+          const opponentMetrics = buildGameMetrics(game, metrics.opponent.teamId, metricContext);
           builtRows.push({
             teamId: homeTeam.teamId,
             gameId: String(game.gameId || ""),
@@ -3792,8 +3884,8 @@ async function buildLeagueTeamSeasonDataset(season: string) {
           });
         }
         if (awayTeam) {
-          const metrics = buildGameMetrics(game, awayTeam.teamId);
-          const opponentMetrics = buildGameMetrics(game, metrics.opponent.teamId);
+          const metrics = buildGameMetrics(game, awayTeam.teamId, metricContext);
+          const opponentMetrics = buildGameMetrics(game, metrics.opponent.teamId, metricContext);
           builtRows.push({
             teamId: awayTeam.teamId,
             gameId: String(game.gameId || ""),
@@ -3966,8 +4058,8 @@ function executeQuery(
   metric: MetricDefinition,
   query: ParsedQuery,
   team: (typeof NBA_TEAMS)[number],
-  subjectLabel = team.fullName,
-) {
+  subjectLabel: string = team.fullName,
+): any {
   const threshold = safeNumber(query.threshold, 0);
   const requestedAggregation = query.aggregation || "season_total";
   const aggregation = metric.kind === "rate" && requestedAggregation === "season_total"
@@ -4209,7 +4301,7 @@ Deno.serve(async (request) => {
         });
       }
 
-      const opponentIds = new Set(opponentRecordRequest.opponents.map((entry) => entry.teamId));
+      const opponentIds = new Set<string>(opponentRecordRequest.opponents.map((entry) => entry.teamId));
       const matchingRows = dataset.rows.filter((row) => {
         if (!matchesSeasonScope(row, opponentRecordRequest.seasonScope)) return false;
         if (!opponentIds.has(row.opponent.teamId)) return false;
@@ -4523,56 +4615,38 @@ Deno.serve(async (request) => {
     const explicitOrImplicitThreshold = promptThreshold ?? parseImplicitThreshold(prompt, metricForComparison || findMetricFromPrompt(prompt));
     const promptHasExplicitOpponent = hasExplicitOpponentContext(prompt);
     const specificPeriod = parseSpecificPeriod(prompt);
-    const openAiParsedPromise = parsePromptWithOpenAI(prompt)
-      .then((value) => normalizeParsedQuery(value))
-      .catch(() => null);
-    const seasonGamesPromise = fetchSeasonGames(season);
-    const openAiParsed = await openAiParsedPromise;
-    const candidateParses = [fallbackParsed, openAiParsed].filter(Boolean) as ParsedQuery[];
 
     let parsed: ParsedQuery | null = null;
     let team: (typeof NBA_TEAMS)[number] | null = null;
     let metric: MetricDefinition | null = null;
+    let openAiParsed: ParsedQuery | null = null;
 
-    let bestCandidateScore = 0;
+    const fallbackCandidate = scoreParsedCandidate(fallbackParsed, {
+      prompt,
+      promptHasExplicitOpponent,
+      explicitOrImplicitThreshold,
+      inferredPlayerTeam,
+      sourceBonus: 25,
+    });
+    let selectedCandidate = fallbackCandidate;
 
-    for (const candidate of candidateParses) {
-      const matchedTeam = NBA_TEAMS.find((entry) => entry.teamId === candidate.teamId) || null;
-      const matchedMetric = METRICS.find((entry) => entry.key === candidate.statKey) || null;
-      if (matchedTeam && matchedMetric) {
-        if (candidate.opponentTeamId && !promptHasExplicitOpponent) {
-          candidate.opponentTeamId = undefined;
-        }
-        if (candidate.groupBy === "on_off" && !hasExplicitOnOffContext(prompt)) {
-          candidate.groupBy = "none";
-        }
-        if (explicitOrImplicitThreshold != null && candidate.threshold == null) {
-          continue;
-        }
-        const teamScore = scoreTeamPrompt(matchedTeam, prompt);
-        const metricScore = scoreMetricPrompt(matchedMetric, prompt);
-        const matchedOpponent = candidate.opponentTeamId
-          ? NBA_TEAMS.find((entry) => entry.teamId === candidate.opponentTeamId) || null
-          : null;
-        const opponentScore = matchedOpponent ? scoreTeamPrompt(matchedOpponent, prompt) : 0;
-        const sourceBonus = candidate === fallbackParsed ? 25 : 0;
-        const filterBonus = (candidate.resultFilter && candidate.resultFilter !== "all" ? 2 : 0)
-          + (matchedOpponent ? 2 : 0);
-        const thresholdBonus = explicitOrImplicitThreshold != null && candidate.threshold === explicitOrImplicitThreshold ? 4 : 0;
-        const groupBonus = parseGroupBy(prompt) !== "none" && candidate.groupBy === parseGroupBy(prompt) ? 6 : 0;
-        const inferredTeamBonus = inferredPlayerTeam?.team.teamId === matchedTeam.teamId ? 12 : 0;
-        const metricIntentBonus = scoreMetricIntent(matchedMetric, prompt);
-        const effectiveTeamScore = Math.max(teamScore, inferredTeamBonus);
-        const candidateScore = effectiveTeamScore + metricScore + opponentScore + sourceBonus + filterBonus + thresholdBonus + groupBonus + metricIntentBonus;
-        if (effectiveTeamScore < 6 || metricScore < 5 || candidateScore <= bestCandidateScore) continue;
-        bestCandidateScore = candidateScore;
-        if (candidate.opponentTeamId === candidate.teamId) {
-          candidate.opponentTeamId = undefined;
-        }
-        parsed = candidate;
-        team = matchedTeam;
-        metric = matchedMetric;
-      }
+    if (!selectedCandidate) {
+      openAiParsed = await parsePromptWithOpenAI(prompt)
+        .then((value) => normalizeParsedQuery(value))
+        .catch(() => null);
+      selectedCandidate = scoreParsedCandidate(openAiParsed, {
+        prompt,
+        promptHasExplicitOpponent,
+        explicitOrImplicitThreshold,
+        inferredPlayerTeam,
+        sourceBonus: 0,
+      });
+    }
+
+    if (selectedCandidate) {
+      parsed = selectedCandidate.parsed;
+      team = selectedCandidate.team;
+      metric = selectedCandidate.metric;
     }
 
     if (!parsed || !team || !metric) {
@@ -4638,7 +4712,6 @@ Deno.serve(async (request) => {
       rowsForQuery = playerPeriodDataset.rows;
       skippedGames = playerPeriodDataset.skippedGames;
     } else if (parsed.playerId) {
-      await seasonGamesPromise;
       const playerDataset = await buildSinglePlayerSeasonDataset(season, team, parsed.playerId);
       rowsForQuery = playerDataset.rows;
       skippedGames = playerDataset.skippedGames;
@@ -4647,7 +4720,6 @@ Deno.serve(async (request) => {
       rowsForQuery = teamPeriodDataset.rows;
       skippedGames = teamPeriodDataset.skippedGames;
     } else {
-      await seasonGamesPromise;
       const dataset = await buildTeamSeasonDataset(season, team);
       if (!dataset.rows.length) {
         return jsonResponse(502, {

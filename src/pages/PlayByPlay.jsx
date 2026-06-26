@@ -1,10 +1,10 @@
 import { useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
 import { createNote } from "../accountData.js";
 import PlayerHeadshot from "../components/PlayerHeadshot.jsx";
-import { fetchGame, nbaEventVideoUrl, teamLogoUrl } from "../api.js";
+import { nbaEventVideoUrl, teamLogoUrl } from "../api.js";
 import { useAuth } from "../auth/useAuth.js";
+import { useGame } from "../queries.js";
 import {
   buildNoteFormFromAction,
   buildPlayByPlaySourceMeta,
@@ -62,11 +62,8 @@ export default function PlayByPlay() {
   const holdTimerRef = useRef(null);
   const holdTargetRef = useRef(null);
 
-  const { data: game, isLoading, error } = useQuery({
-    queryKey: ["game", gameId],
-    queryFn: () => fetchGame(gameId, null, { dateStr: dateParam }),
-    enabled: Boolean(gameId),
-    staleTime: 30_000,
+  const { data: game, isLoading, error } = useGame(gameId, {
+    dateStr: dateParam,
   });
 
   const actions = game?.playByPlayActions || [];

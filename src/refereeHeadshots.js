@@ -1,4 +1,5 @@
 import { getSavedToolRecordRemote, saveToolRecordRemote } from "./toolVault.js";
+import { STATIC_REFEREE_HEADSHOT_PATHS } from "./refereeHeadshotStaticPaths.js";
 import { supabase } from "./supabaseClient.js";
 
 export const REFEREE_HEADSHOT_OVERRIDE_STORAGE_KEY = "referee_headshot_overrides_v1";
@@ -9,6 +10,7 @@ export const REFEREE_HEADSHOT_REMOTE_RECORD_ID = "shared-referee-headshots";
 export const REFEREE_HEADSHOT_REMOTE_RECORD_TYPE = "referee_headshots";
 export const REFEREE_HEADSHOT_PREVIEW_BUCKET = "referee-headshots-preview";
 export const REFEREE_HEADSHOT_FULL_BUCKET = "referee-headshots-full";
+export const STATIC_REFEREE_HEADSHOT_FULL_PREFIX = "static";
 const REFEREE_HEADSHOT_SHARED_TABLE = "rotations_shared_state";
 const REFEREE_HEADSHOT_SHARED_SCOPE_TYPE = "shared_referee_headshots";
 const REFEREE_HEADSHOT_SHARED_SCOPE_KEY = "global";
@@ -49,19 +51,6 @@ export function buildManualRefereeItemId(nameKey) {
   return normalizedKey ? `manual:${normalizedKey}` : "";
 }
 
-const IMAGE_MODULE_LOADERS = import.meta.glob(
-  [
-    "./assets/referees/*.jpg",
-    "./assets/referees/*.jpeg",
-    "./assets/referees/*.JPG",
-    "./assets/referees/*.JPEG",
-    "./assets/referees_review_duplicates/*.jpg",
-    "./assets/referees_review_duplicates/*.jpeg",
-    "./assets/referees_review_duplicates/*.JPG",
-    "./assets/referees_review_duplicates/*.JPEG",
-  ],
-  { import: "default" }
-);
 let staticRefereeHeadshotItems = [];
 let staticRefereeHeadshotItemsPromise = null;
 
@@ -70,7 +59,20 @@ function encodePublicPathSegment(value) {
     .replace(/%2F/g, "/");
 }
 
-function buildFullResolutionRefereeHeadshotUrl(path, fileName) {
+export function buildStaticRefereeHeadshotFullPath(path, fileName) {
+  const root = path.includes("/referees_review_duplicates/")
+    ? "referees_review_duplicates"
+    : "referees";
+  return `${STATIC_REFEREE_HEADSHOT_FULL_PREFIX}/${root}/${fileName}`;
+}
+
+function buildSupabaseStoragePublicUrl(bucket, path) {
+  if (!supabase || !bucket || !path) return "";
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  return String(data?.publicUrl || "").trim();
+}
+
+function buildLegacyFullResolutionRefereeHeadshotUrl(path, fileName) {
   const baseUrl = import.meta.env.BASE_URL || "/";
   const root = path.includes("/referees_review_duplicates/")
     ? "referees_review_duplicates"
@@ -78,10 +80,10 @@ function buildFullResolutionRefereeHeadshotUrl(path, fileName) {
   return `${baseUrl}referees-full/${root}/${encodePublicPathSegment(fileName)}`;
 }
 
-function buildSupabaseStoragePublicUrl(bucket, path) {
-  if (!supabase || !bucket || !path) return "";
-  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-  return String(data?.publicUrl || "").trim();
+function buildFullResolutionRefereeHeadshotUrl(path, fileName) {
+  const storagePath = buildStaticRefereeHeadshotFullPath(path, fileName);
+  return buildSupabaseStoragePublicUrl(REFEREE_HEADSHOT_FULL_BUCKET, storagePath)
+    || buildLegacyFullResolutionRefereeHeadshotUrl(path, fileName);
 }
 
 export function normalizeNameKey(value) {
@@ -469,20 +471,21 @@ export function buildCanvasAvatarPlacement({
   };
 }
 
-function buildStaticRefereeHeadshotItems(assetEntries) {
-  return assetEntries
-    .map(([path, url]) => {
+function buildStaticRefereeHeadshotItems(assetPaths) {
+  return assetPaths
+    .map((path) => {
       const fileName = path.split("/").pop() || "";
       const fullName = fileName.replace(/\.(jpe?g)$/i, "");
       const isDuplicate = path.includes("/referees_review_duplicates/");
+      const storageUrl = buildFullResolutionRefereeHeadshotUrl(path, fileName);
       return {
         id: path,
         path,
         fileName,
         fullName,
         nameKey: normalizeNameKey(fullName),
-        url,
-        exportUrl: buildFullResolutionRefereeHeadshotUrl(path, fileName),
+        url: storageUrl,
+        exportUrl: storageUrl,
         source: isDuplicate ? "duplicate review" : "production",
         isDuplicate,
       };
@@ -493,20 +496,23 @@ function buildStaticRefereeHeadshotItems(assetEntries) {
     });
 }
 
+function ensureStaticRefereeHeadshotItemsLoadedSync() {
+  if (!staticRefereeHeadshotItems.length) {
+    staticRefereeHeadshotItems = buildStaticRefereeHeadshotItems(STATIC_REFEREE_HEADSHOT_PATHS);
+  }
+  return staticRefereeHeadshotItems;
+}
+
 async function ensureStaticRefereeHeadshotItemsLoaded() {
   if (staticRefereeHeadshotItems.length) return staticRefereeHeadshotItems;
   if (!staticRefereeHeadshotItemsPromise) {
-    staticRefereeHeadshotItemsPromise = Promise.all(
-      Object.entries(IMAGE_MODULE_LOADERS).map(async ([path, loader]) => [path, await loader()])
-    ).then((entries) => {
-      staticRefereeHeadshotItems = buildStaticRefereeHeadshotItems(entries);
-      return staticRefereeHeadshotItems;
-    });
+    staticRefereeHeadshotItemsPromise = Promise.resolve(ensureStaticRefereeHeadshotItemsLoadedSync());
   }
   return staticRefereeHeadshotItemsPromise;
 }
 
 export function buildRefereeHeadshotImageItems(preferences = DEFAULT_REFEREE_HEADSHOT_PREFERENCES) {
+  const staticItems = ensureStaticRefereeHeadshotItemsLoadedSync();
   const manualItems = Object.entries(preferences.manualRefereesByNameKey || {})
     .map(([nameKey, displayName]) => {
       const normalizedKey = normalizeNameKey(nameKey);
@@ -527,7 +533,7 @@ export function buildRefereeHeadshotImageItems(preferences = DEFAULT_REFEREE_HEA
     .filter((item) => item.nameKey && item.fullName)
     .sort((a, b) => a.fullName.localeCompare(b.fullName));
 
-  return [...staticRefereeHeadshotItems, ...manualItems];
+  return [...staticItems, ...manualItems];
 }
 
 export async function loadRefereeHeadshotImageItems(preferences = DEFAULT_REFEREE_HEADSHOT_PREFERENCES) {

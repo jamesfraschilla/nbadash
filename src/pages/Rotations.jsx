@@ -1,7 +1,7 @@
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchGame } from "../api.js";
+import { useGame } from "../queries.js";
 import {
   fetchRemotePregamePlayers,
   getTeamBoxScorePlayers,
@@ -1564,10 +1564,8 @@ export default function Rotations() {
   });
   const [touchPreview, setTouchPreview] = useState(null);
 
-  const { data: game, isLoading, error } = useQuery({
-    queryKey: ["game-rotations", gameId],
-    queryFn: () => fetchGame(gameId, null, { dateStr: dateParam }),
-    enabled: Boolean(gameId),
+  const { data: game, isLoading, error } = useGame(gameId, {
+    dateStr: dateParam,
   });
 
   const monitoredTeam = useMemo(() => getRotationsScopeForGame(game), [game]);

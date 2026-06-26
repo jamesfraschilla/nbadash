@@ -41,8 +41,8 @@ const TEAM_METADATA = [
   { teamId: 1610612764, teamTricode: "WAS", teamCity: "Washington", teamName: "Wizards" },
 ] as const;
 
-const TEAM_BY_ID = new Map(TEAM_METADATA.map((team) => [String(team.teamId), team]));
-const TEAM_BY_TRICODE = new Map(TEAM_METADATA.map((team) => [team.teamTricode, team]));
+const TEAM_BY_ID = new Map<string, (typeof TEAM_METADATA)[number]>(TEAM_METADATA.map((team) => [String(team.teamId), team]));
+const TEAM_BY_TRICODE = new Map<string, (typeof TEAM_METADATA)[number]>(TEAM_METADATA.map((team) => [team.teamTricode, team]));
 
 function jsonResponse(status: number, payload: Record<string, unknown>) {
   return new Response(JSON.stringify(payload), {
@@ -126,7 +126,11 @@ function sortRowsChronologically(rows: Record<string, unknown>[]) {
   });
 }
 
-function annotateRowsWithRecords(rows: Record<string, unknown>[]) {
+type TeamGameFinderRow = Record<string, unknown> & {
+  recordAfter?: { wins: number; losses: number } | null;
+};
+
+function annotateRowsWithRecords(rows: Record<string, unknown>[]): TeamGameFinderRow[] {
   const tallies = new Map<string, { wins: number; losses: number }>();
 
   return sortRowsChronologically(rows).map((row) => {
@@ -145,7 +149,7 @@ function annotateRowsWithRecords(rows: Record<string, unknown>[]) {
   });
 }
 
-function buildTeamPayload(row: Record<string, unknown>, fallbackTricode = "", recordOverride: { wins: number; losses: number } | null = null) {
+function buildTeamPayload(row: TeamGameFinderRow, fallbackTricode = "", recordOverride: { wins: number; losses: number } | null = null) {
   const teamId = String(row?.TEAM_ID || "");
   const fallbackMeta = TEAM_BY_TRICODE.get(String(fallbackTricode || "").trim().toUpperCase()) || null;
   const meta = TEAM_BY_ID.get(teamId) || fallbackMeta;
@@ -167,7 +171,7 @@ function normalizeSeasonType(seasonType: unknown) {
   return String(seasonType || "");
 }
 
-function buildSyntheticOpponentRow(selectedRow: Record<string, unknown>, opponentTricode: string) {
+function buildSyntheticOpponentRow(selectedRow: TeamGameFinderRow, opponentTricode: string): TeamGameFinderRow {
   const meta = TEAM_BY_TRICODE.get(String(opponentTricode || "").trim().toUpperCase()) || null;
   const selectedScore = toNumber(selectedRow?.PTS, 0);
   const pointDelta = toNumber(selectedRow?.PLUS_MINUS, 0);
@@ -176,6 +180,10 @@ function buildSyntheticOpponentRow(selectedRow: Record<string, unknown>, opponen
     TEAM_ABBREVIATION: meta?.teamTricode || opponentTricode,
     TEAM_NAME: meta?.teamName || opponentTricode,
     PTS: Math.max(0, selectedScore - pointDelta),
+    MATCHUP: "",
+    GAME_ID: selectedRow?.GAME_ID || "",
+    GAME_DATE: selectedRow?.GAME_DATE || "",
+    seasonType: selectedRow?.seasonType || "",
     recordAfter: null,
   };
 }

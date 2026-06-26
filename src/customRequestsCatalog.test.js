@@ -32,6 +32,7 @@ function extractArray(name) {
 }
 
 const metrics = extractArray("METRICS");
+const teams = extractArray("NBA_TEAMS");
 
 function normalizeText(value) {
   return String(value || "")
@@ -39,17 +40,25 @@ function normalizeText(value) {
     .replace(/'s\b/g, "")
     .replace(/%/g, " pct ")
     .replace(/\bc\s*&\s*s\b/g, "catch and shoot")
+    .replace(/\b3fgas\b/g, "3fg attempted")
     .replace(/\b3fgm\b/g, "3fg made")
     .replace(/\b3fga\b/g, "3fg attempted")
     .replace(/\b3fgs\b/g, "3fg made")
+    .replace(/\bfgas\b/g, "fg attempted")
     .replace(/\bfgm\b/g, "fg made")
     .replace(/\bfga\b/g, "fg attempted")
+    .replace(/\bftas\b/g, "ft attempted")
     .replace(/\bftm\b/g, "ft made")
     .replace(/\bfta\b/g, "ft attempted")
     .replace(/\btotals\b/g, "total")
     .replace(/\bavgs?\b/g, "average")
     .replace(/\bper-game\b/g, "per game")
     .replace(/\bthrees\b/g, "3s")
+    .replace(/(?<!catch and )(?<!catch-and-)\bshoot(?:ing|s)?\s+3s\b/g, "3fg attempted")
+    .replace(/\bshot\s+3s\b/g, "3fg attempted")
+    .replace(/(?<!catch and )(?<!catch-and-)\bshoot(?:ing|s)?\s+threes\b/g, "3fg attempted")
+    .replace(/\btook\s+shots\b/g, "fg attempted")
+    .replace(/\btake\s+shots\b/g, "fg attempted")
     .replace(/\bthree pointers\b/g, "3pt")
     .replace(/\bthree point\b/g, "3pt")
     .replace(/[^a-z0-9]+/g, " ")
@@ -59,6 +68,9 @@ function normalizeText(value) {
 function normalizeToken(token) {
   const normalized = String(token || "").trim().toLowerCase();
   if (!normalized) return "";
+  if (normalized === "3fgas") return "3fga";
+  if (normalized === "fgas") return "fga";
+  if (normalized === "ftas") return "fta";
   if (normalized === "totals") return "total";
   if (normalized === "avg" || normalized === "avgs") return "average";
   if (normalized === "times") return "time";
@@ -222,6 +234,18 @@ const metricSearchIndex = metrics.map((metric) => ({
   })),
 }));
 
+const teamSearchIndex = teams.map((team) => ({
+  team,
+  aliases: [...new Set([
+    ...team.aliases,
+    team.fullName,
+    team.tricode,
+  ])].map((alias) => ({
+    alias: normalizeText(alias),
+    tokens: uniqueMeaningfulTokens(alias),
+  })),
+}));
+
 function scoreSearchAliases(prompt, searchEntries) {
   const normalizedPrompt = normalizeText(prompt);
   const paddedPrompt = ` ${normalizedPrompt} `;
@@ -247,7 +271,7 @@ function findMetricFromPrompt(prompt) {
   let bestScore = 0;
 
   metricSearchIndex.forEach(({ metric, aliases }) => {
-    const score = scoreSearchAliases(prompt, aliases);
+    const score = scoreSearchAliases(prompt, aliases) + scoreMetricIntent(metric, prompt);
     if (score > bestScore) {
       bestMatch = metric;
       bestScore = score;
@@ -255,6 +279,138 @@ function findMetricFromPrompt(prompt) {
   });
 
   return bestScore >= 5 ? bestMatch : null;
+}
+
+function usesAttemptIntent(prompt) {
+  const normalizedPrompt = normalizeText(prompt).replace(/\bcatch and shoot\b/g, "catchshoot");
+  return /\b(attempt|attempted|attempts|shot|shoot|took|take)\b/.test(normalizedPrompt);
+}
+
+function usesMadeIntent(prompt) {
+  const normalizedPrompt = normalizeText(prompt);
+  return /\b(make|made|makes|hit|hits|hitting)\b/.test(normalizedPrompt);
+}
+
+function scoreMetricIntent(metric, prompt) {
+  const promptWantsAttempted = usesAttemptIntent(prompt);
+  const promptWantsMade = usesMadeIntent(prompt);
+  const attemptedMetric = metric.key.endsWith("_attempted");
+  const madeMetric = metric.key.endsWith("_made");
+
+  if (promptWantsAttempted && attemptedMetric) return 12;
+  if (promptWantsAttempted && madeMetric) return -10;
+  if (promptWantsMade && madeMetric) return 10;
+  if (promptWantsMade && attemptedMetric) return -8;
+  return 0;
+}
+
+function findTeamFromPrompt(prompt) {
+  let bestMatch = null;
+  let bestScore = 0;
+
+  teamSearchIndex.forEach(({ team, aliases }) => {
+    const score = scoreSearchAliases(prompt, aliases);
+    if (score > bestScore) {
+      bestMatch = team;
+      bestScore = score;
+    }
+  });
+
+  return bestScore >= 6 ? bestMatch : null;
+}
+
+function safeNumber(value, fallback = 0) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function parseThreshold(prompt) {
+  const loweredPrompt = String(prompt || "").toLowerCase();
+  const normalizedPrompt = normalizeText(prompt);
+  const numericMatch = /(\d+(?:\.\d+)?)\s*\+/.exec(loweredPrompt)
+    || /(\d+(?:\.\d+)?)\s*(?:or more|or greater|at least|plus|>=)/.exec(loweredPrompt)
+    || /at least\s+(\d+(?:\.\d+)?)/.exec(loweredPrompt)
+    || /over\s+(\d+(?:\.\d+)?)/.exec(loweredPrompt)
+    || /more than\s+(\d+(?:\.\d+)?)/.exec(loweredPrompt)
+    || /under\s+(\d+(?:\.\d+)?)/.exec(loweredPrompt)
+    || /below\s+(\d+(?:\.\d+)?)/.exec(loweredPrompt)
+    || /less than\s+(\d+(?:\.\d+)?)/.exec(loweredPrompt)
+    || /fewer than\s+(\d+(?:\.\d+)?)/.exec(loweredPrompt)
+    || /(\d+(?:\.\d+)?)\s*(?:or more|or greater|at least|plus)/.exec(normalizedPrompt);
+  if (numericMatch) return safeNumber(numericMatch[1], 0);
+  return null;
+}
+
+function parseImplicitThreshold(prompt, metric) {
+  if (!metric) return null;
+  const normalizedPrompt = normalizeText(prompt);
+  if (
+    metric.key === "first_half_margin"
+    && (
+      normalizedPrompt.includes("winning at halftime")
+      || normalizedPrompt.includes("lead at halftime")
+      || normalizedPrompt.includes("halftime lead")
+      || normalizedPrompt.includes("outscored opponents in the first half")
+      || normalizedPrompt.includes("outscored opponents in first half")
+    )
+  ) {
+    return 1;
+  }
+  return null;
+}
+
+function isUpperBoundPrompt(prompt) {
+  const normalizedPrompt = normalizeText(prompt);
+  return /under|below|less than|fewer than|<=|at most|or fewer/.test(normalizedPrompt);
+}
+
+function isRecordPrompt(prompt) {
+  const normalizedPrompt = normalizeText(prompt);
+  return normalizedPrompt.includes("record")
+    || normalizedPrompt.includes("win loss")
+    || normalizedPrompt.includes("wins and losses")
+    || normalizedPrompt.includes("w l");
+}
+
+function detectAggregation(prompt, threshold) {
+  const normalizedPrompt = normalizeText(prompt);
+  const wantsCount = normalizedPrompt.includes("how many games")
+    || normalizedPrompt.includes("how many times")
+    || normalizedPrompt.includes("how often")
+    || normalizedPrompt.includes("number of games")
+    || normalizedPrompt.includes("count of games");
+
+  if (isRecordPrompt(prompt)) {
+    if (isUpperBoundPrompt(prompt)) return "record_when_lte";
+    if (threshold != null) return "record_when_gte";
+    if (wantsCount || normalizedPrompt.includes("with ") || normalizedPrompt.includes("when ")) return "record_when_nonzero";
+    return "record";
+  }
+
+  if (wantsCount || (normalizedPrompt.includes("how many") && threshold != null)) {
+    if (isUpperBoundPrompt(prompt)) return "count_games_lte";
+    if (threshold != null) return "count_games_gte";
+    return "count_games_nonzero";
+  }
+
+  if (normalizedPrompt.includes("average") || normalizedPrompt.includes("mean") || normalizedPrompt.includes("per game")) {
+    return "season_average";
+  }
+
+  return "season_total";
+}
+
+function buildFallbackParse(prompt) {
+  const team = findTeamFromPrompt(prompt);
+  const metric = findMetricFromPrompt(prompt);
+  if (!team || !metric) return null;
+  const threshold = parseThreshold(prompt) ?? parseImplicitThreshold(prompt, metric);
+  return {
+    teamId: team.teamId,
+    statKey: metric.key,
+    aggregation: detectAggregation(prompt, threshold),
+    threshold: threshold ?? undefined,
+  };
 }
 
 test("every custom request metric resolves from its label and aliases", () => {
@@ -291,4 +447,18 @@ test("custom requests resolve representative natural-language stat prompts", () 
   cases.forEach(([prompt, expectedMetric]) => {
     assert.equal(findMetricFromPrompt(prompt)?.key, expectedMetric, prompt);
   });
+});
+
+test("custom request fallback parser resolves threshold and record prompts", () => {
+  const thresholdParse = buildFallbackParse("How many games this season has Washington made 5 or more 3FGs?");
+  assert.equal(thresholdParse?.teamId, "1610612764");
+  assert.equal(thresholdParse?.statKey, "three_pointers_made");
+  assert.equal(thresholdParse?.aggregation, "count_games_gte");
+  assert.equal(thresholdParse?.threshold, 5);
+
+  const halftimeParse = buildFallbackParse("What is the Wizards record when they outscored opponents in the first half?");
+  assert.equal(halftimeParse?.teamId, "1610612764");
+  assert.equal(halftimeParse?.statKey, "first_half_margin");
+  assert.equal(halftimeParse?.aggregation, "record_when_gte");
+  assert.equal(halftimeParse?.threshold, 1);
 });

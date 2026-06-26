@@ -18,6 +18,32 @@ export function formatDateInputInTimeZone(date = new Date(), timeZone = "America
   return `${year}-${month}-${day}`;
 }
 
+export function currentSeasonString(date = new Date()) {
+  const month = date.getMonth() + 1;
+  const year = date.getFullYear();
+  const startYear = month >= 7 ? year : year - 1;
+  return `${startYear}-${String(startYear + 1).slice(-2)}`;
+}
+
+function parseSeasonStartYear(season) {
+  const match = /^(\d{4})-\d{2}$/.exec(String(season || "").trim());
+  return match ? Number(match[1]) : null;
+}
+
+export function seasonBoundsForSeason(season = currentSeasonString(), date = new Date()) {
+  const startYear = parseSeasonStartYear(season);
+  if (!Number.isFinite(startYear)) {
+    throw new Error(`Invalid season: ${season}`);
+  }
+  const seasonStart = new Date(startYear, 9, 1);
+  const seasonEnd = new Date(startYear + 1, 5, 30);
+  const end = date >= seasonStart && date < seasonEnd ? date : seasonEnd;
+  return {
+    start: seasonStart,
+    end: date < seasonStart ? new Date(seasonStart.getFullYear(), seasonStart.getMonth(), seasonStart.getDate() - 1) : end,
+  };
+}
+
 export function parseDateInput(value) {
   if (!value) return new Date();
   const parts = value.split("-");

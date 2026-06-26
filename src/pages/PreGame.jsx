@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { fetchGame } from "../api.js";
+import { useGame } from "../queries.js";
 import {
   fetchRemotePregamePlayers,
   getTeamBoxScorePlayers,
@@ -609,10 +609,8 @@ export default function PreGame() {
   const dateParam = params.get("d");
   const backUrl = dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`;
 
-  const { data: game, isLoading, error } = useQuery({
-    queryKey: ["game-pregame", gameId],
-    queryFn: () => fetchGame(gameId, null, { dateStr: dateParam }),
-    enabled: Boolean(gameId),
+  const { data: game, isLoading, error } = useGame(gameId, {
+    dateStr: dateParam,
   });
 
   const [players, setPlayers] = useState([]);

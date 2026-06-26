@@ -11,7 +11,6 @@ const STORAGE_EVICTION_PREFIXES = [
 ];
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  // eslint-disable-next-line no-console
   console.warn("Supabase env vars are missing. Highlights will be disabled.");
 }
 

@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { fetchGame } from "../api.js";
 import { isCapitalCityTeam, isWashingtonTeam } from "../pregamePlayers.js";
+import { useGame } from "../queries.js";
 import { supabase } from "../supabaseClient.js";
 import { readLocalStorage, writeLocalStorage } from "../storage.js";
 import styles from "./Kpis.module.css";
@@ -211,11 +210,7 @@ export default function Kpis() {
   const hydratedRef = useRef(false);
   const activeFieldRef = useRef("");
 
-  const { data: game, isLoading, error } = useQuery({
-    queryKey: ["game-kpis", gameId],
-    queryFn: () => fetchGame(gameId),
-    enabled: Boolean(gameId),
-  });
+  const { data: game, isLoading, error } = useGame(gameId);
 
   const supportedTeamGame = useMemo(() => {
     const homeTeam = game?.homeTeam;
