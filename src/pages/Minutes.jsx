@@ -197,13 +197,13 @@ export default function Minutes() {
   const dateParam = params.get("d");
   const [view, setView] = useState("away");
   const { data, isLoading, error } = useMinutes(gameId);
-  const { data: game } = useGame(gameId, { dateStr: dateParam });
+  const { data: game, isLoading: isGameLoading } = useGame(gameId, { dateStr: dateParam });
   const substitutionLookup = useMemo(
     () => buildSubstitutionAnnotationLookup(game?.playByPlayActions || []),
     [game?.playByPlayActions],
   );
 
-  if (isLoading) {
+  if (isLoading || (!game && isGameLoading)) {
     return <div className={styles.stateMessage}>Loading minutes data...</div>;
   }
 
