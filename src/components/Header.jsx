@@ -1,9 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { getGamesListPollingInterval } from "../gamePolling.js";
 import { useGamesByDate } from "../queries.js";
 import { formatDateInputInTimeZone, formatDateLabel, parseDateInput } from "../utils.js";
 import GameCard from "./GameCard.jsx";
 import styles from "./Header.module.css";
+
+function isWizardsGame(game) {
+  const teams = [game?.homeTeam, game?.awayTeam];
+  return teams.some((team) => {
+    const tricode = String(team?.teamTricode || "").toUpperCase();
+    const name = `${team?.teamCity || ""} ${team?.teamName || ""}`.toLowerCase();
+    return tricode === "WAS" || name.includes("washington") || name.includes("wizards");
+  });
+}
 
 export default function Header({ theme, onToggleTheme, onSignOut, profile, isAdmin, canUseTools }) {
   const [params, setParams] = useSearchParams();
@@ -18,8 +28,9 @@ export default function Header({ theme, onToggleTheme, onSignOut, profile, isAdm
   const dateLabel = formatDateLabel(date);
 
   const { data: games = [], isLoading, isFetching } = useGamesByDate(dateInput, {
-    refetchInterval: (query) =>
-      query.state.data?.some((g) => g.gameStatus === 2) ? 30_000 : false,
+    refetchInterval: (query) => getGamesListPollingInterval(query.state.data, {
+      isTrackedGame: isWizardsGame,
+    }),
   });
 
   const orderedGames = useMemo(() => {

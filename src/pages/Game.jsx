@@ -39,6 +39,7 @@ import {
   evaluateLateGameStrategy,
 } from "../lateGameStrategy.js";
 import { recordClientError } from "../errorDiagnostics.js";
+import { getGamePollingInterval } from "../gamePolling.js";
 import { gameStatusLabel, normalizeClock } from "../utils.js";
 import BoxScoreTable from "../components/BoxScoreTable.jsx";
 import StatBars from "../components/StatBars.jsx";
@@ -539,6 +540,10 @@ const isCapitalCityTeam = (team) => {
 
 const isRotationsTeam = (team) => isWashingtonTeam(team) || isCapitalCityTeam(team);
 
+const isWashingtonGamePayload = (game) => (
+  isWashingtonTeam(game?.homeTeam) || isWashingtonTeam(game?.awayTeam)
+);
+
 const parseTeamFoulMarker = (description) => {
   if (!description) return null;
   const text = String(description);
@@ -785,13 +790,17 @@ export default function Game({ variant = "full" }) {
   const { data: game, isLoading, error } = useGame(gameId, {
     segment: segmentParam,
     dateStr: dateParam,
-    refetchInterval: (query) => (query.state.data?.gameStatus === 3 ? false : 15_000),
+    refetchInterval: (query) => getGamePollingInterval(query.state.data, {
+      isTrackedGame: isWashingtonGamePayload(query.state.data),
+    }),
     refetchIntervalInBackground: true,
   });
 
   const { data: minutesData } = useMinutes(gameId, {
     optional: true,
-    refetchInterval: () => (game?.gameStatus === 3 ? false : 15_000),
+    refetchInterval: () => getGamePollingInterval(game, {
+      isTrackedGame: isWashingtonGamePayload(game),
+    }),
     refetchIntervalInBackground: true,
   });
 
