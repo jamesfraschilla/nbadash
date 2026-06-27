@@ -12,7 +12,7 @@ export const NOTE_TAG_OPTIONS = [
   "Bad",
   "Offense",
   "Defense",
-  "Concept",
+  "Halftime",
   "Misc",
 ];
 

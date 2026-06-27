@@ -26,9 +26,13 @@ const ROTATIONS_SCOPE_GAME = "game";
 const ROTATIONS_SCOPE_SAVED_LINEUPS = "saved_lineups";
 const FINAL_VERSION_ID = "final";
 const QUARTERS = [1, 2, 3, 4];
-const MINUTES = Array.from({ length: 12 }, (_, index) => 12 - index);
+const DEFAULT_PERIOD_MINUTES = 12;
+const SUMMER_LEAGUE_PERIOD_MINUTES = 10;
+const buildMinuteLabels = (periodMinutes = DEFAULT_PERIOD_MINUTES) => (
+  Array.from({ length: periodMinutes }, (_, index) => periodMinutes - index)
+);
+const DEFAULT_MINUTES = buildMinuteLabels(DEFAULT_PERIOD_MINUTES);
 const POSITION_COLUMNS = [1, 2, 3, 4, 5];
-const TOTAL_PER_QUARTER = MINUTES.length * POSITION_COLUMNS.length;
 const MAX_LINEUP_HISTORY = 100;
 const LONG_PRESS_DURATION_MS = 700;
 const TOUCH_FILL_MOVE_TOLERANCE_PX = 16;
@@ -140,6 +144,14 @@ function getRotationsScopeForGame(game) {
   return getRotationsTeamConfig(game?.homeTeam) || getRotationsTeamConfig(game?.awayTeam);
 }
 
+function getRotationPeriodMinuteCount(game) {
+  return isSummerLeagueRosterGame(game) ? SUMMER_LEAGUE_PERIOD_MINUTES : DEFAULT_PERIOD_MINUTES;
+}
+
+function getTotalPerQuarter(minuteLabels) {
+  return (minuteLabels?.length || DEFAULT_PERIOD_MINUTES) * POSITION_COLUMNS.length;
+}
+
 function playersStorageKey(teamScope) {
   return `rotations:${teamScope}:players:v1`;
 }
@@ -156,12 +168,15 @@ function globalScopeKey(teamScope) {
   return `${teamScope}:global`;
 }
 
-const createDefaultQuarterLineups = () => ({
-  1: MINUTES.map(() => Array.from({ length: POSITION_COLUMNS.length }, () => "")),
-  2: MINUTES.map(() => Array.from({ length: POSITION_COLUMNS.length }, () => "")),
-  3: MINUTES.map(() => Array.from({ length: POSITION_COLUMNS.length }, () => "")),
-  4: MINUTES.map(() => Array.from({ length: POSITION_COLUMNS.length }, () => "")),
-});
+const createDefaultQuarterLineups = (periodMinutes = DEFAULT_PERIOD_MINUTES) => {
+  const minuteLabels = buildMinuteLabels(periodMinutes);
+  return {
+    1: minuteLabels.map(() => Array.from({ length: POSITION_COLUMNS.length }, () => "")),
+    2: minuteLabels.map(() => Array.from({ length: POSITION_COLUMNS.length }, () => "")),
+    3: minuteLabels.map(() => Array.from({ length: POSITION_COLUMNS.length }, () => "")),
+    4: minuteLabels.map(() => Array.from({ length: POSITION_COLUMNS.length }, () => "")),
+  };
+};
 
 const createDefaultPlayers = (teamScope = "washington") => (
   (TEAM_ROTATIONS_CONFIG[teamScope]?.defaultPlayers || TEAM_ROTATIONS_CONFIG.washington.defaultPlayers)
@@ -181,27 +196,29 @@ function createVersionState({
   inheritDepthTemplate = false,
   options = DEFAULT_VERSION_OPTIONS,
   teamScope = "washington",
+  periodMinutes = DEFAULT_PERIOD_MINUTES,
 }) {
   return {
     id: String(id || (typeof crypto !== "undefined" ? crypto.randomUUID() : `version-${Date.now()}`)),
     name: String(name || "Version").trim() || "Version",
     depthChart: normalizeDepthChart(depthChart, teamScope),
-    lineups: normalizeLineups(lineups),
+    lineups: normalizeLineups(lineups, periodMinutes),
     inheritDepthTemplate: Boolean(inheritDepthTemplate),
     options: normalizeVersionOptions(options),
   };
 }
 
-const createDefaultGameState = (teamScope = "washington") => ({
+const createDefaultGameState = (teamScope = "washington", periodMinutes = DEFAULT_PERIOD_MINUTES) => ({
   activeVersionId: FINAL_VERSION_ID,
   versions: [
     createVersionState({
       id: FINAL_VERSION_ID,
       name: "Final",
       depthChart: createDefaultDepthChart(teamScope),
-      lineups: createDefaultQuarterLineups(),
+      lineups: createDefaultQuarterLineups(periodMinutes),
       inheritDepthTemplate: true,
       teamScope,
+      periodMinutes,
     }),
   ],
 });
@@ -297,12 +314,13 @@ function normalizeDepthChart(rawDepth, teamScope = "washington") {
   });
 }
 
-function normalizeLineups(rawLineups) {
-  const fallback = createDefaultQuarterLineups();
+function normalizeLineups(rawLineups, periodMinutes = DEFAULT_PERIOD_MINUTES) {
+  const minuteLabels = buildMinuteLabels(periodMinutes);
+  const fallback = createDefaultQuarterLineups(periodMinutes);
   const result = {};
   QUARTERS.forEach((quarter) => {
     const rows = Array.isArray(rawLineups?.[quarter]) ? rawLineups[quarter] : fallback[quarter];
-    result[quarter] = MINUTES.map((_, minuteIndex) => {
+    result[quarter] = minuteLabels.map((_, minuteIndex) => {
       const row = Array.isArray(rows?.[minuteIndex]) ? rows[minuteIndex] : [];
       return POSITION_COLUMNS.map((_, columnIndex) => normalizeName(row[columnIndex] || ""));
     });
@@ -330,8 +348,8 @@ function hasAnyFilledLineups(lineups) {
   ));
 }
 
-function normalizeGameState(rawState, teamScope = "washington") {
-  if (!rawState || typeof rawState !== "object") return createDefaultGameState(teamScope);
+function normalizeGameState(rawState, teamScope = "washington", periodMinutes = DEFAULT_PERIOD_MINUTES) {
+  if (!rawState || typeof rawState !== "object") return createDefaultGameState(teamScope, periodMinutes);
 
   if (Array.isArray(rawState.versions)) {
     const normalizedVersions = rawState.versions.map((version, index) => createVersionState({
@@ -345,6 +363,7 @@ function normalizeGameState(rawState, teamScope = "washington") {
           : version?.id === FINAL_VERSION_ID,
       options: version?.options,
       teamScope,
+      periodMinutes,
     }));
 
     const finalVersion = normalizedVersions.find((version) => version.id === FINAL_VERSION_ID)
@@ -356,6 +375,7 @@ function normalizeGameState(rawState, teamScope = "washington") {
         inheritDepthTemplate: rawState.inheritDepthTemplate ?? true,
         options: rawState.options,
         teamScope,
+        periodMinutes,
       });
 
     const otherVersions = normalizedVersions.filter((version) => version.id !== FINAL_VERSION_ID);
@@ -386,15 +406,16 @@ function normalizeGameState(rawState, teamScope = "washington") {
             : !hasAnyFilledLineups(rawState.lineups),
         options: rawState.options,
         teamScope,
+        periodMinutes,
       }),
     ],
   };
 }
 
-function getVersionById(gameState, versionId, teamScope = "washington") {
+function getVersionById(gameState, versionId, teamScope = "washington", periodMinutes = DEFAULT_PERIOD_MINUTES) {
   return gameState?.versions?.find((version) => version.id === versionId)
     || gameState?.versions?.[0]
-    || createDefaultGameState(teamScope).versions[0];
+    || createDefaultGameState(teamScope, periodMinutes).versions[0];
 }
 
 function loadLegacyPlayersPayload(teamScope) {
@@ -663,7 +684,7 @@ async function saveRemoteSavedLineups(teamScope, lineups, updatedAt = Date.now()
   );
 }
 
-async function fetchRemoteGameState(gameId, teamScope) {
+async function fetchRemoteGameState(gameId, teamScope, periodMinutes = DEFAULT_PERIOD_MINUTES) {
   if (!supabase || !gameId || !teamScope) return null;
   const { data, error } = await supabase
     .from(ROTATIONS_TABLE)
@@ -676,7 +697,7 @@ async function fetchRemoteGameState(gameId, teamScope) {
   const parsed = parseSharedStateRow(data);
   return {
     updatedAt: Number(parsed.payload?.updatedAt || parsed.updatedAt || 0),
-    state: normalizeGameState(parsed.payload, teamScope),
+    state: normalizeGameState(parsed.payload, teamScope, periodMinutes),
   };
 }
 
@@ -778,14 +799,14 @@ function getExportRowValues(lineups, quarter, minuteIndex) {
   return lineups?.[quarter]?.[minuteIndex] || [];
 }
 
-function getExportPreviousRowValues(lineups, quarter, minuteIndex) {
+function getExportPreviousRowValues(lineups, quarter, minuteIndex, minuteLabels = DEFAULT_MINUTES) {
   if (minuteIndex > 0) return getExportRowValues(lineups, quarter, minuteIndex - 1);
-  if (quarter > 1) return getExportRowValues(lineups, quarter - 1, MINUTES.length - 1);
+  if (quarter > 1) return getExportRowValues(lineups, quarter - 1, minuteLabels.length - 1);
   return null;
 }
 
-function getExportNextRowValues(lineups, quarter, minuteIndex) {
-  if (minuteIndex < MINUTES.length - 1) return getExportRowValues(lineups, quarter, minuteIndex + 1);
+function getExportNextRowValues(lineups, quarter, minuteIndex, minuteLabels = DEFAULT_MINUTES) {
+  if (minuteIndex < minuteLabels.length - 1) return getExportRowValues(lineups, quarter, minuteIndex + 1);
   if (quarter < 4) return getExportRowValues(lineups, quarter + 1, 0);
   return null;
 }
@@ -836,10 +857,10 @@ function getQuarterCellState({ rowValues, previousRowValues, nextRowValues, posi
   };
 }
 
-function getExportQuarterCellClass(lineups, quarter, minuteIndex, positionIndex, hideNamesOnDuplicateRows) {
+function getExportQuarterCellClass(lineups, quarter, minuteIndex, positionIndex, hideNamesOnDuplicateRows, minuteLabels = DEFAULT_MINUTES) {
   const rowValues = getExportRowValues(lineups, quarter, minuteIndex);
-  const previousRowValues = getExportPreviousRowValues(lineups, quarter, minuteIndex);
-  const nextRowValues = getExportNextRowValues(lineups, quarter, minuteIndex);
+  const previousRowValues = getExportPreviousRowValues(lineups, quarter, minuteIndex, minuteLabels);
+  const nextRowValues = getExportNextRowValues(lineups, quarter, minuteIndex, minuteLabels);
   const cellState = getQuarterCellState({
     rowValues,
     previousRowValues,
@@ -857,7 +878,7 @@ function getExportQuarterCellClass(lineups, quarter, minuteIndex, positionIndex,
   return "";
 }
 
-function renderExportQuarterTable(quarter, lineups, hideNamesOnDuplicateRows = false) {
+function renderExportQuarterTable(quarter, lineups, hideNamesOnDuplicateRows = false, minuteLabels = DEFAULT_MINUTES) {
   return `
     <section class="export-section">
       <div class="export-section-title">${quarterLabel(quarter)} Quarter</div>
@@ -873,16 +894,16 @@ function renderExportQuarterTable(quarter, lineups, hideNamesOnDuplicateRows = f
           </tr>
         </thead>
         <tbody>
-          ${MINUTES.map((minute, minuteIndex) => `
+          ${minuteLabels.map((minute, minuteIndex) => `
             <tr>
               <td>${minute}</td>
               ${POSITION_COLUMNS.map((_, columnIndex) => `
-                <td class="export-player-cell ${getExportQuarterCellClass(lineups, quarter, minuteIndex, columnIndex, hideNamesOnDuplicateRows)}">
+                <td class="export-player-cell ${getExportQuarterCellClass(lineups, quarter, minuteIndex, columnIndex, hideNamesOnDuplicateRows, minuteLabels)}">
                   ${escapeHtml(
     shouldHideRowNames(
       hideNamesOnDuplicateRows,
       minuteIndex,
-      getExportPreviousRowValues(lineups, quarter, minuteIndex),
+      getExportPreviousRowValues(lineups, quarter, minuteIndex, minuteLabels),
       getExportRowValues(lineups, quarter, minuteIndex)
     )
       ? ""
@@ -1021,10 +1042,10 @@ function drawPdfCell(page, {
   }
 }
 
-function getExportCellDisplay(lineups, quarter, minuteIndex, positionIndex, hideNamesOnDuplicateRows, pdfColors) {
+function getExportCellDisplay(lineups, quarter, minuteIndex, positionIndex, hideNamesOnDuplicateRows, pdfColors, minuteLabels = DEFAULT_MINUTES) {
   const rowValues = getExportRowValues(lineups, quarter, minuteIndex);
-  const previousRowValues = getExportPreviousRowValues(lineups, quarter, minuteIndex);
-  const nextRowValues = getExportNextRowValues(lineups, quarter, minuteIndex);
+  const previousRowValues = getExportPreviousRowValues(lineups, quarter, minuteIndex, minuteLabels);
+  const nextRowValues = getExportNextRowValues(lineups, quarter, minuteIndex, minuteLabels);
   const cellState = getQuarterCellState({
     rowValues,
     previousRowValues,
@@ -1120,7 +1141,7 @@ function drawPdfDepthChart(page, font, x, topY, width, depthChart, playerFontSiz
   return titleHeight + headerHeight + (rowHeight * DEPTH_ROW_INDICES.length);
 }
 
-function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideNamesOnDuplicateRows, playerFontSize, pdfColors) {
+function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideNamesOnDuplicateRows, playerFontSize, pdfColors, minuteLabels = DEFAULT_MINUTES) {
   const titleHeight = 20;
   const headerHeight = 18;
   const rowHeight = 18;
@@ -1172,7 +1193,7 @@ function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideN
     });
   });
 
-  MINUTES.forEach((minute, minuteIndex) => {
+  minuteLabels.forEach((minute, minuteIndex) => {
     const rowY = headerY - ((minuteIndex + 1) * rowHeight);
     drawPdfCell(page, {
       x,
@@ -1188,7 +1209,7 @@ function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideN
     });
 
     POSITION_COLUMNS.forEach((_, index) => {
-      const display = getExportCellDisplay(lineups, quarter, minuteIndex, index, hideNamesOnDuplicateRows, pdfColors);
+      const display = getExportCellDisplay(lineups, quarter, minuteIndex, index, hideNamesOnDuplicateRows, pdfColors, minuteLabels);
       drawPdfCell(page, {
         x: x + timeColWidth + (index * playerColWidth),
         y: rowY,
@@ -1204,10 +1225,10 @@ function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideN
     });
   });
 
-  return titleHeight + headerHeight + (rowHeight * MINUTES.length);
+  return titleHeight + headerHeight + (rowHeight * minuteLabels.length);
 }
 
-function drawRotationsPdfPage(page, { headerLine, depthChart, lineups, logoImage, font, side, hideNamesOnDuplicateRows, pdfColors }) {
+function drawRotationsPdfPage(page, { headerLine, depthChart, lineups, logoImage, font, side, hideNamesOnDuplicateRows, pdfColors, minuteLabels = DEFAULT_MINUTES }) {
   const pageWidth = page.getWidth();
   const pageHeight = page.getHeight();
   const columnWidth = 4.05 * 72;
@@ -1238,7 +1259,8 @@ function drawRotationsPdfPage(page, { headerLine, depthChart, lineups, logoImage
     lineups,
     hideNamesOnDuplicateRows,
     playerFontSize,
-    pdfColors
+    pdfColors,
+    minuteLabels
   );
   currentTop -= 8;
   currentTop -= drawPdfQuarterTable(
@@ -1251,7 +1273,8 @@ function drawRotationsPdfPage(page, { headerLine, depthChart, lineups, logoImage
     lineups,
     hideNamesOnDuplicateRows,
     playerFontSize,
-    pdfColors
+    pdfColors,
+    minuteLabels
   );
 
   if (logoImage) {
@@ -1272,6 +1295,7 @@ function buildRotationsPdfHtml({
   fontUrl,
   hideNamesOnDuplicateRows = false,
   playerFontSize = PDF_BASE_QUARTER_NAME_FONT_SIZE,
+  minuteLabels = DEFAULT_MINUTES,
 }) {
   const quarterPlayerColWidthPercent = ((100 - ((PDF_QUARTER_TIME_COL_WIDTH / (4.05 * 72)) * 100)) / POSITION_COLUMNS.length);
   const pageMarkup = (quarters, side) => `
@@ -1280,7 +1304,7 @@ function buildRotationsPdfHtml({
       <div class="pdf-column">
         <div class="pdf-sections">
         ${renderExportDepthChart(depthChart)}
-        ${quarters.map((quarter) => renderExportQuarterTable(quarter, lineups, hideNamesOnDuplicateRows)).join("")}
+        ${quarters.map((quarter) => renderExportQuarterTable(quarter, lineups, hideNamesOnDuplicateRows, minuteLabels)).join("")}
         </div>
         <div class="pdf-logo-wrap">
           <img class="pdf-logo" src="${escapeHtml(logoUrl)}" alt="Washington Wizards" />
@@ -1567,6 +1591,9 @@ export default function Rotations() {
   const { data: game, isLoading, error } = useGame(gameId, {
     dateStr: dateParam,
   });
+  const periodMinuteCount = getRotationPeriodMinuteCount(game);
+  const minuteLabels = useMemo(() => buildMinuteLabels(periodMinuteCount), [periodMinuteCount]);
+  const totalPerQuarter = getTotalPerQuarter(minuteLabels);
 
   const monitoredTeam = useMemo(() => getRotationsScopeForGame(game), [game]);
   const monitoredTeamScope = monitoredTeam?.key || null;
@@ -1601,8 +1628,8 @@ export default function Rotations() {
   });
 
   const { data: remoteGameState, isFetched: remoteGameFetched } = useQuery({
-    queryKey: ["rotations-game-remote", gameId, monitoredTeamScope],
-    queryFn: () => fetchRemoteGameState(gameId, monitoredTeamScope),
+    queryKey: ["rotations-game-remote", gameId, monitoredTeamScope, periodMinuteCount],
+    queryFn: () => fetchRemoteGameState(gameId, monitoredTeamScope, periodMinuteCount),
     enabled: Boolean(supabase && gameId && monitoredTeamScope),
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -1617,8 +1644,8 @@ export default function Rotations() {
   });
 
   const activeVersion = useMemo(
-    () => getVersionById(gameState, gameState.activeVersionId, monitoredTeamScope || "washington"),
-    [gameState, monitoredTeamScope]
+    () => getVersionById(gameState, gameState.activeVersionId, monitoredTeamScope || "washington", periodMinuteCount),
+    [gameState, monitoredTeamScope, periodMinuteCount]
   );
   const activeVersionId = activeVersion.id;
   const depthChart = activeVersion.depthChart;
@@ -1630,13 +1657,13 @@ export default function Rotations() {
     const sourceGameId = Number(depthTemplateSourceGameIdRef.current || 0);
     const currentGameNumeric = Number(gameId || 0);
     if (!sourceGameId || !currentGameNumeric || currentGameNumeric <= sourceGameId) return false;
-    return Boolean(getVersionById(state, FINAL_VERSION_ID, monitoredTeamScope || "washington")?.inheritDepthTemplate);
+    return Boolean(getVersionById(state, FINAL_VERSION_ID, monitoredTeamScope || "washington", periodMinuteCount)?.inheritDepthTemplate);
   };
 
   const applyInheritedTemplate = (state) => {
     if (!shouldInheritFutureTemplate(state)) return state;
     const nextDepthChart = normalizeDepthChart(depthTemplate, monitoredTeamScope || "washington");
-    const currentFinalVersion = getVersionById(state, FINAL_VERSION_ID, monitoredTeamScope || "washington");
+    const currentFinalVersion = getVersionById(state, FINAL_VERSION_ID, monitoredTeamScope || "washington", periodMinuteCount);
     if (depthChartStateKey(currentFinalVersion.depthChart) === depthChartStateKey(nextDepthChart)) return state;
     return {
       ...state,
@@ -1856,19 +1883,19 @@ export default function Rotations() {
     if (!depthTemplateHydrated) return;
 
     if (!monitoredTeamScope) return;
-    const defaults = createDefaultGameState(monitoredTeamScope);
+    const defaults = createDefaultGameState(monitoredTeamScope, periodMinuteCount);
     defaults.versions[0].depthChart = normalizeDepthChart(depthTemplate, monitoredTeamScope);
     const localPayload = loadGamePayload(gameId);
     const localUpdatedAt = Number(localPayload?.updatedAt || 0);
     const remoteUpdatedAt = Number(remoteGameState?.updatedAt || 0);
     if (remoteGameState?.state && remoteUpdatedAt >= localUpdatedAt) {
-      const incomingState = applyInheritedTemplate(normalizeGameState(remoteGameState.state, monitoredTeamScope));
+      const incomingState = applyInheritedTemplate(normalizeGameState(remoteGameState.state, monitoredTeamScope, periodMinuteCount));
       setGameState(incomingState);
       gameUpdatedAtRef.current = remoteUpdatedAt;
       gameStateKeyRef.current = gameStateKey(incomingState);
       skipGameSaveRef.current = true;
     } else if (localPayload?.state) {
-      const incomingState = applyInheritedTemplate(normalizeGameState(localPayload.state, monitoredTeamScope));
+      const incomingState = applyInheritedTemplate(normalizeGameState(localPayload.state, monitoredTeamScope, periodMinuteCount));
       setGameState(incomingState);
       gameUpdatedAtRef.current = localUpdatedAt;
       gameStateKeyRef.current = gameStateKey(incomingState);
@@ -2489,7 +2516,7 @@ export default function Rotations() {
       setUndoDepth(lineupHistoryRef.current.length);
       return {
         ...currentVersion,
-        lineups: createDefaultQuarterLineups(),
+        lineups: createDefaultQuarterLineups(periodMinuteCount),
         inheritDepthTemplate: currentVersion.inheritDepthTemplate,
       };
     });
@@ -2500,7 +2527,7 @@ export default function Rotations() {
     updateActiveVersion((currentVersion) => {
       lineupHistoryRef.current = [...lineupHistoryRef.current, currentVersion.lineups].slice(-MAX_LINEUP_HISTORY);
       setUndoDepth(lineupHistoryRef.current.length);
-      const next = createDefaultQuarterLineups();
+      const next = createDefaultQuarterLineups(periodMinuteCount);
       next[1][0] = POSITION_COLUMNS.map((_, columnIndex) => getDepthChartLineupValue(depthChart?.[0]?.[columnIndex] || ""));
       return {
         ...currentVersion,
@@ -2519,7 +2546,7 @@ export default function Rotations() {
         ...currentVersion,
         lineups: {
           ...currentVersion.lineups,
-          [quarter]: createDefaultQuarterLineups()[quarter],
+          [quarter]: createDefaultQuarterLineups(periodMinuteCount)[quarter],
         },
         inheritDepthTemplate: currentVersion.inheritDepthTemplate,
       };
@@ -2567,7 +2594,8 @@ export default function Rotations() {
     const nextVersion = createVersionState({
       name,
       depthChart: mode === "copy" ? depthChart : DEPTH_ROW_INDICES.map(() => POSITION_COLUMNS.map(() => "")),
-      lineups: mode === "copy" ? lineups : createDefaultQuarterLineups(),
+      lineups: mode === "copy" ? lineups : createDefaultQuarterLineups(periodMinuteCount),
+      periodMinutes: periodMinuteCount,
       inheritDepthTemplate: false,
       options: mode === "copy" ? versionDisplayOptions : DEFAULT_VERSION_OPTIONS,
       teamScope: monitoredTeamScope || "washington",
@@ -2635,6 +2663,7 @@ export default function Rotations() {
       side: "left",
       hideNamesOnDuplicateRows: versionDisplayOptions.hideNamesOnDuplicateRows,
       pdfColors,
+      minuteLabels,
     });
     drawRotationsPdfPage(pageTwo, {
       headerLine: exportHeaderLine,
@@ -2645,6 +2674,7 @@ export default function Rotations() {
       side: "right",
       hideNamesOnDuplicateRows: versionDisplayOptions.hideNamesOnDuplicateRows,
       pdfColors,
+      minuteLabels,
     });
 
     const pdfBytes = await pdfDoc.save();
@@ -2789,7 +2819,7 @@ export default function Rotations() {
   const applyRemoteGameState = (payload) => {
     const remoteUpdatedAt = Number(payload?.updatedAt || 0);
     if (!remoteUpdatedAt || remoteUpdatedAt <= gameUpdatedAtRef.current) return;
-    const incomingState = normalizeGameState(payload?.state, monitoredTeamScope || "washington");
+    const incomingState = normalizeGameState(payload?.state, monitoredTeamScope || "washington", periodMinuteCount);
     const incomingKey = gameStateKey(incomingState);
     if (incomingKey === gameStateKeyRef.current) {
       gameUpdatedAtRef.current = remoteUpdatedAt;
@@ -2906,7 +2936,7 @@ export default function Rotations() {
           const parsed = parseSharedStateRow(row);
           applyRemoteGameState({
             updatedAt: Number(parsed.payload?.updatedAt || parsed.updatedAt || 0),
-            state: normalizeGameState(parsed.payload, monitoredTeamScope),
+            state: normalizeGameState(parsed.payload, monitoredTeamScope, periodMinuteCount),
           });
         }
       )
@@ -2921,12 +2951,12 @@ export default function Rotations() {
 
   const getPreviousRowValues = (quarter, minuteIndex) => {
     if (minuteIndex > 0) return getRowValues(quarter, minuteIndex - 1);
-    if (quarter > 1) return getRowValues(quarter - 1, MINUTES.length - 1);
+    if (quarter > 1) return getRowValues(quarter - 1, minuteLabels.length - 1);
     return null;
   };
 
   const getNextRowValues = (quarter, minuteIndex) => {
-    if (minuteIndex < MINUTES.length - 1) return getRowValues(quarter, minuteIndex + 1);
+    if (minuteIndex < minuteLabels.length - 1) return getRowValues(quarter, minuteIndex + 1);
     if (quarter < 4) return getRowValues(quarter + 1, 0);
     return null;
   };
@@ -3334,11 +3364,11 @@ export default function Rotations() {
               <tr>
                 <td>Total</td>
                 <td />
-                <td className={quarterTotals[1] !== TOTAL_PER_QUARTER ? styles.badTotalCell : ""}>{quarterTotals[1]}</td>
-                <td className={quarterTotals[2] !== TOTAL_PER_QUARTER ? styles.badTotalCell : ""}>{quarterTotals[2]}</td>
-                <td className={quarterTotals[3] !== TOTAL_PER_QUARTER ? styles.badTotalCell : ""}>{quarterTotals[3]}</td>
-                <td className={quarterTotals[4] !== TOTAL_PER_QUARTER ? styles.badTotalCell : ""}>{quarterTotals[4]}</td>
-                <td className={allQuarterTotal !== TOTAL_PER_QUARTER * 4 ? styles.badTotalCell : ""}>{allQuarterTotal}</td>
+                <td className={quarterTotals[1] !== totalPerQuarter ? styles.badTotalCell : ""}>{quarterTotals[1]}</td>
+                <td className={quarterTotals[2] !== totalPerQuarter ? styles.badTotalCell : ""}>{quarterTotals[2]}</td>
+                <td className={quarterTotals[3] !== totalPerQuarter ? styles.badTotalCell : ""}>{quarterTotals[3]}</td>
+                <td className={quarterTotals[4] !== totalPerQuarter ? styles.badTotalCell : ""}>{quarterTotals[4]}</td>
+                <td className={allQuarterTotal !== totalPerQuarter * 4 ? styles.badTotalCell : ""}>{allQuarterTotal}</td>
               </tr>
             </tfoot>
           </table>
@@ -3555,7 +3585,7 @@ export default function Rotations() {
                   </tr>
                 </thead>
                 <tbody>
-                  {MINUTES.map((minute, minuteIndex) => {
+                  {minuteLabels.map((minute, minuteIndex) => {
                     const rowValues = lineups[quarter]?.[minuteIndex] || [];
                     const previousRowValues = getPreviousRowValues(quarter, minuteIndex);
                     const nextRowValues = getNextRowValues(quarter, minuteIndex);

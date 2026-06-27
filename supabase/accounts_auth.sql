@@ -220,6 +220,8 @@ as $$
       and (
         n.owner_id = coalesce(target_user, auth.uid())
         or public.is_admin_user(target_user)
+        or 'Halftime' = any(n.tags)
+        or 'Concept' = any(n.tags)
         or exists (
           select 1
           from public.user_note_shares s
@@ -434,8 +436,8 @@ create policy "notes update owner shared admin"
 on public.user_notes
 for update
 to authenticated
-using (public.can_access_note(id))
-with check (public.can_access_note(id));
+using (public.can_manage_note(id))
+with check (public.can_manage_note(id));
 
 drop policy if exists "notes delete owner admin" on public.user_notes;
 create policy "notes delete owner admin"

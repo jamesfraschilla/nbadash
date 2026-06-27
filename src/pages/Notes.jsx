@@ -27,7 +27,7 @@ const filterTags = [
   "Bad",
   "Offense",
   "Defense",
-  "Concept",
+  "Halftime",
   "Misc",
 ];
 const noteTags = filterTags.filter((tag) => tag !== "All");

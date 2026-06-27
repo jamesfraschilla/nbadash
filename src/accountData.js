@@ -17,6 +17,36 @@ function normalizeTextArray(values) {
   );
 }
 
+const PUBLIC_NOTE_TAG = "Halftime";
+const LEGACY_PUBLIC_NOTE_TAG = "Concept";
+
+function normalizeNoteTags(values) {
+  return Array.from(
+    new Set(
+      normalizeTextArray(values).map((tag) => (
+        tag === LEGACY_PUBLIC_NOTE_TAG ? PUBLIC_NOTE_TAG : tag
+      ))
+    )
+  );
+}
+
+function hasPublicNoteTag(tags) {
+  return normalizeNoteTags(tags).includes(PUBLIC_NOTE_TAG);
+}
+
+function normalizeNoteRow(note) {
+  if (!note) return note;
+  return {
+    ...note,
+    tags: normalizeNoteTags(note.tags),
+  };
+}
+
+function resolveNoteSharingScope(tags, requestedScope) {
+  if (hasPublicNoteTag(tags)) return "shared";
+  return requestedScope === "shared" ? "shared" : "private";
+}
+
 function normalizeNoteSourceMeta(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const next = {};
@@ -188,13 +218,13 @@ export async function listNotesForGame(gameId, actorId) {
     .eq("game_id", gameId)
     .order("created_at", { ascending: true });
   if (error) throw error;
-  const notes = data || [];
+  const notes = (data || []).map(normalizeNoteRow);
   const sharedCandidateIds = notes
-    .filter((note) => note.owner_id !== actorId)
+    .filter((note) => note.owner_id !== actorId && !hasPublicNoteTag(note.tags))
     .map((note) => note.id);
 
   if (!sharedCandidateIds.length) {
-    return notes.filter((note) => note.owner_id === actorId);
+    return notes.filter((note) => note.owner_id === actorId || hasPublicNoteTag(note.tags));
   }
 
   const { data: sharedRows, error: sharedError } = await supabase
@@ -205,7 +235,11 @@ export async function listNotesForGame(gameId, actorId) {
   if (sharedError) throw sharedError;
 
   const sharedNoteIds = new Set((sharedRows || []).map((row) => row.note_id));
-  return notes.filter((note) => note.owner_id === actorId || sharedNoteIds.has(note.id));
+  return notes.filter((note) => (
+    note.owner_id === actorId ||
+    hasPublicNoteTag(note.tags) ||
+    sharedNoteIds.has(note.id)
+  ));
 }
 
 export async function listOwnedNotes(actorId) {
@@ -216,13 +250,14 @@ export async function listOwnedNotes(actorId) {
     .eq("owner_id", actorId)
     .order("updated_at", { ascending: false });
   if (error) throw error;
-  return data || [];
+  return (data || []).map(normalizeNoteRow);
 }
 
 export async function createNote(note, actorId) {
   requireSupabase();
   const noteId = String(note.id || (typeof crypto !== "undefined" ? crypto.randomUUID() : `note-${Date.now()}`));
   const createdAtIso = note.createdAtIso || new Date().toISOString();
+  const tags = normalizeNoteTags(note.tags);
   const payload = {
     id: noteId,
     owner_id: actorId,
@@ -232,9 +267,9 @@ export async function createNote(note, actorId) {
     minutes: note.minutes ?? null,
     seconds: note.seconds ?? null,
     text: String(note.text || "").trim(),
-    tags: normalizeTextArray(note.tags),
+    tags,
     source_meta: normalizeNoteSourceMeta(note.sourceMeta),
-    sharing_scope: note.sharingScope === "shared" ? "shared" : "private",
+    sharing_scope: resolveNoteSharingScope(tags, note.sharingScope),
     created_at: createdAtIso,
     updated_at: createdAtIso,
   };
@@ -272,8 +307,8 @@ export async function importLegacyLocalNotes(actorId) {
       minutes: note?.minutes ?? null,
       seconds: note?.seconds ?? null,
       text: String(note?.text || "").trim(),
-      tags: normalizeTextArray(note?.tags),
-      sharing_scope: "private",
+      tags: normalizeNoteTags(note?.tags),
+      sharing_scope: resolveNoteSharingScope(note?.tags, "private"),
       created_at: createdAtIso,
       updated_at: createdAtIso,
     };
@@ -354,14 +389,17 @@ export async function updateNoteRecord(noteId, updates, actorId) {
     created_by: actorId,
   });
 
+  const tags = updates.tags != null ? normalizeNoteTags(updates.tags) : normalizeNoteTags(existing.tags);
   const payload = {
     text: updates.text != null ? String(updates.text || "").trim() : existing.text,
-    tags: updates.tags != null ? normalizeTextArray(updates.tags) : existing.tags,
+    tags,
     period_label: updates.periodLabel !== undefined ? updates.periodLabel : existing.period_label,
     minutes: updates.minutes !== undefined ? updates.minutes : existing.minutes,
     seconds: updates.seconds !== undefined ? updates.seconds : existing.seconds,
     source_meta: updates.sourceMeta !== undefined ? normalizeNoteSourceMeta(updates.sourceMeta) : (existing.source_meta || {}),
-    sharing_scope: updates.sharingScope || existing.sharing_scope,
+    sharing_scope: hasPublicNoteTag(tags)
+      ? "shared"
+      : updates.sharingScope || existing.sharing_scope,
   };
 
   const { error } = await supabase
@@ -370,7 +408,7 @@ export async function updateNoteRecord(noteId, updates, actorId) {
     .eq("id", noteId);
   if (error) throw error;
   await insertAuditLog(actorId, "note", noteId, "updated", payload);
-  return { ...existing, ...payload, id: noteId };
+  return normalizeNoteRow({ ...existing, ...payload, id: noteId });
 }
 
 export async function deleteNoteRecord(noteId, actorId) {

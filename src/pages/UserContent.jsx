@@ -22,7 +22,7 @@ const DEFAULT_NOTE_TAG_OPTIONS = [
   "Bad",
   "Offense",
   "Defense",
-  "Concept",
+  "Halftime",
   "Misc",
 ];
 
