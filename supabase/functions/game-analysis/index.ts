@@ -1388,6 +1388,18 @@ function buildTurnoverText(home: Record<string, any>, away: Record<string, any>)
   return `${leader.tricode} committed fewer turnovers (${leaderValue} to ${trailerValue}).`;
 }
 
+function sanitizeTurnoverLanguage(value: unknown, features: ReturnType<typeof buildFeaturePayload>) {
+  const text = String(value || "").trim();
+  const turnoverText = buildTurnoverText(features.teams.home, features.teams.away);
+  if (!text || !turnoverText) return text;
+
+  const turnoverClause = turnoverText.replace(/\.$/, "");
+  const teamSubject = String.raw`(?:the\s+)?(?:[A-Z]{2,4}|[A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){0,3})`;
+  return text
+    .replace(new RegExp(String.raw`\b${teamSubject}\s+forced\s+fewer\s+turnovers\s*(?:\([^)]*\))?`, "gi"), turnoverClause)
+    .replace(new RegExp(String.raw`\b${teamSubject}\s+won\s+turnovers\s*[-+]?\d*(?:\s*\([^)]*\))?`, "gi"), turnoverClause);
+}
+
 function buildTemplateSections(features: ReturnType<typeof buildFeaturePayload>) {
   return buildInsightSignals(features)
     .sort((a, b) => b.strength - a.strength)
@@ -1529,6 +1541,7 @@ async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayloa
     "Do not overstate player scoring share; if a player scored 10 points for a team that scored 38, do not say he scored all of the team's points.",
     "When citing team edges in categories like paint points or points off turnovers, name the team with the higher value.",
     "For turnovers, lower is better; never say a team won turnovers because it committed more turnovers. Say the lower-turnover team committed fewer turnovers.",
+    "Do not write 'forced fewer turnovers'; forced turnovers are opponent turnovers. When comparing the TO column, say committed fewer turnovers.",
     "Decide what most shaped this selected stretch instead of forcing equal attention to every category.",
     "Vary sentence structure and avoid repeating the same opening pattern from one answer to the next.",
     "If one theme clearly dominates, center the answer on that theme.",
@@ -1583,8 +1596,8 @@ async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayloa
   const parsed = JSON.parse(content);
   return {
     source: "ai",
-    headline: sanitizeAiHeadline(String(parsed?.headline || "").trim(), features),
-    summary: String(parsed?.summary || "").trim(),
+    headline: sanitizeTurnoverLanguage(sanitizeAiHeadline(String(parsed?.headline || "").trim(), features), features),
+    summary: sanitizeTurnoverLanguage(parsed?.summary, features),
     sections: Array.isArray(parsed?.sections)
       ? parsed.sections
         .map((section: unknown) => {
@@ -1592,7 +1605,7 @@ async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayloa
           const title = String((section as Record<string, unknown>).title || "").trim();
           const items = Array.isArray((section as Record<string, unknown>).items)
             ? ((section as Record<string, unknown>).items as unknown[])
-              .map((item) => String(item || "").trim())
+              .map((item) => sanitizeTurnoverLanguage(item, features))
               .filter(Boolean)
               .slice(0, 2)
             : [];
@@ -1603,9 +1616,9 @@ async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayloa
         .slice(0, 3)
       : [],
     uniformDetails: null,
-    swingFactors: Array.isArray(parsed?.swingFactors) ? parsed.swingFactors.map((item: unknown) => String(item || "").trim()).filter(Boolean) : [],
-    lineupNotes: Array.isArray(parsed?.lineupNotes) ? parsed.lineupNotes.map((item: unknown) => String(item || "").trim()).filter(Boolean) : [],
-    statOutliers: Array.isArray(parsed?.statOutliers) ? parsed.statOutliers.map((item: unknown) => String(item || "").trim()).filter(Boolean) : [],
+    swingFactors: Array.isArray(parsed?.swingFactors) ? parsed.swingFactors.map((item: unknown) => sanitizeTurnoverLanguage(item, features)).filter(Boolean) : [],
+    lineupNotes: Array.isArray(parsed?.lineupNotes) ? parsed.lineupNotes.map((item: unknown) => sanitizeTurnoverLanguage(item, features)).filter(Boolean) : [],
+    statOutliers: Array.isArray(parsed?.statOutliers) ? parsed.statOutliers.map((item: unknown) => sanitizeTurnoverLanguage(item, features)).filter(Boolean) : [],
   };
 }
 
