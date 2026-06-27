@@ -1755,6 +1755,8 @@ export default function Game({ variant = "full" }) {
         Math.max(possessions(advancedAwayTotals, advancedHomeTotals), 1) *
         100
     );
+  const netAway = ortgAway - drtgAway;
+  const netHome = ortgHome - drtgHome;
 
   const officialAwayPossessions = teamStats?.away?.possessions;
   const officialHomePossessions = teamStats?.home?.possessions;
@@ -2725,16 +2727,31 @@ export default function Game({ variant = "full" }) {
 
           <div className={styles.centerColumn}>
             {showExtras && (
-              <div className={styles.headerMetricGrid}>
-                <div className={styles.headerMetricValue}>{ortgAway}</div>
-                <div className={styles.headerMetricLabel}>ORTG</div>
-                <div className={styles.headerMetricValue}>{ortgHome}</div>
-                <div className={styles.headerMetricValue}>{formatChancesValue(displayAwayChances)}</div>
-                <div className={styles.headerMetricLabel}>CHANCES</div>
-                <div className={styles.headerMetricValue}>{formatChancesValue(displayHomeChances)}</div>
+              <div className={styles.centerMetrics}>
+                <div className={styles.centerMetricRow}>
+                  <span className={styles.statValue}>{ortgAway}</span>
+                  <span className={styles.statLabel}>ORTG</span>
+                  <span className={styles.statValue}>{ortgHome}</span>
+                </div>
+                <div className={styles.centerMetricDivider} />
+                <div className={styles.centerMetricRow}>
+                  <span className={styles.statValue}>{netAway >= 0 ? "+" : ""}{netAway}</span>
+                  <span className={styles.statLabel}>NET</span>
+                  <span className={styles.statValue}>{netHome >= 0 ? "+" : ""}{netHome}</span>
+                </div>
+                <div className={styles.centerMetricDivider} />
+                <div className={styles.centerMetricRow}>
+                  <span className={styles.statValue}>{formatChancesValue(displayAwayChances)}</span>
+                  <span className={styles.statLabel}>CHANCES</span>
+                  <span className={styles.statValue}>{formatChancesValue(displayHomeChances)}</span>
+                </div>
               </div>
             )}
-            {showExtras && <div className={styles.paceRow}>PACE: {displayPaceValue.toFixed(1)}</div>}
+            {showExtras && (
+              <div className={styles.paceGroup}>
+                <div className={styles.paceRow}>PACE {displayPaceValue.toFixed(1)}</div>
+              </div>
+            )}
             {isAtc && <div className={styles.headerPossessionTable}>{possessionSummaryTable}</div>}
             <div className={`${styles.status} ${isLive ? styles.statusLive : ""}`}>
               {status || game.gameStatusText}
