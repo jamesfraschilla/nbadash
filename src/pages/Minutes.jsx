@@ -77,9 +77,17 @@ function substitutionLookupKey({ period, teamId, clock, personId }) {
   return [
     Number(period) || 0,
     String(teamId || ""),
-    normalizeClock(String(clock || "")),
+    normalizeSubstitutionClock(clock),
     String(personId || ""),
   ].join("|");
+}
+
+function normalizeSubstitutionClock(clock) {
+  const normalized = normalizeClock(String(clock || ""));
+  const [minutes, seconds] = normalized.split(":");
+  if (seconds == null) return normalized;
+  const minuteNumber = Number(minutes);
+  return `${Number.isFinite(minuteNumber) ? minuteNumber : minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
 function buildSubstitutionAnnotationLookup(actions) {
