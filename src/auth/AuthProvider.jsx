@@ -81,8 +81,6 @@ export function AuthProvider({ children }) {
         setRequiresPasswordReset(false);
       }
 
-      setLoading(true);
-
       try {
         setSession(nextSession || null);
         setEmailSentTo("");

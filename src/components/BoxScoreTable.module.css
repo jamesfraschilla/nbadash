@@ -162,6 +162,16 @@
   border-bottom: none;
 }
 
+.emptyRow td {
+  color: var(--muted);
+  background: color-mix(in srgb, var(--panel) 88%, var(--surface) 12%);
+}
+
+.emptyCell {
+  text-align: left;
+  padding: 14px 12px;
+}
+
 .pfBlack {
   color: var(--text);
 }

@@ -26,9 +26,18 @@ function formatRating(value) {
   return value.toFixed(1);
 }
 
+function safeStat(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function formatMadeAttempted(made, attempted) {
+  return `${safeStat(made)}-${safeStat(attempted)}`;
+}
+
 function formatShootingPercent(made, attempted) {
-  const safeMade = Number(made) || 0;
-  const safeAttempted = Number(attempted) || 0;
+  const safeMade = safeStat(made);
+  const safeAttempted = safeStat(attempted);
   if (safeAttempted <= 0) return "0.0%";
   return `${((safeMade / safeAttempted) * 100).toFixed(1)}%`;
 }
@@ -36,20 +45,20 @@ function formatShootingPercent(made, attempted) {
 function playerLine(player) {
   return {
     MIN: formatMinutes(player.minutes),
-    PTS: player.points,
-    REB: player.reboundsTotal,
-    OREB: player.reboundsOffensive,
-    AST: player.assists,
-    STL: player.steals,
-    BLK: player.blocks,
-    TO: player.turnovers,
-    PF: player.foulsPersonal,
-    FG: `${player.fieldGoalsMade}-${player.fieldGoalsAttempted}`,
-    RIM: `${player.rimFieldGoalsMade}-${player.rimFieldGoalsAttempted}`,
-    MID: `${player.midFieldGoalsMade}-${player.midFieldGoalsAttempted}`,
-    "3PT": `${player.threePointersMade}-${player.threePointersAttempted}`,
-    FT: `${player.freeThrowsMade}-${player.freeThrowsAttempted}`,
-    "+/-": player.plusMinusPoints,
+    PTS: safeStat(player.points),
+    REB: safeStat(player.reboundsTotal),
+    OREB: safeStat(player.reboundsOffensive),
+    AST: safeStat(player.assists),
+    STL: safeStat(player.steals),
+    BLK: safeStat(player.blocks),
+    TO: safeStat(player.turnovers),
+    PF: safeStat(player.foulsPersonal),
+    FG: formatMadeAttempted(player.fieldGoalsMade, player.fieldGoalsAttempted),
+    RIM: formatMadeAttempted(player.rimFieldGoalsMade, player.rimFieldGoalsAttempted),
+    MID: formatMadeAttempted(player.midFieldGoalsMade, player.midFieldGoalsAttempted),
+    "3PT": formatMadeAttempted(player.threePointersMade, player.threePointersAttempted),
+    FT: formatMadeAttempted(player.freeThrowsMade, player.freeThrowsAttempted),
+    "+/-": safeStat(player.plusMinusPoints),
     ORTG: formatRating(player.ortg),
     DRTG: formatRating(player.drtg),
   };
@@ -126,6 +135,7 @@ export default function BoxScoreTable({
 }) {
   if (!boxScore) return null;
 
+  const players = Array.isArray(boxScore.players) ? boxScore.players : [];
   const columns = variant === "atc"
     ? [
       "MIN",
@@ -179,7 +189,15 @@ export default function BoxScoreTable({
           </tr>
         </thead>
       <tbody>
-        {boxScore.players.map((player) => {
+        {!players.length && (
+          <tr className={styles.emptyRow}>
+            <td className={styles.playerNumberCol}></td>
+            <td className={styles.emptyCell} colSpan={columns.length + 1}>
+              Roster not available yet.
+            </td>
+          </tr>
+        )}
+        {players.map((player) => {
           const stats = playerLine(player);
           const pageUrl = playerPageUrl(player, teamId);
           const minutesClassName = minuteCapClass(player, minuteCapsByPersonId);
@@ -229,19 +247,19 @@ export default function BoxScoreTable({
                 <td className={styles.playerNameCol}></td>
                 {columns.map((col) => {
                   let value = "";
-                  if (col === "PTS") value = boxScore.totals.points;
-                  if (col === "REB") value = boxScore.totals.reboundsTotal;
-                  if (col === "OREB") value = boxScore.totals.reboundsOffensive;
-                  if (col === "AST") value = boxScore.totals.assists;
-                  if (col === "STL") value = boxScore.totals.steals;
-                  if (col === "BLK") value = boxScore.totals.blocks;
-                  if (col === "TO") value = boxScore.totals.turnovers;
-                  if (col === "PF") value = boxScore.totals.foulsPersonal;
-                  if (col === "FG") value = `${boxScore.totals.fieldGoalsMade}-${boxScore.totals.fieldGoalsAttempted}`;
-                  if (col === "RIM") value = `${boxScore.totals.rimFieldGoalsMade}-${boxScore.totals.rimFieldGoalsAttempted}`;
-                  if (col === "MID") value = `${boxScore.totals.midFieldGoalsMade}-${boxScore.totals.midFieldGoalsAttempted}`;
-                  if (col === "3PT") value = `${boxScore.totals.threePointersMade}-${boxScore.totals.threePointersAttempted}`;
-                  if (col === "FT") value = `${boxScore.totals.freeThrowsMade}-${boxScore.totals.freeThrowsAttempted}`;
+                  if (col === "PTS") value = safeStat(boxScore.totals.points);
+                  if (col === "REB") value = safeStat(boxScore.totals.reboundsTotal);
+                  if (col === "OREB") value = safeStat(boxScore.totals.reboundsOffensive);
+                  if (col === "AST") value = safeStat(boxScore.totals.assists);
+                  if (col === "STL") value = safeStat(boxScore.totals.steals);
+                  if (col === "BLK") value = safeStat(boxScore.totals.blocks);
+                  if (col === "TO") value = safeStat(boxScore.totals.turnovers);
+                  if (col === "PF") value = safeStat(boxScore.totals.foulsPersonal);
+                  if (col === "FG") value = formatMadeAttempted(boxScore.totals.fieldGoalsMade, boxScore.totals.fieldGoalsAttempted);
+                  if (col === "RIM") value = formatMadeAttempted(boxScore.totals.rimFieldGoalsMade, boxScore.totals.rimFieldGoalsAttempted);
+                  if (col === "MID") value = formatMadeAttempted(boxScore.totals.midFieldGoalsMade, boxScore.totals.midFieldGoalsAttempted);
+                  if (col === "3PT") value = formatMadeAttempted(boxScore.totals.threePointersMade, boxScore.totals.threePointersAttempted);
+                  if (col === "FT") value = formatMadeAttempted(boxScore.totals.freeThrowsMade, boxScore.totals.freeThrowsAttempted);
                   if (col === "ORTG") value = formatRating(ratings.ortg);
                   if (col === "DRTG") value = formatRating(ratings.drtg);
                   const atcSeparator = variant === "atc" && col === "PF";

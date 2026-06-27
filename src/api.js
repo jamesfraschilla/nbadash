@@ -1,6 +1,7 @@
 import { gLeagueHeadshotOverrides } from "./gLeagueHeadshotOverrides.js";
 import { NBA_TEAMS } from "./data/nbaTeams.js";
 import { aggregateSegmentStats } from "./segmentStats.js";
+import { shouldUseDirectSummerLeagueGame } from "./summerLeagueGameSource.js";
 import { supabase } from "./supabaseClient.js";
 import { currentSeasonString, formatDateInput, seasonBoundsForSeason } from "./utils.js";
 
@@ -1675,15 +1676,21 @@ export async function fetchGame(gameId, segment = null, options = {}) {
   if (isSummerLeagueGameId(gameId)) {
     const segmentParam = segment ? `?segment=${segment}` : "";
     const directUrl = `${API_BASE}/games/${gameId}${segmentParam}`;
+    let directGame = null;
     try {
-      const directGame = await requestJson(directUrl);
-      if (directGame?.boxScore && directGame?.teamStats && directGame?.playByPlayActions?.length) {
+      directGame = await requestJson(directUrl);
+      if (shouldUseDirectSummerLeagueGame(directGame)) {
         return directGame;
       }
     } catch {
       // Fall back to the Summer League markdown parser when the direct API payload is unavailable.
     }
-    return fetchSummerLeagueGame(gameId, options?.dateStr || null);
+    try {
+      return await fetchSummerLeagueGame(gameId, options?.dateStr || null);
+    } catch (error) {
+      if (directGame) return directGame;
+      throw error;
+    }
   }
   const segmentParam = segment ? `?segment=${segment}` : "";
   const url = `${API_BASE}/games/${gameId}${segmentParam}`;
