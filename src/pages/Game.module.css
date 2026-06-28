@@ -1939,6 +1939,14 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 
   .teamBlock {
     gap: 6px;
+    min-width: 0;
+    width: 100%;
+    align-items: center;
+  }
+
+  .awayTeamBlock,
+  .homeTeamBlock {
+    justify-self: center;
   }
 
   .teamInfoRow,
@@ -1950,7 +1958,13 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   }
 
   .teamValueColumn {
+    order: 1;
     gap: 8px;
+    width: 100%;
+  }
+
+  .teamInfoRow .teamLogo {
+    order: 0;
   }
 
   .teamLogo {
@@ -1977,15 +1991,31 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
     align-items: center;
     gap: 8px;
     margin-top: 0;
+    justify-self: center;
+    width: min(100%, 330px);
   }
 
   .centerMetrics {
     gap: 8px;
+    width: min(100%, 330px);
   }
 
   .centerMetricRow {
-    grid-template-columns: minmax(38px, 1fr) minmax(68px, auto) minmax(38px, 1fr);
-    column-gap: 10px;
+    grid-template-columns: minmax(64px, 1fr) 92px minmax(64px, 1fr);
+    column-gap: 8px;
+    width: 100%;
+  }
+
+  .centerMetricRow .statValue:first-child {
+    text-align: right;
+  }
+
+  .centerMetricRow .statValue:last-child {
+    text-align: left;
+  }
+
+  .centerMetricRow .statLabel {
+    text-align: center;
   }
 
   .teamMetaStack {
