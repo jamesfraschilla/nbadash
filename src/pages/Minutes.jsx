@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { teamLogoUrl } from "../api.js";
+import { getGamePollingInterval, isTrackedPollingGameId } from "../gamePolling.js";
 import { useGame, useMinutes } from "../queries.js";
 import {
   buildSubstitutionAnnotationLookup,
@@ -94,8 +95,24 @@ export default function Minutes() {
   const [params] = useSearchParams();
   const dateParam = params.get("d");
   const [view, setView] = useState("away");
-  const { data, isLoading, error } = useMinutes(gameId);
-  const { data: game, isLoading: isGameLoading } = useGame(gameId, { dateStr: dateParam });
+  const shouldTrackPolling = isTrackedPollingGameId(gameId);
+  const { data: game, isLoading: isGameLoading } = useGame(gameId, {
+    dateStr: dateParam,
+    refetchInterval: (query) => (
+      shouldTrackPolling
+        ? getGamePollingInterval(query.state.data, { isTrackedGame: true })
+        : false
+    ),
+    refetchIntervalInBackground: shouldTrackPolling,
+  });
+  const { data, isLoading, error } = useMinutes(gameId, {
+    refetchInterval: () => (
+      shouldTrackPolling
+        ? getGamePollingInterval(game, { isTrackedGame: true })
+        : false
+    ),
+    refetchIntervalInBackground: shouldTrackPolling,
+  });
   const substitutionLookup = useMemo(
     () => buildSubstitutionAnnotationLookup(game?.playByPlayActions || []),
     [game?.playByPlayActions],

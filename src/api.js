@@ -1756,17 +1756,19 @@ export function playerHeadshotUrls(personId, teamId = null) {
   if (!safePersonId) return [];
 
   const league = inferLeagueFromTeamId(teamId);
+  const gLeagueOverrideUrls = normalizePlayerHeadshotOverrides(gLeagueHeadshotOverrides[safePersonId], APP_BASE_PATH);
+  const gLeagueResolverUrl = SUPABASE_FUNCTIONS_BASE
+    ? `${SUPABASE_FUNCTIONS_BASE}/player-headshot?personId=${encodeURIComponent(safePersonId)}`
+    : null;
   const overrideUrls = [
     ...resolvePlayerHeadshotOverrideUrls(safePersonId, APP_BASE_PATH),
-    ...(league === "gleague" ? normalizePlayerHeadshotOverrides(gLeagueHeadshotOverrides[safePersonId], APP_BASE_PATH) : []),
   ];
 
   const candidates = league === "gleague"
     ? [
       ...overrideUrls,
-      SUPABASE_FUNCTIONS_BASE
-        ? `${SUPABASE_FUNCTIONS_BASE}/player-headshot?personId=${encodeURIComponent(safePersonId)}`
-        : null,
+      ...gLeagueOverrideUrls,
+      gLeagueResolverUrl,
       `https://cdn.nba.com/headshots/nba/latest/1040x760/${safePersonId}.png`,
       `https://cdn.nba.com/headshots/nba/latest/260x190/${safePersonId}.png`,
     ]
@@ -1774,6 +1776,8 @@ export function playerHeadshotUrls(personId, teamId = null) {
       ...overrideUrls,
       `https://cdn.nba.com/headshots/nba/latest/260x190/${safePersonId}.png`,
       `https://cdn.nba.com/headshots/nba/latest/1040x760/${safePersonId}.png`,
+      ...(league === "wnba" ? [] : gLeagueOverrideUrls),
+      ...(league === "wnba" ? [] : [gLeagueResolverUrl]),
     ];
 
   return [...new Set(candidates.filter(Boolean))];

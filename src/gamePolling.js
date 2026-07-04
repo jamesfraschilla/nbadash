@@ -18,6 +18,17 @@ const OTHER_GAME_INTERVALS = {
   pregame: 120_000,
 };
 
+const TRACKED_POLLING_GAME_IDS = new Set([
+  "1322600002",
+]);
+
+export function isTrackedPollingGameId(value) {
+  const gameId = typeof value === "object" && value !== null
+    ? value.gameId
+    : value;
+  return TRACKED_POLLING_GAME_IDS.has(String(gameId || "").trim());
+}
+
 function clockSeconds(clock) {
   const text = String(clock || "").trim();
   if (!text) return null;
@@ -40,7 +51,9 @@ function statusText(game) {
 }
 
 export function getGamePollingInterval(game, options = {}) {
-  const intervals = options.isTrackedGame ? TRACKED_GAME_INTERVALS : OTHER_GAME_INTERVALS;
+  const intervals = options.isTrackedGame || isTrackedPollingGameId(game)
+    ? TRACKED_GAME_INTERVALS
+    : OTHER_GAME_INTERVALS;
   if (!game) return intervals.pregame;
 
   const status = Number(game?.gameStatus || 0);

@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   getGamePollingInterval,
   getGamesListPollingInterval,
+  isTrackedPollingGameId,
 } from "./gamePolling.js";
 
 const game = (overrides = {}) => ({
@@ -31,6 +32,12 @@ test("adaptive polling keeps other games at reduced live frequency", () => {
   assert.equal(getGamePollingInterval(game({ period: 4, gameClock: "PT3M59.00S" }), { isTrackedGame: false }), 30_000);
   assert.equal(getGamePollingInterval(game({ period: 3, gameClock: "PT59.00S" }), { isTrackedGame: false }), 30_000);
   assert.equal(getGamePollingInterval(game({ gameStatus: 1, gameClock: "", gameStatusText: "7:00 PM" }), { isTrackedGame: false }), 120_000);
+});
+
+test("game 1322600002 uses tracked polling intervals", () => {
+  assert.equal(isTrackedPollingGameId("1322600002"), true);
+  assert.equal(getGamePollingInterval(game({ gameId: "1322600002", period: 4, gameClock: "PT3M59.00S" })), 2_000);
+  assert.equal(getGamePollingInterval(game({ gameId: "1322600002", period: 3, gameClock: "PT59.00S" })), 5_000);
 });
 
 test("game lists poll at the fastest active game interval", () => {

@@ -4,6 +4,7 @@ import { createNote } from "../accountData.js";
 import PlayerHeadshot from "../components/PlayerHeadshot.jsx";
 import { nbaEventVideoUrl, teamLogoUrl } from "../api.js";
 import { useAuth } from "../auth/useAuth.js";
+import { getGamePollingInterval, isTrackedPollingGameId } from "../gamePolling.js";
 import { useGame } from "../queries.js";
 import {
   buildNoteFormFromAction,
@@ -70,6 +71,12 @@ export default function PlayByPlay() {
 
   const { data: game, isLoading, error } = useGame(gameId, {
     dateStr: dateParam,
+    refetchInterval: (query) => (
+      isTrackedPollingGameId(gameId)
+        ? getGamePollingInterval(query.state.data, { isTrackedGame: true })
+        : false
+    ),
+    refetchIntervalInBackground: isTrackedPollingGameId(gameId),
   });
 
   const actions = game?.playByPlayActions || [];
