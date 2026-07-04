@@ -1434,7 +1434,7 @@ export async function fetchGamesByDate(dateStr) {
   }
 
   const merged = new Map();
-  [...normalizedBaseGames, ...summerGames].forEach((game) => {
+  [...summerGames, ...normalizedBaseGames].forEach((game) => {
     if (game?.gameId) {
       merged.set(String(game.gameId), game);
     }
