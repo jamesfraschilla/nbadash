@@ -68,6 +68,10 @@ import {
   resolveSharedPregamePlayersPayload,
 } from "../pregamePlayers.js";
 import {
+  buildMatchupRosterPool,
+  normalizeLiveRosterPlayers,
+} from "../rosterPools.js";
+import {
   aggregateSegmentStats,
   computeKills,
   countPossessionsByTeam,
@@ -137,80 +141,6 @@ const SEGMENT_STAT_DEFAULTS = {
   possessionsFor: 0,
   possessionsAgainst: 0,
 };
-
-const normalizeRosterPersonId = (value) => String(value || "").trim();
-const normalizeRosterName = (value) => String(value || "").trim().replace(/\s+/g, " ");
-const buildRosterMatchKey = (value) => normalizeRosterName(value).toUpperCase().replace(/[^A-Z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
-
-const normalizeLiveRosterPlayers = (players, teamId) => (
-  (Array.isArray(players) ? players : [])
-    .map((player) => {
-      const personId = normalizeRosterPersonId(player?.personId);
-      const firstName = normalizeRosterName(player?.firstName || "");
-      const familyName = normalizeRosterName(player?.familyName || "");
-      const fullName = normalizeRosterName(player?.fullName || [firstName, familyName].filter(Boolean).join(" "));
-      if (!personId || !fullName) return null;
-      return {
-        personId,
-        firstName,
-        familyName,
-        fullName,
-        display: fullName,
-        name: fullName,
-        jerseyNum: String(player?.jerseyNum || "").trim(),
-        position: String(player?.position || "").trim(),
-        height: String(player?.height || "").trim(),
-        teamId: String(player?.teamId || teamId || "").trim() || String(teamId || "").trim(),
-      };
-    })
-    .filter(Boolean)
-);
-
-function mergeRosterPools(sharedPlayers, livePlayers) {
-  const next = [];
-  const byPersonId = new Map();
-  const byName = new Map();
-
-  const upsertPlayer = (player, preferExisting = false) => {
-    if (!player) return;
-    const personId = normalizeRosterPersonId(player.personId);
-    const fullName = normalizeRosterName(player.fullName || player.display || player.name || "");
-    const nameKey = buildRosterMatchKey(fullName);
-    const existing =
-      (personId && byPersonId.get(personId)) ||
-      (nameKey && byName.get(nameKey)) ||
-      null;
-
-    if (existing) {
-      if (!preferExisting) {
-        Object.assign(existing, {
-          ...player,
-          cap: existing.cap ?? player.cap,
-          display: existing.display || player.display || player.fullName || player.name || "",
-          name: existing.name || player.name || player.fullName || player.display || "",
-        });
-      }
-      if (personId) byPersonId.set(personId, existing);
-      if (nameKey) byName.set(nameKey, existing);
-      return;
-    }
-
-    const entry = {
-      ...player,
-      personId,
-      fullName: fullName || normalizeRosterName(player.display || player.name || ""),
-      display: normalizeRosterName(player.display || player.fullName || player.name || ""),
-      name: normalizeRosterName(player.name || player.fullName || player.display || ""),
-    };
-    next.push(entry);
-    if (personId) byPersonId.set(personId, entry);
-    if (nameKey) byName.set(nameKey, entry);
-  };
-
-  (sharedPlayers || []).forEach((player) => upsertPlayer(player, true));
-  (livePlayers || []).forEach((player) => upsertPlayer(player, false));
-  return next;
-}
 
 const reviveSnapshotEntry = (entry) => {
   if (!entry?.snapshot) return entry;
@@ -804,6 +734,7 @@ export default function Game({ variant = "full" }) {
     refetchIntervalInBackground: true,
   });
 
+  const isSummerLeagueMatch = isSummerLeagueGame(gameId);
   const awayTeamScope = getPregameTeamScopeForTeam(game?.awayTeam, game);
   const homeTeamScope = getPregameTeamScopeForTeam(game?.homeTeam, game);
   const awayLeague = inferLeagueFromTeamId(game?.awayTeam?.teamId);
@@ -812,7 +743,7 @@ export default function Game({ variant = "full" }) {
   const { data: currentNbaRostersPayload } = useQuery({
     queryKey: ["game-current-nba-rosters"],
     queryFn: fetchCurrentNbaRosters,
-    enabled: awayLeague === "nba" || homeLeague === "nba",
+    enabled: !isSummerLeagueMatch && (awayLeague === "nba" || homeLeague === "nba"),
     staleTime: 6 * 60 * 60 * 1000,
     retry: 1,
   });
@@ -820,7 +751,7 @@ export default function Game({ variant = "full" }) {
   const { data: currentGLeagueRostersPayload } = useQuery({
     queryKey: ["game-current-gleague-rosters"],
     queryFn: fetchCurrentGLeagueRosters,
-    enabled: awayLeague === "gleague" || homeLeague === "gleague",
+    enabled: !isSummerLeagueMatch && (awayLeague === "gleague" || homeLeague === "gleague"),
     staleTime: 6 * 60 * 60 * 1000,
     retry: 1,
   });
@@ -907,32 +838,58 @@ export default function Game({ variant = "full" }) {
     ...(boxScore?.home?.players || []),
   ];
 
-  const getRosterForTeam = (team, teamScope, remoteRoster) => {
+  const getRosterForTeam = (team, teamScope, remoteRoster, gameRosterPlayers) => {
     const teamId = String(team?.teamId || "").trim();
     const league = inferLeagueFromTeamId(teamId);
     const liveRosterTeams = league === "gleague"
       ? currentGLeagueRostersPayload?.teams
       : currentNbaRostersPayload?.teams;
-    const liveRoster = normalizeLiveRosterPlayers(liveRosterTeams?.[teamId]?.players, teamId);
+    const apiRoster = normalizeLiveRosterPlayers(
+      isSummerLeagueMatch ? gameRosterPlayers : liveRosterTeams?.[teamId]?.players,
+      teamId
+    );
 
-    if (!teamScope) {
-      return liveRoster;
+    let linkedSharedRoster = [];
+    if (teamScope) {
+      const localRoster = loadPregamePlayersPayload(teamScope);
+      const sharedRoster = resolveSharedPregamePlayersPayload(localRoster, remoteRoster).players;
+      linkedSharedRoster = linkPregamePlayersToApiPlayers(sharedRoster, apiRoster);
     }
 
-    const localRoster = loadPregamePlayersPayload(teamScope);
-    const sharedRoster = resolveSharedPregamePlayersPayload(localRoster, remoteRoster).players;
-    const linkedSharedRoster = linkPregamePlayersToApiPlayers(sharedRoster, liveRoster);
-    return mergeRosterPools(linkedSharedRoster, liveRoster);
+    return buildMatchupRosterPool({
+      teamId,
+      teamScope,
+      sharedPlayers: linkedSharedRoster,
+      liveRosterTeams,
+      gameRosterPlayers,
+      isSummerLeague: isSummerLeagueMatch,
+    });
   };
 
   const awayRosterPlayers = useMemo(
-    () => getRosterForTeam(game?.awayTeam, awayTeamScope, awayRemoteRoster),
-    [awayRemoteRoster, awayTeamScope, currentGLeagueRostersPayload?.teams, currentNbaRostersPayload?.teams, game?.awayTeam]
+    () => getRosterForTeam(game?.awayTeam, awayTeamScope, awayRemoteRoster, boxScore?.away?.players),
+    [
+      awayRemoteRoster,
+      awayTeamScope,
+      boxScore?.away?.players,
+      currentGLeagueRostersPayload?.teams,
+      currentNbaRostersPayload?.teams,
+      game?.awayTeam,
+      isSummerLeagueMatch,
+    ]
   );
 
   const homeRosterPlayers = useMemo(
-    () => getRosterForTeam(game?.homeTeam, homeTeamScope, homeRemoteRoster),
-    [currentGLeagueRostersPayload?.teams, currentNbaRostersPayload?.teams, game?.homeTeam, homeRemoteRoster, homeTeamScope]
+    () => getRosterForTeam(game?.homeTeam, homeTeamScope, homeRemoteRoster, boxScore?.home?.players),
+    [
+      boxScore?.home?.players,
+      currentGLeagueRostersPayload?.teams,
+      currentNbaRostersPayload?.teams,
+      game?.homeTeam,
+      homeRemoteRoster,
+      homeTeamScope,
+      isSummerLeagueMatch,
+    ]
   );
 
   const awayMinuteCapsByPersonId = useMemo(() => new Map(
@@ -2068,7 +2025,6 @@ export default function Game({ variant = "full" }) {
   const displayPaceValue = isPregame ? 0 : paceValue;
 
   const currentPeriod = game?.period || 1;
-  const isSummerLeagueMatch = isSummerLeagueGame(gameId);
   const foulLimit = 5;
   const foulWarningCount = foulLimit - 1;
   const currentHalf = currentPeriod <= 2 ? 1 : 2;
