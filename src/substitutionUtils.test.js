@@ -116,6 +116,41 @@ test("normalizes substitution clocks for minutes annotations", () => {
   );
 });
 
+test("builds minutes annotations from separate SUB in/out rows", () => {
+  const lookup = buildSubstitutionAnnotationLookup([
+    {
+      period: 1,
+      clock: "PT02M19.00S",
+      teamId: 1710612744,
+      personId: 1642502,
+      playerName: "M. Leons",
+      subType: "out",
+      actionType: "substitution",
+      description: "SUB out: M. Leons",
+    },
+    {
+      period: 1,
+      clock: "PT02M19.00S",
+      teamId: 1710612744,
+      personId: 1642865,
+      playerName: "Y. Lendeborg",
+      subType: "in",
+      actionType: "substitution",
+      description: "SUB in: Y. Lendeborg",
+    },
+  ]);
+
+  assert.equal(
+    getSubstitutionAnnotation(lookup, {
+      period: 1,
+      clock: "2:19",
+      teamId: 1710612744,
+      personId: 1642865,
+    }),
+    "Leons",
+  );
+});
+
 test("keeps suffixes with substitution display last names", () => {
   assert.equal(getSubstitutionLastName("Kelly Oubre Jr."), "Oubre Jr.");
   assert.equal(getSubstitutionLastName("K. Towns"), "Towns");

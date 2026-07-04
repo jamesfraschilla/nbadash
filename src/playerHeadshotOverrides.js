@@ -15,6 +15,11 @@ export const PLAYER_HEADSHOT_REMOTE_RECORD_TYPE = "player_headshots";
 const PLAYER_HEADSHOT_SHARED_TABLE = "rotations_shared_state";
 const PLAYER_HEADSHOT_SHARED_SCOPE_TYPE = "shared_player_headshots";
 const PLAYER_HEADSHOT_SHARED_SCOPE_KEY = "global";
+const PLAYER_HEADSHOT_UPLOAD_FORMATS = {
+  "image/jpeg": { contentType: "image/jpeg", extension: "jpg" },
+  "image/png": { contentType: "image/png", extension: "png" },
+  "image/webp": { contentType: "image/webp", extension: "webp" },
+};
 let inMemoryUploadedPlayerHeadshots = {};
 let playerHeadshotCacheSyncBlocked = false;
 
@@ -35,6 +40,12 @@ function sanitizePersonId(value) {
   return String(value || "").replace(/\D+/g, "").trim();
 }
 
+export function getPlayerHeadshotUploadFormat(value) {
+  const normalized = String(value || "").toLowerCase().split(";")[0].trim();
+  if (normalized === "image/jpg") return PLAYER_HEADSHOT_UPLOAD_FORMATS["image/jpeg"];
+  return PLAYER_HEADSHOT_UPLOAD_FORMATS[normalized] || PLAYER_HEADSHOT_UPLOAD_FORMATS["image/jpeg"];
+}
+
 export function sanitizePlayerHeadshotRecord(record, fallbackPersonId = "") {
   if (!record || typeof record !== "object" || Array.isArray(record)) return null;
   const personId = sanitizePersonId(record.personId || fallbackPersonId);
@@ -43,7 +54,8 @@ export function sanitizePlayerHeadshotRecord(record, fallbackPersonId = "") {
   const path = String(record.path || "").trim();
   const url = String(record.url || "").trim() || buildSupabaseStoragePublicUrl(bucket, path);
   if (!url && !path) return null;
-  return {
+  const contentType = String(record.contentType || "").trim();
+  const sanitizedRecord = {
     personId,
     label: String(record.label || "").trim(),
     originalFileName: String(record.originalFileName || "").trim(),
@@ -52,6 +64,8 @@ export function sanitizePlayerHeadshotRecord(record, fallbackPersonId = "") {
     url,
     updatedAt: String(record.updatedAt || new Date().toISOString()),
   };
+  if (contentType) sanitizedRecord.contentType = getPlayerHeadshotUploadFormat(contentType).contentType;
+  return sanitizedRecord;
 }
 
 export function sanitizePlayerHeadshotState(rawState) {
@@ -169,17 +183,19 @@ export async function uploadPlayerHeadshotAsset({
   label = "",
   originalFileName = "",
   blob,
+  contentType = "",
 }) {
   const safePersonId = sanitizePersonId(personId);
   if (!safePersonId) throw new Error("Missing player ID.");
   if (!blob) throw new Error("Choose an image to upload.");
   if (!supabase) throw new Error("Supabase is not configured.");
 
-  const path = `${safePersonId}/${Date.now()}-headshot.jpg`;
+  const format = getPlayerHeadshotUploadFormat(contentType || blob?.type);
+  const path = `${safePersonId}/${Date.now()}-headshot.${format.extension}`;
   const upload = await supabase.storage
     .from(PLAYER_HEADSHOT_BUCKET)
     .upload(path, blob, {
-      contentType: "image/jpeg",
+      contentType: format.contentType,
       cacheControl: "31536000",
       upsert: false,
     });
@@ -191,6 +207,7 @@ export async function uploadPlayerHeadshotAsset({
     originalFileName: String(originalFileName || "").trim(),
     bucket: PLAYER_HEADSHOT_BUCKET,
     path,
+    contentType: format.contentType,
     url: buildSupabaseStoragePublicUrl(PLAYER_HEADSHOT_BUCKET, path),
     updatedAt: new Date().toISOString(),
   };

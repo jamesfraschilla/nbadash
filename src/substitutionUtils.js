@@ -235,16 +235,10 @@ export function buildSubstitutionAnnotationLookup(actions, options = {}) {
   const lookup = new Map();
   const describeAction = options.describeAction || null;
 
-  (Array.isArray(actions) ? actions : []).forEach((action) => {
-    const pair = parseSubstitutionAction(action, describeAction);
+  const setLookupEntry = (action, outName) => {
     const personId = String(action?.personId || "");
-    if (!pair || pair.kind !== "pair" || !personId) return;
-
-    const subType = String(action?.subType || "").toLowerCase();
-    const isIncomingAction = subType === "in" || (!subType && actionMatchesPlayerName(action, pair.inName));
-    if (!isIncomingAction) return;
-
-    const outgoingLastName = getSubstitutionLastName(pair.outName);
+    if (!personId) return;
+    const outgoingLastName = getSubstitutionLastName(outName);
     if (!outgoingLastName) return;
 
     const keyParts = {
@@ -255,7 +249,47 @@ export function buildSubstitutionAnnotationLookup(actions, options = {}) {
     };
     lookup.set(substitutionLookupKey(keyParts), outgoingLastName);
     lookup.set(substitutionLookupKey({ ...keyParts, teamId: "" }), outgoingLastName);
+  };
+
+  const entries = (Array.isArray(actions) ? actions : [])
+    .map((action, index) => ({
+      action,
+      index,
+      parsed: parseSubstitutionAction(action, describeAction),
+    }))
+    .filter((entry) => entry.parsed);
+
+  entries.forEach(({ action, parsed }) => {
+    if (parsed.kind !== "pair") return;
+
+    const subType = String(action?.subType || "").toLowerCase();
+    const isIncomingAction = subType === "in" || (!subType && actionMatchesPlayerName(action, parsed.inName));
+    if (!isIncomingAction) return;
+    setLookupEntry(action, parsed.outName);
   });
+
+  const singleGroups = new Map();
+  entries
+    .filter((entry) => entry.parsed?.kind === "single")
+    .forEach((entry) => {
+      const key = [
+        Number(entry.action?.period || 0),
+        String(entry.action?.teamId || ""),
+        normalizeSubstitutionClock(entry.action?.clock),
+      ].join("|");
+      if (!singleGroups.has(key)) singleGroups.set(key, []);
+      singleGroups.get(key).push(entry);
+    });
+
+  singleGroups.forEach((group) => {
+    const incomingEntries = group.filter((entry) => entry.parsed.direction === "in");
+    const outgoingEntries = group.filter((entry) => entry.parsed.direction === "out");
+    const pairCount = Math.min(incomingEntries.length, outgoingEntries.length);
+    for (let index = 0; index < pairCount; index += 1) {
+      setLookupEntry(incomingEntries[index].action, outgoingEntries[index].parsed.name);
+    }
+  });
+
   return lookup;
 }
 

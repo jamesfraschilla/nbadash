@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  getPlayerHeadshotUploadFormat,
   playerHeadshotOverrides,
   resolvePlayerHeadshotOverrideUrls,
 } from "./playerHeadshotOverrides.js";
@@ -31,4 +32,23 @@ test("player headshot overrides accept ordered external candidates", () => {
   } finally {
     delete playerHeadshotOverrides["999998"];
   }
+});
+
+test("player headshot upload formats preserve alpha-capable image types", () => {
+  assert.deepEqual(getPlayerHeadshotUploadFormat("image/png"), {
+    contentType: "image/png",
+    extension: "png",
+  });
+  assert.deepEqual(getPlayerHeadshotUploadFormat("image/webp"), {
+    contentType: "image/webp",
+    extension: "webp",
+  });
+  assert.deepEqual(getPlayerHeadshotUploadFormat("image/jpg"), {
+    contentType: "image/jpeg",
+    extension: "jpg",
+  });
+  assert.deepEqual(getPlayerHeadshotUploadFormat("application/octet-stream"), {
+    contentType: "image/jpeg",
+    extension: "jpg",
+  });
 });

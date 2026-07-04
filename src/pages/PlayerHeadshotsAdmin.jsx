@@ -5,6 +5,7 @@ import {
   broadcastPlayerHeadshotChange,
   cacheStoredPlayerHeadshotOverrides,
   deleteUploadedPlayerHeadshotAsset,
+  getPlayerHeadshotUploadFormat,
   loadRemotePlayerHeadshotState,
   readStoredPlayerHeadshotOverrides,
   saveRemotePlayerHeadshotState,
@@ -31,9 +32,22 @@ async function loadImageElement(src) {
   });
 }
 
+function getPreferredUploadFormat(file) {
+  const mimeType = String(file?.type || "").toLowerCase().split(";")[0].trim();
+  if (mimeType === "image/png" || mimeType === "image/webp" || mimeType === "image/jpeg" || mimeType === "image/jpg") {
+    return getPlayerHeadshotUploadFormat(mimeType);
+  }
+
+  const fileName = String(file?.name || "").toLowerCase();
+  if (fileName.endsWith(".png")) return getPlayerHeadshotUploadFormat("image/png");
+  if (fileName.endsWith(".webp")) return getPlayerHeadshotUploadFormat("image/webp");
+  return getPlayerHeadshotUploadFormat("image/jpeg");
+}
+
 async function renderCompressedImageBlob(file, { maxEdge, quality }) {
   const rawDataUrl = await readFileAsDataUrl(file);
   const image = await loadImageElement(rawDataUrl);
+  const requestedFormat = getPreferredUploadFormat(file);
   const sourceWidth = image.naturalWidth || image.width;
   const sourceHeight = image.naturalHeight || image.height;
   const scale = Math.min(1, maxEdge / Math.max(sourceWidth, sourceHeight));
@@ -52,8 +66,12 @@ async function renderCompressedImageBlob(file, { maxEdge, quality }) {
         reject(new Error("Unable to encode image."));
         return;
       }
-      resolve(blob);
-    }, "image/jpeg", quality);
+      const format = getPlayerHeadshotUploadFormat(blob.type || requestedFormat.contentType);
+      resolve({
+        blob,
+        contentType: format.contentType,
+      });
+    }, requestedFormat.contentType, quality);
   });
 }
 
@@ -139,12 +157,13 @@ export default function PlayerHeadshotsAdmin() {
     try {
       setLoading(true);
       setStatus("Uploading...");
-      const blob = await renderCompressedImageBlob(selectedFile, { maxEdge: 1400, quality: 0.9 });
+      const renderedImage = await renderCompressedImageBlob(selectedFile, { maxEdge: 1400, quality: 0.9 });
       uploadedRecord = await uploadPlayerHeadshotAsset({
         personId: selectedPersonId,
         label,
         originalFileName: selectedFile.name,
-        blob,
+        blob: renderedImage.blob,
+        contentType: renderedImage.contentType,
       });
       await persistRecords({
         ...records,
