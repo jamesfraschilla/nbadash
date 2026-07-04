@@ -1,4 +1,3 @@
-import { getSavedToolRecordRemote, saveToolRecordRemote } from "./toolVault.js";
 import { STATIC_REFEREE_HEADSHOT_PATHS } from "./refereeHeadshotStaticPaths.js";
 import { supabase } from "./supabaseClient.js";
 
@@ -339,6 +338,7 @@ export async function loadRemoteRefereeHeadshotState(userId) {
       .eq("scope_type", REFEREE_HEADSHOT_SHARED_SCOPE_TYPE)
       .eq("scope_key", REFEREE_HEADSHOT_SHARED_SCOPE_KEY)
       .maybeSingle();
+    if (error) throw error;
     if (!error && data?.payload && typeof data.payload === "object") {
       return {
         overrides: {
@@ -350,15 +350,7 @@ export async function loadRemoteRefereeHeadshotState(userId) {
     }
   }
   if (!userId) return null;
-  const record = await getSavedToolRecordRemote(userId, REFEREE_HEADSHOT_REMOTE_RECORD_ID);
-  if (!record?.payload || typeof record.payload !== "object") return null;
-  return {
-    overrides: {
-      ...DEFAULT_REFEREE_HEADSHOT_OVERRIDES,
-      ...sanitizeRefereeHeadshotOverrides(record.payload.overrides),
-    },
-    preferences: sanitizeRefereeHeadshotPreferences(record.payload.preferences),
-  };
+  return null;
 }
 
 export async function saveRemoteRefereeHeadshotState(userId, { overrides, preferences }) {
@@ -376,15 +368,10 @@ export async function saveRemoteRefereeHeadshotState(userId, { overrides, prefer
       { onConflict: "scope_type,scope_key" }
     );
     if (error) throw error;
+    return sanitizedPayload;
   }
   if (!userId) return null;
-  return saveToolRecordRemote(userId, {
-    id: REFEREE_HEADSHOT_REMOTE_RECORD_ID,
-    type: REFEREE_HEADSHOT_REMOTE_RECORD_TYPE,
-    title: "Referee Headshots",
-    payload: sanitizedPayload,
-    updatedAt: new Date().toISOString(),
-  });
+  return null;
 }
 
 export async function syncRemoteRefereeHeadshotState(userId) {

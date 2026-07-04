@@ -1,5 +1,4 @@
 import { supabase } from "./supabaseClient.js";
-import { getSavedToolRecordRemote, saveToolRecordRemote } from "./toolVault.js";
 
 // Manual player headshot overrides keyed by NBA personId.
 // For source-controlled images, add files under public/player-headshots/
@@ -129,14 +128,13 @@ export async function loadRemotePlayerHeadshotState(userId) {
       .eq("scope_type", PLAYER_HEADSHOT_SHARED_SCOPE_TYPE)
       .eq("scope_key", PLAYER_HEADSHOT_SHARED_SCOPE_KEY)
       .maybeSingle();
+    if (error) throw error;
     if (!error && data?.payload && typeof data.payload === "object") {
       return sanitizePlayerHeadshotState(data.payload);
     }
   }
   if (!userId) return null;
-  const record = await getSavedToolRecordRemote(userId, PLAYER_HEADSHOT_REMOTE_RECORD_ID);
-  if (!record?.payload || typeof record.payload !== "object") return null;
-  return sanitizePlayerHeadshotState(record.payload);
+  return null;
 }
 
 export async function saveRemotePlayerHeadshotState(userId, records) {
@@ -152,15 +150,10 @@ export async function saveRemotePlayerHeadshotState(userId, records) {
       { onConflict: "scope_type,scope_key" }
     );
     if (error) throw error;
+    return payload;
   }
   if (!userId) return null;
-  return saveToolRecordRemote(userId, {
-    id: PLAYER_HEADSHOT_REMOTE_RECORD_ID,
-    type: PLAYER_HEADSHOT_REMOTE_RECORD_TYPE,
-    title: "Player Headshots",
-    payload,
-    updatedAt: new Date().toISOString(),
-  });
+  return null;
 }
 
 export async function syncRemotePlayerHeadshotState(userId) {
