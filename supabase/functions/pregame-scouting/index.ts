@@ -143,9 +143,17 @@ function normalizeClock(clock: unknown) {
 
 function parseClockToSeconds(clock: unknown) {
   const normalized = normalizeClock(clock);
-  const match = /^(\d{1,2}):(\d{2})$/.exec(normalized);
+  const match = /^(\d{1,2}):(\d{2}(?:\.\d+)?)$/.exec(normalized);
   if (!match) return 0;
   return (safeNumber(match[1], 0) * 60) + safeNumber(match[2], 0);
+}
+
+function isSummerLeagueGameId(gameId: unknown) {
+  return /^1(?:3|4|5|6)\d{8}$/.test(String(gameId || "").trim());
+}
+
+function periodLengthSeconds(period: number, regulationMinutes = 12) {
+  return period > 4 ? 5 * 60 : regulationMinutes * 60;
 }
 
 function parseIsoMinutesToSeconds(value: unknown) {
@@ -463,7 +471,10 @@ function addLineupAggregation(
 ) {
   const perspective = selectTeamPerspective(bundle.game, teamId);
   const periods = Array.isArray(bundle.minutesData?.periods) ? bundle.minutesData?.periods as Record<string, unknown>[] : [];
+  const regulationMinutes = isSummerLeagueGameId(bundle.gameId) ? 10 : 12;
   periods.forEach((period) => {
+    const periodNumber = safeNumber(period?.period, 0);
+    const periodSeconds = periodLengthSeconds(periodNumber, regulationMinutes);
     const stints = Array.isArray(period?.stints) ? period.stints as Record<string, unknown>[] : [];
     stints.forEach((stint) => {
       const lineup = perspective.side === "home"
@@ -477,7 +488,8 @@ function addLineupAggregation(
       if (!label) return;
       const durationSeconds = Math.max(
         0,
-        parseClockToSeconds(stint.startClock) - parseClockToSeconds(stint.endClock),
+        Math.min(parseClockToSeconds(stint.startClock), periodSeconds)
+          - Math.min(parseClockToSeconds(stint.endClock), periodSeconds),
       );
       const plusMinus = perspective.side === "home"
         ? safeNumber(stint.plusMinus, 0)

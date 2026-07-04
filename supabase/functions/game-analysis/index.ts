@@ -29,10 +29,19 @@ function isWnbaTeamId(teamId: unknown) {
   return numericTeamId >= 1611661300 && numericTeamId < 1611661400;
 }
 
+function isSummerLeagueGameId(gameId: unknown) {
+  return /^1(?:3|4|5|6)\d{8}$/.test(String(gameId || "").trim());
+}
+
 function inferRegulationMinutes(game: Record<string, unknown> | null | undefined, fallbackGameId = "") {
   const homeTeam = (game?.homeTeam || {}) as Record<string, unknown>;
   const awayTeam = (game?.awayTeam || {}) as Record<string, unknown>;
-  if (isWnbaTeamId(homeTeam.teamId) || isWnbaTeamId(awayTeam.teamId) || String(fallbackGameId || "").startsWith("10")) {
+  if (
+    isWnbaTeamId(homeTeam.teamId)
+    || isWnbaTeamId(awayTeam.teamId)
+    || String(fallbackGameId || "").startsWith("10")
+    || isSummerLeagueGameId(game?.gameId || fallbackGameId)
+  ) {
     return 10;
   }
   return 12;
@@ -65,8 +74,9 @@ function pointToElapsedSeconds(period: number, clock: unknown, regulationMinutes
   for (let current = 1; current < period; current += 1) {
     elapsed += periodLengthSeconds(current, regulationMinutes);
   }
-  const remaining = parseClockToSeconds(clock);
-  return elapsed + Math.max(0, periodLengthSeconds(period, regulationMinutes) - remaining);
+  const periodLength = periodLengthSeconds(period, regulationMinutes);
+  const remaining = Math.min(parseClockToSeconds(clock), periodLength);
+  return elapsed + Math.max(0, periodLength - remaining);
 }
 
 function periodLabel(period: number) {

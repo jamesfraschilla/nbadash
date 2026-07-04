@@ -1,7 +1,11 @@
 import { gLeagueHeadshotOverrides } from "./gLeagueHeadshotOverrides.js";
 import { NBA_TEAMS } from "./data/nbaTeams.js";
 import { aggregateSegmentStats } from "./segmentStats.js";
-import { shouldUseDirectSummerLeagueGame } from "./summerLeagueGameSource.js";
+import {
+  isSummerLeagueGameId,
+  normalizeSummerLeagueMinutesData,
+  shouldUseDirectSummerLeagueGame,
+} from "./summerLeagueGameSource.js";
 import { supabase } from "./supabaseClient.js";
 import { currentSeasonString, formatDateInput, seasonBoundsForSeason } from "./utils.js";
 
@@ -133,12 +137,16 @@ function isJulyDate(dateStr) {
   return parts?.month === 7;
 }
 
-function isSummerLeagueGameId(gameId) {
-  return /^1(?:3|4|5|6)\d{8}$/.test(String(gameId || "").trim());
-}
-
 export function isSummerLeagueGame(gameId) {
   return isSummerLeagueGameId(gameId);
+}
+
+function normalizeSummerLeagueGameMetadata(game) {
+  if (!isSummerLeagueGameId(game?.gameId)) return game;
+  return {
+    ...game,
+    seasonType: "Summer League",
+  };
 }
 
 function safeNumber(value, fallback = 0) {
@@ -1419,13 +1427,14 @@ export async function fetchGamesByDate(dateStr) {
     isJulyDate(dateStr) ? fetchSummerLeagueGamesByDate(dateStr).catch(() => []) : Promise.resolve([]),
   ]);
   const filteredBaseGames = (Array.isArray(baseGames) ? baseGames : []).filter(isNbaDashboardGame);
+  const normalizedBaseGames = filteredBaseGames.map(normalizeSummerLeagueGameMetadata);
 
   if (!summerGames.length) {
-    return filteredBaseGames;
+    return normalizedBaseGames;
   }
 
   const merged = new Map();
-  [...filteredBaseGames, ...summerGames].forEach((game) => {
+  [...normalizedBaseGames, ...summerGames].forEach((game) => {
     if (game?.gameId) {
       merged.set(String(game.gameId), game);
     }
@@ -1680,7 +1689,7 @@ export async function fetchGame(gameId, segment = null, options = {}) {
     try {
       directGame = await requestJson(directUrl);
       if (shouldUseDirectSummerLeagueGame(directGame)) {
-        return directGame;
+        return normalizeSummerLeagueGameMetadata(directGame);
       }
     } catch {
       // Fall back to the Summer League markdown parser when the direct API payload is unavailable.
@@ -1688,7 +1697,7 @@ export async function fetchGame(gameId, segment = null, options = {}) {
     try {
       return await fetchSummerLeagueGame(gameId, options?.dateStr || null);
     } catch (error) {
-      if (directGame) return directGame;
+      if (directGame) return normalizeSummerLeagueGameMetadata(directGame);
       throw error;
     }
   }
@@ -1700,7 +1709,8 @@ export async function fetchGame(gameId, segment = null, options = {}) {
 export async function fetchMinutes(gameId, options = {}) {
   const url = `${API_BASE}/games/${gameId}/minutes`;
   try {
-    return await requestJson(url);
+    const minutesData = await requestJson(url);
+    return normalizeSummerLeagueMinutesData(gameId, minutesData);
   } catch (error) {
     if (options.optional && error?.status === 404) {
       return null;

@@ -1,4 +1,5 @@
 import { normalizeClock } from "./utils.js";
+import { isSummerLeagueGameId } from "./summerLeagueGameSource.js";
 
 function safeNumber(value, fallback = 0) {
   const numeric = Number(value);
@@ -13,21 +14,25 @@ export function analysisPeriodLabel(period) {
   return overtimeNumber === 1 ? "OT" : `${overtimeNumber}OT`;
 }
 
-export function analysisPeriodLengthMinutes(period) {
-  return safeNumber(period, 0) > 4 ? 5 : 12;
+function analysisRegulationMinutes(game = null) {
+  return isSummerLeagueGameId(game?.gameId) ? 10 : 12;
 }
 
-export function analysisPeriodLengthSeconds(period) {
-  return analysisPeriodLengthMinutes(period) * 60;
+export function analysisPeriodLengthMinutes(period, game = null) {
+  return safeNumber(period, 0) > 4 ? 5 : analysisRegulationMinutes(game);
 }
 
-function normalizeBoundaryPoint(point, boundary = "instant") {
-  const normalized = normalizeAnalysisPoint(point);
+export function analysisPeriodLengthSeconds(period, game = null) {
+  return analysisPeriodLengthMinutes(period, game) * 60;
+}
+
+function normalizeBoundaryPoint(point, game = null, boundary = "instant") {
+  const normalized = normalizeAnalysisPoint(point, game);
   if (boundary !== "start") return normalized;
   if (normalized.minutes !== 0 || normalized.seconds !== 0) return normalized;
   return {
     period: normalized.period + 1,
-    minutes: analysisPeriodLengthMinutes(normalized.period + 1),
+    minutes: analysisPeriodLengthMinutes(normalized.period + 1, game),
     seconds: 0,
   };
 }
@@ -71,14 +76,14 @@ export function buildAnalysisSegmentOptions(game, isLive) {
   ];
 }
 
-export function buildAnalysisMinuteOptions(period) {
-  const maxMinutes = analysisPeriodLengthMinutes(period);
+export function buildAnalysisMinuteOptions(period, game = null) {
+  const maxMinutes = analysisPeriodLengthMinutes(period, game);
   return Array.from({ length: maxMinutes + 1 }, (_, index) => String(maxMinutes - index));
 }
 
-export function buildAnalysisSecondOptions(period, minute) {
+export function buildAnalysisSecondOptions(period, minute, game = null) {
   const numericMinute = safeNumber(minute, 0);
-  if (numericMinute === analysisPeriodLengthMinutes(period)) {
+  if (numericMinute === analysisPeriodLengthMinutes(period, game)) {
     return ["00"];
   }
   return Array.from({ length: 60 }, (_, index) => String(index).padStart(2, "0"));
@@ -92,12 +97,12 @@ export function buildAnalysisPoint(period, minutes, seconds) {
   };
 }
 
-export function normalizeAnalysisPoint(point) {
+export function normalizeAnalysisPoint(point, game = null) {
   const period = Math.max(1, safeNumber(point?.period, 1));
-  const maxMinutes = analysisPeriodLengthMinutes(period);
+  const maxMinutes = analysisPeriodLengthMinutes(period, game);
   let minutes = safeNumber(point?.minutes, maxMinutes);
   minutes = Math.min(Math.max(minutes, 0), maxMinutes);
-  const secondOptions = buildAnalysisSecondOptions(period, minutes);
+  const secondOptions = buildAnalysisSecondOptions(period, minutes, game);
   let seconds = String(point?.seconds ?? "00").padStart(2, "0");
   if (!secondOptions.includes(seconds)) {
     seconds = secondOptions[0];
@@ -110,18 +115,18 @@ export function normalizeAnalysisPoint(point) {
 }
 
 export function formatAnalysisPoint(point, options = {}) {
-  const normalized = normalizeBoundaryPoint(point, options.boundary);
+  const normalized = normalizeBoundaryPoint(point, options.game, options.boundary);
   return `${analysisPeriodLabel(normalized.period)} ${normalized.minutes}:${String(normalized.seconds).padStart(2, "0")}`;
 }
 
-export function analysisPointToElapsedSeconds(point) {
-  const normalized = normalizeAnalysisPoint(point);
+export function analysisPointToElapsedSeconds(point, game = null) {
+  const normalized = normalizeAnalysisPoint(point, game);
   let elapsed = 0;
   for (let period = 1; period < normalized.period; period += 1) {
-    elapsed += analysisPeriodLengthSeconds(period);
+    elapsed += analysisPeriodLengthSeconds(period, game);
   }
   const remaining = (normalized.minutes * 60) + normalized.seconds;
-  return elapsed + Math.max(0, analysisPeriodLengthSeconds(normalized.period) - remaining);
+  return elapsed + Math.max(0, analysisPeriodLengthSeconds(normalized.period, game) - remaining);
 }
 
 export function buildCurrentAnalysisPoint(game, isLive) {
@@ -132,7 +137,7 @@ export function buildCurrentAnalysisPoint(game, isLive) {
       period: Number(game.period) || 1,
       minutes: safeNumber(minutesRaw, 0),
       seconds: safeNumber(secondsRaw, 0),
-    });
+    }, game);
   }
 
   const finalPeriod = Math.max(1, safeNumber(game?.period, 4));
@@ -140,7 +145,7 @@ export function buildCurrentAnalysisPoint(game, isLive) {
     period: finalPeriod,
     minutes: 0,
     seconds: 0,
-  });
+  }, game);
 }
 
 function isAnalysisAnchorAction(action, livePeriod) {
@@ -155,7 +160,7 @@ function isAnalysisAnchorAction(action, livePeriod) {
 function buildLiveDefaultMinPoint(game) {
   const livePeriod = safeNumber(game?.period, 0);
   const currentPoint = buildCurrentAnalysisPoint(game, true);
-  const currentElapsed = analysisPointToElapsedSeconds(currentPoint);
+  const currentElapsed = analysisPointToElapsedSeconds(currentPoint, game);
   const actions = Array.isArray(game?.playByPlayActions) ? game.playByPlayActions : [];
   const anchor = [...actions]
     .filter((action) => isAnalysisAnchorAction(action, livePeriod))
@@ -164,13 +169,13 @@ function buildLiveDefaultMinPoint(game) {
       const [minutesRaw, secondsRaw] = normalizedClock.split(":");
       const point = normalizeAnalysisPoint({
         period: safeNumber(action.period, 1),
-        minutes: safeNumber(minutesRaw, analysisPeriodLengthMinutes(safeNumber(action.period, 1))),
+        minutes: safeNumber(minutesRaw, analysisPeriodLengthMinutes(safeNumber(action.period, 1), game)),
         seconds: safeNumber(secondsRaw, 0),
-      });
+      }, game);
       return {
         action,
         point,
-        elapsed: analysisPointToElapsedSeconds(point),
+        elapsed: analysisPointToElapsedSeconds(point, game),
       };
     })
     .filter(({ elapsed }) => elapsed < currentElapsed)
@@ -191,14 +196,14 @@ export function buildInitialAnalysisForm(game, isLive) {
   const minPoint = isLive
     ? (buildLiveDefaultMinPoint(game) || normalizeAnalysisPoint({
       period: 1,
-      minutes: analysisPeriodLengthMinutes(1),
+      minutes: analysisPeriodLengthMinutes(1, game),
       seconds: 0,
-    }))
+    }, game))
     : normalizeAnalysisPoint({
       period: 1,
-      minutes: analysisPeriodLengthMinutes(1),
+      minutes: analysisPeriodLengthMinutes(1, game),
       seconds: 0,
-    });
+    }, game);
   return {
     segmentShortcut: "custom",
     minPeriod: String(minPoint.period),
@@ -224,13 +229,13 @@ export function applyAnalysisSegmentShortcut(shortcut, game, isLive) {
     period: preset.minPeriod,
     minutes: preset.minMinutes,
     seconds: preset.minSeconds,
-  });
+  }, game);
   const presetMaxPoint = normalizeAnalysisPoint({
     period: preset.maxPeriod,
     minutes: preset.maxMinutes,
     seconds: preset.maxSeconds,
-  });
-  const clampedMaxPoint = isLive && analysisPointToElapsedSeconds(presetMaxPoint) > analysisPointToElapsedSeconds(maxAllowedPoint)
+  }, game);
+  const clampedMaxPoint = isLive && analysisPointToElapsedSeconds(presetMaxPoint, game) > analysisPointToElapsedSeconds(maxAllowedPoint, game)
     ? maxAllowedPoint
     : presetMaxPoint;
 
@@ -251,12 +256,12 @@ export function normalizeAnalysisForm(form, game, isLive) {
     period: form?.minPeriod,
     minutes: form?.minMinutes,
     seconds: form?.minSeconds,
-  });
+  }, game);
   const selectedMaxPoint = normalizeAnalysisPoint({
     period: form?.maxPeriod,
     minutes: form?.maxMinutes,
     seconds: form?.maxSeconds,
-  });
+  }, game);
 
   return {
     minPoint,
@@ -267,13 +272,13 @@ export function normalizeAnalysisForm(form, game, isLive) {
 
 export function validateAnalysisForm(form, game, isLive) {
   const { minPoint, maxPoint, maxAllowedPoint } = normalizeAnalysisForm(form, game, isLive);
-  const minElapsed = analysisPointToElapsedSeconds(minPoint);
-  const maxElapsed = analysisPointToElapsedSeconds(maxPoint);
-  const maxAllowedElapsed = analysisPointToElapsedSeconds(maxAllowedPoint);
+  const minElapsed = analysisPointToElapsedSeconds(minPoint, game);
+  const maxElapsed = analysisPointToElapsedSeconds(maxPoint, game);
+  const maxAllowedElapsed = analysisPointToElapsedSeconds(maxAllowedPoint, game);
 
   if (maxElapsed > maxAllowedElapsed) {
     return {
-      error: `Max time cannot be later than ${formatAnalysisPoint(maxAllowedPoint)}.`,
+      error: `Max time cannot be later than ${formatAnalysisPoint(maxAllowedPoint, { game })}.`,
     };
   }
 
@@ -287,6 +292,6 @@ export function validateAnalysisForm(form, game, isLive) {
     error: "",
     minPoint,
     maxPoint,
-    rangeLabel: `${formatAnalysisPoint(minPoint, { boundary: "start" })} to ${formatAnalysisPoint(maxPoint, { boundary: "end" })}`,
+    rangeLabel: `${formatAnalysisPoint(minPoint, { game, boundary: "start" })} to ${formatAnalysisPoint(maxPoint, { game, boundary: "end" })}`,
   };
 }

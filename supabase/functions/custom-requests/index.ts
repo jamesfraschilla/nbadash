@@ -653,8 +653,16 @@ function parseIsoClock(clock: unknown) {
   return (Number(match[1] || 0) * 60) + Number(match[2] || 0);
 }
 
-function periodLengthSeconds(period: number) {
-  return period > 4 ? 5 * 60 : 12 * 60;
+function isSummerLeagueGameId(gameId: unknown) {
+  return /^1(?:3|4|5|6)\d{8}$/.test(String(gameId || "").trim());
+}
+
+function inferRegulationMinutes(game: Record<string, unknown> | null | undefined) {
+  return isSummerLeagueGameId(game?.gameId) ? 10 : 12;
+}
+
+function periodLengthSeconds(period: number, regulationMinutes = 12) {
+  return period > 4 ? 5 * 60 : regulationMinutes * 60;
 }
 
 function formatDateInput(date: Date) {
@@ -1654,6 +1662,7 @@ function buildPlayerPeriodMetricRows(game: AnyRecord, team: (typeof NBA_TEAMS)[n
     tricode: String(perspective.opponent?.teamTricode || ""),
     fullName: `${String(perspective.opponent?.teamCity || "").trim()} ${String(perspective.opponent?.teamName || "").trim()}`.trim(),
   };
+  const regulationMinutes = inferRegulationMinutes(game);
 
   const orderedActions = [...actions].sort((a, b) => {
     const aOrder = safeNumber(a.orderNumber ?? a.actionNumber, 0);
@@ -1697,7 +1706,11 @@ function buildPlayerPeriodMetricRows(game: AnyRecord, team: (typeof NBA_TEAMS)[n
       const playersForTeam = Array.isArray(isHome ? stint.playersHome : stint.playersAway)
         ? (isHome ? stint.playersHome : stint.playersAway) as Array<Record<string, unknown>>
         : [];
-      const durationMinutes = Math.max(0, parseClockText(stint.startClock) - parseClockText(stint.endClock)) / 60;
+      const periodSeconds = periodLengthSeconds(period, regulationMinutes);
+      const durationMinutes = Math.max(
+        0,
+        Math.min(parseClockText(stint.startClock), periodSeconds) - Math.min(parseClockText(stint.endClock), periodSeconds),
+      ) / 60;
       if (!durationMinutes) return;
       playersForTeam.forEach((player) => {
         const playerId = String(player.personId || "").trim();
@@ -3690,6 +3703,7 @@ function buildTeamOnOffRows(
   const isHome = String(game?.homeTeam?.teamId || "") === team.teamId;
   const actions = Array.isArray(game?.playByPlayActions) ? game.playByPlayActions as Array<Record<string, unknown>> : [];
   const periods = Array.isArray(minutesData?.periods) ? minutesData.periods as Array<Record<string, unknown>> : [];
+  const regulationMinutes = inferRegulationMinutes(game);
 
   const buckets: Record<string, { pointsFor: number; pointsAgainst: number; possessionsFor: number; possessionsAgainst: number }> = {
     on: { pointsFor: 0, pointsAgainst: 0, possessionsFor: 0, possessionsAgainst: 0 },
@@ -3708,8 +3722,8 @@ function buildTeamOnOffRows(
       const lineupIds = new Set(players.map((player) => String(player.personId || "")));
       const on = targetPlayerIds.every((playerId) => lineupIds.has(playerId));
       return {
-        startSec: Math.min(parseClockText(stint.startClock), periodLengthSeconds(period)),
-        endSec: Math.min(parseClockText(stint.endClock), periodLengthSeconds(period)),
+        startSec: Math.min(parseClockText(stint.startClock), periodLengthSeconds(period, regulationMinutes)),
+        endSec: Math.min(parseClockText(stint.endClock), periodLengthSeconds(period, regulationMinutes)),
         bucket: on ? "on" : "off",
       };
     });

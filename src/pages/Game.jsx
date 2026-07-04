@@ -1232,11 +1232,11 @@ export default function Game({ variant = "full" }) {
         [`${prefix}${field}`]: value,
       };
       const period = Number(next[`${prefix}Period`]) || 1;
-      const minuteOptions = buildAnalysisMinuteOptions(period);
+      const minuteOptions = buildAnalysisMinuteOptions(period, game);
       if (!minuteOptions.includes(String(next[`${prefix}Minutes`]))) {
         next[`${prefix}Minutes`] = minuteOptions[0];
       }
-      const secondOptions = buildAnalysisSecondOptions(period, next[`${prefix}Minutes`]);
+      const secondOptions = buildAnalysisSecondOptions(period, next[`${prefix}Minutes`], game);
       const normalizedSeconds = String(next[`${prefix}Seconds`] ?? "00").padStart(2, "0");
       if (!secondOptions.includes(normalizedSeconds)) {
         next[`${prefix}Seconds`] = secondOptions[0];
@@ -1332,10 +1332,10 @@ export default function Game({ variant = "full" }) {
   const analysisValidation = validateAnalysisForm(analysisForm, game, isLive);
   const analysisPeriodOptions = buildAnalysisPeriodOptions(game?.period || 4);
   const analysisSegmentOptions = buildAnalysisSegmentOptions(game, isLive);
-  const minMinuteOptions = buildAnalysisMinuteOptions(analysisForm.minPeriod);
-  const minSecondOptions = buildAnalysisSecondOptions(analysisForm.minPeriod, analysisForm.minMinutes);
-  const maxMinuteOptions = buildAnalysisMinuteOptions(analysisForm.maxPeriod);
-  const maxSecondOptions = buildAnalysisSecondOptions(analysisForm.maxPeriod, analysisForm.maxMinutes);
+  const minMinuteOptions = buildAnalysisMinuteOptions(analysisForm.minPeriod, game);
+  const minSecondOptions = buildAnalysisSecondOptions(analysisForm.minPeriod, analysisForm.minMinutes, game);
+  const maxMinuteOptions = buildAnalysisMinuteOptions(analysisForm.maxPeriod, game);
+  const maxSecondOptions = buildAnalysisSecondOptions(analysisForm.maxPeriod, analysisForm.maxMinutes, game);
 
   const generateAnalysis = async () => {
     if (!gameId || analysisLoading) return;
@@ -1357,10 +1357,10 @@ export default function Game({ variant = "full" }) {
         range: {
           minPeriod: minPoint.period,
           minClock: toClock(minPoint),
-          minLabel: formatAnalysisPoint(minPoint, { boundary: "start" }),
+          minLabel: formatAnalysisPoint(minPoint, { game, boundary: "start" }),
           maxPeriod: maxPoint.period,
           maxClock: toClock(maxPoint),
-          maxLabel: formatAnalysisPoint(maxPoint, { boundary: "end" }),
+          maxLabel: formatAnalysisPoint(maxPoint, { game, boundary: "end" }),
         },
       });
       setAnalysisResult(result);
