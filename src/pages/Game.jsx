@@ -2069,7 +2069,7 @@ export default function Game({ variant = "full" }) {
 
   const currentPeriod = game?.period || 1;
   const isSummerLeagueMatch = isSummerLeagueGame(gameId);
-  const foulLimit = isSummerLeagueMatch ? 10 : 5;
+  const foulLimit = 5;
   const foulWarningCount = foulLimit - 1;
   const currentHalf = currentPeriod <= 2 ? 1 : 2;
   const isTeamFoulAction = (action) => {
