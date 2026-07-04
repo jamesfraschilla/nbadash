@@ -38,8 +38,20 @@ import {
   buildLateGameStrategyState,
   evaluateLateGameStrategy,
 } from "../lateGameStrategy.js";
+import {
+  TEAM_FOUL_DISPLAY_LIMIT,
+  TEAM_FOUL_WARNING_DISPLAY,
+  buildTeamFoulInfo,
+  getSummerLeagueTimeoutDisplay,
+} from "../gameRules.js";
+import { buildFreshnessSummary } from "../dataFreshness.js";
 import { recordClientError } from "../errorDiagnostics.js";
-import { getGamePollingInterval } from "../gamePolling.js";
+import {
+  getGamePollingInterval,
+  isCapitalCityTeam,
+  isGameDayPollingGame,
+  isWashingtonTeam,
+} from "../gamePolling.js";
 import { gameStatusLabel, normalizeClock } from "../utils.js";
 import BoxScoreTable from "../components/BoxScoreTable.jsx";
 import StatBars from "../components/StatBars.jsx";
@@ -456,36 +468,7 @@ const foulsClass = (fouls, stylesRef, warningCount = 4, limitCount = 5) => {
   return stylesRef.pfRed;
 };
 
-const isWashingtonTeam = (team) => {
-  const tricode = String(team?.teamTricode || "").toUpperCase();
-  const name = `${team?.teamCity || ""} ${team?.teamName || ""}`.toLowerCase();
-  return tricode === "WAS" || name.includes("washington") || name.includes("wizards");
-};
-
-const isCapitalCityTeam = (team) => {
-  const tricode = String(team?.teamTricode || "").toUpperCase();
-  const name = `${team?.teamCity || ""} ${team?.teamName || ""}`.toLowerCase();
-  return tricode === "CCG" || name.includes("capital city") || name.includes("go-go") || name.includes("gogo");
-};
-
 const isRotationsTeam = (team) => isWashingtonTeam(team) || isCapitalCityTeam(team);
-
-const isWashingtonGamePayload = (game) => (
-  isWashingtonTeam(game?.homeTeam) || isWashingtonTeam(game?.awayTeam)
-);
-
-const parseTeamFoulMarker = (description) => {
-  if (!description) return null;
-  const text = String(description);
-  const teamMatch = text.match(/\bT(\d+)\b/);
-  const teamFouls = teamMatch ? Number.parseInt(teamMatch[1], 10) : null;
-  const inPenalty = /\bPN\b/.test(text);
-  if (teamFouls == null && !inPenalty) return null;
-  return {
-    teamFouls: Number.isNaN(teamFouls) ? null : teamFouls,
-    inPenalty,
-  };
-};
 
 const getClockSortValue = (clock) => {
   const normalized = normalizeClock(clock);
@@ -574,6 +557,7 @@ export default function Game({ variant = "full" }) {
   const [strategyHistoryRecords, setStrategyHistoryRecords] = useState([]);
   const [strategyHistoryLoading, setStrategyHistoryLoading] = useState(false);
   const [strategyHistoryStatus, setStrategyHistoryStatus] = useState("");
+  const [freshnessNowMs, setFreshnessNowMs] = useState(() => Date.now());
   const strategyHistorySaveRef = useRef("");
   const isAtc = variant === "atc";
   const showExtras = !isAtc;
@@ -717,24 +701,41 @@ export default function Game({ variant = "full" }) {
     setParams(nextParams);
   };
 
-  const { data: game, isLoading, error } = useGame(gameId, {
+  const {
+    data: game,
+    dataUpdatedAt: gameDataUpdatedAt,
+    isFetching: isGameFetching,
+    isLoading,
+    error,
+  } = useGame(gameId, {
     segment: segmentParam,
     dateStr: dateParam,
-    refetchInterval: (query) => getGamePollingInterval(query.state.data, {
-      isTrackedGame: isWashingtonGamePayload(query.state.data),
-    }),
+    refetchInterval: (query) => getGamePollingInterval(query.state.data, { gameId }),
     refetchIntervalInBackground: true,
   });
 
   const { data: minutesData } = useMinutes(gameId, {
     optional: true,
-    refetchInterval: () => getGamePollingInterval(game, {
-      isTrackedGame: isWashingtonGamePayload(game),
-    }),
+    refetchInterval: () => getGamePollingInterval(game, { gameId }),
     refetchIntervalInBackground: true,
   });
 
   const isSummerLeagueMatch = isSummerLeagueGame(gameId);
+  const shouldShowFreshness = isGameDayPollingGame(game || gameId);
+  const shouldRefreshFreshnessClock = shouldShowFreshness && Number(game?.gameStatus || 0) === 2;
+  const freshness = buildFreshnessSummary({
+    dataUpdatedAt: gameDataUpdatedAt,
+    actions: game?.playByPlayActions || [],
+    now: freshnessNowMs,
+    isFetching: isGameFetching,
+  });
+
+  useEffect(() => {
+    if (!shouldRefreshFreshnessClock) return undefined;
+    const intervalId = window.setInterval(() => setFreshnessNowMs(Date.now()), 1000);
+    return () => window.clearInterval(intervalId);
+  }, [shouldRefreshFreshnessClock]);
+
   const awayTeamScope = getPregameTeamScopeForTeam(game?.awayTeam, game);
   const homeTeamScope = getPregameTeamScopeForTeam(game?.homeTeam, game);
   const awayLeague = inferLeagueFromTeamId(game?.awayTeam?.teamId);
@@ -2024,52 +2025,22 @@ export default function Game({ variant = "full" }) {
   const paceValue = paceFrom(basePace);
   const displayPaceValue = isPregame ? 0 : paceValue;
 
-  const currentPeriod = game?.period || 1;
-  const foulLimit = 5;
-  const foulWarningCount = foulLimit - 1;
-  const currentHalf = currentPeriod <= 2 ? 1 : 2;
-  const isTeamFoulAction = (action) => {
-    if (action.actionType !== "foul") return false;
-    const subType = String(action.subType || "").toLowerCase();
-    const descriptor = String(action.descriptor || "").toLowerCase();
-    const qualifiers = (action.qualifiers || []).map((q) => String(q || "").toLowerCase());
-    if (subType === "offensive") return false;
-    if (subType.includes("technical") || descriptor.includes("technical")) return false;
-    if (qualifiers.some((q) => q.includes("technical"))) return false;
-    return true;
-  };
-  const teamFoulInfo = (teamId) => {
-    let markerCount = 0;
-    let fallbackCount = 0;
-    let lastTwoCount = 0;
-    let inPenalty = false;
-    let sawMarker = false;
-    const penaltyThreshold = foulLimit;
-    const lastTwoSeconds = 2 * 60;
-    (game?.playByPlayActions || []).forEach((action) => {
-      if (action.period !== currentPeriod) return;
-      if (!isTeamFoulAction(action)) return;
-      if (action.teamId !== teamId) return;
-      fallbackCount += 1;
-      const remaining = parseIsoClock(action.clock);
-      if (remaining <= lastTwoSeconds) lastTwoCount += 1;
-      const marker = parseTeamFoulMarker(action.description);
-      if (!marker) return;
-      sawMarker = true;
-      if (marker.teamFouls != null) markerCount = Math.max(markerCount, marker.teamFouls);
-      if (marker.inPenalty) inPenalty = true;
-    });
-    let count = (sawMarker && markerCount > 0) ? markerCount : fallbackCount;
-    if (!inPenalty && count >= penaltyThreshold) inPenalty = true;
-    if (!inPenalty && lastTwoCount >= 2) inPenalty = true;
-    let displayCount = count;
-    if (lastTwoCount >= 1 && displayCount < foulWarningCount) displayCount = foulWarningCount;
-    if (lastTwoCount >= 2) displayCount = foulLimit;
-    if (displayCount > foulLimit) displayCount = foulLimit;
-    return { count: displayCount, inPenalty };
-  };
-  const awayFoulInfo = teamFoulInfo(awayTeamId);
-  const homeFoulInfo = teamFoulInfo(homeTeamId);
+  const currentPeriod = Number(game?.period || 1);
+  const foulLimit = TEAM_FOUL_DISPLAY_LIMIT;
+  const foulWarningCount = TEAM_FOUL_WARNING_DISPLAY;
+  const playByPlayActions = game?.playByPlayActions || [];
+  const awayFoulInfo = buildTeamFoulInfo({
+    actions: playByPlayActions,
+    teamId: awayTeamId,
+    period: currentPeriod,
+    isSummerLeague: isSummerLeagueMatch,
+  });
+  const homeFoulInfo = buildTeamFoulInfo({
+    actions: playByPlayActions,
+    teamId: homeTeamId,
+    period: currentPeriod,
+    isSummerLeague: isSummerLeagueMatch,
+  });
   const awayFoulsDisplay = Math.min(
     awayFoulInfo.inPenalty ? foulLimit : awayFoulInfo.count,
     foulLimit
@@ -2122,22 +2093,30 @@ export default function Game({ variant = "full" }) {
       ) : null}
     </div>
   );
-  const summerLeagueTimeoutsRemaining = (teamId) => {
-    if (!teamId) return 2;
-    const timeoutsUsed = (game?.playByPlayActions || []).filter((action) => (
-      action.actionType === "timeout"
-      && action.teamId === teamId
-      && action.subType !== "officials"
-      && ((currentHalf === 1 && action.period <= 2) || (currentHalf === 2 && action.period >= 3 && action.period <= 4))
-    )).length;
-    return Math.max(0, 2 - timeoutsUsed);
-  };
+  const awaySummerLeagueTimeoutDisplay = isSummerLeagueMatch
+    ? getSummerLeagueTimeoutDisplay({
+      actions: playByPlayActions,
+      teamId: awayTeamId,
+      period: currentPeriod,
+      isPregame,
+    })
+    : null;
+  const homeSummerLeagueTimeoutDisplay = isSummerLeagueMatch
+    ? getSummerLeagueTimeoutDisplay({
+      actions: playByPlayActions,
+      teamId: homeTeamId,
+      period: currentPeriod,
+      isPregame,
+    })
+    : null;
   const awayTimeoutsRemaining = isSummerLeagueMatch
-    ? (isPregame ? 2 : summerLeagueTimeoutsRemaining(awayTeamId))
+    ? awaySummerLeagueTimeoutDisplay.remaining
     : (isPregame ? 7 : timeouts?.away);
   const homeTimeoutsRemaining = isSummerLeagueMatch
-    ? (isPregame ? 2 : summerLeagueTimeoutsRemaining(homeTeamId))
+    ? homeSummerLeagueTimeoutDisplay.remaining
     : (isPregame ? 7 : timeouts?.home);
+  const awayTimeoutDisplayTotal = isSummerLeagueMatch ? awaySummerLeagueTimeoutDisplay.total : 7;
+  const homeTimeoutDisplayTotal = isSummerLeagueMatch ? homeSummerLeagueTimeoutDisplay.total : 7;
   const isGLeagueGame = awayLeague === "gleague" || homeLeague === "gleague";
   const awayResetUsed = isSummerLeagueMatch ? false : hasUsedResetTimeout(game?.playByPlayActions || [], awayTeamId, game?.period);
   const homeResetUsed = isSummerLeagueMatch ? false : hasUsedResetTimeout(game?.playByPlayActions || [], homeTeamId, game?.period);
@@ -2658,15 +2637,15 @@ export default function Game({ variant = "full" }) {
                 <div className={styles.mobileTeamScore}>{displayAwayScore}</div>
                 <div className={styles.teamMetaStack}>
                   {(timeouts || isPregame) && (
-                    <div className={styles.teamMetaRow}>
-                      {renderTimeouts(
-                        awayTimeoutsRemaining,
-                        mandatoryTimeoutTeam === "away",
-                        isGLeagueGame && !isSummerLeagueMatch,
-                        awayResetUsed,
-                        isSummerLeagueMatch ? 2 : 7
-                      )}
-                    </div>
+	                  <div className={styles.teamMetaRow}>
+	                    {renderTimeouts(
+	                      awayTimeoutsRemaining,
+	                      mandatoryTimeoutTeam === "away",
+	                      isGLeagueGame && !isSummerLeagueMatch,
+	                      awayResetUsed,
+	                      awayTimeoutDisplayTotal
+	                    )}
+	                  </div>
                   )}
                   <div className={styles.teamMetaRow}>
                     {renderFouls(awayFoulsDisplay)}
@@ -2709,11 +2688,16 @@ export default function Game({ variant = "full" }) {
               </div>
             )}
             {isAtc && <div className={styles.headerPossessionTable}>{possessionSummaryTable}</div>}
-            <div className={`${styles.status} ${isLive ? styles.statusLive : ""}`}>
-              {status || game.gameStatusText}
-            </div>
-            {clock && <div className={styles.clock}>{clock}</div>}
-          </div>
+	            <div className={`${styles.status} ${isLive ? styles.statusLive : ""}`}>
+	              {status || game.gameStatusText}
+	            </div>
+	            {clock && <div className={styles.clock}>{clock}</div>}
+	            {shouldShowFreshness && freshness.label ? (
+	              <div className={`${styles.freshnessBadge} ${styles[`freshness${freshness.level}`] || ""}`}>
+	                {freshness.label}
+	              </div>
+	            ) : null}
+	          </div>
 
           <div className={`${styles.teamBlock} ${styles.homeTeamBlock}`}>
             <div className={`${styles.teamInfoRow} ${styles.homeTeamInfoRow}`}>
@@ -2722,15 +2706,15 @@ export default function Game({ variant = "full" }) {
                 <div className={styles.mobileTeamScore}>{displayHomeScore}</div>
                 <div className={styles.teamMetaStack}>
                   {(timeouts || isPregame) && (
-                    <div className={styles.teamMetaRow}>
-                      {renderTimeouts(
-                        homeTimeoutsRemaining,
-                        mandatoryTimeoutTeam === "home",
-                        isGLeagueGame && !isSummerLeagueMatch,
-                        homeResetUsed,
-                        isSummerLeagueMatch ? 2 : 7
-                      )}
-                    </div>
+	                  <div className={styles.teamMetaRow}>
+	                    {renderTimeouts(
+	                      homeTimeoutsRemaining,
+	                      mandatoryTimeoutTeam === "home",
+	                      isGLeagueGame && !isSummerLeagueMatch,
+	                      homeResetUsed,
+	                      homeTimeoutDisplayTotal
+	                    )}
+	                  </div>
                   )}
                   <div className={styles.teamMetaRow}>
                     {renderFouls(homeFoulsDisplay)}

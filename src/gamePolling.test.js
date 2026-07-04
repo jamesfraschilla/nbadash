@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   getGamePollingInterval,
   getGamesListPollingInterval,
+  isGameDayPollingGame,
   isTrackedPollingGameId,
 } from "./gamePolling.js";
 
@@ -38,6 +39,23 @@ test("game 1322600002 uses tracked polling intervals", () => {
   assert.equal(isTrackedPollingGameId("1322600002"), true);
   assert.equal(getGamePollingInterval(game({ gameId: "1322600002", period: 4, gameClock: "PT3M59.00S" })), 2_000);
   assert.equal(getGamePollingInterval(game({ gameId: "1322600002", period: 3, gameClock: "PT59.00S" })), 5_000);
+});
+
+test("Summer League games use game-day polling intervals", () => {
+  assert.equal(isGameDayPollingGame("1322600008"), true);
+  assert.equal(getGamePollingInterval(game({ gameId: "1322600008", period: 4, gameClock: "PT3M59.00S" })), 2_000);
+});
+
+test("Washington games use game-day polling intervals", () => {
+  const washingtonGame = game({
+    gameId: "0022600001",
+    period: 4,
+    gameClock: "PT3M59.00S",
+    homeTeam: { teamTricode: "WAS" },
+    awayTeam: { teamTricode: "BOS" },
+  });
+  assert.equal(isGameDayPollingGame(washingtonGame), true);
+  assert.equal(getGamePollingInterval(washingtonGame), 2_000);
 });
 
 test("game lists poll at the fastest active game interval", () => {

@@ -1,7 +1,9 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { teamLogoUrl } from "../api.js";
+import { buildFreshnessSummary, formatPollingInterval } from "../dataFreshness.js";
 import { NBA_TEAMS } from "../data/nbaTeams.js";
+import { getGamesListPollingInterval } from "../gamePolling.js";
 import { useGamesByDate, useTeamSeasonGames } from "../queries.js";
 import {
   formatDateInput,
@@ -16,6 +18,7 @@ import styles from "./Home.module.css";
 
 export default function Home() {
   const [params, setParams] = useSearchParams();
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const dateParam = params.get("d");
   const selectedTeamId = params.get("team") || "";
   const selectedOpponentTeamId = params.get("opponent") || "";
@@ -70,14 +73,30 @@ export default function Home() {
 
   const dateGamesQuery = useGamesByDate(dateInput, {
     enabled: !selectedTeamId,
+    refetchInterval: (query) => getGamesListPollingInterval(query.state.data),
+    refetchIntervalInBackground: true,
   });
   const teamGamesQuery = useTeamSeasonGames(selectedTeamId, selectedOpponentTeamId, "", {
     enabled: Boolean(selectedTeamId),
+    refetchInterval: (query) => getGamesListPollingInterval(query.state.data),
+    refetchIntervalInBackground: true,
   });
   const activeGamesQuery = selectedTeamId ? teamGamesQuery : dateGamesQuery;
   const games = activeGamesQuery.data || [];
   const isLoading = activeGamesQuery.isLoading;
   const error = activeGamesQuery.error;
+  const activePollInterval = getGamesListPollingInterval(games);
+  const freshness = buildFreshnessSummary({
+    dataUpdatedAt: activeGamesQuery.dataUpdatedAt,
+    now: nowMs,
+    isFetching: activeGamesQuery.isFetching,
+  });
+
+  useEffect(() => {
+    if (!activePollInterval) return undefined;
+    const intervalId = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(intervalId);
+  }, [activePollInterval]);
 
   const { nbaGames, gLeagueGames } = useMemo(() => {
     if (selectedTeamId) {
@@ -152,6 +171,14 @@ export default function Home() {
       ) : null}
     </>
   );
+  const renderFreshness = () => (
+    freshness.label ? (
+      <div className={`${styles.freshnessBadge} ${styles[`freshness${freshness.level}`] || ""}`}>
+        {freshness.label}
+        {activePollInterval ? ` · Poll ${formatPollingInterval(activePollInterval)}` : ""}
+      </div>
+    ) : null
+  );
 
   if (isLoading) {
     return (
@@ -164,8 +191,9 @@ export default function Home() {
           <button type="button" className={styles.dateButton} onClick={() => changeDateBy(1)}>
             Next
           </button>
-          {renderFilters()}
-        </div>
+	          {renderFilters()}
+	          {renderFreshness()}
+	        </div>
         <div className={styles.stateMessage}>
           {selectedTeamId ? "Loading team games..." : "Loading games..."}
         </div>
@@ -184,8 +212,9 @@ export default function Home() {
           <button type="button" className={styles.dateButton} onClick={() => changeDateBy(1)}>
             Next
           </button>
-          {renderFilters()}
-        </div>
+	          {renderFilters()}
+	          {renderFreshness()}
+	        </div>
         <div className={styles.stateMessage}>
           {selectedTeamId ? "Failed to load team games." : "Failed to load games."}
         </div>
@@ -204,8 +233,9 @@ export default function Home() {
           <button type="button" className={styles.dateButton} onClick={() => changeDateBy(1)}>
             Next
           </button>
-          {renderFilters()}
-        </div>
+	          {renderFilters()}
+	          {renderFreshness()}
+	        </div>
         <div className={styles.stateMessage}>
           {selectedTeamId
             ? (selectedOpponentTeamId
@@ -295,8 +325,9 @@ export default function Home() {
         <button type="button" className={styles.dateButton} onClick={() => changeDateBy(1)}>
           Next
         </button>
-        {renderFilters()}
-      </div>
+	        {renderFilters()}
+	        {renderFreshness()}
+	      </div>
       {nbaGames.length > 0 && (
         <>
           <h2 className={styles.sectionTitle}>

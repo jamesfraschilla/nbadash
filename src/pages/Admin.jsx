@@ -22,6 +22,7 @@ import {
   resolveSharedPregamePlayersPayload,
   saveRemotePregamePlayers,
 } from "../pregamePlayers.js";
+import { runOperationalHealthChecks } from "../operationalHealth.js";
 import PlayerHeadshotsAdmin from "./PlayerHeadshotsAdmin.jsx";
 import RefereeHeadshotsPreview from "./RefereeHeadshotsPreview.jsx";
 import styles from "./Admin.module.css";
@@ -120,7 +121,68 @@ const ADMIN_SECTIONS = [
     kicker: "Images",
     title: "Player headshots",
   },
+  {
+    key: "health",
+    kicker: "Operations",
+    title: "Game-day health",
+  },
 ];
+
+function OperationalHealthCard({ userId }) {
+  const [running, setRunning] = useState(false);
+  const [checks, setChecks] = useState([]);
+  const [lastRunAt, setLastRunAt] = useState("");
+
+  const runChecks = async () => {
+    setRunning(true);
+    const results = await runOperationalHealthChecks(userId);
+    setChecks(results);
+    setLastRunAt(new Date().toLocaleString());
+    setRunning(false);
+  };
+
+  const totals = checks.reduce((accumulator, check) => {
+    accumulator[check.status] = (accumulator[check.status] || 0) + 1;
+    return accumulator;
+  }, {});
+
+  return (
+    <div className={styles.healthCard}>
+      <div className={styles.healthHeader}>
+        <div>
+          <div className={styles.kicker}>Operations</div>
+          <h4 className={styles.healthTitle}>Game-day health</h4>
+        </div>
+        <button
+          type="button"
+          className={styles.primaryButton}
+          onClick={runChecks}
+          disabled={running}
+        >
+          {running ? "Running..." : "Run Checks"}
+        </button>
+      </div>
+      {lastRunAt ? (
+        <div className={styles.healthSummary}>
+          {lastRunAt} · {totals.ok || 0} ok · {totals.warning || 0} warning · {totals.error || 0} error
+        </div>
+      ) : null}
+      <div className={styles.healthList}>
+        {checks.length ? checks.map((check) => (
+          <div key={check.id} className={styles.healthRow}>
+            <span className={`${styles.healthStatus} ${styles[`healthStatus${check.status}`] || ""}`}>
+              {check.status}
+            </span>
+            <span className={styles.healthLabel}>{check.label}</span>
+            <span className={styles.healthDetail}>{check.detail}</span>
+          </div>
+        )) : (
+          <div className={styles.noticeCard}>No health check has been run.</div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function ProfileCard({ profile, actorId, onSave }) {
   const [draftRole, setDraftRole] = useState(profile.role || "coach");
@@ -1112,6 +1174,12 @@ export default function Admin() {
         {activeSection === "players" ? (
           <div className={styles.section}>
             <PlayerHeadshotsAdmin />
+          </div>
+        ) : null}
+
+        {activeSection === "health" ? (
+          <div className={styles.section}>
+            <OperationalHealthCard userId={user?.id} />
           </div>
         ) : null}
       </section>

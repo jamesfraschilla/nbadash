@@ -1,3 +1,5 @@
+import { isSummerLeagueGameId } from "./summerLeagueGameSource.js";
+
 const TRACKED_GAME_INTERVALS = {
   final: false,
   halftime: 60_000,
@@ -29,6 +31,28 @@ export function isTrackedPollingGameId(value) {
   return TRACKED_POLLING_GAME_IDS.has(String(gameId || "").trim());
 }
 
+export function isWashingtonTeam(team) {
+  const tricode = String(team?.teamTricode || "").toUpperCase();
+  const name = `${team?.teamCity || ""} ${team?.teamName || ""}`.toLowerCase();
+  return tricode === "WAS" || name.includes("washington") || name.includes("wizards");
+}
+
+export function isCapitalCityTeam(team) {
+  const tricode = String(team?.teamTricode || "").toUpperCase();
+  const name = `${team?.teamCity || ""} ${team?.teamName || ""}`.toLowerCase();
+  return tricode === "CCG" || name.includes("capital city") || name.includes("go-go") || name.includes("gogo");
+}
+
+export function isGameDayPollingGame(value) {
+  const game = typeof value === "object" && value !== null ? value : { gameId: value };
+  return isTrackedPollingGameId(game)
+    || isSummerLeagueGameId(game?.gameId)
+    || isWashingtonTeam(game?.homeTeam)
+    || isWashingtonTeam(game?.awayTeam)
+    || isCapitalCityTeam(game?.homeTeam)
+    || isCapitalCityTeam(game?.awayTeam);
+}
+
 function clockSeconds(clock) {
   const text = String(clock || "").trim();
   if (!text) return null;
@@ -51,7 +75,7 @@ function statusText(game) {
 }
 
 export function getGamePollingInterval(game, options = {}) {
-  const intervals = options.isTrackedGame || isTrackedPollingGameId(game)
+  const intervals = options.isTrackedGame || isGameDayPollingGame(game || options.gameId)
     ? TRACKED_GAME_INTERVALS
     : OTHER_GAME_INTERVALS;
   if (!game) return intervals.pregame;
@@ -75,7 +99,7 @@ export function getGamesListPollingInterval(games, options = {}) {
   const list = Array.isArray(games) ? games : [];
   const intervals = list
     .map((game) => getGamePollingInterval(game, {
-      isTrackedGame: Boolean(options.isTrackedGame?.(game)),
+      isTrackedGame: Boolean(options.isTrackedGame?.(game)) || isGameDayPollingGame(game),
     }))
     .filter((interval) => typeof interval === "number" && interval > 0);
 

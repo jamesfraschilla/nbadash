@@ -32,6 +32,34 @@
   border-color: var(--muted);
 }
 
+.freshnessBadge {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  background: var(--panel);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.freshnessfresh {
+  color: var(--muted);
+}
+
+.freshnesswarning {
+  color: var(--pf-yellow);
+  border-color: color-mix(in srgb, var(--pf-yellow) 50%, var(--border));
+}
+
+.freshnessstale {
+  color: var(--negative);
+  border-color: color-mix(in srgb, var(--negative) 50%, var(--border));
+}
+
 .teamFilter {
   display: inline-flex;
   align-items: center;
@@ -230,6 +258,11 @@
 
   .teamSelect {
     width: 100%;
+  }
+
+  .freshnessBadge {
+    width: 100%;
+    justify-content: center;
   }
 
   .gameList {

@@ -6,15 +6,6 @@ import { formatDateInputInTimeZone, formatDateLabel, parseDateInput } from "../u
 import GameCard from "./GameCard.jsx";
 import styles from "./Header.module.css";
 
-function isWizardsGame(game) {
-  const teams = [game?.homeTeam, game?.awayTeam];
-  return teams.some((team) => {
-    const tricode = String(team?.teamTricode || "").toUpperCase();
-    const name = `${team?.teamCity || ""} ${team?.teamName || ""}`.toLowerCase();
-    return tricode === "WAS" || name.includes("washington") || name.includes("wizards");
-  });
-}
-
 export default function Header({ theme, onToggleTheme, onSignOut, profile, isAdmin, canUseTools }) {
   const [params, setParams] = useSearchParams();
   const inputRef = useRef(null);
@@ -28,9 +19,8 @@ export default function Header({ theme, onToggleTheme, onSignOut, profile, isAdm
   const dateLabel = formatDateLabel(date);
 
   const { data: games = [], isLoading, isFetching } = useGamesByDate(dateInput, {
-    refetchInterval: (query) => getGamesListPollingInterval(query.state.data, {
-      isTrackedGame: isWizardsGame,
-    }),
+    refetchInterval: (query) => getGamesListPollingInterval(query.state.data),
+    refetchIntervalInBackground: true,
   });
 
   const orderedGames = useMemo(() => {

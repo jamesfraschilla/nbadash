@@ -89,6 +89,7 @@
 .inviteCard,
 .noticeCard,
 .inviteRow,
+.healthCard,
 .profileCard,
 .rosterCard {
   border: 1px solid var(--border);
@@ -346,6 +347,81 @@
   gap: 14px;
 }
 
+.healthCard {
+  display: grid;
+  gap: 14px;
+}
+
+.healthHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.healthTitle {
+  margin: 0;
+}
+
+.healthSummary {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.healthList {
+  display: grid;
+  gap: 8px;
+}
+
+.healthRow {
+  display: grid;
+  grid-template-columns: 92px minmax(180px, 0.8fr) minmax(0, 1.2fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+}
+
+.healthStatus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.healthStatusok {
+  color: #22c55e;
+  border-color: color-mix(in srgb, #22c55e 55%, var(--border));
+}
+
+.healthStatuswarning {
+  color: var(--pf-yellow);
+  border-color: color-mix(in srgb, var(--pf-yellow) 55%, var(--border));
+}
+
+.healthStatuserror {
+  color: var(--negative);
+  border-color: color-mix(in srgb, var(--negative) 55%, var(--border));
+}
+
+.healthLabel {
+  color: var(--text);
+  font-weight: 800;
+}
+
+.healthDetail {
+  color: var(--muted);
+  min-width: 0;
+}
+
 .rosterCard {
   display: grid;
   gap: 12px;
@@ -409,12 +485,17 @@
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   }
 
-  .inviteRow,
-  .profileHeader,
-  .rosterHeader {
-    flex-direction: column;
-    align-items: flex-start;
-  }
+	  .inviteRow,
+	  .healthHeader,
+	  .profileHeader,
+	  .rosterHeader {
+	    flex-direction: column;
+	    align-items: flex-start;
+	  }
+
+	  .healthRow {
+	    grid-template-columns: 1fr;
+	  }
 
   .profileMeta {
     text-align: left;
