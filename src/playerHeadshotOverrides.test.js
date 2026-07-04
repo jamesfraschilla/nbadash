@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   getPlayerHeadshotUploadFormat,
+  normalizePlayerHeadshotKey,
   playerHeadshotOverrides,
   resolvePlayerHeadshotOverrideUrls,
 } from "./playerHeadshotOverrides.js";
@@ -31,6 +32,20 @@ test("player headshot overrides accept ordered external candidates", () => {
     ]);
   } finally {
     delete playerHeadshotOverrides["999998"];
+  }
+});
+
+test("player headshot overrides accept manual roster keys", () => {
+  const manualKey = "manual:1610612764:norris-agbakoko-row";
+  playerHeadshotOverrides[manualKey] = "player-headshots/norris-agbakoko.png";
+
+  try {
+    assert.equal(normalizePlayerHeadshotKey("PERSON:1643407"), "1643407");
+    assert.equal(normalizePlayerHeadshotKey("Manual:1610612764:Norris Agbakoko Row"), manualKey);
+    const urls = resolvePlayerHeadshotOverrideUrls(manualKey, "/nbadash/");
+    assert.deepEqual(urls, ["/nbadash/player-headshots/norris-agbakoko.png"]);
+  } finally {
+    delete playerHeadshotOverrides[manualKey];
   }
 });
 

@@ -8,6 +8,27 @@ export const buildRosterMatchKey = (value) => (
     .trim()
 );
 
+export function buildManualRosterPlayerKey(player, teamId) {
+  const seed =
+    normalizeRosterPersonId(player?.matchupId) ||
+    normalizeRosterPersonId(player?.id) ||
+    buildRosterMatchKey(player?.fullName || player?.name || player?.display || "");
+  const safeSeed = String(seed || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  if (!safeSeed) return "";
+  return `manual:${String(teamId || "team").trim() || "team"}:${safeSeed}`;
+}
+
+function mergeHeadshotOverrideKeys(...groups) {
+  const values = groups
+    .flatMap((group) => (Array.isArray(group) ? group : group ? [group] : []))
+    .map((key) => String(key || "").trim())
+    .filter(Boolean);
+  return [...new Set(values)];
+}
+
 export const normalizeLiveRosterPlayers = (players, teamId) => (
   (Array.isArray(players) ? players : [])
     .map((player) => {
@@ -23,6 +44,7 @@ export const normalizeLiveRosterPlayers = (players, teamId) => (
         fullName,
         display: fullName,
         name: fullName,
+        headshotPersonId: personId,
         jerseyNum: String(player?.jerseyNum || "").trim(),
         position: String(player?.position || "").trim(),
         height: String(player?.height || "").trim(),
@@ -32,16 +54,20 @@ export const normalizeLiveRosterPlayers = (players, teamId) => (
     .filter(Boolean)
 );
 
-export function mergeRosterPools(sharedPlayers, livePlayers) {
+export function mergeRosterPools(sharedPlayers, livePlayers, teamId = "") {
   const next = [];
   const byPersonId = new Map();
   const byName = new Map();
 
   const upsertPlayer = (player, preferExisting = false) => {
     if (!player) return;
-    const personId = normalizeRosterPersonId(player.personId);
-    const fullName = normalizeRosterName(player.fullName || player.display || player.name || "");
+    const officialPersonId = normalizeRosterPersonId(player.personId);
+    const manualPersonId = officialPersonId ? "" : buildManualRosterPlayerKey(player, teamId);
+    const personId = officialPersonId || manualPersonId;
+    const fullName = normalizeRosterName(player.fullName || player.name || player.display || "");
     const nameKey = buildRosterMatchKey(fullName);
+    if (!personId || !fullName) return;
+    const headshotOverrideKeys = mergeHeadshotOverrideKeys(player.headshotOverrideKeys, manualPersonId);
     const existing =
       (personId && byPersonId.get(personId)) ||
       (nameKey && byName.get(nameKey)) ||
@@ -51,6 +77,9 @@ export function mergeRosterPools(sharedPlayers, livePlayers) {
       if (!preferExisting) {
         Object.assign(existing, {
           ...player,
+          personId,
+          headshotPersonId: player.headshotPersonId ?? (officialPersonId || manualPersonId),
+          headshotOverrideKeys: mergeHeadshotOverrideKeys(existing.headshotOverrideKeys, headshotOverrideKeys),
           cap: existing.cap ?? player.cap,
           display: existing.display || player.display || player.fullName || player.name || "",
           name: existing.name || player.name || player.fullName || player.display || "",
@@ -64,6 +93,8 @@ export function mergeRosterPools(sharedPlayers, livePlayers) {
     const entry = {
       ...player,
       personId,
+      headshotPersonId: player.headshotPersonId ?? (officialPersonId || manualPersonId),
+      headshotOverrideKeys,
       fullName: fullName || normalizeRosterName(player.display || player.name || ""),
       display: normalizeRosterName(player.display || player.fullName || player.name || ""),
       name: normalizeRosterName(player.name || player.fullName || player.display || ""),
@@ -90,9 +121,9 @@ export function buildMatchupRosterPool({
   const gameRoster = normalizeLiveRosterPlayers(gameRosterPlayers, safeTeamId);
 
   if (isSummerLeague) {
-    return teamScope ? mergeRosterPools(sharedPlayers, gameRoster) : gameRoster;
+    return teamScope ? mergeRosterPools(sharedPlayers, gameRoster, safeTeamId) : gameRoster;
   }
 
   const liveRoster = normalizeLiveRosterPlayers(liveRosterTeams?.[safeTeamId]?.players, safeTeamId);
-  return teamScope ? mergeRosterPools(sharedPlayers, liveRoster) : liveRoster;
+  return teamScope ? mergeRosterPools(sharedPlayers, liveRoster, safeTeamId) : liveRoster;
 }

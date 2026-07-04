@@ -523,6 +523,17 @@ function normalizeRosterPlayer(player, fallback = null, teamId = null, staticPos
   if (!player && !fallback) return null;
   const personId = String(player?.personId || fallback?.personId || "");
   if (!personId) return null;
+  const headshotPersonId = String(
+    player?.headshotPersonId ??
+    fallback?.headshotPersonId ??
+    player?.personId ??
+    fallback?.personId ??
+    ""
+  ).trim();
+  const headshotOverrideKeys = [
+    ...(Array.isArray(player?.headshotOverrideKeys) ? player.headshotOverrideKeys : []),
+    ...(Array.isArray(fallback?.headshotOverrideKeys) ? fallback.headshotOverrideKeys : []),
+  ].map((key) => String(key || "").trim()).filter(Boolean);
   const profile = resolveMatchupPlayerProfile(profileMap, personId);
   const staticRosterPlayer = staticRosterById?.get(personId) || null;
 
@@ -540,6 +551,8 @@ function normalizeRosterPlayer(player, fallback = null, teamId = null, staticPos
   const familyName = String(player?.familyName || player?.lastName || "").trim() || extractLastName(fullNameSource);
   return {
     personId,
+    headshotPersonId,
+    headshotOverrideKeys: [...new Set(headshotOverrideKeys)],
     jerseyNum: String(player?.jerseyNum || fallback?.jerseyNum || "").trim(),
     firstName,
     lastName: familyName,
@@ -830,6 +843,14 @@ function sortRowSlotIdsByHeight(row, slotIds, profileMap) {
   return sortLineupByHeight(orderedPlayers, profileMap).map((player) => player.personId);
 }
 
+function getPlayerHeadshotPersonId(player) {
+  if (!player) return "";
+  if (Object.prototype.hasOwnProperty.call(player, "headshotPersonId")) {
+    return String(player.headshotPersonId || "").trim();
+  }
+  return String(player.personId || "").trim();
+}
+
 function findSlotIndex(slots, clientX, clientY) {
   let matchedIndex = -1;
   let matchedDistance = Number.POSITIVE_INFINITY;
@@ -932,7 +953,8 @@ function MatchUpTile({ player, isDraggingSource, isTarget, isSwapAnimating, onPo
         <div className={styles.avatarFrame}>
           <PlayerHeadshot
             className={styles.avatarImage}
-            personId={player.personId}
+            personId={getPlayerHeadshotPersonId(player)}
+            overrideKeys={player.headshotOverrideKeys}
             teamId={player.teamId}
             style={headshotStyle}
             alt=""
@@ -971,7 +993,8 @@ function ExpandedTile({ player, teamLabel, isDraggingSource, isTarget, isSwapAni
         <div className={styles.expandedAvatarFrame}>
           <PlayerHeadshot
             className={styles.expandedAvatarImage}
-            personId={player.personId}
+            personId={getPlayerHeadshotPersonId(player)}
+            overrideKeys={player.headshotOverrideKeys}
             teamId={player.teamId}
             alt=""
             draggable={false}
@@ -1001,7 +1024,8 @@ function HeadshotPickerTile({ player, isActive, onClick }) {
       <div className={styles.pickerAvatarFrame}>
         <PlayerHeadshot
           className={styles.pickerAvatarImage}
-          personId={player.personId}
+          personId={getPlayerHeadshotPersonId(player)}
+          overrideKeys={player.headshotOverrideKeys}
           teamId={player.teamId}
           style={isGLeagueTeamId(player.teamId) ? { mixBlendMode: "multiply" } : undefined}
           alt=""
@@ -2184,7 +2208,8 @@ export default function MatchUps({
               <div className={styles.expandedAvatarFrame}>
                 <PlayerHeadshot
                   className={styles.expandedAvatarImage}
-                  personId={dragState.player.personId}
+                  personId={getPlayerHeadshotPersonId(dragState.player)}
+                  overrideKeys={dragState.player.headshotOverrideKeys}
                   teamId={dragState.player.teamId}
                   alt=""
                   draggable={false}
@@ -2197,7 +2222,8 @@ export default function MatchUps({
               <div className={styles.avatarFrame}>
                 <PlayerHeadshot
                   className={styles.avatarImage}
-                  personId={dragState.player.personId}
+                  personId={getPlayerHeadshotPersonId(dragState.player)}
+                  overrideKeys={dragState.player.headshotOverrideKeys}
                   teamId={dragState.player.teamId}
                   style={isGLeagueTeamId(dragState.player.teamId) ? { mixBlendMode: "multiply" } : undefined}
                   alt=""

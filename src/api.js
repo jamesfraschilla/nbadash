@@ -269,7 +269,7 @@ function parseSummerBoxScoreBlock(blockText, teamMeta) {
       };
       return;
     }
-    if (/DNP/i.test(cells[1] || "")) return;
+    const isDnp = /DNP/i.test(cells[1] || "");
     const playerLabel = extractMarkdownPlayerLabel(cells[0]);
     if (!playerLabel?.personId) return;
     const nameParts = buildPlayerNameParts(playerLabel.fullName);
@@ -279,7 +279,8 @@ function parseSummerBoxScoreBlock(blockText, teamMeta) {
       familyName: nameParts.familyName,
       jerseyNum: "",
       position: playerLabel.position,
-      minutes: formatMinutesToIso(cells[1]),
+      minutes: isDnp ? "PT00M00.00S" : formatMinutesToIso(cells[1]),
+      notPlayingReason: isDnp ? String(cells[1] || "").trim() : "",
       plusMinusPoints: parseMarkdownNumeric(cells[20]),
       points: parseMarkdownNumeric(cells[19]),
       reboundsTotal: parseMarkdownNumeric(cells[13]),
@@ -346,7 +347,7 @@ function parseSummerScoreboard(markdown, awayTricode, homeTricode) {
   };
 }
 
-function parseSummerLeagueBoxScoreMarkdown(markdown, shareUrl) {
+export function parseSummerLeagueBoxScoreMarkdown(markdown, shareUrl) {
   const slugMatch = /\/game\/([a-z]{2,4})-vs-([a-z]{2,4})-\d+/i.exec(String(shareUrl || ""));
   const awayTricode = String(slugMatch?.[1] || "").toUpperCase();
   const homeTricode = String(slugMatch?.[2] || "").toUpperCase();
@@ -1751,9 +1752,15 @@ function isNbaDashboardGame(game) {
   return homeLeague !== "wnba" && awayLeague !== "wnba";
 }
 
-export function playerHeadshotUrls(personId, teamId = null) {
+export function playerHeadshotUrls(personId, teamId = null, options = {}) {
   const safePersonId = String(personId || "").trim();
-  if (!safePersonId) return [];
+  const overrideKeys = Array.isArray(options?.overrideKeys) ? options.overrideKeys : [];
+  const keyOverrideUrls = [
+    ...overrideKeys.flatMap((key) => resolvePlayerHeadshotOverrideUrls(key, APP_BASE_PATH)),
+    ...resolvePlayerHeadshotOverrideUrls(safePersonId, APP_BASE_PATH),
+  ];
+  const isOfficialPersonId = /^\d+$/.test(safePersonId);
+  if (!safePersonId || !isOfficialPersonId) return [...new Set(keyOverrideUrls)];
 
   const league = inferLeagueFromTeamId(teamId);
   const gLeagueOverrideUrls = normalizePlayerHeadshotOverrides(gLeagueHeadshotOverrides[safePersonId], APP_BASE_PATH);
@@ -1761,7 +1768,7 @@ export function playerHeadshotUrls(personId, teamId = null) {
     ? `${SUPABASE_FUNCTIONS_BASE}/player-headshot?personId=${encodeURIComponent(safePersonId)}`
     : null;
   const overrideUrls = [
-    ...resolvePlayerHeadshotOverrideUrls(safePersonId, APP_BASE_PATH),
+    ...keyOverrideUrls,
   ];
 
   const candidates = league === "gleague"
@@ -1783,8 +1790,8 @@ export function playerHeadshotUrls(personId, teamId = null) {
   return [...new Set(candidates.filter(Boolean))];
 }
 
-export function playerHeadshotUrl(personId, teamId = null) {
-  return playerHeadshotUrls(personId, teamId)[0] || null;
+export function playerHeadshotUrl(personId, teamId = null, options = {}) {
+  return playerHeadshotUrls(personId, teamId, options)[0] || null;
 }
 
 export async function fetchCurrentNbaRosters() {

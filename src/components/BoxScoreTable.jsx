@@ -44,7 +44,7 @@ function formatShootingPercent(made, attempted) {
 
 function playerLine(player) {
   return {
-    MIN: formatMinutes(player.minutes),
+    MIN: player.notPlayingReason || formatMinutes(player.minutes),
     PTS: safeStat(player.points),
     REB: safeStat(player.reboundsTotal),
     OREB: safeStat(player.reboundsOffensive),

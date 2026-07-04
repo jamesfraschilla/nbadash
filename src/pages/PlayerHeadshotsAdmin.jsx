@@ -7,12 +7,22 @@ import {
   deleteUploadedPlayerHeadshotAsset,
   getPlayerHeadshotUploadFormat,
   loadRemotePlayerHeadshotState,
+  normalizePlayerHeadshotKey,
   readStoredPlayerHeadshotOverrides,
   saveRemotePlayerHeadshotState,
   sanitizePlayerHeadshotState,
   uploadPlayerHeadshotAsset,
 } from "../playerHeadshotOverrides.js";
+import {
+  fetchRemotePregamePlayers,
+  loadPregamePlayersPayload,
+  resolveSharedPregamePlayersPayload,
+} from "../pregamePlayers.js";
+import { buildManualRosterPlayerKey } from "../rosterPools.js";
 import styles from "./Admin.module.css";
+
+const WIZARDS_TEAM_ID = "1610612764";
+const WASHINGTON_SUMMER_SCOPE = "washington_summer";
 
 async function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -76,7 +86,7 @@ async function renderCompressedImageBlob(file, { maxEdge, quality }) {
 }
 
 function normalizePersonId(value) {
-  return String(value || "").replace(/\D+/g, "").trim();
+  return normalizePlayerHeadshotKey(value);
 }
 
 export default function PlayerHeadshotsAdmin() {
@@ -88,6 +98,7 @@ export default function PlayerHeadshotsAdmin() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
+  const [summerRosterPlayers, setSummerRosterPlayers] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -116,6 +127,23 @@ export default function PlayerHeadshotsAdmin() {
     };
   }, [user?.id]);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetchRemotePregamePlayers(WASHINGTON_SUMMER_SCOPE)
+      .then((remoteRoster) => {
+        if (cancelled) return;
+        const localRoster = loadPregamePlayersPayload(WASHINGTON_SUMMER_SCOPE);
+        const players = resolveSharedPregamePlayersPayload(localRoster, remoteRoster).players;
+        setSummerRosterPlayers(players);
+      })
+      .catch(() => {
+        if (!cancelled) setSummerRosterPlayers([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const sortedRecords = useMemo(() => (
     Object.values(records)
       .filter(Boolean)
@@ -128,6 +156,23 @@ export default function PlayerHeadshotsAdmin() {
 
   const selectedPersonId = normalizePersonId(personId);
   const selectedRecord = selectedPersonId ? records[selectedPersonId] || null : null;
+  const summerRosterOptions = useMemo(() => (
+    summerRosterPlayers
+      .map((player) => {
+        const officialKey = normalizePlayerHeadshotKey(player.personId);
+        const manualKey = buildManualRosterPlayerKey(player, WIZARDS_TEAM_ID);
+        const key = officialKey || manualKey;
+        if (!key) return null;
+        return {
+          key,
+          label: player.name || player.display || key,
+          display: player.display || player.name || key,
+          hasOfficialId: Boolean(officialKey),
+        };
+      })
+      .filter(Boolean)
+      .sort((left, right) => String(left.label).localeCompare(String(right.label)))
+  ), [summerRosterPlayers]);
 
   const persistRecords = async (nextRecords) => {
     const sanitized = sanitizePlayerHeadshotState(nextRecords);
@@ -160,6 +205,7 @@ export default function PlayerHeadshotsAdmin() {
       const renderedImage = await renderCompressedImageBlob(selectedFile, { maxEdge: 1400, quality: 0.9 });
       uploadedRecord = await uploadPlayerHeadshotAsset({
         personId: selectedPersonId,
+        headshotKey: selectedPersonId,
         label,
         originalFileName: selectedFile.name,
         blob: renderedImage.blob,
@@ -220,6 +266,7 @@ export default function PlayerHeadshotsAdmin() {
           {selectedPersonId ? (
             <PlayerHeadshot
               personId={selectedPersonId}
+              overrideKeys={selectedPersonId.startsWith("manual:") ? [selectedPersonId] : []}
               className={styles.playerHeadshotImage}
               alt={label || selectedPersonId}
               fallback={<div className={styles.playerHeadshotFallback}>No Image</div>}
@@ -231,12 +278,29 @@ export default function PlayerHeadshotsAdmin() {
 
         <div className={styles.playerHeadshotForm}>
           <label className={styles.field}>
-            <span>Player ID</span>
+            <span>Summer League roster</span>
+            <select
+              value={summerRosterOptions.some((option) => option.key === selectedPersonId) ? selectedPersonId : ""}
+              onChange={(event) => {
+                const option = summerRosterOptions.find((candidate) => candidate.key === event.target.value);
+                setPersonId(option?.key || "");
+                setLabel(option?.label || "");
+              }}
+            >
+              <option value="">Select roster player</option>
+              {summerRosterOptions.map((option) => (
+                <option key={option.key} value={option.key}>
+                  {`${option.label}${option.hasOfficialId ? "" : " (manual)"}`}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className={styles.field}>
+            <span>Player ID / Headshot key</span>
             <input
               value={personId}
               onChange={(event) => setPersonId(event.target.value)}
-              placeholder="1642066"
-              inputMode="numeric"
+              placeholder="1642066 or manual:1610612764:row-id"
             />
           </label>
           <label className={styles.field}>
@@ -281,7 +345,7 @@ export default function PlayerHeadshotsAdmin() {
               )}
               <span>
                 <strong>{record.label || `Player ${record.personId}`}</strong>
-                <span>{record.personId}</span>
+                <span>{record.key || record.personId}</span>
               </span>
             </button>
             <button type="button" className={styles.secondaryButton} disabled={loading} onClick={() => handleRemove(record)}>

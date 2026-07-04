@@ -5,6 +5,7 @@ import { PLAYER_HEADSHOT_CHANGE_EVENT } from "../playerHeadshotOverrides.js";
 export default function PlayerHeadshot({
   personId,
   teamId = null,
+  overrideKeys = [],
   className,
   style,
   alt = "",
@@ -13,7 +14,15 @@ export default function PlayerHeadshot({
   onLoad,
 }) {
   const [headshotVersion, setHeadshotVersion] = useState(0);
-  const sources = useMemo(() => playerHeadshotUrls(personId, teamId), [personId, teamId, headshotVersion]);
+  const overrideKeySignature = Array.isArray(overrideKeys) ? overrideKeys.join("|") : "";
+  const normalizedOverrideKeys = useMemo(
+    () => (overrideKeySignature ? overrideKeySignature.split("|").filter(Boolean) : []),
+    [overrideKeySignature]
+  );
+  const sources = useMemo(
+    () => playerHeadshotUrls(personId, teamId, { overrideKeys: normalizedOverrideKeys }),
+    [personId, teamId, normalizedOverrideKeys, headshotVersion]
+  );
   const [sourceIndex, setSourceIndex] = useState(0);
   const [exhausted, setExhausted] = useState(false);
 

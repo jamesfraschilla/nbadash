@@ -1,6 +1,6 @@
 import { supabase } from "./supabaseClient.js";
 
-// Manual player headshot overrides keyed by NBA personId.
+// Manual player headshot overrides keyed by NBA personId or a manual roster key.
 // For source-controlled images, add files under public/player-headshots/
 // and use a relative path like "player-headshots/1642066.png".
 // Values can be a single URL/path or an ordered array of URL/path candidates.
@@ -36,8 +36,30 @@ function buildSupabaseStoragePublicUrl(bucket, path) {
   return String(data?.publicUrl || "").trim();
 }
 
-function sanitizePersonId(value) {
-  return String(value || "").replace(/\D+/g, "").trim();
+export function normalizePlayerHeadshotKey(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const personMatch = /^(?:person:)?(\d+)$/i.exec(raw);
+  if (personMatch) return personMatch[1];
+  if (/^manual:/i.test(raw)) {
+    return raw
+      .toLowerCase()
+      .replace(/[^a-z0-9:_-]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  }
+  return raw
+    .toLowerCase()
+    .replace(/[^a-z0-9:_-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function storagePathPrefixForHeadshotKey(value) {
+  return normalizePlayerHeadshotKey(value)
+    .replace(/[^a-z0-9_-]+/gi, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "") || "player";
 }
 
 export function getPlayerHeadshotUploadFormat(value) {
@@ -46,17 +68,18 @@ export function getPlayerHeadshotUploadFormat(value) {
   return PLAYER_HEADSHOT_UPLOAD_FORMATS[normalized] || PLAYER_HEADSHOT_UPLOAD_FORMATS["image/jpeg"];
 }
 
-export function sanitizePlayerHeadshotRecord(record, fallbackPersonId = "") {
+export function sanitizePlayerHeadshotRecord(record, fallbackKey = "") {
   if (!record || typeof record !== "object" || Array.isArray(record)) return null;
-  const personId = sanitizePersonId(record.personId || fallbackPersonId);
-  if (!personId) return null;
+  const key = normalizePlayerHeadshotKey(record.key || record.personId || fallbackKey);
+  if (!key) return null;
   const bucket = String(record.bucket || PLAYER_HEADSHOT_BUCKET).trim();
   const path = String(record.path || "").trim();
   const url = String(record.url || "").trim() || buildSupabaseStoragePublicUrl(bucket, path);
   if (!url && !path) return null;
   const contentType = String(record.contentType || "").trim();
   const sanitizedRecord = {
-    personId,
+    key,
+    personId: key,
     label: String(record.label || "").trim(),
     originalFileName: String(record.originalFileName || "").trim(),
     bucket,
@@ -74,9 +97,9 @@ export function sanitizePlayerHeadshotState(rawState) {
     ? rawState.records
     : rawState;
   const records = {};
-  Object.entries(rawRecords || {}).forEach(([personId, record]) => {
-    const sanitized = sanitizePlayerHeadshotRecord(record, personId);
-    if (sanitized) records[sanitized.personId] = sanitized;
+  Object.entries(rawRecords || {}).forEach(([key, record]) => {
+    const sanitized = sanitizePlayerHeadshotRecord(record, key);
+    if (sanitized) records[sanitized.key] = sanitized;
   });
   return records;
 }
@@ -125,12 +148,12 @@ export function normalizePlayerHeadshotOverrides(value, basePath = "/nbadash/") 
 }
 
 export function resolvePlayerHeadshotOverrideUrls(personId, basePath = "/nbadash/") {
-  const safePersonId = String(personId || "").trim();
-  if (!safePersonId) return [];
-  const uploadedRecord = readStoredPlayerHeadshotOverrides()[safePersonId];
+  const safeKey = normalizePlayerHeadshotKey(personId);
+  if (!safeKey) return [];
+  const uploadedRecord = readStoredPlayerHeadshotOverrides()[safeKey];
   return [
     ...normalizePlayerHeadshotOverrides(uploadedRecord?.url, basePath),
-    ...normalizePlayerHeadshotOverrides(playerHeadshotOverrides[safePersonId], basePath),
+    ...normalizePlayerHeadshotOverrides(playerHeadshotOverrides[safeKey], basePath),
   ];
 }
 
@@ -180,18 +203,19 @@ export async function syncRemotePlayerHeadshotState(userId) {
 
 export async function uploadPlayerHeadshotAsset({
   personId,
+  headshotKey = "",
   label = "",
   originalFileName = "",
   blob,
   contentType = "",
 }) {
-  const safePersonId = sanitizePersonId(personId);
-  if (!safePersonId) throw new Error("Missing player ID.");
+  const safeHeadshotKey = normalizePlayerHeadshotKey(headshotKey || personId);
+  if (!safeHeadshotKey) throw new Error("Missing player ID or headshot key.");
   if (!blob) throw new Error("Choose an image to upload.");
   if (!supabase) throw new Error("Supabase is not configured.");
 
   const format = getPlayerHeadshotUploadFormat(contentType || blob?.type);
-  const path = `${safePersonId}/${Date.now()}-headshot.${format.extension}`;
+  const path = `${storagePathPrefixForHeadshotKey(safeHeadshotKey)}/${Date.now()}-headshot.${format.extension}`;
   const upload = await supabase.storage
     .from(PLAYER_HEADSHOT_BUCKET)
     .upload(path, blob, {
@@ -202,7 +226,8 @@ export async function uploadPlayerHeadshotAsset({
   if (upload.error) throw upload.error;
 
   return {
-    personId: safePersonId,
+    key: safeHeadshotKey,
+    personId: safeHeadshotKey,
     label: String(label || "").trim(),
     originalFileName: String(originalFileName || "").trim(),
     bucket: PLAYER_HEADSHOT_BUCKET,
