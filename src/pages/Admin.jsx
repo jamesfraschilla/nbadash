@@ -22,6 +22,7 @@ import {
   resolveSharedPregamePlayersPayload,
   saveRemotePregamePlayers,
 } from "../pregamePlayers.js";
+import PlayerHeadshotsAdmin from "./PlayerHeadshotsAdmin.jsx";
 import RefereeHeadshotsPreview from "./RefereeHeadshotsPreview.jsx";
 import styles from "./Admin.module.css";
 
@@ -113,6 +114,11 @@ const ADMIN_SECTIONS = [
     key: "referees",
     kicker: "Officials",
     title: "Referee headshots",
+  },
+  {
+    key: "players",
+    kicker: "Images",
+    title: "Player headshots",
   },
 ];
 
@@ -1100,6 +1106,12 @@ export default function Admin() {
         {activeSection === "referees" ? (
           <div className={styles.section}>
             <RefereeHeadshotsPreview embedded />
+          </div>
+        ) : null}
+
+        {activeSection === "players" ? (
+          <div className={styles.section}>
+            <PlayerHeadshotsAdmin />
           </div>
         ) : null}
       </section>

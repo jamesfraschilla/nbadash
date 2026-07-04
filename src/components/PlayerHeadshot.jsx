@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { playerHeadshotUrls } from "../api.js";
+import { PLAYER_HEADSHOT_CHANGE_EVENT } from "../playerHeadshotOverrides.js";
 
 export default function PlayerHeadshot({
   personId,
@@ -11,9 +12,17 @@ export default function PlayerHeadshot({
   fallback = null,
   onLoad,
 }) {
-  const sources = useMemo(() => playerHeadshotUrls(personId, teamId), [personId, teamId]);
+  const [headshotVersion, setHeadshotVersion] = useState(0);
+  const sources = useMemo(() => playerHeadshotUrls(personId, teamId), [personId, teamId, headshotVersion]);
   const [sourceIndex, setSourceIndex] = useState(0);
   const [exhausted, setExhausted] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const refresh = () => setHeadshotVersion((value) => value + 1);
+    window.addEventListener(PLAYER_HEADSHOT_CHANGE_EVENT, refresh);
+    return () => window.removeEventListener(PLAYER_HEADSHOT_CHANGE_EVENT, refresh);
+  }, []);
 
   useEffect(() => {
     setSourceIndex(0);

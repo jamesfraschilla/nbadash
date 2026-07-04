@@ -125,6 +125,10 @@
   min-height: 180px;
 }
 
+.field input[type="file"] {
+  padding: 8px 10px;
+}
+
 .scopeGroup {
   display: grid;
   gap: 8px;
@@ -205,6 +209,116 @@
 .list {
   display: grid;
   gap: 12px;
+}
+
+.playerHeadshotPanel {
+  display: grid;
+  gap: 16px;
+}
+
+.playerHeadshotEditor {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.playerHeadshotPreview {
+  display: grid;
+  place-items: center;
+  min-height: 150px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.playerHeadshotImage,
+.playerHeadshotFallback {
+  width: 100%;
+  max-width: 170px;
+  aspect-ratio: 1 / 1;
+}
+
+.playerHeadshotImage {
+  object-fit: contain;
+  object-position: center bottom;
+}
+
+.playerHeadshotFallback {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.playerHeadshotForm {
+  display: grid;
+  gap: 12px;
+}
+
+.playerHeadshotActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.playerHeadshotList {
+  display: grid;
+  gap: 10px;
+}
+
+.playerHeadshotRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 14px;
+  padding: 10px;
+}
+
+.playerHeadshotRowButton {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  padding: 0;
+}
+
+.playerHeadshotRowButton span {
+  display: grid;
+  gap: 3px;
+}
+
+.playerHeadshotRowButton span span {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.playerHeadshotThumb,
+.playerHeadshotThumbFallback {
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.playerHeadshotThumb {
+  object-fit: contain;
+  object-position: center bottom;
 }
 
 .inviteRow {
@@ -309,5 +423,14 @@
   .rosterGridHeader,
   .rosterRow {
     grid-template-columns: 1fr;
+  }
+
+  .playerHeadshotEditor,
+  .playerHeadshotRow {
+    grid-template-columns: 1fr;
+  }
+
+  .playerHeadshotActions {
+    justify-content: flex-start;
   }
 }

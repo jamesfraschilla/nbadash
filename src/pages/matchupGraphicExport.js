@@ -108,8 +108,8 @@ function buildPlayerHeadshotCandidates(player) {
   const personId = String(player?.personId || "").trim();
   if (!personId) return [];
   return [
-    `https://cdn.nba.com/headshots/nba/latest/1040x760/${personId}.png`,
     ...playerHeadshotUrls(personId, player?.teamId),
+    `https://cdn.nba.com/headshots/nba/latest/1040x760/${personId}.png`,
   ].filter((url, index, urls) => url && urls.indexOf(url) === index);
 }
 

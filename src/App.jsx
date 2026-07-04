@@ -5,6 +5,7 @@ import AuthGate from "./components/AuthGate.jsx";
 import LegacyNotesImportPrompt from "./components/LegacyNotesImportPrompt.jsx";
 import PasswordResetGate from "./components/PasswordResetGate.jsx";
 import { useAuth } from "./auth/useAuth.js";
+import { syncRemotePlayerHeadshotState } from "./playerHeadshotOverrides.js";
 import { readLocalStorage, writeLocalStorage } from "./storage.js";
 
 const UPDATE_CHECK_INTERVAL_MS = 10 * 60 * 1000;
@@ -79,9 +80,11 @@ export default function App() {
   useEffect(() => {
     if (user?.id) {
       return scheduleIdleWork(() => {
-        import("./refereeHeadshots.js")
-          .then(({ syncRemoteRefereeHeadshotState }) => syncRemoteRefereeHeadshotState(user.id))
-          .catch(() => {});
+        Promise.all([
+          import("./refereeHeadshots.js")
+            .then(({ syncRemoteRefereeHeadshotState }) => syncRemoteRefereeHeadshotState(user.id)),
+          syncRemotePlayerHeadshotState(user.id),
+        ]).catch(() => {});
       });
     }
     return undefined;

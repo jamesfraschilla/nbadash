@@ -1,4 +1,8 @@
 import { gLeagueHeadshotOverrides } from "./gLeagueHeadshotOverrides.js";
+import {
+  normalizePlayerHeadshotOverrides,
+  resolvePlayerHeadshotOverrideUrls,
+} from "./playerHeadshotOverrides.js";
 import { NBA_TEAMS } from "./data/nbaTeams.js";
 import { aggregateSegmentStats } from "./segmentStats.js";
 import {
@@ -20,6 +24,7 @@ const SUPABASE_ANON_KEY = import.meta?.env?.VITE_SUPABASE_ANON_KEY;
 const SUPABASE_FUNCTIONS_BASE = SUPABASE_URL
   ? `${String(SUPABASE_URL).replace(/\/$/, "")}/functions/v1`
   : "";
+const APP_BASE_PATH = import.meta?.env?.BASE_URL || "/nbadash/";
 
 async function requestJson(url, options = {}) {
   const { timeoutMs = 0 } = options;
@@ -1751,12 +1756,10 @@ export function playerHeadshotUrls(personId, teamId = null) {
   if (!safePersonId) return [];
 
   const league = inferLeagueFromTeamId(teamId);
-  const overrideValue = league === "gleague" ? gLeagueHeadshotOverrides[safePersonId] : null;
-  const overrideUrls = Array.isArray(overrideValue)
-    ? overrideValue
-    : overrideValue
-      ? [overrideValue]
-      : [];
+  const overrideUrls = [
+    ...resolvePlayerHeadshotOverrideUrls(safePersonId, APP_BASE_PATH),
+    ...(league === "gleague" ? normalizePlayerHeadshotOverrides(gLeagueHeadshotOverrides[safePersonId], APP_BASE_PATH) : []),
+  ];
 
   const candidates = league === "gleague"
     ? [
@@ -1768,6 +1771,7 @@ export function playerHeadshotUrls(personId, teamId = null) {
       `https://cdn.nba.com/headshots/nba/latest/260x190/${safePersonId}.png`,
     ]
     : [
+      ...overrideUrls,
       `https://cdn.nba.com/headshots/nba/latest/260x190/${safePersonId}.png`,
       `https://cdn.nba.com/headshots/nba/latest/1040x760/${safePersonId}.png`,
     ];
