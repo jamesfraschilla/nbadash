@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { GLEAGUE_TEAMS, NBA_TEAMS } from "../data/nbaTeams.js";
-import { exportDepthChartGraphic, renderDepthChartGraphic } from "./depthChartGraphicExport.js";
+import { DEPTH_CHART_EXPORT_SIZE, exportDepthChartGraphic, renderDepthChartGraphic } from "./depthChartGraphicExport.js";
 import styles from "./Tools.module.css";
 
 const CUSTOM_VALUE = "__custom__";
@@ -50,13 +50,9 @@ function formatPlayerOption(player) {
 
 function getPlayerLastName(player) {
   const familyName = String(player?.familyName || "").trim();
-  if (familyName && !isNameSuffix(familyName)) return familyName;
+  if (hasNameBeforeSuffix(familyName)) return familyName;
   const fullName = String(player?.fullName || "").trim();
-  const parts = fullName.split(/\s+/).filter(Boolean);
-  while (parts.length > 1 && isNameSuffix(parts[parts.length - 1])) {
-    parts.pop();
-  }
-  return parts[parts.length - 1] || fullName;
+  return parseLastNameLabel(fullName) || fullName;
 }
 
 function normalizeNameToken(value) {
@@ -65,6 +61,20 @@ function normalizeNameToken(value) {
 
 function isNameSuffix(value) {
   return NAME_SUFFIXES.has(normalizeNameToken(value));
+}
+
+function hasNameBeforeSuffix(value) {
+  return String(value || "").trim().split(/\s+/).some((part) => !isNameSuffix(part));
+}
+
+function parseLastNameLabel(fullName) {
+  const parts = String(fullName || "").trim().split(/\s+/).filter(Boolean);
+  const suffixes = [];
+  while (parts.length > 1 && isNameSuffix(parts[parts.length - 1])) {
+    suffixes.unshift(parts.pop());
+  }
+  const lastName = parts[parts.length - 1] || "";
+  return lastName && !isNameSuffix(lastName) ? [lastName, ...suffixes].join(" ") : "";
 }
 
 function readFileAsDataUrl(file) {
@@ -277,7 +287,7 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
         slots: exportSlots,
         fileName: `${getTeamFileLabel(selectedTeam)}-depth-chart.png`,
       });
-      setStatus("PNG exported.");
+      setStatus(`PNG exported at ${DEPTH_CHART_EXPORT_SIZE}x${DEPTH_CHART_EXPORT_SIZE}.`);
     } catch (error) {
       setStatus(error?.message || "Unable to export PNG.");
     }

@@ -1,7 +1,7 @@
 import { playerHeadshotUrls } from "../api.js";
 
-export const DEPTH_CHART_EXPORT_SIZE = 400;
-const DEPTH_CHART_EXPORT_SCALE = 4;
+const DEPTH_CHART_LAYOUT_SIZE = 400;
+export const DEPTH_CHART_EXPORT_SIZE = 1600;
 
 const COURT_FILL = "#c9d4e8";
 const COURT_LINE = "#f8fbff";
@@ -95,10 +95,10 @@ function drawRoundedFill(context, x, y, width, height, radius, fill, outline = n
 
 function getLastName(slot) {
   const explicit = String(slot?.lastName || "").trim();
-  if (explicit && !isNameSuffix(explicit)) return explicit.toUpperCase();
+  if (hasNameBeforeSuffix(explicit)) return explicit.toUpperCase();
   const fullName = String(slot?.fullName || "").trim();
-  const parsed = parseLastName(fullName);
-  return String(parsed || explicit || "").toUpperCase();
+  const parsed = parseLastNameLabel(fullName);
+  return String(parsed || "").toUpperCase();
 }
 
 function normalizeNameToken(value) {
@@ -109,12 +109,18 @@ function isNameSuffix(value) {
   return NAME_SUFFIXES.has(normalizeNameToken(value));
 }
 
-function parseLastName(fullName) {
+function hasNameBeforeSuffix(value) {
+  return String(value || "").trim().split(/\s+/).some((part) => !isNameSuffix(part));
+}
+
+function parseLastNameLabel(fullName) {
   const parts = String(fullName || "").trim().split(/\s+/).filter(Boolean);
+  const suffixes = [];
   while (parts.length > 1 && isNameSuffix(parts[parts.length - 1])) {
-    parts.pop();
+    suffixes.unshift(parts.pop());
   }
-  return parts[parts.length - 1] || "";
+  const lastName = parts[parts.length - 1] || "";
+  return lastName && !isNameSuffix(lastName) ? [lastName, ...suffixes].join(" ") : "";
 }
 
 function getNumberLabel(slot) {
@@ -184,7 +190,7 @@ function drawContainBottom(context, image, x, y, width, height) {
 function drawNbaHalfCourt(context) {
   const courtHeight = 280;
   const courtWidth = Math.round((courtHeight * 50) / 47);
-  const courtLeft = (DEPTH_CHART_EXPORT_SIZE - courtWidth) / 2;
+  const courtLeft = (DEPTH_CHART_LAYOUT_SIZE - courtWidth) / 2;
   const courtTop = 3;
   const scale = courtWidth / 50;
 
@@ -290,10 +296,10 @@ function drawStarterNamePlate(context, x, y, slot) {
 
 function drawStarter(context, slot, image, courtPoint) {
   const positions = {
-    "1": [0, 40.8],
+    "1": [0, 38.7],
     "2": [-18.8, 31],
     "3": [18.8, 31],
-    "4": [0, 22.5],
+    "4": [0, 25.2],
     "5": [0, 8.8],
   };
   const mapped = courtPoint(...(positions[slot.position] || [0, 0]));
@@ -340,7 +346,7 @@ function drawBenchCellName(context, slot, x, y, width, height) {
 function drawBenchRows(context, slotsById) {
   const left = 1;
   const gap = 2;
-  const columnWidth = (DEPTH_CHART_EXPORT_SIZE - left * 2 - gap * 4) / 5;
+  const columnWidth = (DEPTH_CHART_LAYOUT_SIZE - left * 2 - gap * 4) / 5;
   const headerY = 298;
   const rowTop = 314;
   const rowHeight = 35;
@@ -382,9 +388,12 @@ function getSlotsById(slots) {
   }, {});
 }
 
-export async function renderDepthChartGraphic(canvas, { slots = [], scale = 1 } = {}) {
+export async function renderDepthChartGraphic(canvas, { slots = [], outputSize = DEPTH_CHART_LAYOUT_SIZE } = {}) {
   if (!canvas) return null;
-  const renderScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  const pixelSize = Number.isFinite(outputSize) && outputSize > 0
+    ? Math.round(outputSize)
+    : DEPTH_CHART_LAYOUT_SIZE;
+  const renderScale = pixelSize / DEPTH_CHART_LAYOUT_SIZE;
   const starters = [1, 2, 3, 4, 5].map((position) => (
     slots.find((slot) => slot.id === `starter-${position}`) || { id: `starter-${position}`, position: String(position) }
   ));
@@ -398,30 +407,15 @@ export async function renderDepthChartGraphic(canvas, { slots = [], scale = 1 } 
     drawBenchRows(targetContext, getSlotsById(slots));
   };
 
-  canvas.width = DEPTH_CHART_EXPORT_SIZE;
-  canvas.height = DEPTH_CHART_EXPORT_SIZE;
+  canvas.width = pixelSize;
+  canvas.height = pixelSize;
   const context = canvas.getContext("2d");
   context.setTransform(1, 0, 0, 1, 0, 0);
-  context.clearRect(0, 0, DEPTH_CHART_EXPORT_SIZE, DEPTH_CHART_EXPORT_SIZE);
+  context.clearRect(0, 0, pixelSize, pixelSize);
+  context.setTransform(renderScale, 0, 0, renderScale, 0, 0);
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
-
-  if (renderScale === 1) {
-    drawGraphic(context);
-    return canvas;
-  }
-
-  const offscreenCanvas = document.createElement("canvas");
-  offscreenCanvas.width = DEPTH_CHART_EXPORT_SIZE * renderScale;
-  offscreenCanvas.height = DEPTH_CHART_EXPORT_SIZE * renderScale;
-  const offscreenContext = offscreenCanvas.getContext("2d");
-  offscreenContext.setTransform(renderScale, 0, 0, renderScale, 0, 0);
-  offscreenContext.clearRect(0, 0, DEPTH_CHART_EXPORT_SIZE, DEPTH_CHART_EXPORT_SIZE);
-  offscreenContext.imageSmoothingEnabled = true;
-  offscreenContext.imageSmoothingQuality = "high";
-  drawGraphic(offscreenContext);
-
-  context.drawImage(offscreenCanvas, 0, 0, DEPTH_CHART_EXPORT_SIZE, DEPTH_CHART_EXPORT_SIZE);
+  drawGraphic(context);
   return canvas;
 }
 
@@ -434,6 +428,6 @@ export function downloadCanvas(canvas, fileName) {
 
 export async function exportDepthChartGraphic({ slots, fileName = "depth-chart.png" }) {
   const canvas = document.createElement("canvas");
-  await renderDepthChartGraphic(canvas, { slots, scale: DEPTH_CHART_EXPORT_SCALE });
+  await renderDepthChartGraphic(canvas, { slots, outputSize: DEPTH_CHART_EXPORT_SIZE });
   downloadCanvas(canvas, fileName);
 }
