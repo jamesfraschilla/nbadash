@@ -23,6 +23,7 @@ import {
   saveRemotePregamePlayers,
 } from "../pregamePlayers.js";
 import { runOperationalHealthChecks } from "../operationalHealth.js";
+import DepthChartGraphicAdmin from "./DepthChartGraphicAdmin.jsx";
 import PlayerHeadshotsAdmin from "./PlayerHeadshotsAdmin.jsx";
 import RefereeHeadshotsPreview from "./RefereeHeadshotsPreview.jsx";
 import styles from "./Admin.module.css";
@@ -110,6 +111,11 @@ const ADMIN_SECTIONS = [
     key: "matchups",
     kicker: "Match-Ups",
     title: "Smart matchup profiles",
+  },
+  {
+    key: "depth-chart",
+    kicker: "Graphics",
+    title: "Depth chart export",
   },
   {
     key: "referees",
@@ -1162,6 +1168,12 @@ export default function Admin() {
               onSave={(record) => saveMatchupProfileMutation.mutateAsync(record)}
               onDelete={(personId) => deleteMatchupProfileMutation.mutateAsync(personId)}
             />
+          </div>
+        ) : null}
+
+        {activeSection === "depth-chart" ? (
+          <div className={styles.section}>
+            <DepthChartGraphicAdmin rosterSources={rosterSources} />
           </div>
         ) : null}
 
