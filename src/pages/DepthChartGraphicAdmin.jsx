@@ -5,6 +5,17 @@ import styles from "./Admin.module.css";
 
 const CUSTOM_VALUE = "__custom__";
 const POSITION_VALUES = ["1", "2", "3", "4", "5"];
+const NAME_SUFFIXES = new Set([
+  "JR",
+  "JUNIOR",
+  "SR",
+  "SENIOR",
+  "II",
+  "III",
+  "IV",
+  "V",
+  "VI",
+]);
 
 function buildSlot(id, position, group) {
   return {
@@ -39,10 +50,21 @@ function formatPlayerOption(player) {
 
 function getPlayerLastName(player) {
   const familyName = String(player?.familyName || "").trim();
-  if (familyName) return familyName;
+  if (familyName && !isNameSuffix(familyName)) return familyName;
   const fullName = String(player?.fullName || "").trim();
   const parts = fullName.split(/\s+/).filter(Boolean);
+  while (parts.length > 1 && isNameSuffix(parts[parts.length - 1])) {
+    parts.pop();
+  }
   return parts[parts.length - 1] || fullName;
+}
+
+function normalizeNameToken(value) {
+  return String(value || "").trim().replace(/[.,]/g, "").toUpperCase();
+}
+
+function isNameSuffix(value) {
+  return NAME_SUFFIXES.has(normalizeNameToken(value));
 }
 
 function readFileAsDataUrl(file) {

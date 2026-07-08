@@ -1,6 +1,7 @@
 import { playerHeadshotUrls } from "../api.js";
 
 export const DEPTH_CHART_EXPORT_SIZE = 400;
+const DEPTH_CHART_EXPORT_SCALE = 4;
 
 const COURT_FILL = "#c9d4e8";
 const COURT_LINE = "#f8fbff";
@@ -16,6 +17,17 @@ const SUPABASE_FUNCTIONS_BASE = import.meta.env.VITE_SUPABASE_URL
   : "";
 
 const loadedImageCache = new Map();
+const NAME_SUFFIXES = new Set([
+  "JR",
+  "JUNIOR",
+  "SR",
+  "SENIOR",
+  "II",
+  "III",
+  "IV",
+  "V",
+  "VI",
+]);
 
 function setFont(context, size, weight = 700) {
   context.font = `${weight} ${size}px Arial, Helvetica, sans-serif`;
@@ -83,10 +95,26 @@ function drawRoundedFill(context, x, y, width, height, radius, fill, outline = n
 
 function getLastName(slot) {
   const explicit = String(slot?.lastName || "").trim();
-  if (explicit) return explicit.toUpperCase();
+  if (explicit && !isNameSuffix(explicit)) return explicit.toUpperCase();
   const fullName = String(slot?.fullName || "").trim();
-  const parts = fullName.split(/\s+/).filter(Boolean);
-  return String(parts[parts.length - 1] || "").toUpperCase();
+  const parsed = parseLastName(fullName);
+  return String(parsed || explicit || "").toUpperCase();
+}
+
+function normalizeNameToken(value) {
+  return String(value || "").trim().replace(/[.,]/g, "").toUpperCase();
+}
+
+function isNameSuffix(value) {
+  return NAME_SUFFIXES.has(normalizeNameToken(value));
+}
+
+function parseLastName(fullName) {
+  const parts = String(fullName || "").trim().split(/\s+/).filter(Boolean);
+  while (parts.length > 1 && isNameSuffix(parts[parts.length - 1])) {
+    parts.pop();
+  }
+  return parts[parts.length - 1] || "";
 }
 
 function getNumberLabel(slot) {
@@ -99,7 +127,13 @@ function buildHeadshotCandidates(slot) {
   if (customUrl) return [customUrl];
   const personId = String(slot?.personId || "").trim();
   if (!personId) return [];
-  return playerHeadshotUrls(personId, slot?.teamId);
+  const candidates = playerHeadshotUrls(personId, slot?.teamId);
+  const isOfficialNbaHeadshot = (url) => /cdn\.nba\.com\/headshots\/nba\/latest\/(260x190|1040x760)\//i.test(String(url || ""));
+  return [
+    ...candidates.filter((url) => !isOfficialNbaHeadshot(url)),
+    ...candidates.filter((url) => isOfficialNbaHeadshot(url) && String(url || "").includes("/1040x760/")),
+    ...candidates.filter((url) => isOfficialNbaHeadshot(url) && !String(url || "").includes("/1040x760/")),
+  ];
 }
 
 function buildProxyUrl(url) {
@@ -256,15 +290,15 @@ function drawStarterNamePlate(context, x, y, slot) {
 
 function drawStarter(context, slot, image, courtPoint) {
   const positions = {
-    "1": [0, 39.6],
-    "2": [-18.6, 30],
-    "3": [18.6, 30],
-    "4": [0, 24],
-    "5": [0, 10.6],
+    "1": [0, 37.2],
+    "2": [-18.6, 30.8],
+    "3": [18.6, 30.8],
+    "4": [0, 24.8],
+    "5": [0, 9.8],
   };
   const mapped = courtPoint(...(positions[slot.position] || [0, 0]));
-  const headshotHeight = 52;
-  const headshotWidth = 74;
+  const headshotHeight = 49;
+  const headshotWidth = 70;
 
   context.save();
   setFont(context, 10, 700);
@@ -277,7 +311,7 @@ function drawStarter(context, slot, image, courtPoint) {
       context,
       image,
       mapped.x - headshotWidth / 2,
-      mapped.y - 33,
+      mapped.y - 32,
       headshotWidth,
       headshotHeight
     );
@@ -348,11 +382,13 @@ function getSlotsById(slots) {
   }, {});
 }
 
-export async function renderDepthChartGraphic(canvas, { slots = [] } = {}) {
+export async function renderDepthChartGraphic(canvas, { slots = [], scale = 1 } = {}) {
   if (!canvas) return null;
-  canvas.width = DEPTH_CHART_EXPORT_SIZE;
-  canvas.height = DEPTH_CHART_EXPORT_SIZE;
+  const renderScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  canvas.width = DEPTH_CHART_EXPORT_SIZE * renderScale;
+  canvas.height = DEPTH_CHART_EXPORT_SIZE * renderScale;
   const context = canvas.getContext("2d");
+  context.setTransform(renderScale, 0, 0, renderScale, 0, 0);
   context.clearRect(0, 0, DEPTH_CHART_EXPORT_SIZE, DEPTH_CHART_EXPORT_SIZE);
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
@@ -380,6 +416,6 @@ export function downloadCanvas(canvas, fileName) {
 
 export async function exportDepthChartGraphic({ slots, fileName = "depth-chart.png" }) {
   const canvas = document.createElement("canvas");
-  await renderDepthChartGraphic(canvas, { slots });
+  await renderDepthChartGraphic(canvas, { slots, scale: DEPTH_CHART_EXPORT_SCALE });
   downloadCanvas(canvas, fileName);
 }
