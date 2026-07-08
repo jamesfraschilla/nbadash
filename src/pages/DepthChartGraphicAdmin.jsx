@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { GLEAGUE_TEAMS, NBA_TEAMS } from "../data/nbaTeams.js";
 import { exportDepthChartGraphic, renderDepthChartGraphic } from "./depthChartGraphicExport.js";
-import styles from "./Admin.module.css";
+import styles from "./Tools.module.css";
 
 const CUSTOM_VALUE = "__custom__";
 const POSITION_VALUES = ["1", "2", "3", "4", "5"];
@@ -101,8 +101,8 @@ function SlotEditor({
         {isStarter ? "Starter" : "Bench"} {slot.position}
       </div>
       <label className={styles.field}>
-        <span>Player</span>
-        <select value={slot.selection} onChange={(event) => onSelectionChange(slot.id, event.target.value)}>
+        <span className={styles.fieldLabel}>Player</span>
+        <select className={styles.select} value={slot.selection} onChange={(event) => onSelectionChange(slot.id, event.target.value)}>
           <option value="">Select player</option>
           {roster.map((player) => (
             <option
@@ -120,8 +120,9 @@ function SlotEditor({
       {isCustom ? (
         <div className={styles.depthChartCustomFields}>
           <label className={styles.field}>
-            <span>Number</span>
+            <span className={styles.fieldLabel}>Number</span>
             <input
+              className={styles.select}
               type="text"
               value={slot.customNumber}
               onChange={(event) => onCustomChange(slot.id, { customNumber: event.target.value })}
@@ -129,8 +130,9 @@ function SlotEditor({
             />
           </label>
           <label className={styles.field}>
-            <span>Last name</span>
+            <span className={styles.fieldLabel}>Last name</span>
             <input
+              className={styles.select}
               type="text"
               value={slot.customLastName}
               onChange={(event) => onCustomChange(slot.id, { customLastName: event.target.value })}
@@ -139,8 +141,9 @@ function SlotEditor({
           </label>
           {isStarter ? (
             <label className={styles.field}>
-              <span>Headshot PNG</span>
+              <span className={styles.fieldLabel}>Headshot PNG</span>
               <input
+                className={styles.select}
                 type="file"
                 accept="image/png"
                 onChange={(event) => onHeadshotChange(slot.id, event.target.files?.[0] || null)}
@@ -286,18 +289,18 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
 
   return (
     <div className={styles.depthChartPanel}>
-      <div className={styles.inviteCard}>
-        <div className={styles.formGrid}>
+      <div className={styles.depthChartSetupCard}>
+        <div className={styles.depthChartSetupGrid}>
           <label className={styles.field}>
-            <span>League</span>
-            <select value={league} onChange={(event) => handleLeagueChange(event.target.value)}>
+            <span className={styles.fieldLabel}>League</span>
+            <select className={styles.select} value={league} onChange={(event) => handleLeagueChange(event.target.value)}>
               <option value="nba">NBA</option>
               <option value="gleague">G League</option>
             </select>
           </label>
           <label className={styles.field}>
-            <span>Team</span>
-            <select value={teamId} onChange={(event) => handleTeamChange(event.target.value)}>
+            <span className={styles.fieldLabel}>Team</span>
+            <select className={styles.select} value={teamId} onChange={(event) => handleTeamChange(event.target.value)}>
               <option value="">Select team</option>
               {teams.map((team) => (
                 <option key={team.teamId} value={team.teamId}>{team.fullName}</option>
@@ -310,7 +313,7 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
       <div className={styles.depthChartBuilder}>
         <div className={styles.depthChartControls}>
           <div className={styles.depthChartSlotSection}>
-            <div className={styles.scopeLabel}>Starters</div>
+            <div className={styles.depthChartSectionTitle}>Starters</div>
             <div className={styles.depthChartSlotGrid}>
               {starterSlots.map((slot) => (
                 <SlotEditor
@@ -327,7 +330,7 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
           </div>
 
           <div className={styles.depthChartSlotSection}>
-            <div className={styles.scopeLabel}>Bench row 1</div>
+            <div className={styles.depthChartSectionTitle}>Bench row 1</div>
             <div className={styles.depthChartSlotGrid}>
               {benchRowOne.map((slot) => (
                 <SlotEditor
@@ -344,7 +347,7 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
           </div>
 
           <div className={styles.depthChartSlotSection}>
-            <div className={styles.scopeLabel}>Bench row 2</div>
+            <div className={styles.depthChartSectionTitle}>Bench row 2</div>
             <div className={styles.depthChartSlotGrid}>
               {benchRowTwo.map((slot) => (
                 <SlotEditor
@@ -375,7 +378,7 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
               Export PNG
             </button>
           </div>
-          {status ? <div className={styles.message}>{status}</div> : null}
+          {status ? <div className={styles.statusNote}>{status}</div> : null}
         </aside>
       </div>
     </div>

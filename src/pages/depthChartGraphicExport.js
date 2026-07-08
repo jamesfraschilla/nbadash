@@ -290,11 +290,11 @@ function drawStarterNamePlate(context, x, y, slot) {
 
 function drawStarter(context, slot, image, courtPoint) {
   const positions = {
-    "1": [0, 37.2],
-    "2": [-18.6, 30.8],
-    "3": [18.6, 30.8],
-    "4": [0, 24.8],
-    "5": [0, 9.8],
+    "1": [0, 40.8],
+    "2": [-18.8, 31],
+    "3": [18.8, 31],
+    "4": [0, 22.5],
+    "5": [0, 8.8],
   };
   const mapped = courtPoint(...(positions[slot.position] || [0, 0]));
   const headshotHeight = 49;
@@ -385,25 +385,43 @@ function getSlotsById(slots) {
 export async function renderDepthChartGraphic(canvas, { slots = [], scale = 1 } = {}) {
   if (!canvas) return null;
   const renderScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
-  canvas.width = DEPTH_CHART_EXPORT_SIZE * renderScale;
-  canvas.height = DEPTH_CHART_EXPORT_SIZE * renderScale;
-  const context = canvas.getContext("2d");
-  context.setTransform(renderScale, 0, 0, renderScale, 0, 0);
-  context.clearRect(0, 0, DEPTH_CHART_EXPORT_SIZE, DEPTH_CHART_EXPORT_SIZE);
-  context.imageSmoothingEnabled = true;
-  context.imageSmoothingQuality = "high";
-
   const starters = [1, 2, 3, 4, 5].map((position) => (
     slots.find((slot) => slot.id === `starter-${position}`) || { id: `starter-${position}`, position: String(position) }
   ));
   const images = await Promise.all(starters.map((slot) => loadFirstImage(buildHeadshotCandidates(slot))));
-  const { point } = drawNbaHalfCourt(context);
 
-  starters.forEach((slot, index) => {
-    drawStarter(context, slot, images[index], point);
-  });
+  const drawGraphic = (targetContext) => {
+    const { point } = drawNbaHalfCourt(targetContext);
+    starters.forEach((slot, index) => {
+      drawStarter(targetContext, slot, images[index], point);
+    });
+    drawBenchRows(targetContext, getSlotsById(slots));
+  };
 
-  drawBenchRows(context, getSlotsById(slots));
+  canvas.width = DEPTH_CHART_EXPORT_SIZE;
+  canvas.height = DEPTH_CHART_EXPORT_SIZE;
+  const context = canvas.getContext("2d");
+  context.setTransform(1, 0, 0, 1, 0, 0);
+  context.clearRect(0, 0, DEPTH_CHART_EXPORT_SIZE, DEPTH_CHART_EXPORT_SIZE);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+
+  if (renderScale === 1) {
+    drawGraphic(context);
+    return canvas;
+  }
+
+  const offscreenCanvas = document.createElement("canvas");
+  offscreenCanvas.width = DEPTH_CHART_EXPORT_SIZE * renderScale;
+  offscreenCanvas.height = DEPTH_CHART_EXPORT_SIZE * renderScale;
+  const offscreenContext = offscreenCanvas.getContext("2d");
+  offscreenContext.setTransform(renderScale, 0, 0, renderScale, 0, 0);
+  offscreenContext.clearRect(0, 0, DEPTH_CHART_EXPORT_SIZE, DEPTH_CHART_EXPORT_SIZE);
+  offscreenContext.imageSmoothingEnabled = true;
+  offscreenContext.imageSmoothingQuality = "high";
+  drawGraphic(offscreenContext);
+
+  context.drawImage(offscreenCanvas, 0, 0, DEPTH_CHART_EXPORT_SIZE, DEPTH_CHART_EXPORT_SIZE);
   return canvas;
 }
 

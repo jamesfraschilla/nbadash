@@ -31,6 +31,7 @@ import {
   getMarginOptionLabel,
 } from "../components/lateGamePanelHelpers.js";
 import { exportMatchupGraphic } from "./matchupGraphicExport.js";
+import DepthChartGraphicAdmin from "./DepthChartGraphicAdmin.jsx";
 import { requestCustomDashboardRequest } from "../customRequestsData.js";
 import styles from "./Tools.module.css";
 
@@ -39,6 +40,7 @@ const WIZARDS_TEAM_ID = "1610612764";
 const CAPITAL_CITY_TEAM_ID = "1612709928";
 const TOOL_TABS = {
   MATCHUP: "matchup",
+  DEPTH_CHART: "depth-chart",
   SCOUTING: "scouting",
   LATE_GAME: "late-game",
   CUSTOM_REQUESTS: "custom-requests",
@@ -350,6 +352,8 @@ export default function Tools() {
     ? TOOL_TABS.LATE_GAME
     : rawTab === TOOL_TABS.CUSTOM_REQUESTS
       ? TOOL_TABS.CUSTOM_REQUESTS
+    : rawTab === TOOL_TABS.DEPTH_CHART
+      ? TOOL_TABS.DEPTH_CHART
     : rawTab === TOOL_TABS.SCOUTING
       ? TOOL_TABS.SCOUTING
       : TOOL_TABS.MATCHUP;
@@ -694,6 +698,8 @@ export default function Tools() {
       ? TOOL_TABS.LATE_GAME
       : nextTab === TOOL_TABS.CUSTOM_REQUESTS
         ? TOOL_TABS.CUSTOM_REQUESTS
+      : nextTab === TOOL_TABS.DEPTH_CHART
+        ? TOOL_TABS.DEPTH_CHART
       : nextTab === TOOL_TABS.SCOUTING
         ? TOOL_TABS.SCOUTING
         : TOOL_TABS.MATCHUP;
@@ -1124,6 +1130,13 @@ export default function Tools() {
         </button>
         <button
           type="button"
+          className={`${styles.tabButton} ${activeTab === TOOL_TABS.DEPTH_CHART ? styles.tabButtonActive : ""}`}
+          onClick={() => handleToolTabChange(TOOL_TABS.DEPTH_CHART)}
+        >
+          Depth Chart Graphic
+        </button>
+        <button
+          type="button"
           className={`${styles.tabButton} ${activeTab === TOOL_TABS.SCOUTING ? styles.tabButtonActive : ""}`}
           onClick={() => handleToolTabChange(TOOL_TABS.SCOUTING)}
         >
@@ -1235,6 +1248,10 @@ export default function Tools() {
           </div>
 
           {saveStatus ? <div className={styles.statusNote}>{saveStatus}</div> : null}
+        </section>
+      ) : activeTab === TOOL_TABS.DEPTH_CHART ? (
+        <section className={styles.workspace}>
+          <DepthChartGraphicAdmin rosterSources={{ nba: nbaRosterMap, gleague: gLeagueRosterMap }} />
         </section>
       ) : activeTab === TOOL_TABS.SCOUTING ? (
         <section className={styles.workspace}>
