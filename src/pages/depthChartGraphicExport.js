@@ -124,7 +124,7 @@ function parseLastNameLabel(fullName) {
 }
 
 function getNumberLabel(slot) {
-  const jersey = String(slot?.jerseyNum || slot?.number || "").trim();
+  const jersey = String(slot?.jerseyNum || slot?.number || "").trim().replace(/^#+\s*/, "");
   return jersey ? `#${jersey}` : "";
 }
 
@@ -314,7 +314,7 @@ function drawStarter(context, slot, image, courtPoint, courtBounds) {
     "5": [0, 8.8],
   };
   const markerOffsets = {
-    "1": [-52, -33],
+    "1": [-41, -27],
   };
   const mapped = courtPoint(...(positions[slot.position] || [0, 0]));
   const markerOffset = markerOffsets[slot.position] || [-31, -33];
