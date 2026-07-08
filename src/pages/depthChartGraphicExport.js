@@ -258,10 +258,18 @@ function drawNbaHalfCourt(context) {
 
   context.restore();
 
-  return { point };
+  return {
+    point,
+    bounds: {
+      left: courtLeft,
+      right: courtLeft + courtWidth,
+      top: courtTop,
+      bottom: courtTop + courtHeight,
+    },
+  };
 }
 
-function drawStarterNamePlate(context, x, y, slot) {
+function drawStarterNamePlate(context, x, y, slot, courtBounds) {
   const number = getNumberLabel(slot);
   const lastName = getLastName(slot);
   if (!number && !lastName) return;
@@ -275,7 +283,10 @@ function drawStarterNamePlate(context, x, y, slot) {
   const lastWidth = context.measureText(lastName).width;
   const plateWidth = Math.min(maxWidth, Math.max(52, numberWidth + 12, lastWidth + 12));
   const plateHeight = 21;
-  const plateX = x - plateWidth / 2;
+  const unclampedPlateX = x - plateWidth / 2;
+  const minPlateX = (courtBounds?.left ?? 0) + 2;
+  const maxPlateX = (courtBounds?.right ?? DEPTH_CHART_LAYOUT_SIZE) - plateWidth - 2;
+  const plateX = Math.max(minPlateX, Math.min(unclampedPlateX, maxPlateX));
 
   context.save();
   drawRoundedFill(context, plateX, y, plateWidth, plateHeight, 3, PLATE_FILL, PLATE_OUTLINE);
@@ -294,15 +305,19 @@ function drawStarterNamePlate(context, x, y, slot) {
   context.restore();
 }
 
-function drawStarter(context, slot, image, courtPoint) {
+function drawStarter(context, slot, image, courtPoint, courtBounds) {
   const positions = {
     "1": [0, 38.7],
     "2": [-18.8, 31],
     "3": [18.8, 31],
-    "4": [0, 25.2],
+    "4": [0, 26],
     "5": [0, 8.8],
   };
+  const markerOffsets = {
+    "1": [-52, -33],
+  };
   const mapped = courtPoint(...(positions[slot.position] || [0, 0]));
+  const markerOffset = markerOffsets[slot.position] || [-31, -33];
   const headshotHeight = 49;
   const headshotWidth = 70;
 
@@ -311,7 +326,7 @@ function drawStarter(context, slot, image, courtPoint) {
   context.fillStyle = RED;
   context.textAlign = "left";
   context.textBaseline = "middle";
-  context.fillText(slot.position, mapped.x - 31, mapped.y - 33);
+  context.fillText(slot.position, mapped.x + markerOffset[0], mapped.y + markerOffset[1]);
   if (image) {
     drawContainBottom(
       context,
@@ -322,7 +337,7 @@ function drawStarter(context, slot, image, courtPoint) {
       headshotHeight
     );
   }
-  drawStarterNamePlate(context, mapped.x, mapped.y + 21, slot);
+  drawStarterNamePlate(context, mapped.x, mapped.y + 21, slot, courtBounds);
   context.restore();
 }
 
@@ -400,9 +415,9 @@ export async function renderDepthChartGraphic(canvas, { slots = [], outputSize =
   const images = await Promise.all(starters.map((slot) => loadFirstImage(buildHeadshotCandidates(slot))));
 
   const drawGraphic = (targetContext) => {
-    const { point } = drawNbaHalfCourt(targetContext);
+    const { point, bounds } = drawNbaHalfCourt(targetContext);
     starters.forEach((slot, index) => {
-      drawStarter(targetContext, slot, images[index], point);
+      drawStarter(targetContext, slot, images[index], point, bounds);
     });
     drawBenchRows(targetContext, getSlotsById(slots));
   };
