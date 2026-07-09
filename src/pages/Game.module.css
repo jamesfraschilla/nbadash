@@ -990,6 +990,12 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   font-feature-settings: "tnum" 1;
 }
 
+.freshnessFooter {
+  display: flex;
+  justify-content: center;
+  margin-top: -10px;
+}
+
 .freshnessfresh {
   color: var(--muted);
 }

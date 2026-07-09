@@ -132,7 +132,7 @@ def normalize_player(entry: dict[str, Any]) -> dict[str, Any] | None:
         return None
     return {
         "teamId": team_id,
-        "personId": person_id,
+        "personId": str(person_id).strip(),
         "firstName": first_name,
         "familyName": family_name,
         "fullName": full_name,

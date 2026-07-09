@@ -99,12 +99,14 @@ function normalizeLastName(player) {
 }
 
 function getPlayerExportLabel(player) {
-  const jersey = String(player?.jerseyNum || "").trim();
+  const jersey = String(player?.jerseyNum || "").trim().replace(/^#+\s*/, "");
   const lastName = normalizeLastName(player);
   return `${jersey ? `#${jersey} ` : ""}${lastName}`.trim();
 }
 
 function buildPlayerHeadshotCandidates(player) {
+  const customUrl = String(player?.headshotDataUrl || player?.headshotUrl || "").trim();
+  if (customUrl) return [customUrl];
   const personId = String(player?.personId || "").trim();
   if (!personId) return [];
   return [
@@ -115,7 +117,7 @@ function buildPlayerHeadshotCandidates(player) {
 
 function buildProxyUrl(url) {
   const safeUrl = String(url || "").trim();
-  if (!safeUrl || !SUPABASE_FUNCTIONS_BASE) return safeUrl;
+  if (!safeUrl || !SUPABASE_FUNCTIONS_BASE || !/^https?:\/\//i.test(safeUrl)) return safeUrl;
   return `${SUPABASE_FUNCTIONS_BASE}/export-image?url=${encodeURIComponent(safeUrl)}`;
 }
 

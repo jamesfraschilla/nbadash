@@ -36,6 +36,7 @@ import { requestCustomDashboardRequest } from "../customRequestsData.js";
 import styles from "./Tools.module.css";
 
 const EMPTY_PLAYER_IDS = Array(5).fill("");
+const CUSTOM_PLAYER_VALUE = "__custom__";
 const WIZARDS_TEAM_ID = "1610612764";
 const CAPITAL_CITY_TEAM_ID = "1612709928";
 const TOOL_TABS = {
@@ -54,8 +55,22 @@ function buildEmptyDraft() {
     rightTeamId: "",
     leftPlayerIds: [...EMPTY_PLAYER_IDS],
     rightPlayerIds: [...EMPTY_PLAYER_IDS],
+    leftCustomPlayers: buildEmptyCustomPlayers(),
+    rightCustomPlayers: buildEmptyCustomPlayers(),
     logoTeamId: "",
   };
+}
+
+function buildEmptyCustomPlayer() {
+  return {
+    jerseyNum: "",
+    lastName: "",
+    headshotDataUrl: "",
+  };
+}
+
+function buildEmptyCustomPlayers() {
+  return EMPTY_PLAYER_IDS.map(() => buildEmptyCustomPlayer());
 }
 
 function normalizeTeamScopes(teamScopes) {
@@ -159,11 +174,20 @@ function isDraftBlank(draft) {
   if (!draft || typeof draft !== "object") return true;
   const leftPlayerIds = Array.isArray(draft.leftPlayerIds) ? draft.leftPlayerIds : [];
   const rightPlayerIds = Array.isArray(draft.rightPlayerIds) ? draft.rightPlayerIds : [];
+  const customPlayerValues = [
+    ...(Array.isArray(draft.leftCustomPlayers) ? draft.leftCustomPlayers : []),
+    ...(Array.isArray(draft.rightCustomPlayers) ? draft.rightCustomPlayers : []),
+  ];
   return !String(draft.leftTeamId || "").trim() &&
     !String(draft.rightTeamId || "").trim() &&
     !String(draft.logoTeamId || "").trim() &&
     !leftPlayerIds.some((value) => String(value || "").trim()) &&
-    !rightPlayerIds.some((value) => String(value || "").trim());
+    !rightPlayerIds.some((value) => String(value || "").trim()) &&
+    !customPlayerValues.some((player) => (
+      String(player?.jerseyNum || "").trim() ||
+      String(player?.lastName || "").trim() ||
+      String(player?.headshotDataUrl || "").trim()
+    ));
 }
 
 function hydrateDraftPayload(payload, fallbackDraft) {
@@ -174,8 +198,21 @@ function hydrateDraftPayload(payload, fallbackDraft) {
     rightTeamId: String(payload?.rightTeamId || "").trim(),
     leftPlayerIds: [...EMPTY_PLAYER_IDS].map((_, index) => String(payload?.leftPlayerIds?.[index] || "").trim()),
     rightPlayerIds: [...EMPTY_PLAYER_IDS].map((_, index) => String(payload?.rightPlayerIds?.[index] || "").trim()),
+    leftCustomPlayers: hydrateCustomPlayers(payload?.leftCustomPlayers),
+    rightCustomPlayers: hydrateCustomPlayers(payload?.rightCustomPlayers),
     logoTeamId: String(payload?.logoTeamId || "").trim() || String(fallbackDraft?.logoTeamId || "").trim(),
   };
+}
+
+function hydrateCustomPlayers(value) {
+  return EMPTY_PLAYER_IDS.map((_, index) => {
+    const player = Array.isArray(value) && value[index] && typeof value[index] === "object" ? value[index] : {};
+    return {
+      jerseyNum: String(player?.jerseyNum || player?.number || "").trim(),
+      lastName: String(player?.lastName || player?.familyName || player?.fullName || "").trim(),
+      headshotDataUrl: String(player?.headshotDataUrl || "").trim(),
+    };
+  });
 }
 
 function teamDisplayCode(team) {
@@ -205,7 +242,8 @@ function buildDraftTitle(draft) {
 }
 
 function formatPlayerOption(player) {
-  return `#${player.jerseyNum || "--"} ${player.fullName}`.trim();
+  const jersey = String(player?.jerseyNum || "").trim().replace(/^#+\s*/, "");
+  return `${jersey ? `#${jersey}` : "#--"} ${player.fullName}`.trim();
 }
 
 function parseSortableNumeric(value) {
@@ -244,11 +282,37 @@ function compareSortableValues(left, right) {
   });
 }
 
-function resolveSelectedPlayers(playerIds, roster) {
+function buildCustomMatchupPlayer(customPlayer, index, teamId) {
+  const lastName = String(customPlayer?.lastName || "").trim();
+  if (!lastName) return null;
+  return {
+    personId: `custom-matchup-${teamId || "team"}-${index}`,
+    firstName: "",
+    familyName: lastName,
+    fullName: lastName,
+    jerseyNum: String(customPlayer?.jerseyNum || "").trim(),
+    teamId: String(teamId || "").trim(),
+    headshotDataUrl: String(customPlayer?.headshotDataUrl || "").trim(),
+  };
+}
+
+function resolveSelectedPlayers(playerIds, roster, customPlayers, teamId) {
   const playersById = new Map((roster || []).map((player) => [player.personId, player]));
   return [...EMPTY_PLAYER_IDS].map((_, index) => {
     const playerId = String(playerIds?.[index] || "").trim();
+    if (playerId === CUSTOM_PLAYER_VALUE) {
+      return buildCustomMatchupPlayer(customPlayers?.[index], index, teamId);
+    }
     return playersById.get(playerId) || null;
+  });
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("Unable to read file."));
+    reader.readAsDataURL(file);
   });
 }
 
@@ -268,8 +332,11 @@ function ToolColumn({
   teams,
   playerIds,
   rosterMap,
+  customPlayers,
   onTeamChange,
   onPlayerChange,
+  onCustomPlayerChange,
+  onCustomHeadshotChange,
 }) {
   const roster = useMemo(() => rosterMap[String(teamId || "")] || [], [rosterMap, teamId]);
 
@@ -286,29 +353,64 @@ function ToolColumn({
 
       <div className={styles.playerFields}>
         {Array.from({ length: 5 }, (_, index) => {
-          const selectedIds = new Set(playerIds.filter(Boolean));
+          const selectedIds = new Set(playerIds.filter((value) => value && value !== CUSTOM_PLAYER_VALUE));
           const currentId = playerIds[index] || "";
+          const isCustom = currentId === CUSTOM_PLAYER_VALUE;
+          const customPlayer = customPlayers?.[index] || buildEmptyCustomPlayer();
           selectedIds.delete(currentId);
           return (
-            <label key={`${columnId}-player-${index}`} className={styles.field}>
-              <select
-                className={styles.select}
-                value={currentId}
-                onChange={(event) => onPlayerChange(index, event.target.value)}
-                disabled={!teamId}
-              >
-                <option value="">Player</option>
-                {roster.map((player) => (
-                  <option
-                    key={player.personId}
-                    value={player.personId}
-                    disabled={selectedIds.has(player.personId)}
-                  >
-                    {formatPlayerOption(player)}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div key={`${columnId}-player-${index}`} className={styles.matchupPlayerSlot}>
+              <label className={styles.field}>
+                <select
+                  className={styles.select}
+                  value={currentId}
+                  onChange={(event) => onPlayerChange(index, event.target.value)}
+                  disabled={!teamId}
+                >
+                  <option value="">Player</option>
+                  {roster.map((player) => (
+                    <option
+                      key={player.personId}
+                      value={player.personId}
+                      disabled={selectedIds.has(player.personId)}
+                    >
+                      {formatPlayerOption(player)}
+                    </option>
+                  ))}
+                  <option value={CUSTOM_PLAYER_VALUE}>Custom</option>
+                </select>
+              </label>
+              {isCustom ? (
+                <div className={styles.matchupCustomFields}>
+                  <label className={styles.field}>
+                    <span className={styles.fieldLabel}>Number</span>
+                    <input
+                      className={styles.select}
+                      value={customPlayer.jerseyNum}
+                      onChange={(event) => onCustomPlayerChange(index, { jerseyNum: event.target.value })}
+                      inputMode="numeric"
+                    />
+                  </label>
+                  <label className={styles.field}>
+                    <span className={styles.fieldLabel}>Last name</span>
+                    <input
+                      className={styles.select}
+                      value={customPlayer.lastName}
+                      onChange={(event) => onCustomPlayerChange(index, { lastName: event.target.value })}
+                    />
+                  </label>
+                  <label className={styles.field}>
+                    <span className={styles.fieldLabel}>Headshot PNG</span>
+                    <input
+                      className={styles.select}
+                      type="file"
+                      accept="image/png"
+                      onChange={(event) => onCustomHeadshotChange(index, event.target.files?.[0] || null)}
+                    />
+                  </label>
+                </div>
+              ) : null}
+            </div>
           );
         })}
       </div>
@@ -438,12 +540,12 @@ export default function Tools() {
     [lateGameLeague, lateGameSetup.homeTeamId]
   );
   const selectedLeftPlayers = useMemo(
-    () => resolveSelectedPlayers(draft.leftPlayerIds, leftRoster),
-    [draft.leftPlayerIds, leftRoster]
+    () => resolveSelectedPlayers(draft.leftPlayerIds, leftRoster, draft.leftCustomPlayers, draft.leftTeamId),
+    [draft.leftCustomPlayers, draft.leftPlayerIds, draft.leftTeamId, leftRoster]
   );
   const selectedRightPlayers = useMemo(
-    () => resolveSelectedPlayers(draft.rightPlayerIds, rightRoster),
-    [draft.rightPlayerIds, rightRoster]
+    () => resolveSelectedPlayers(draft.rightPlayerIds, rightRoster, draft.rightCustomPlayers, draft.rightTeamId),
+    [draft.rightCustomPlayers, draft.rightPlayerIds, draft.rightTeamId, rightRoster]
   );
   const exportReady = Boolean(
     leftTeam &&
@@ -660,6 +762,7 @@ export default function Tools() {
       ...current,
       [`${side}TeamId`]: nextTeamId,
       [`${side}PlayerIds`]: [...EMPTY_PLAYER_IDS],
+      [`${side}CustomPlayers`]: buildEmptyCustomPlayers(),
     }));
     setSaveStatus("");
   };
@@ -675,6 +778,40 @@ export default function Tools() {
       };
     });
     setSaveStatus("");
+  };
+
+  const handleCustomPlayerChange = (side, index, patch) => {
+    setDraft((current) => {
+      const key = `${side}CustomPlayers`;
+      const currentPlayers = hydrateCustomPlayers(current[key]);
+      currentPlayers[index] = {
+        ...currentPlayers[index],
+        ...patch,
+      };
+      return {
+        ...current,
+        [key]: currentPlayers,
+      };
+    });
+    setSaveStatus("");
+  };
+
+  const handleCustomHeadshotChange = async (side, index, file) => {
+    if (!file) {
+      handleCustomPlayerChange(side, index, { headshotDataUrl: "" });
+      return;
+    }
+    if (file.type && file.type !== "image/png") {
+      setSaveStatus("Use a PNG headshot.");
+      return;
+    }
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      handleCustomPlayerChange(side, index, { headshotDataUrl: dataUrl });
+      setSaveStatus("");
+    } catch (error) {
+      setSaveStatus(error?.message || "Unable to load headshot.");
+    }
   };
 
   const handleLeagueChange = (nextLeague) => {
@@ -1184,8 +1321,11 @@ export default function Tools() {
               teams={availableTeams}
               playerIds={draft.leftPlayerIds}
               rosterMap={rosterMap}
+              customPlayers={draft.leftCustomPlayers}
               onTeamChange={(nextTeamId) => handleTeamChange("left", nextTeamId)}
               onPlayerChange={(index, nextPlayerId) => handlePlayerChange("left", index, nextPlayerId)}
+              onCustomPlayerChange={(index, patch) => handleCustomPlayerChange("left", index, patch)}
+              onCustomHeadshotChange={(index, file) => handleCustomHeadshotChange("left", index, file)}
             />
 
             <ToolColumn
@@ -1194,8 +1334,11 @@ export default function Tools() {
               teams={availableTeams}
               playerIds={draft.rightPlayerIds}
               rosterMap={rosterMap}
+              customPlayers={draft.rightCustomPlayers}
               onTeamChange={(nextTeamId) => handleTeamChange("right", nextTeamId)}
               onPlayerChange={(index, nextPlayerId) => handlePlayerChange("right", index, nextPlayerId)}
+              onCustomPlayerChange={(index, patch) => handleCustomPlayerChange("right", index, patch)}
+              onCustomHeadshotChange={(index, file) => handleCustomHeadshotChange("right", index, file)}
             />
           </div>
 

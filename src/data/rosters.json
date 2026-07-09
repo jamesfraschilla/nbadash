@@ -6,8 +6,7 @@
       "familyName": "Kuminga",
       "fullName": "Jonathan Kuminga",
       "jerseyNum": "0",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
       "personId": "1642484",
@@ -15,8 +14,7 @@
       "familyName": "Dennis",
       "fullName": "RayJ Dennis",
       "jerseyNum": "00",
-      "position": "G",
-      "height": "6-1"
+      "position": "G"
     },
     {
       "personId": "1630552",
@@ -24,8 +22,7 @@
       "familyName": "Johnson",
       "fullName": "Jalen Johnson",
       "jerseyNum": "1",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
     },
     {
       "personId": "1630811",
@@ -33,8 +30,7 @@
       "familyName": "Wallace",
       "fullName": "Keaton Wallace",
       "jerseyNum": "2",
-      "position": "G",
-      "height": "6-3"
+      "position": "G"
     },
     {
       "personId": "203468",
@@ -42,8 +38,7 @@
       "familyName": "McCollum",
       "fullName": "CJ McCollum",
       "jerseyNum": "3",
-      "position": "G",
-      "height": "6-3"
+      "position": "G"
     },
     {
       "personId": "1629216",
@@ -51,8 +46,15 @@
       "familyName": "Vincent",
       "fullName": "Gabe Vincent",
       "jerseyNum": "4",
-      "position": "G",
-      "height": "6-2"
+      "position": "G"
+    },
+    {
+      "personId": "1643412",
+      "firstName": "Kingston",
+      "familyName": "Flemings",
+      "fullName": "Kingston Flemings",
+      "jerseyNum": "4",
+      "position": "G"
     },
     {
       "personId": "1630700",
@@ -60,8 +62,7 @@
       "familyName": "Daniels",
       "fullName": "Dyson Daniels",
       "jerseyNum": "5",
-      "position": "G",
-      "height": "6-7"
+      "position": "G"
     },
     {
       "personId": "1629638",
@@ -69,8 +70,7 @@
       "familyName": "Alexander-Walker",
       "fullName": "Nickeil Alexander-Walker",
       "jerseyNum": "7",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
     },
     {
       "personId": "1627741",
@@ -78,8 +78,7 @@
       "familyName": "Hield",
       "fullName": "Buddy Hield",
       "jerseyNum": "8",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "1631132",
@@ -87,8 +86,7 @@
       "familyName": "Koloko",
       "fullName": "Christian Koloko",
       "jerseyNum": "10",
-      "position": "C",
-      "height": "6-11"
+      "position": "C"
     },
     {
       "personId": "1642258",
@@ -96,8 +94,15 @@
       "familyName": "Risacher",
       "fullName": "Zaccharie Risacher",
       "jerseyNum": "10",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
+    },
+    {
+      "personId": "1643539",
+      "firstName": "Henri",
+      "familyName": "Veesaar",
+      "fullName": "Henri Veesaar",
+      "jerseyNum": "13",
+      "position": "C"
     },
     {
       "personId": "1628396",
@@ -105,8 +110,7 @@
       "familyName": "Bradley",
       "fullName": "Tony Bradley",
       "jerseyNum": "13",
-      "position": "C-F",
-      "height": "6-10"
+      "position": "C-F"
     },
     {
       "personId": "1642854",
@@ -114,8 +118,7 @@
       "familyName": "Newell",
       "fullName": "Asa Newell",
       "jerseyNum": "14",
-      "position": "F",
-      "height": "6-10"
+      "position": "F"
     },
     {
       "personId": "1630168",
@@ -123,8 +126,7 @@
       "familyName": "Okongwu",
       "fullName": "Onyeka Okongwu",
       "jerseyNum": "17",
-      "position": "F-C",
-      "height": "6-10"
+      "position": "F-C"
     },
     {
       "personId": "1631243",
@@ -132,8 +134,31 @@
       "familyName": "Gueye",
       "fullName": "Mouhamed Gueye",
       "jerseyNum": "18",
-      "position": "F",
-      "height": "6-11"
+      "position": "F"
+    },
+    {
+      "personId": "1643544",
+      "firstName": "Zuby",
+      "familyName": "Ejiofor",
+      "fullName": "Zuby Ejiofor",
+      "jerseyNum": "20",
+      "position": "F"
+    },
+    {
+      "personId": "1630598",
+      "firstName": "Aaron",
+      "familyName": "Wiggins",
+      "fullName": "Aaron Wiggins",
+      "jerseyNum": "21",
+      "position": "G"
+    },
+    {
+      "personId": "1642269",
+      "firstName": "Devin",
+      "familyName": "Carter",
+      "fullName": "Devin Carter",
+      "jerseyNum": "22",
+      "position": "G"
     },
     {
       "personId": "1630557",
@@ -141,8 +166,7 @@
       "familyName": "Kispert",
       "fullName": "Corey Kispert",
       "jerseyNum": "24",
-      "position": "F",
-      "height": "6-6"
+      "position": "F"
     },
     {
       "personId": "1629111",
@@ -150,8 +174,7 @@
       "familyName": "Landale",
       "fullName": "Jock Landale",
       "jerseyNum": "31",
-      "position": "C",
-      "height": "6-11"
+      "position": "C"
     },
     {
       "personId": "1642933",
@@ -159,8 +182,7 @@
       "familyName": "Gilbert",
       "fullName": "Keshon Gilbert",
       "jerseyNum": "",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     }
   ],
   "1610612738": [
@@ -170,26 +192,7 @@
       "familyName": "Tatum",
       "fullName": "Jayson Tatum",
       "jerseyNum": "0",
-      "position": "F-G",
-      "height": "6-8"
-    },
-    {
-      "personId": "202696",
-      "firstName": "Nikola",
-      "familyName": "Vučević",
-      "fullName": "Nikola Vučević",
-      "jerseyNum": "4",
-      "position": "C",
-      "height": "6-9"
-    },
-    {
-      "personId": "1627759",
-      "firstName": "Jaylen",
-      "familyName": "Brown",
-      "fullName": "Jaylen Brown",
-      "jerseyNum": "7",
-      "position": "G-F",
-      "height": "6-6"
+      "position": "F-G"
     },
     {
       "personId": "1642910",
@@ -197,8 +200,15 @@
       "familyName": "Tonje",
       "fullName": "John Tonje",
       "jerseyNum": "8",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
+    },
+    {
+      "personId": "202331",
+      "firstName": "Paul",
+      "familyName": "George",
+      "fullName": "Paul George",
+      "jerseyNum": "8",
+      "position": "F"
     },
     {
       "personId": "1628401",
@@ -206,8 +216,15 @@
       "familyName": "White",
       "fullName": "Derrick White",
       "jerseyNum": "9",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
+    },
+    {
+      "personId": "201144",
+      "firstName": "Mike",
+      "familyName": "Conley",
+      "fullName": "Mike Conley",
+      "jerseyNum": "10",
+      "position": "G"
     },
     {
       "personId": "1630202",
@@ -215,8 +232,15 @@
       "familyName": "Pritchard",
       "fullName": "Payton Pritchard",
       "jerseyNum": "11",
-      "position": "G",
-      "height": "6-1"
+      "position": "G"
+    },
+    {
+      "personId": "1643416",
+      "firstName": "Chris",
+      "familyName": "Cenac Jr.",
+      "fullName": "Chris Cenac Jr.",
+      "jerseyNum": "12",
+      "position": "F"
     },
     {
       "personId": "1631199",
@@ -224,8 +248,15 @@
       "familyName": "Harper Jr.",
       "fullName": "Ron Harper Jr.",
       "jerseyNum": "13",
-      "position": "G-F",
-      "height": "6-5"
+      "position": "G-F"
+    },
+    {
+      "personId": "1629011",
+      "firstName": "Mitchell",
+      "familyName": "Robinson",
+      "fullName": "Mitchell Robinson",
+      "jerseyNum": "23",
+      "position": "C-F"
     },
     {
       "personId": "1641775",
@@ -233,8 +264,7 @@
       "familyName": "Walsh",
       "fullName": "Jordan Walsh",
       "jerseyNum": "27",
-      "position": "G",
-      "height": "6-6"
+      "position": "G"
     },
     {
       "personId": "1642864",
@@ -242,8 +272,7 @@
       "familyName": "González",
       "fullName": "Hugo González",
       "jerseyNum": "28",
-      "position": "G",
-      "height": "6-6"
+      "position": "G"
     },
     {
       "personId": "1630573",
@@ -251,8 +280,7 @@
       "familyName": "Hauser",
       "fullName": "Sam Hauser",
       "jerseyNum": "30",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
       "personId": "1642917",
@@ -260,8 +288,7 @@
       "familyName": "Shulga",
       "fullName": "Max Shulga",
       "jerseyNum": "44",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "1630625",
@@ -269,8 +296,7 @@
       "familyName": "Banton",
       "fullName": "Dalano Banton",
       "jerseyNum": "45",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
     },
     {
       "personId": "1630568",
@@ -278,8 +304,7 @@
       "familyName": "Garza",
       "fullName": "Luka Garza",
       "jerseyNum": "52",
-      "position": "C",
-      "height": "6-10"
+      "position": "C"
     },
     {
       "personId": "1631248",
@@ -287,8 +312,7 @@
       "familyName": "Scheierman",
       "fullName": "Baylor Scheierman",
       "jerseyNum": "55",
-      "position": "G",
-      "height": "6-6"
+      "position": "G"
     },
     {
       "personId": "1642873",
@@ -296,8 +320,7 @@
       "familyName": "Williams",
       "fullName": "Amari Williams",
       "jerseyNum": "77",
-      "position": "F-C",
-      "height": "6-11"
+      "position": "F-C"
     },
     {
       "personId": "1629674",
@@ -305,8 +328,15 @@
       "familyName": "Queta",
       "fullName": "Neemias Queta",
       "jerseyNum": "88",
-      "position": "C",
-      "height": "7-0"
+      "position": "C"
+    },
+    {
+      "personId": "1641759",
+      "firstName": "Dillon",
+      "familyName": "Mitchell",
+      "fullName": "Dillon Mitchell",
+      "jerseyNum": "",
+      "position": "F"
     }
   ],
   "1610612739": [
@@ -316,8 +346,7 @@
       "familyName": "Harden",
       "fullName": "James Harden",
       "jerseyNum": "1",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
     },
     {
       "personId": "1629622",
@@ -325,8 +354,7 @@
       "familyName": "Strus",
       "fullName": "Max Strus",
       "jerseyNum": "2",
-      "position": "G-F",
-      "height": "6-5"
+      "position": "G-F"
     },
     {
       "personId": "1628418",
@@ -334,8 +362,7 @@
       "familyName": "Bryant",
       "fullName": "Thomas Bryant",
       "jerseyNum": "3",
-      "position": "C-F",
-      "height": "6-9"
+      "position": "C-F"
     },
     {
       "personId": "1630596",
@@ -343,8 +370,7 @@
       "familyName": "Mobley",
       "fullName": "Evan Mobley",
       "jerseyNum": "4",
-      "position": "C",
-      "height": "6-11"
+      "position": "C"
     },
     {
       "personId": "1630241",
@@ -352,8 +378,7 @@
       "familyName": "Merrill",
       "fullName": "Sam Merrill",
       "jerseyNum": "5",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "203471",
@@ -361,8 +386,7 @@
       "familyName": "Schröder",
       "fullName": "Dennis Schröder",
       "jerseyNum": "8",
-      "position": "G",
-      "height": "6-1"
+      "position": "G"
     },
     {
       "personId": "1641854",
@@ -370,8 +394,7 @@
       "familyName": "Porter Jr.",
       "fullName": "Craig Porter Jr.",
       "jerseyNum": "9",
-      "position": "G",
-      "height": "6-1"
+      "position": "G"
     },
     {
       "personId": "1642434",
@@ -379,17 +402,15 @@
       "familyName": "Minix",
       "fullName": "Riley Minix",
       "jerseyNum": "12",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
-      "personId": "1631165",
-      "firstName": "Keon",
-      "familyName": "Ellis",
-      "fullName": "Keon Ellis",
-      "jerseyNum": "14",
-      "position": "G",
-      "height": "6-4"
+      "personId": "1643509",
+      "firstName": "Meleek",
+      "familyName": "Thomas",
+      "fullName": "Meleek Thomas",
+      "jerseyNum": "15",
+      "position": "G"
     },
     {
       "personId": "1642281",
@@ -397,8 +418,7 @@
       "familyName": "Tyson",
       "fullName": "Jaylon Tyson",
       "jerseyNum": "20",
-      "position": "G-F",
-      "height": "6-6"
+      "position": "G-F"
     },
     {
       "personId": "1642400",
@@ -406,8 +426,7 @@
       "familyName": "Enaruna",
       "fullName": "Tristan Enaruna",
       "jerseyNum": "21",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
       "personId": "1626204",
@@ -415,8 +434,7 @@
       "familyName": "Nance Jr.",
       "fullName": "Larry Nance Jr.",
       "jerseyNum": "22",
-      "position": "F-C",
-      "height": "6-6"
+      "position": "F-C"
     },
     {
       "personId": "1642878",
@@ -424,8 +442,7 @@
       "familyName": "Proctor",
       "fullName": "Tyrese Proctor",
       "jerseyNum": "24",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "1628386",
@@ -433,17 +450,7 @@
       "familyName": "Allen",
       "fullName": "Jarrett Allen",
       "jerseyNum": "31",
-      "position": "C",
-      "height": "6-9"
-    },
-    {
-      "personId": "1629731",
-      "firstName": "Dean",
-      "familyName": "Wade",
-      "fullName": "Dean Wade",
-      "jerseyNum": "32",
-      "position": "F-C",
-      "height": "6-9"
+      "position": "C"
     },
     {
       "personId": "1630846",
@@ -451,8 +458,7 @@
       "familyName": "Sarr",
       "fullName": "Olivier Sarr",
       "jerseyNum": "33",
-      "position": "C",
-      "height": "6-10"
+      "position": "C"
     },
     {
       "personId": "1641772",
@@ -460,8 +466,15 @@
       "familyName": "Tomlin",
       "fullName": "Nae'Qwan Tomlin",
       "jerseyNum": "35",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
+    },
+    {
+      "personId": "1643640",
+      "firstName": "Ernest",
+      "familyName": "Udeh, Jr.",
+      "fullName": "Ernest Udeh, Jr.",
+      "jerseyNum": "39",
+      "position": "C"
     },
     {
       "personId": "1628378",
@@ -469,8 +482,7 @@
       "familyName": "Mitchell",
       "fullName": "Donovan Mitchell",
       "jerseyNum": "45",
-      "position": "G",
-      "height": "6-2"
+      "position": "G"
     }
   ],
   "1610612740": [
@@ -480,8 +492,7 @@
       "familyName": "Fears",
       "fullName": "Jeremiah Fears",
       "jerseyNum": "0",
-      "position": "G",
-      "height": "6-3"
+      "position": "G"
     },
     {
       "personId": "1629627",
@@ -489,8 +500,7 @@
       "familyName": "Williamson",
       "fullName": "Zion Williamson",
       "jerseyNum": "1",
-      "position": "F",
-      "height": "6-6"
+      "position": "F"
     },
     {
       "personId": "1630529",
@@ -498,8 +508,7 @@
       "familyName": "Jones",
       "fullName": "Herbert Jones",
       "jerseyNum": "2",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
       "personId": "1629673",
@@ -507,8 +516,7 @@
       "familyName": "Poole",
       "fullName": "Jordan Poole",
       "jerseyNum": "3",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "1630621",
@@ -516,8 +524,7 @@
       "familyName": "Dickinson",
       "fullName": "Hunter Dickinson",
       "jerseyNum": "4",
-      "position": "C",
-      "height": "7-1"
+      "position": "C"
     },
     {
       "personId": "1627749",
@@ -525,8 +532,7 @@
       "familyName": "Murray",
       "fullName": "Dejounte Murray",
       "jerseyNum": "5",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "201599",
@@ -534,8 +540,7 @@
       "familyName": "Jordan",
       "fullName": "DeAndre Jordan",
       "jerseyNum": "9",
-      "position": "C",
-      "height": "6-11"
+      "position": "C"
     },
     {
       "personId": "1631121",
@@ -543,8 +548,7 @@
       "familyName": "McGowens",
       "fullName": "Bryce McGowens",
       "jerseyNum": "11",
-      "position": "G",
-      "height": "6-6"
+      "position": "G"
     },
     {
       "personId": "1642877",
@@ -552,8 +556,7 @@
       "familyName": "Peavy",
       "fullName": "Micah Peavy",
       "jerseyNum": "14",
-      "position": "G-F",
-      "height": "6-7"
+      "position": "G-F"
     },
     {
       "personId": "1631255",
@@ -561,8 +564,7 @@
       "familyName": "Matković",
       "fullName": "Karlo Matković",
       "jerseyNum": "17",
-      "position": "F-C",
-      "height": "6-10"
+      "position": "F-C"
     },
     {
       "personId": "1642274",
@@ -570,8 +572,7 @@
       "familyName": "Missi",
       "fullName": "Yves Missi",
       "jerseyNum": "21",
-      "position": "C",
-      "height": "6-11"
+      "position": "C"
     },
     {
       "personId": "1642852",
@@ -579,17 +580,7 @@
       "familyName": "Queen",
       "fullName": "Derik Queen",
       "jerseyNum": "22",
-      "position": "C",
-      "height": "6-9"
-    },
-    {
-      "personId": "1641725",
-      "firstName": "Trey",
-      "familyName": "Alexander",
-      "fullName": "Trey Alexander",
-      "jerseyNum": "23",
-      "position": "G",
-      "height": "6-5"
+      "position": "C"
     },
     {
       "personId": "1641722",
@@ -597,8 +588,7 @@
       "familyName": "Hawkins",
       "fullName": "Jordan Hawkins",
       "jerseyNum": "24",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
     },
     {
       "personId": "1630530",
@@ -606,8 +596,7 @@
       "familyName": "Murphy III",
       "fullName": "Trey Murphy III",
       "jerseyNum": "25",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
     },
     {
       "personId": "1630180",
@@ -615,8 +604,7 @@
       "familyName": "Bey",
       "fullName": "Saddiq Bey",
       "jerseyNum": "41",
-      "position": "G-F",
-      "height": "6-8"
+      "position": "G-F"
     },
     {
       "personId": "1626172",
@@ -624,8 +612,15 @@
       "familyName": "Looney",
       "fullName": "Kevon Looney",
       "jerseyNum": "55",
-      "position": "F",
-      "height": "6-9"
+      "position": "F"
+    },
+    {
+      "personId": "1643555",
+      "firstName": "Jaron",
+      "familyName": "Pierre Jr.",
+      "fullName": "Jaron Pierre Jr.",
+      "jerseyNum": "",
+      "position": "G"
     },
     {
       "personId": "1642490",
@@ -633,8 +628,7 @@
       "familyName": "Oduro",
       "fullName": "Josh Oduro",
       "jerseyNum": "",
-      "position": "C",
-      "height": "6-9"
+      "position": "C"
     }
   ],
   "1610612741": [
@@ -644,8 +638,7 @@
       "familyName": "Sexton",
       "fullName": "Collin Sexton",
       "jerseyNum": "2",
-      "position": "G",
-      "height": "6-3"
+      "position": "G"
     },
     {
       "personId": "1630581",
@@ -653,8 +646,15 @@
       "familyName": "Giddey",
       "fullName": "Josh Giddey",
       "jerseyNum": "3",
-      "position": "G",
-      "height": "6-7"
+      "position": "G"
+    },
+    {
+      "personId": "1643517",
+      "firstName": "Dailyn",
+      "familyName": "Swain",
+      "fullName": "Dailyn Swain",
+      "jerseyNum": "5",
+      "position": "F"
     },
     {
       "personId": "1630644",
@@ -662,8 +662,7 @@
       "familyName": "McClung",
       "fullName": "Mac McClung",
       "jerseyNum": "5",
-      "position": "G",
-      "height": "6-2"
+      "position": "G"
     },
     {
       "personId": "1642265",
@@ -671,8 +670,15 @@
       "familyName": "Dillingham",
       "fullName": "Rob Dillingham",
       "jerseyNum": "7",
-      "position": "G",
-      "height": "6-2"
+      "position": "G"
+    },
+    {
+      "personId": "1643410",
+      "firstName": "Caleb",
+      "familyName": "Wilson",
+      "fullName": "Caleb Wilson",
+      "jerseyNum": "8",
+      "position": "F"
     },
     {
       "personId": "1642530",
@@ -680,8 +686,7 @@
       "familyName": "Kawamura",
       "fullName": "Yuki Kawamura",
       "jerseyNum": "8",
-      "position": "G",
-      "height": "5-7"
+      "position": "G"
     },
     {
       "personId": "1631159",
@@ -689,8 +694,7 @@
       "familyName": "Miller",
       "fullName": "Leonard Miller",
       "jerseyNum": "11",
-      "position": "F",
-      "height": "6-10"
+      "position": "F"
     },
     {
       "personId": "1628380",
@@ -698,8 +702,7 @@
       "familyName": "Collins",
       "fullName": "Zach Collins",
       "jerseyNum": "12",
-      "position": "F-C",
-      "height": "6-9"
+      "position": "F-C"
     },
     {
       "personId": "1630208",
@@ -707,8 +710,7 @@
       "familyName": "Richards",
       "fullName": "Nick Richards",
       "jerseyNum": "13",
-      "position": "C",
-      "height": "6-11"
+      "position": "C"
     },
     {
       "personId": "1641824",
@@ -716,8 +718,7 @@
       "familyName": "Buzelis",
       "fullName": "Matas Buzelis",
       "jerseyNum": "14",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
     },
     {
       "personId": "1631338",
@@ -725,17 +726,7 @@
       "familyName": "Gueye",
       "fullName": "Mouhamadou Gueye",
       "jerseyNum": "16",
-      "position": "F",
-      "height": "6-9"
-    },
-    {
-      "personId": "1629014",
-      "firstName": "Anfernee",
-      "familyName": "Simons",
-      "fullName": "Anfernee Simons",
-      "jerseyNum": "22",
-      "position": "G",
-      "height": "6-3"
+      "position": "F"
     },
     {
       "personId": "1642855",
@@ -743,8 +734,7 @@
       "familyName": "Essengue",
       "fullName": "Noa Essengue",
       "jerseyNum": "24",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
     },
     {
       "personId": "1630188",
@@ -752,8 +742,7 @@
       "familyName": "Smith",
       "fullName": "Jalen Smith",
       "jerseyNum": "25",
-      "position": "F-C",
-      "height": "6-8"
+      "position": "F-C"
     },
     {
       "personId": "1627824",
@@ -761,8 +750,7 @@
       "familyName": "Yabusele",
       "fullName": "Guerschon Yabusele",
       "jerseyNum": "28",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
       "personId": "1630200",
@@ -770,8 +758,7 @@
       "familyName": "Jones",
       "fullName": "Tre Jones",
       "jerseyNum": "30",
-      "position": "G",
-      "height": "6-1"
+      "position": "G"
     },
     {
       "personId": "1630171",
@@ -779,8 +766,7 @@
       "familyName": "Okoro",
       "fullName": "Isaac Okoro",
       "jerseyNum": "35",
-      "position": "F-G",
-      "height": "6-4"
+      "position": "F-G"
     },
     {
       "personId": "1630172",
@@ -788,8 +774,7 @@
       "familyName": "Williams",
       "fullName": "Patrick Williams",
       "jerseyNum": "44",
-      "position": "F",
-      "height": "6-6"
+      "position": "F"
     },
     {
       "personId": "1642950",
@@ -797,8 +782,23 @@
       "familyName": "Olbrich",
       "fullName": "Lachlan Olbrich",
       "jerseyNum": "47",
-      "position": "C",
-      "height": "6-8"
+      "position": "C"
+    },
+    {
+      "personId": "1643637",
+      "firstName": "Jaylin",
+      "familyName": "Sellers",
+      "fullName": "Jaylin Sellers",
+      "jerseyNum": "",
+      "position": ""
+    },
+    {
+      "personId": "1643591",
+      "firstName": "Tobe",
+      "familyName": "Awaka",
+      "fullName": "Tobe Awaka",
+      "jerseyNum": "",
+      "position": "F"
     }
   ],
   "1610612742": [
@@ -807,9 +807,16 @@
       "firstName": "Max",
       "familyName": "Christie",
       "fullName": "Max Christie",
-      "jerseyNum": "00",
-      "position": "G",
-      "height": "6-5"
+      "jerseyNum": "0",
+      "position": "G"
+    },
+    {
+      "personId": "1642967",
+      "firstName": "John",
+      "familyName": "Poulakidas",
+      "fullName": "John Poulakidas",
+      "jerseyNum": "1",
+      "position": "G"
     },
     {
       "personId": "1641726",
@@ -817,8 +824,15 @@
       "familyName": "Lively II",
       "fullName": "Dereck Lively II",
       "jerseyNum": "2",
-      "position": "C",
-      "height": "7-1"
+      "position": "C"
+    },
+    {
+      "personId": "1630230",
+      "firstName": "Naji",
+      "familyName": "Marshall",
+      "fullName": "Naji Marshall",
+      "jerseyNum": "3",
+      "position": "F"
     },
     {
       "personId": "203939",
@@ -826,17 +840,15 @@
       "familyName": "Powell",
       "fullName": "Dwight Powell",
       "jerseyNum": "7",
-      "position": "F-C",
-      "height": "6-10"
+      "position": "F-C"
     },
     {
-      "personId": "1642358",
-      "firstName": "AJ",
-      "familyName": "Johnson",
-      "fullName": "AJ Johnson",
-      "jerseyNum": "8",
-      "position": "G",
-      "height": "6-5"
+      "personId": "1630583",
+      "firstName": "Santi",
+      "familyName": "Aldama",
+      "fullName": "Santi Aldama",
+      "jerseyNum": "7",
+      "position": "F-C"
     },
     {
       "personId": "1642948",
@@ -844,8 +856,7 @@
       "familyName": "Nembhard",
       "fullName": "Ryan Nembhard",
       "jerseyNum": "9",
-      "position": "G",
-      "height": "5-11"
+      "position": "G"
     },
     {
       "personId": "1630314",
@@ -853,8 +864,7 @@
       "familyName": "Williams",
       "fullName": "Brandon Williams",
       "jerseyNum": "10",
-      "position": "G",
-      "height": "6-1"
+      "position": "G"
     },
     {
       "personId": "202681",
@@ -862,17 +872,15 @@
       "familyName": "Irving",
       "fullName": "Kyrie Irving",
       "jerseyNum": "11",
-      "position": "G",
-      "height": "6-2"
+      "position": "G"
     },
     {
-      "personId": "1630230",
-      "firstName": "Naji",
-      "familyName": "Marshall",
-      "fullName": "Naji Marshall",
-      "jerseyNum": "13",
-      "position": "F",
-      "height": "6-6"
+      "personId": "1643516",
+      "firstName": "Morez",
+      "familyName": "Johnson",
+      "fullName": "Morez Johnson",
+      "jerseyNum": "14",
+      "position": "F"
     },
     {
       "personId": "1628997",
@@ -880,17 +888,7 @@
       "familyName": "Martin",
       "fullName": "Caleb Martin",
       "jerseyNum": "16",
-      "position": "F",
-      "height": "6-5"
-    },
-    {
-      "personId": "203114",
-      "firstName": "Khris",
-      "familyName": "Middleton",
-      "fullName": "Khris Middleton",
-      "jerseyNum": "20",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
       "personId": "1629655",
@@ -898,8 +896,7 @@
       "familyName": "Gafford",
       "fullName": "Daniel Gafford",
       "jerseyNum": "21",
-      "position": "F-C",
-      "height": "6-10"
+      "position": "F-C"
     },
     {
       "personId": "1641890",
@@ -907,8 +904,15 @@
       "familyName": "Smith",
       "fullName": "Tyler Smith",
       "jerseyNum": "21",
-      "position": "F",
-      "height": "6-9"
+      "position": "F"
+    },
+    {
+      "personId": "1631204",
+      "firstName": "Marcus",
+      "familyName": "Sasser",
+      "fullName": "Marcus Sasser",
+      "jerseyNum": "25",
+      "position": "G"
     },
     {
       "personId": "1629023",
@@ -916,8 +920,7 @@
       "familyName": "Washington",
       "fullName": "P.J. Washington",
       "jerseyNum": "25",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
       "personId": "1630619",
@@ -925,8 +928,7 @@
       "familyName": "Cisse",
       "fullName": "Moussa Cisse",
       "jerseyNum": "30",
-      "position": "C",
-      "height": "6-11"
+      "position": "C"
     },
     {
       "personId": "202691",
@@ -934,8 +936,7 @@
       "familyName": "Thompson",
       "fullName": "Klay Thompson",
       "jerseyNum": "31",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
     },
     {
       "personId": "1642843",
@@ -943,8 +944,15 @@
       "familyName": "Flagg",
       "fullName": "Cooper Flagg",
       "jerseyNum": "32",
-      "position": "F",
-      "height": "6-9"
+      "position": "F"
+    },
+    {
+      "personId": "1643588",
+      "firstName": "Tobi",
+      "familyName": "Lawal",
+      "fullName": "Tobi Lawal",
+      "jerseyNum": "33",
+      "position": "F"
     },
     {
       "personId": "1628963",
@@ -952,17 +960,23 @@
       "familyName": "Bagley III",
       "fullName": "Marvin Bagley III",
       "jerseyNum": "35",
-      "position": "F",
-      "height": "6-10"
+      "position": "F"
     },
     {
-      "personId": "1642967",
-      "firstName": "John",
-      "familyName": "Poulakidas",
-      "fullName": "John Poulakidas",
+      "personId": "1643547",
+      "firstName": "Sergio",
+      "familyName": "De Larrea",
+      "fullName": "Sergio De Larrea",
+      "jerseyNum": "55",
+      "position": "G"
+    },
+    {
+      "personId": "1643585",
+      "firstName": "Vsevolod",
+      "familyName": "Ishchenko",
+      "fullName": "Vsevolod Ishchenko",
       "jerseyNum": "",
-      "position": "G",
-      "height": "6-6"
+      "position": "G"
     }
   ],
   "1610612743": [
@@ -972,8 +986,7 @@
       "familyName": "Braun",
       "fullName": "Christian Braun",
       "jerseyNum": "0",
-      "position": "G",
-      "height": "6-6"
+      "position": "G"
     },
     {
       "personId": "1642938",
@@ -981,8 +994,7 @@
       "familyName": "Jones",
       "fullName": "Curtis Jones",
       "jerseyNum": "1",
-      "position": "G",
-      "height": "6-3"
+      "position": "G"
     },
     {
       "personId": "1631124",
@@ -990,8 +1002,7 @@
       "familyName": "Strawther",
       "fullName": "Julian Strawther",
       "jerseyNum": "3",
-      "position": "G",
-      "height": "6-6"
+      "position": "G"
     },
     {
       "personId": "1626145",
@@ -999,8 +1010,7 @@
       "familyName": "Jones",
       "fullName": "Tyus Jones",
       "jerseyNum": "5",
-      "position": "G",
-      "height": "6-0"
+      "position": "G"
     },
     {
       "personId": "1631212",
@@ -1008,17 +1018,7 @@
       "familyName": "Watson",
       "fullName": "Peyton Watson",
       "jerseyNum": "8",
-      "position": "G",
-      "height": "6-8"
-    },
-    {
-      "personId": "203501",
-      "firstName": "Tim",
-      "familyName": "Hardaway Jr.",
-      "fullName": "Tim Hardaway Jr.",
-      "jerseyNum": "10",
-      "position": "G-F",
-      "height": "6-5"
+      "position": "G"
     },
     {
       "personId": "1628971",
@@ -1026,8 +1026,7 @@
       "familyName": "Brown",
       "fullName": "Bruce Brown",
       "jerseyNum": "11",
-      "position": "G-F",
-      "height": "6-4"
+      "position": "G-F"
     },
     {
       "personId": "1641747",
@@ -1035,8 +1034,7 @@
       "familyName": "Holmes II",
       "fullName": "DaRon Holmes II",
       "jerseyNum": "14",
-      "position": "F",
-      "height": "6-9"
+      "position": "F"
     },
     {
       "personId": "203999",
@@ -1044,17 +1042,7 @@
       "familyName": "Jokić",
       "fullName": "Nikola Jokić",
       "jerseyNum": "15",
-      "position": "C",
-      "height": "6-11"
-    },
-    {
-      "personId": "202685",
-      "firstName": "Jonas",
-      "familyName": "Valančiūnas",
-      "fullName": "Jonas Valančiūnas",
-      "jerseyNum": "17",
-      "position": "C",
-      "height": "6-11"
+      "position": "C"
     },
     {
       "personId": "1642461",
@@ -1062,8 +1050,7 @@
       "familyName": "Jones",
       "fullName": "Spencer Jones",
       "jerseyNum": "21",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
       "personId": "1630192",
@@ -1071,8 +1058,7 @@
       "familyName": "Nnaji",
       "fullName": "Zeke Nnaji",
       "jerseyNum": "22",
-      "position": "F-C",
-      "height": "6-10"
+      "position": "F-C"
     },
     {
       "personId": "1629661",
@@ -1080,8 +1066,7 @@
       "familyName": "Johnson",
       "fullName": "Cameron Johnson",
       "jerseyNum": "23",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
     },
     {
       "personId": "1629618",
@@ -1089,8 +1074,7 @@
       "familyName": "Pickett",
       "fullName": "Jalen Pickett",
       "jerseyNum": "24",
-      "position": "G",
-      "height": "6-2"
+      "position": "G"
     },
     {
       "personId": "1642354",
@@ -1098,8 +1082,7 @@
       "familyName": "Simpson",
       "fullName": "KJ Simpson",
       "jerseyNum": "25",
-      "position": "G",
-      "height": "6-2"
+      "position": "G"
     },
     {
       "personId": "1627750",
@@ -1107,8 +1090,7 @@
       "familyName": "Murray",
       "fullName": "Jamal Murray",
       "jerseyNum": "27",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "203932",
@@ -1116,8 +1098,7 @@
       "familyName": "Gordon",
       "fullName": "Aaron Gordon",
       "jerseyNum": "32",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
     },
     {
       "personId": "1631223",
@@ -1125,8 +1106,23 @@
       "familyName": "Roddy",
       "fullName": "David Roddy",
       "jerseyNum": "45",
-      "position": "F",
-      "height": "6-5"
+      "position": "F"
+    },
+    {
+      "personId": "1643624",
+      "firstName": "Bryce",
+      "familyName": "Hopkins",
+      "fullName": "Bryce Hopkins",
+      "jerseyNum": "",
+      "position": ""
+    },
+    {
+      "personId": "1642350",
+      "firstName": "Trevon",
+      "familyName": "Brazile",
+      "fullName": "Trevon Brazile",
+      "jerseyNum": "",
+      "position": "F"
     }
   ],
   "1610612744": [
@@ -1136,8 +1132,15 @@
       "familyName": "Payton II",
       "fullName": "Gary Payton II",
       "jerseyNum": "0",
-      "position": "G",
-      "height": "6-2"
+      "position": "G"
+    },
+    {
+      "personId": "1642865",
+      "firstName": "Yaxel",
+      "familyName": "Lendeborg",
+      "fullName": "Yaxel Lendeborg",
+      "jerseyNum": "1",
+      "position": "F"
     },
     {
       "personId": "1641764",
@@ -1145,8 +1148,7 @@
       "familyName": "Podziemski",
       "fullName": "Brandin Podziemski",
       "jerseyNum": "2",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "1642954",
@@ -1154,8 +1156,7 @@
       "familyName": "Richard",
       "fullName": "Will Richard",
       "jerseyNum": "3",
-      "position": "G",
-      "height": "6-3"
+      "position": "G"
     },
     {
       "personId": "1630541",
@@ -1163,8 +1164,7 @@
       "familyName": "Moody",
       "fullName": "Moses Moody",
       "jerseyNum": "4",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
     },
     {
       "personId": "204001",
@@ -1172,8 +1172,7 @@
       "familyName": "Porziņģis",
       "fullName": "Kristaps Porziņģis",
       "jerseyNum": "7",
-      "position": "F-C",
-      "height": "7-2"
+      "position": "F-C"
     },
     {
       "personId": "1629001",
@@ -1181,8 +1180,7 @@
       "familyName": "Melton",
       "fullName": "De'Anthony Melton",
       "jerseyNum": "8",
-      "position": "G",
-      "height": "6-2"
+      "position": "G"
     },
     {
       "personId": "202710",
@@ -1190,8 +1188,7 @@
       "familyName": "Butler III",
       "fullName": "Jimmy Butler III",
       "jerseyNum": "10",
-      "position": "F",
-      "height": "6-6"
+      "position": "F"
     },
     {
       "personId": "1630611",
@@ -1199,8 +1196,7 @@
       "familyName": "Santos",
       "fullName": "Gui Santos",
       "jerseyNum": "15",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
       "personId": "1643018",
@@ -1208,8 +1204,7 @@
       "familyName": "Cryer",
       "fullName": "LJ Cryer",
       "jerseyNum": "18",
-      "position": "G",
-      "height": "6-0"
+      "position": "G"
     },
     {
       "personId": "1631466",
@@ -1217,8 +1212,7 @@
       "familyName": "Williams",
       "fullName": "Nate Williams",
       "jerseyNum": "19",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
     },
     {
       "personId": "201143",
@@ -1226,17 +1220,7 @@
       "familyName": "Horford",
       "fullName": "Al Horford",
       "jerseyNum": "20",
-      "position": "C-F",
-      "height": "6-8"
-    },
-    {
-      "personId": "1642366",
-      "firstName": "Quinten",
-      "familyName": "Post",
-      "fullName": "Quinten Post",
-      "jerseyNum": "21",
-      "position": "C",
-      "height": "7-0"
+      "position": "C-F"
     },
     {
       "personId": "203110",
@@ -1244,8 +1228,15 @@
       "familyName": "Green",
       "fullName": "Draymond Green",
       "jerseyNum": "23",
-      "position": "F",
-      "height": "6-6"
+      "position": "F"
+    },
+    {
+      "personId": "1643650",
+      "firstName": "Lajae",
+      "familyName": "Jones",
+      "fullName": "Lajae Jones",
+      "jerseyNum": "25",
+      "position": "G-F"
     },
     {
       "personId": "1629646",
@@ -1253,8 +1244,7 @@
       "familyName": "Bassey",
       "fullName": "Charles Bassey",
       "jerseyNum": "28",
-      "position": "C-F",
-      "height": "6-10"
+      "position": "C-F"
     },
     {
       "personId": "201939",
@@ -1262,8 +1252,7 @@
       "familyName": "Curry",
       "fullName": "Stephen Curry",
       "jerseyNum": "30",
-      "position": "G",
-      "height": "6-2"
+      "position": "G"
     },
     {
       "personId": "203552",
@@ -1271,8 +1260,7 @@
       "familyName": "Curry",
       "fullName": "Seth Curry",
       "jerseyNum": "31",
-      "position": "G",
-      "height": "6-1"
+      "position": "G"
     },
     {
       "personId": "1642502",
@@ -1280,17 +1268,7 @@
       "familyName": "Leons",
       "fullName": "Malevy Leons",
       "jerseyNum": "33",
-      "position": "F",
-      "height": "6-9"
-    },
-    {
-      "personId": "1630311",
-      "firstName": "Pat",
-      "familyName": "Spencer",
-      "fullName": "Pat Spencer",
-      "jerseyNum": "61",
-      "position": "G",
-      "height": "6-2"
+      "position": "F"
     }
   ],
   "1610612745": [
@@ -1300,8 +1278,7 @@
       "familyName": "Holiday",
       "fullName": "Aaron Holiday",
       "jerseyNum": "0",
-      "position": "G",
-      "height": "6-0"
+      "position": "G"
     },
     {
       "personId": "1641708",
@@ -1309,17 +1286,7 @@
       "familyName": "Thompson",
       "fullName": "Amen Thompson",
       "jerseyNum": "1",
-      "position": "G-F",
-      "height": "6-7"
-    },
-    {
-      "personId": "1627827",
-      "firstName": "Dorian",
-      "familyName": "Finney-Smith",
-      "fullName": "Dorian Finney-Smith",
-      "jerseyNum": "2",
-      "position": "F",
-      "height": "6-7"
+      "position": "G-F"
     },
     {
       "personId": "1631120",
@@ -1327,8 +1294,7 @@
       "familyName": "Davison",
       "fullName": "JD Davison",
       "jerseyNum": "4",
-      "position": "G",
-      "height": "6-1"
+      "position": "G"
     },
     {
       "personId": "1627832",
@@ -1336,8 +1302,15 @@
       "familyName": "VanVleet",
       "fullName": "Fred VanVleet",
       "jerseyNum": "5",
-      "position": "G",
-      "height": "6-0"
+      "position": "G"
+    },
+    {
+      "personId": "203992",
+      "firstName": "Bogdan",
+      "familyName": "Bogdanović",
+      "fullName": "Bogdan Bogdanović",
+      "jerseyNum": "7",
+      "position": "G"
     },
     {
       "personId": "201142",
@@ -1345,8 +1318,7 @@
       "familyName": "Durant",
       "fullName": "Kevin Durant",
       "jerseyNum": "7",
-      "position": "F",
-      "height": "6-11"
+      "position": "F"
     },
     {
       "personId": "1630256",
@@ -1354,8 +1326,7 @@
       "familyName": "Tate",
       "fullName": "Jae'Sean Tate",
       "jerseyNum": "8",
-      "position": "F",
-      "height": "6-4"
+      "position": "F"
     },
     {
       "personId": "1631095",
@@ -1363,8 +1334,7 @@
       "familyName": "Smith Jr.",
       "fullName": "Jabari Smith Jr.",
       "jerseyNum": "10",
-      "position": "F",
-      "height": "6-11"
+      "position": "F"
     },
     {
       "personId": "203500",
@@ -1372,8 +1342,7 @@
       "familyName": "Adams",
       "fullName": "Steven Adams",
       "jerseyNum": "12",
-      "position": "C",
-      "height": "6-11"
+      "position": "C"
     },
     {
       "personId": "1641803",
@@ -1381,8 +1350,7 @@
       "familyName": "Newton",
       "fullName": "Tristen Newton",
       "jerseyNum": "13",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
     },
     {
       "personId": "1642263",
@@ -1390,8 +1358,7 @@
       "familyName": "Sheppard",
       "fullName": "Reed Sheppard",
       "jerseyNum": "15",
-      "position": "G",
-      "height": "6-2"
+      "position": "G"
     },
     {
       "personId": "1631106",
@@ -1399,8 +1366,7 @@
       "familyName": "Eason",
       "fullName": "Tari Eason",
       "jerseyNum": "17",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
     },
     {
       "personId": "1629006",
@@ -1408,8 +1374,7 @@
       "familyName": "Okogie",
       "fullName": "Josh Okogie",
       "jerseyNum": "20",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "1642384",
@@ -1417,8 +1382,7 @@
       "familyName": "Crawford",
       "fullName": "Isaiah Crawford",
       "jerseyNum": "27",
-      "position": "F",
-      "height": "6-6"
+      "position": "F"
     },
     {
       "personId": "1630578",
@@ -1426,8 +1390,7 @@
       "familyName": "Sengun",
       "fullName": "Alperen Sengun",
       "jerseyNum": "28",
-      "position": "C",
-      "height": "6-11"
+      "position": "C"
     },
     {
       "personId": "203991",
@@ -1435,8 +1398,7 @@
       "familyName": "Capela",
       "fullName": "Clint Capela",
       "jerseyNum": "30",
-      "position": "C",
-      "height": "6-10"
+      "position": "C"
     },
     {
       "personId": "201145",
@@ -1444,8 +1406,23 @@
       "familyName": "Green",
       "fullName": "Jeff Green",
       "jerseyNum": "32",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
+    },
+    {
+      "personId": "1643570",
+      "firstName": "Bruce",
+      "familyName": "Thornton",
+      "fullName": "Bruce Thornton",
+      "jerseyNum": "",
+      "position": "G"
+    },
+    {
+      "personId": "1643595",
+      "firstName": "Quadir",
+      "familyName": "Copeland",
+      "fullName": "Quadir Copeland",
+      "jerseyNum": "",
+      "position": "G"
     }
   ],
   "1610612746": [
@@ -1455,8 +1432,15 @@
       "familyName": "Beal",
       "fullName": "Bradley Beal",
       "jerseyNum": "0",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
+    },
+    {
+      "personId": "1643413",
+      "firstName": "Keaton",
+      "familyName": "Wagler",
+      "fullName": "Keaton Wagler",
+      "jerseyNum": "1",
+      "position": "G"
     },
     {
       "personId": "202695",
@@ -1464,8 +1448,7 @@
       "familyName": "Leonard",
       "fullName": "Kawhi Leonard",
       "jerseyNum": "2",
-      "position": "F",
-      "height": "6-6"
+      "position": "F"
     },
     {
       "personId": "1642920",
@@ -1473,8 +1456,7 @@
       "familyName": "Sanders",
       "fullName": "Kobe Sanders",
       "jerseyNum": "4",
-      "position": "G",
-      "height": "6-8"
+      "position": "G"
     },
     {
       "personId": "1627884",
@@ -1482,17 +1464,7 @@
       "familyName": "Jones Jr.",
       "fullName": "Derrick Jones Jr.",
       "jerseyNum": "5",
-      "position": "F",
-      "height": "6-6"
-    },
-    {
-      "personId": "203992",
-      "firstName": "Bogdan",
-      "familyName": "Bogdanović",
-      "fullName": "Bogdan Bogdanović",
-      "jerseyNum": "7",
-      "position": "G",
-      "height": "6-5"
+      "position": "F"
     },
     {
       "personId": "1627739",
@@ -1500,8 +1472,7 @@
       "familyName": "Dunn",
       "fullName": "Kris Dunn",
       "jerseyNum": "8",
-      "position": "G",
-      "height": "6-3"
+      "position": "G"
     },
     {
       "personId": "1631097",
@@ -1509,8 +1480,7 @@
       "familyName": "Mathurin",
       "fullName": "Bennedict Mathurin",
       "jerseyNum": "9",
-      "position": "G-F",
-      "height": "6-5"
+      "position": "G-F"
     },
     {
       "personId": "1629636",
@@ -1518,8 +1488,7 @@
       "familyName": "Garland",
       "fullName": "Darius Garland",
       "jerseyNum": "10",
-      "position": "G",
-      "height": "6-1"
+      "position": "G"
     },
     {
       "personId": "201572",
@@ -1527,17 +1496,7 @@
       "familyName": "Lopez",
       "fullName": "Brook Lopez",
       "jerseyNum": "11",
-      "position": "C",
-      "height": "7-1"
-    },
-    {
-      "personId": "1642353",
-      "firstName": "Cam",
-      "familyName": "Christie",
-      "fullName": "Cam Christie",
-      "jerseyNum": "12",
-      "position": "G",
-      "height": "6-5"
+      "position": "C"
     },
     {
       "personId": "1631102",
@@ -1545,8 +1504,7 @@
       "familyName": "Washington Jr.",
       "fullName": "TyTy Washington Jr.",
       "jerseyNum": "14",
-      "position": "G",
-      "height": "6-3"
+      "position": "G"
     },
     {
       "personId": "1642949",
@@ -1554,17 +1512,7 @@
       "familyName": "Niederhäuser",
       "fullName": "Yanic Konan Niederhäuser",
       "jerseyNum": "14",
-      "position": "C",
-      "height": "6-11"
-    },
-    {
-      "personId": "1628381",
-      "firstName": "John",
-      "familyName": "Collins",
-      "fullName": "John Collins",
-      "jerseyNum": "20",
-      "position": "F-C",
-      "height": "6-9"
+      "position": "C"
     },
     {
       "personId": "1641757",
@@ -1572,8 +1520,7 @@
       "familyName": "Miller",
       "fullName": "Jordan Miller",
       "jerseyNum": "22",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
     },
     {
       "personId": "1630543",
@@ -1581,8 +1528,23 @@
       "familyName": "Jackson",
       "fullName": "Isaiah Jackson",
       "jerseyNum": "23",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
+    },
+    {
+      "personId": "1642353",
+      "firstName": "Cam",
+      "familyName": "Christie",
+      "fullName": "Cam Christie",
+      "jerseyNum": "24",
+      "position": "G"
+    },
+    {
+      "personId": "1629060",
+      "firstName": "Rui",
+      "familyName": "Hachimura",
+      "fullName": "Rui Hachimura",
+      "jerseyNum": "28",
+      "position": "F"
     },
     {
       "personId": "201587",
@@ -1590,8 +1552,31 @@
       "familyName": "Batum",
       "fullName": "Nicolas Batum",
       "jerseyNum": "33",
-      "position": "G-F",
-      "height": "6-7"
+      "position": "G-F"
+    },
+    {
+      "personId": "1642394",
+      "firstName": "Baba",
+      "familyName": "Miller",
+      "fullName": "Baba Miller",
+      "jerseyNum": "",
+      "position": "F"
+    },
+    {
+      "personId": "1643712",
+      "firstName": "Narcisse",
+      "familyName": "Ngoy",
+      "fullName": "Narcisse Ngoy",
+      "jerseyNum": "",
+      "position": "C"
+    },
+    {
+      "personId": "1643568",
+      "firstName": "Nick",
+      "familyName": "Martinelli",
+      "fullName": "Nick Martinelli",
+      "jerseyNum": "",
+      "position": "F"
     },
     {
       "personId": "1641807",
@@ -1599,8 +1584,7 @@
       "familyName": "Omier",
       "fullName": "Norchad Omier",
       "jerseyNum": "",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
       "personId": "1642951",
@@ -1608,8 +1592,7 @@
       "familyName": "Pedulla",
       "fullName": "Sean Pedulla",
       "jerseyNum": "",
-      "position": "G",
-      "height": "6-1"
+      "position": "G"
     }
   ],
   "1610612747": [
@@ -1619,8 +1602,7 @@
       "familyName": "Thiero",
       "fullName": "Adou Thiero",
       "jerseyNum": "1",
-      "position": "G",
-      "height": "6-7"
+      "position": "G"
     },
     {
       "personId": "1629020",
@@ -1628,8 +1610,7 @@
       "familyName": "Vanderbilt",
       "fullName": "Jarred Vanderbilt",
       "jerseyNum": "2",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
     },
     {
       "personId": "1642261",
@@ -1637,17 +1618,23 @@
       "familyName": "Knecht",
       "fullName": "Dalton Knecht",
       "jerseyNum": "4",
-      "position": "F",
-      "height": "6-6"
+      "position": "F"
     },
     {
-      "personId": "1629028",
-      "firstName": "Deandre",
-      "familyName": "Ayton",
-      "fullName": "Deandre Ayton",
+      "personId": "1629656",
+      "firstName": "Quentin",
+      "familyName": "Grimes",
+      "fullName": "Quentin Grimes",
       "jerseyNum": "5",
-      "position": "C",
-      "height": "7-0"
+      "position": "G"
+    },
+    {
+      "personId": "1630702",
+      "firstName": "Jaden",
+      "familyName": "Hardy",
+      "fullName": "Jaden Hardy",
+      "jerseyNum": "7",
+      "position": "G"
     },
     {
       "personId": "1642355",
@@ -1655,26 +1642,7 @@
       "familyName": "James",
       "fullName": "Bronny James",
       "jerseyNum": "9",
-      "position": "G",
-      "height": "6-2"
-    },
-    {
-      "personId": "1628379",
-      "firstName": "Luke",
-      "familyName": "Kennard",
-      "fullName": "Luke Kennard",
-      "jerseyNum": "10",
-      "position": "G",
-      "height": "6-5"
-    },
-    {
-      "personId": "1629637",
-      "firstName": "Jaxson",
-      "familyName": "Hayes",
-      "fullName": "Jaxson Hayes",
-      "jerseyNum": "11",
-      "position": "C-F",
-      "height": "7-0"
+      "position": "G"
     },
     {
       "personId": "1631222",
@@ -1682,17 +1650,7 @@
       "familyName": "LaRavia",
       "fullName": "Jake LaRavia",
       "jerseyNum": "12",
-      "position": "F",
-      "height": "6-7"
-    },
-    {
-      "personId": "1628467",
-      "firstName": "Maxi",
-      "familyName": "Kleber",
-      "fullName": "Maxi Kleber",
-      "jerseyNum": "14",
-      "position": "F",
-      "height": "6-10"
+      "position": "F"
     },
     {
       "personId": "1630559",
@@ -1700,44 +1658,15 @@
       "familyName": "Reaves",
       "fullName": "Austin Reaves",
       "jerseyNum": "15",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
     },
     {
-      "personId": "1631166",
-      "firstName": "Drew",
-      "familyName": "Timme",
-      "fullName": "Drew Timme",
-      "jerseyNum": "17",
-      "position": "F",
-      "height": "6-9"
-    },
-    {
-      "personId": "1641733",
-      "firstName": "Nick",
-      "familyName": "Smith Jr.",
-      "fullName": "Nick Smith Jr.",
-      "jerseyNum": "20",
-      "position": "G",
-      "height": "6-2"
-    },
-    {
-      "personId": "2544",
-      "firstName": "LeBron",
-      "familyName": "James",
-      "fullName": "LeBron James",
-      "jerseyNum": "23",
-      "position": "F",
-      "height": "6-9"
-    },
-    {
-      "personId": "1629060",
-      "firstName": "Rui",
-      "familyName": "Hachimura",
-      "fullName": "Rui Hachimura",
-      "jerseyNum": "28",
-      "position": "F",
-      "height": "6-8"
+      "personId": "1631117",
+      "firstName": "Walker",
+      "familyName": "Kessler",
+      "fullName": "Walker Kessler",
+      "jerseyNum": "24",
+      "position": "C"
     },
     {
       "personId": "1643024",
@@ -1745,17 +1674,39 @@
       "familyName": "Mañon",
       "fullName": "Chris Mañon",
       "jerseyNum": "30",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
-      "personId": "203935",
-      "firstName": "Marcus",
-      "familyName": "Smart",
-      "fullName": "Marcus Smart",
-      "jerseyNum": "36",
-      "position": "G",
-      "height": "6-3"
+      "personId": "1643758",
+      "firstName": "AK",
+      "familyName": "Okereke",
+      "fullName": "AK Okereke",
+      "jerseyNum": "31",
+      "position": "F"
+    },
+    {
+      "personId": "1643614",
+      "firstName": "Peter",
+      "familyName": "Suder",
+      "fullName": "Peter Suder",
+      "jerseyNum": "35",
+      "position": "G"
+    },
+    {
+      "personId": "1643418",
+      "firstName": "Cameron",
+      "familyName": "Carr",
+      "fullName": "Cameron Carr",
+      "jerseyNum": "43",
+      "position": "G"
+    },
+    {
+      "personId": "1630572",
+      "firstName": "Sandro",
+      "familyName": "Mamukelashvili",
+      "fullName": "Sandro Mamukelashvili",
+      "jerseyNum": "54",
+      "position": "F-C"
     },
     {
       "personId": "1629029",
@@ -1763,8 +1714,7 @@
       "familyName": "Dončić",
       "fullName": "Luka Dončić",
       "jerseyNum": "77",
-      "position": "F-G",
-      "height": "6-8"
+      "position": "F-G"
     }
   ],
   "1610612748": [
@@ -1774,8 +1724,15 @@
       "familyName": "Fontecchio",
       "fullName": "Simone Fontecchio",
       "jerseyNum": "0",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
+    },
+    {
+      "personId": "1630558",
+      "firstName": "Davion",
+      "familyName": "Mitchell",
+      "fullName": "Davion Mitchell",
+      "jerseyNum": "2",
+      "position": "G"
     },
     {
       "personId": "1631211",
@@ -1783,8 +1740,15 @@
       "familyName": "Keels",
       "fullName": "Trevor Keels",
       "jerseyNum": "3",
-      "position": "G",
-      "height": "6-3"
+      "position": "G"
+    },
+    {
+      "personId": "1643553",
+      "firstName": "Ryan",
+      "familyName": "Conwell",
+      "fullName": "Ryan Conwell",
+      "jerseyNum": "4",
+      "position": "G"
     },
     {
       "personId": "1631107",
@@ -1792,17 +1756,15 @@
       "familyName": "Jović",
       "fullName": "Nikola Jović",
       "jerseyNum": "5",
-      "position": "F",
-      "height": "6-10"
+      "position": "F"
     },
     {
-      "personId": "1642276",
-      "firstName": "Kel'el",
-      "familyName": "Ware",
-      "fullName": "Kel'el Ware",
+      "personId": "203507",
+      "firstName": "Giannis",
+      "familyName": "Antetokounmpo",
+      "fullName": "Giannis Antetokounmpo",
       "jerseyNum": "7",
-      "position": "C",
-      "height": "7-0"
+      "position": "F"
     },
     {
       "personId": "1641796",
@@ -1810,17 +1772,15 @@
       "familyName": "Larsson",
       "fullName": "Pelle Larsson",
       "jerseyNum": "9",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
     },
     {
-      "personId": "1631170",
-      "firstName": "Jaime",
-      "familyName": "Jaquez Jr.",
-      "fullName": "Jaime Jaquez Jr.",
-      "jerseyNum": "11",
-      "position": "G",
-      "height": "6-6"
+      "personId": "203501",
+      "firstName": "Tim",
+      "familyName": "Hardaway Jr.",
+      "fullName": "Tim Hardaway Jr.",
+      "jerseyNum": "10",
+      "position": "G-F"
     },
     {
       "personId": "1630696",
@@ -1828,8 +1788,7 @@
       "familyName": "Smith",
       "fullName": "Dru Smith",
       "jerseyNum": "12",
-      "position": "G",
-      "height": "6-2"
+      "position": "G"
     },
     {
       "personId": "1628389",
@@ -1837,17 +1796,7 @@
       "familyName": "Adebayo",
       "fullName": "Bam Adebayo",
       "jerseyNum": "13",
-      "position": "C-F",
-      "height": "6-9"
-    },
-    {
-      "personId": "1629639",
-      "firstName": "Tyler",
-      "familyName": "Herro",
-      "fullName": "Tyler Herro",
-      "jerseyNum": "14",
-      "position": "G",
-      "height": "6-5"
+      "position": "C-F"
     },
     {
       "personId": "1642066",
@@ -1855,8 +1804,7 @@
       "familyName": "Gardner",
       "fullName": "Myron Gardner",
       "jerseyNum": "15",
-      "position": "F",
-      "height": "6-5"
+      "position": "F"
     },
     {
       "personId": "1642352",
@@ -1864,8 +1812,7 @@
       "familyName": "Johnson",
       "fullName": "Keshad Johnson",
       "jerseyNum": "16",
-      "position": "F",
-      "height": "6-6"
+      "position": "F"
     },
     {
       "personId": "1642443",
@@ -1873,8 +1820,7 @@
       "familyName": "Young",
       "fullName": "Jahmir Young",
       "jerseyNum": "17",
-      "position": "G",
-      "height": "6-0"
+      "position": "G"
     },
     {
       "personId": "203952",
@@ -1882,8 +1828,7 @@
       "familyName": "Wiggins",
       "fullName": "Andrew Wiggins",
       "jerseyNum": "22",
-      "position": "F",
-      "height": "6-6"
+      "position": "F"
     },
     {
       "personId": "1626181",
@@ -1891,26 +1836,15 @@
       "familyName": "Powell",
       "fullName": "Norman Powell",
       "jerseyNum": "24",
-      "position": "G",
-      "height": "6-3"
+      "position": "G"
     },
     {
-      "personId": "1642857",
-      "firstName": "Kasparas",
-      "familyName": "Jakučionis",
-      "fullName": "Kasparas Jakučionis",
-      "jerseyNum": "25",
-      "position": "G",
-      "height": "6-5"
-    },
-    {
-      "personId": "1630558",
-      "firstName": "Davion",
-      "familyName": "Mitchell",
-      "fullName": "Davion Mitchell",
-      "jerseyNum": "45",
-      "position": "G",
-      "height": "6-0"
+      "personId": "1643621",
+      "firstName": "Tre",
+      "familyName": "Donaldson",
+      "fullName": "Tre Donaldson",
+      "jerseyNum": "24",
+      "position": "G"
     },
     {
       "personId": "1642884",
@@ -1918,19 +1852,33 @@
       "familyName": "Goldin",
       "fullName": "Vladislav Goldin",
       "jerseyNum": "50",
-      "position": "C",
-      "height": "7-0"
+      "position": "C"
+    },
+    {
+      "personId": "1626171",
+      "firstName": "Bobby",
+      "familyName": "Portis Jr.",
+      "fullName": "Bobby Portis Jr.",
+      "jerseyNum": "95",
+      "position": "F"
     }
   ],
   "1610612749": [
+    {
+      "personId": "1643415",
+      "firstName": "Brayden",
+      "familyName": "Burries",
+      "fullName": "Brayden Burries",
+      "jerseyNum": "0",
+      "position": "G"
+    },
     {
       "personId": "1630579",
       "firstName": "Jericho",
       "familyName": "Sims",
       "fullName": "Jericho Sims",
       "jerseyNum": "00",
-      "position": "C",
-      "height": "6-10"
+      "position": "C"
     },
     {
       "personId": "1626167",
@@ -1938,8 +1886,7 @@
       "familyName": "Turner",
       "fullName": "Myles Turner",
       "jerseyNum": "3",
-      "position": "C-F",
-      "height": "6-11"
+      "position": "C-F"
     },
     {
       "personId": "1629018",
@@ -1947,8 +1894,23 @@
       "familyName": "Trent Jr.",
       "fullName": "Gary Trent Jr.",
       "jerseyNum": "5",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
+    },
+    {
+      "personId": "1642880",
+      "firstName": "Kam",
+      "familyName": "Jones",
+      "fullName": "Kam Jones",
+      "jerseyNum": "7",
+      "position": "G"
+    },
+    {
+      "personId": "1642276",
+      "firstName": "Kel'el",
+      "familyName": "Ware",
+      "fullName": "Kel'el Ware",
+      "jerseyNum": "7",
+      "position": "C"
     },
     {
       "personId": "1629645",
@@ -1956,35 +1918,23 @@
       "familyName": "Porter Jr.",
       "fullName": "Kevin Porter Jr.",
       "jerseyNum": "7",
-      "position": "G-F",
-      "height": "6-5"
+      "position": "G-F"
     },
     {
-      "personId": "1626171",
-      "firstName": "Bobby",
-      "familyName": "Portis",
-      "fullName": "Bobby Portis",
-      "jerseyNum": "9",
-      "position": "F",
-      "height": "6-9"
+      "personId": "1627747",
+      "firstName": "Caris",
+      "familyName": "LeVert",
+      "fullName": "Caris LeVert",
+      "jerseyNum": "8",
+      "position": "G"
     },
     {
-      "personId": "203914",
-      "firstName": "Gary",
-      "familyName": "Harris",
-      "fullName": "Gary Harris",
+      "personId": "1631170",
+      "firstName": "Jaime",
+      "familyName": "Jaquez Jr.",
+      "fullName": "Jaime Jaquez Jr.",
       "jerseyNum": "11",
-      "position": "G",
-      "height": "6-4"
-    },
-    {
-      "personId": "1627752",
-      "firstName": "Taurean",
-      "familyName": "Prince",
-      "fullName": "Taurean Prince",
-      "jerseyNum": "12",
-      "position": "F",
-      "height": "6-6"
+      "position": "G"
     },
     {
       "personId": "1631157",
@@ -1992,8 +1942,15 @@
       "familyName": "Rollins",
       "fullName": "Ryan Rollins",
       "jerseyNum": "13",
-      "position": "G",
-      "height": "6-3"
+      "position": "G"
+    },
+    {
+      "personId": "1629639",
+      "firstName": "Tyler",
+      "familyName": "Herro",
+      "fullName": "Tyler Herro",
+      "jerseyNum": "14",
+      "position": "G"
     },
     {
       "personId": "1628398",
@@ -2001,8 +1958,7 @@
       "familyName": "Kuzma",
       "fullName": "Kyle Kuzma",
       "jerseyNum": "18",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
     },
     {
       "personId": "1631260",
@@ -2010,8 +1966,7 @@
       "familyName": "Green",
       "fullName": "AJ Green",
       "jerseyNum": "20",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "1631172",
@@ -2019,8 +1974,23 @@
       "familyName": "Dieng",
       "fullName": "Ousmane Dieng",
       "jerseyNum": "21",
-      "position": "F",
-      "height": "6-9"
+      "position": "F"
+    },
+    {
+      "personId": "1642881",
+      "firstName": "Bogoljub",
+      "familyName": "Marković",
+      "fullName": "Bogoljub Marković",
+      "jerseyNum": "23",
+      "position": "F"
+    },
+    {
+      "personId": "1642857",
+      "firstName": "Kasparas",
+      "familyName": "Jakučionis",
+      "fullName": "Kasparas Jakučionis",
+      "jerseyNum": "25",
+      "position": "G"
     },
     {
       "personId": "1630828",
@@ -2028,8 +1998,7 @@
       "familyName": "Antetokounmpo",
       "fullName": "Alex Antetokounmpo",
       "jerseyNum": "29",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
     },
     {
       "personId": "1642504",
@@ -2037,26 +2006,7 @@
       "familyName": "Ryan",
       "fullName": "Cormac Ryan",
       "jerseyNum": "30",
-      "position": "G",
-      "height": "6-5"
-    },
-    {
-      "personId": "203507",
-      "firstName": "Giannis",
-      "familyName": "Antetokounmpo",
-      "fullName": "Giannis Antetokounmpo",
-      "jerseyNum": "34",
-      "position": "F",
-      "height": "6-11"
-    },
-    {
-      "personId": "1631250",
-      "firstName": "Pete",
-      "familyName": "Nance",
-      "fullName": "Pete Nance",
-      "jerseyNum": "35",
-      "position": "F",
-      "height": "6-9"
+      "position": "G"
     },
     {
       "personId": "203648",
@@ -2064,8 +2014,7 @@
       "familyName": "Antetokounmpo",
       "fullName": "Thanasis Antetokounmpo",
       "jerseyNum": "43",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
       "personId": "1641748",
@@ -2073,8 +2022,23 @@
       "familyName": "Jackson Jr.",
       "fullName": "Andre Jackson Jr.",
       "jerseyNum": "44",
-      "position": "G",
-      "height": "6-6"
+      "position": "G"
+    },
+    {
+      "personId": "1641831",
+      "firstName": "Malique",
+      "familyName": "Lewis",
+      "fullName": "Malique Lewis",
+      "jerseyNum": "",
+      "position": "F"
+    },
+    {
+      "personId": "1643417",
+      "firstName": "Nate",
+      "familyName": "Ament",
+      "fullName": "Nate Ament",
+      "jerseyNum": "",
+      "position": "F"
     }
   ],
   "1610612750": [
@@ -2084,8 +2048,7 @@
       "familyName": "DiVincenzo",
       "fullName": "Donte DiVincenzo",
       "jerseyNum": "0",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "1630545",
@@ -2093,8 +2056,7 @@
       "familyName": "Shannon Jr.",
       "fullName": "Terrence Shannon Jr.",
       "jerseyNum": "1",
-      "position": "G-F",
-      "height": "6-6"
+      "position": "G-F"
     },
     {
       "personId": "1630183",
@@ -2102,8 +2064,7 @@
       "familyName": "McDaniels",
       "fullName": "Jaden McDaniels",
       "jerseyNum": "3",
-      "position": "F",
-      "height": "6-9"
+      "position": "F"
     },
     {
       "personId": "1641763",
@@ -2111,8 +2072,7 @@
       "familyName": "Phillips",
       "fullName": "Julian Phillips",
       "jerseyNum": "4",
-      "position": "F",
-      "height": "6-6"
+      "position": "F"
     },
     {
       "personId": "1630162",
@@ -2120,8 +2080,7 @@
       "familyName": "Edwards",
       "fullName": "Anthony Edwards",
       "jerseyNum": "5",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "204060",
@@ -2129,8 +2088,7 @@
       "familyName": "Ingles",
       "fullName": "Joe Ingles",
       "jerseyNum": "7",
-      "position": "F-G",
-      "height": "6-8"
+      "position": "F-G"
     },
     {
       "personId": "1630538",
@@ -2138,17 +2096,7 @@
       "familyName": "Hyland",
       "fullName": "Bones Hyland",
       "jerseyNum": "8",
-      "position": "G",
-      "height": "6-2"
-    },
-    {
-      "personId": "201144",
-      "firstName": "Mike",
-      "familyName": "Conley",
-      "fullName": "Mike Conley",
-      "jerseyNum": "10",
-      "position": "G",
-      "height": "6-1"
+      "position": "G"
     },
     {
       "personId": "1629675",
@@ -2156,17 +2104,7 @@
       "familyName": "Reid",
       "fullName": "Naz Reid",
       "jerseyNum": "11",
-      "position": "C-F",
-      "height": "6-9"
-    },
-    {
-      "personId": "203937",
-      "firstName": "Kyle",
-      "familyName": "Anderson",
-      "fullName": "Kyle Anderson",
-      "jerseyNum": "12",
-      "position": "F-G",
-      "height": "6-8"
+      "position": "C-F"
     },
     {
       "personId": "1630245",
@@ -2174,8 +2112,7 @@
       "familyName": "Dosunmu",
       "fullName": "Ayo Dosunmu",
       "jerseyNum": "13",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "1642389",
@@ -2183,8 +2120,7 @@
       "familyName": "Pullin",
       "fullName": "Zyon Pullin",
       "jerseyNum": "15",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "1642866",
@@ -2192,8 +2128,7 @@
       "familyName": "Beringer",
       "fullName": "Joan Beringer",
       "jerseyNum": "19",
-      "position": "F",
-      "height": "6-11"
+      "position": "F"
     },
     {
       "personId": "1641740",
@@ -2201,8 +2136,7 @@
       "familyName": "Clark",
       "fullName": "Jaylen Clark",
       "jerseyNum": "22",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
     },
     {
       "personId": "1642402",
@@ -2210,8 +2144,7 @@
       "familyName": "Freeman",
       "fullName": "Enrique Freeman",
       "jerseyNum": "25",
-      "position": "F",
-      "height": "6-9"
+      "position": "F"
     },
     {
       "personId": "203497",
@@ -2219,8 +2152,7 @@
       "familyName": "Gobert",
       "fullName": "Rudy Gobert",
       "jerseyNum": "27",
-      "position": "C",
-      "height": "7-1"
+      "position": "C"
     },
     {
       "personId": "203944",
@@ -2228,8 +2160,7 @@
       "familyName": "Randle",
       "fullName": "Julius Randle",
       "jerseyNum": "30",
-      "position": "F-C",
-      "height": "6-9"
+      "position": "F-C"
     },
     {
       "personId": "1642911",
@@ -2237,19 +2168,41 @@
       "familyName": "Zikarsky",
       "fullName": "Rocco Zikarsky",
       "jerseyNum": "44",
-      "position": "C",
-      "height": "7-3"
+      "position": "C"
+    },
+    {
+      "personId": "1643538",
+      "firstName": "Joshua",
+      "familyName": "Jefferson",
+      "fullName": "Joshua Jefferson",
+      "jerseyNum": "",
+      "position": "F"
+    },
+    {
+      "personId": "1643626",
+      "firstName": "Trey",
+      "familyName": "Kaufman-Renn",
+      "fullName": "Trey Kaufman-Renn",
+      "jerseyNum": "",
+      "position": ""
     }
   ],
   "1610612751": [
+    {
+      "personId": "1643414",
+      "firstName": "Mikel",
+      "familyName": "Brown Jr.",
+      "fullName": "Mikel Brown Jr.",
+      "jerseyNum": "0",
+      "position": "G"
+    },
     {
       "personId": "1631169",
       "firstName": "Josh",
       "familyName": "Minott",
       "fullName": "Josh Minott",
       "jerseyNum": "00",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
     },
     {
       "personId": "1630533",
@@ -2257,8 +2210,7 @@
       "familyName": "Williams",
       "fullName": "Ziaire Williams",
       "jerseyNum": "1",
-      "position": "F",
-      "height": "6-9"
+      "position": "F"
     },
     {
       "personId": "1642874",
@@ -2266,8 +2218,7 @@
       "familyName": "Wolf",
       "fullName": "Danny Wolf",
       "jerseyNum": "2",
-      "position": "F",
-      "height": "6-11"
+      "position": "F"
     },
     {
       "personId": "1642962",
@@ -2275,8 +2226,7 @@
       "familyName": "Powell",
       "fullName": "Drake Powell",
       "jerseyNum": "4",
-      "position": "G-F",
-      "height": "6-5"
+      "position": "G-F"
     },
     {
       "personId": "1642856",
@@ -2284,8 +2234,7 @@
       "familyName": "Dëmin",
       "fullName": "Egor Dëmin",
       "jerseyNum": "8",
-      "position": "G",
-      "height": "6-8"
+      "position": "G"
     },
     {
       "personId": "1630604",
@@ -2293,8 +2242,7 @@
       "familyName": "Liddell",
       "fullName": "E.J. Liddell",
       "jerseyNum": "9",
-      "position": "F",
-      "height": "6-6"
+      "position": "F"
     },
     {
       "personId": "1630623",
@@ -2302,8 +2250,23 @@
       "familyName": "Etienne",
       "fullName": "Tyson Etienne",
       "jerseyNum": "10",
-      "position": "G",
-      "height": "6-0"
+      "position": "G"
+    },
+    {
+      "personId": "1642849",
+      "firstName": "Nolan",
+      "familyName": "Traore",
+      "fullName": "Nolan Traore",
+      "jerseyNum": "13",
+      "position": "G"
+    },
+    {
+      "personId": "1631165",
+      "firstName": "Keon",
+      "familyName": "Ellis",
+      "fullName": "Keon Ellis",
+      "jerseyNum": "14",
+      "position": "G"
     },
     {
       "personId": "1629611",
@@ -2311,8 +2274,7 @@
       "familyName": "Mann",
       "fullName": "Terance Mann",
       "jerseyNum": "14",
-      "position": "G-F",
-      "height": "6-6"
+      "position": "G-F"
     },
     {
       "personId": "1629008",
@@ -2320,8 +2282,7 @@
       "familyName": "Porter Jr.",
       "fullName": "Michael Porter Jr.",
       "jerseyNum": "17",
-      "position": "F",
-      "height": "6-10"
+      "position": "F"
     },
     {
       "personId": "1641869",
@@ -2329,8 +2290,7 @@
       "familyName": "Smith",
       "fullName": "Malachi Smith",
       "jerseyNum": "18",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "1630549",
@@ -2338,8 +2298,7 @@
       "familyName": "Sharpe",
       "fullName": "Day'Ron Sharpe",
       "jerseyNum": "20",
-      "position": "C",
-      "height": "6-10"
+      "position": "C"
     },
     {
       "personId": "1641730",
@@ -2347,8 +2306,7 @@
       "familyName": "Clowney",
       "fullName": "Noah Clowney",
       "jerseyNum": "21",
-      "position": "F-C",
-      "height": "6-10"
+      "position": "F-C"
     },
     {
       "personId": "1630592",
@@ -2356,17 +2314,7 @@
       "familyName": "Wilson",
       "fullName": "Jalen Wilson",
       "jerseyNum": "22",
-      "position": "F",
-      "height": "6-6"
-    },
-    {
-      "personId": "1630534",
-      "firstName": "Ochai",
-      "familyName": "Agbaji",
-      "fullName": "Ochai Agbaji",
-      "jerseyNum": "30",
-      "position": "G",
-      "height": "6-5"
+      "position": "F"
     },
     {
       "personId": "1643052",
@@ -2374,8 +2322,7 @@
       "familyName": "Johnson",
       "fullName": "Chaney Johnson",
       "jerseyNum": "31",
-      "position": "G-F",
-      "height": "6-7"
+      "position": "G-F"
     },
     {
       "personId": "1629651",
@@ -2383,8 +2330,15 @@
       "familyName": "Claxton",
       "fullName": "Nic Claxton",
       "jerseyNum": "33",
-      "position": "C",
-      "height": "6-11"
+      "position": "C"
+    },
+    {
+      "personId": "1643548",
+      "firstName": "Tyler",
+      "familyName": "Bilodeau",
+      "fullName": "Tyler Bilodeau",
+      "jerseyNum": "34",
+      "position": "F"
     },
     {
       "personId": "1642879",
@@ -2392,17 +2346,15 @@
       "familyName": "Saraf",
       "fullName": "Ben Saraf",
       "jerseyNum": "77",
-      "position": "G",
-      "height": "6-6"
+      "position": "G"
     },
     {
-      "personId": "1642849",
-      "firstName": "Nolan",
-      "familyName": "Traore",
-      "fullName": "Nolan Traore",
-      "jerseyNum": "88",
-      "position": "G",
-      "height": "6-3"
+      "personId": "1642912",
+      "firstName": "Isaiah",
+      "familyName": "Evans",
+      "fullName": "Isaiah Evans",
+      "jerseyNum": "",
+      "position": "F"
     }
   ],
   "1610612752": [
@@ -2412,8 +2364,15 @@
       "familyName": "Clarkson",
       "fullName": "Jordan Clarkson",
       "jerseyNum": "00",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
+    },
+    {
+      "personId": "203083",
+      "firstName": "Andre",
+      "familyName": "Drummond",
+      "fullName": "Andre Drummond",
+      "jerseyNum": "1",
+      "position": "C"
     },
     {
       "personId": "1630540",
@@ -2421,8 +2380,7 @@
       "familyName": "McBride",
       "fullName": "Miles McBride",
       "jerseyNum": "2",
-      "position": "G",
-      "height": "6-2"
+      "position": "G"
     },
     {
       "personId": "1628404",
@@ -2430,8 +2388,7 @@
       "familyName": "Hart",
       "fullName": "Josh Hart",
       "jerseyNum": "3",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
     },
     {
       "personId": "1642359",
@@ -2439,8 +2396,7 @@
       "familyName": "Dadiet",
       "fullName": "Pacôme Dadiet",
       "jerseyNum": "4",
-      "position": "F",
-      "height": "6-9"
+      "position": "F"
     },
     {
       "personId": "1630631",
@@ -2448,8 +2404,7 @@
       "familyName": "Alvarado",
       "fullName": "Jose Alvarado",
       "jerseyNum": "5",
-      "position": "G",
-      "height": "6-0"
+      "position": "G"
     },
     {
       "personId": "1628384",
@@ -2457,8 +2412,7 @@
       "familyName": "Anunoby",
       "fullName": "OG Anunoby",
       "jerseyNum": "8",
-      "position": "F-G",
-      "height": "6-7"
+      "position": "F-G"
     },
     {
       "personId": "1641755",
@@ -2466,8 +2420,7 @@
       "familyName": "McCullar Jr.",
       "fullName": "Kevin McCullar Jr.",
       "jerseyNum": "9",
-      "position": "G",
-      "height": "6-6"
+      "position": "G"
     },
     {
       "personId": "1628973",
@@ -2475,8 +2428,7 @@
       "familyName": "Brunson",
       "fullName": "Jalen Brunson",
       "jerseyNum": "11",
-      "position": "G",
-      "height": "6-2"
+      "position": "G"
     },
     {
       "personId": "1642278",
@@ -2484,8 +2436,7 @@
       "familyName": "Kolek",
       "fullName": "Tyler Kolek",
       "jerseyNum": "13",
-      "position": "G",
-      "height": "6-2"
+      "position": "G"
     },
     {
       "personId": "1631110",
@@ -2493,17 +2444,7 @@
       "familyName": "Sochan",
       "fullName": "Jeremy Sochan",
       "jerseyNum": "20",
-      "position": "F",
-      "height": "6-8"
-    },
-    {
-      "personId": "1629011",
-      "firstName": "Mitchell",
-      "familyName": "Robinson",
-      "fullName": "Mitchell Robinson",
-      "jerseyNum": "23",
-      "position": "C-F",
-      "height": "7-0"
+      "position": "F"
     },
     {
       "personId": "1628969",
@@ -2511,8 +2452,7 @@
       "familyName": "Bridges",
       "fullName": "Mikal Bridges",
       "jerseyNum": "25",
-      "position": "G-F",
-      "height": "6-6"
+      "position": "G-F"
     },
     {
       "personId": "1626157",
@@ -2520,17 +2460,7 @@
       "familyName": "Towns",
       "fullName": "Karl-Anthony Towns",
       "jerseyNum": "32",
-      "position": "C-F",
-      "height": "7-0"
-    },
-    {
-      "personId": "1641794",
-      "firstName": "Dillon",
-      "familyName": "Jones",
-      "fullName": "Dillon Jones",
-      "jerseyNum": "33",
-      "position": "F",
-      "height": "6-5"
+      "position": "C-F"
     },
     {
       "personId": "1629013",
@@ -2538,8 +2468,7 @@
       "familyName": "Shamet",
       "fullName": "Landry Shamet",
       "jerseyNum": "44",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
     },
     {
       "personId": "1641998",
@@ -2547,8 +2476,7 @@
       "familyName": "Jemison III",
       "fullName": "Trey Jemison III",
       "jerseyNum": "50",
-      "position": "C",
-      "height": "6-10"
+      "position": "C"
     },
     {
       "personId": "1642885",
@@ -2556,17 +2484,31 @@
       "familyName": "Diawara",
       "fullName": "Mohamed Diawara",
       "jerseyNum": "51",
-      "position": "F",
-      "height": "6-9"
+      "position": "F"
     },
     {
-      "personId": "1630574",
-      "firstName": "Ariel",
-      "familyName": "Hukporti",
-      "fullName": "Ariel Hukporti",
-      "jerseyNum": "55",
-      "position": "C",
-      "height": "7-0"
+      "personId": "1641794",
+      "firstName": "Dillon",
+      "familyName": "Jones",
+      "fullName": "Dillon Jones",
+      "jerseyNum": "",
+      "position": "F"
+    },
+    {
+      "personId": "1643583",
+      "firstName": "Jack",
+      "familyName": "Kayil",
+      "fullName": "Jack Kayil",
+      "jerseyNum": "",
+      "position": "G"
+    },
+    {
+      "personId": "1643589",
+      "firstName": "Tyler",
+      "familyName": "Nickel",
+      "fullName": "Tyler Nickel",
+      "jerseyNum": "",
+      "position": "F"
     }
   ],
   "1610612753": [
@@ -2576,8 +2518,7 @@
       "familyName": "Black",
       "fullName": "Anthony Black",
       "jerseyNum": "0",
-      "position": "G",
-      "height": "6-7"
+      "position": "G"
     },
     {
       "personId": "1628371",
@@ -2585,8 +2526,7 @@
       "familyName": "Isaac",
       "fullName": "Jonathan Isaac",
       "jerseyNum": "1",
-      "position": "F",
-      "height": "6-10"
+      "position": "F"
     },
     {
       "personId": "1628975",
@@ -2594,8 +2534,7 @@
       "familyName": "Carter",
       "fullName": "Jevon Carter",
       "jerseyNum": "2",
-      "position": "G",
-      "height": "6-0"
+      "position": "G"
     },
     {
       "personId": "1630217",
@@ -2603,8 +2542,7 @@
       "familyName": "Bane",
       "fullName": "Desmond Bane",
       "jerseyNum": "3",
-      "position": "G",
-      "height": "6-6"
+      "position": "G"
     },
     {
       "personId": "1630591",
@@ -2612,8 +2550,15 @@
       "familyName": "Suggs",
       "fullName": "Jalen Suggs",
       "jerseyNum": "4",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
+    },
+    {
+      "personId": "202696",
+      "firstName": "Nikola",
+      "familyName": "Vučević",
+      "fullName": "Nikola Vučević",
+      "jerseyNum": "4",
+      "position": "C"
     },
     {
       "personId": "1631094",
@@ -2621,8 +2566,7 @@
       "familyName": "Banchero",
       "fullName": "Paolo Banchero",
       "jerseyNum": "5",
-      "position": "F",
-      "height": "6-10"
+      "position": "F"
     },
     {
       "personId": "1631288",
@@ -2630,8 +2574,7 @@
       "familyName": "Cain",
       "fullName": "Jamal Cain",
       "jerseyNum": "8",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
       "personId": "1642859",
@@ -2639,8 +2582,7 @@
       "familyName": "Richardson",
       "fullName": "Jase Richardson",
       "jerseyNum": "11",
-      "position": "G",
-      "height": "6-1"
+      "position": "G"
     },
     {
       "personId": "1641724",
@@ -2648,8 +2590,7 @@
       "familyName": "Howard",
       "fullName": "Jett Howard",
       "jerseyNum": "13",
-      "position": "G",
-      "height": "6-8"
+      "position": "G"
     },
     {
       "personId": "1630658",
@@ -2657,8 +2598,7 @@
       "familyName": "Castleton",
       "fullName": "Colin Castleton",
       "jerseyNum": "14",
-      "position": "C",
-      "height": "6-10"
+      "position": "C"
     },
     {
       "personId": "1629021",
@@ -2666,8 +2606,7 @@
       "familyName": "Wagner",
       "fullName": "Moritz Wagner",
       "jerseyNum": "21",
-      "position": "F-C",
-      "height": "6-11"
+      "position": "F-C"
     },
     {
       "personId": "1630532",
@@ -2675,8 +2614,7 @@
       "familyName": "Wagner",
       "fullName": "Franz Wagner",
       "jerseyNum": "22",
-      "position": "F",
-      "height": "6-10"
+      "position": "F"
     },
     {
       "personId": "1641783",
@@ -2684,8 +2622,7 @@
       "familyName": "da Silva",
       "fullName": "Tristan da Silva",
       "jerseyNum": "23",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
     },
     {
       "personId": "1628976",
@@ -2693,8 +2630,7 @@
       "familyName": "Carter Jr.",
       "fullName": "Wendell Carter Jr.",
       "jerseyNum": "34",
-      "position": "C-F",
-      "height": "6-10"
+      "position": "C-F"
     },
     {
       "personId": "1629048",
@@ -2702,8 +2638,7 @@
       "familyName": "Bitadze",
       "fullName": "Goga Bitadze",
       "jerseyNum": "35",
-      "position": "C-F",
-      "height": "6-11"
+      "position": "C-F"
     },
     {
       "personId": "1642869",
@@ -2711,8 +2646,7 @@
       "familyName": "Penda",
       "fullName": "Noah Penda",
       "jerseyNum": "93",
-      "position": "G-F",
-      "height": "6-7"
+      "position": "G-F"
     },
     {
       "personId": "1631457",
@@ -2720,8 +2654,15 @@
       "familyName": "Morales",
       "fullName": "Alex Morales",
       "jerseyNum": "",
-      "position": "G",
-      "height": "6-6"
+      "position": "G"
+    },
+    {
+      "personId": "1643593",
+      "firstName": "Izaiyah",
+      "familyName": "Nelson",
+      "fullName": "Izaiyah Nelson",
+      "jerseyNum": "",
+      "position": "F"
     }
   ],
   "1610612754": [
@@ -2731,8 +2672,7 @@
       "familyName": "Haliburton",
       "fullName": "Tyrese Haliburton",
       "jerseyNum": "0",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
     },
     {
       "personId": "1630167",
@@ -2740,8 +2680,7 @@
       "familyName": "Toppin",
       "fullName": "Obi Toppin",
       "jerseyNum": "1",
-      "position": "F",
-      "height": "6-9"
+      "position": "F"
     },
     {
       "personId": "1629614",
@@ -2749,8 +2688,15 @@
       "familyName": "Nembhard",
       "fullName": "Andrew Nembhard",
       "jerseyNum": "2",
-      "position": "G-F",
-      "height": "6-4"
+      "position": "G-F"
+    },
+    {
+      "personId": "1643552",
+      "firstName": "Braden",
+      "familyName": "Smith",
+      "fullName": "Braden Smith",
+      "jerseyNum": "3",
+      "position": "G"
     },
     {
       "personId": "1643007",
@@ -2758,8 +2704,7 @@
       "familyName": "Peter",
       "fullName": "Taelon Peter",
       "jerseyNum": "4",
-      "position": "G",
-      "height": "6-3"
+      "position": "G"
     },
     {
       "personId": "1641716",
@@ -2767,17 +2712,15 @@
       "familyName": "Walker",
       "fullName": "Jarace Walker",
       "jerseyNum": "5",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
-      "personId": "1642880",
-      "firstName": "Kam",
-      "familyName": "Jones",
-      "fullName": "Kam Jones",
-      "jerseyNum": "7",
-      "position": "G",
-      "height": "6-4"
+      "personId": "1626162",
+      "firstName": "Kelly",
+      "familyName": "Oubre Jr.",
+      "fullName": "Kelly Oubre Jr.",
+      "jerseyNum": "9",
+      "position": "F-G"
     },
     {
       "personId": "204456",
@@ -2785,17 +2728,7 @@
       "familyName": "McConnell",
       "fullName": "T.J. McConnell",
       "jerseyNum": "9",
-      "position": "G",
-      "height": "6-1"
-    },
-    {
-      "personId": "1630695",
-      "firstName": "Micah",
-      "familyName": "Potter",
-      "fullName": "Micah Potter",
-      "jerseyNum": "11",
-      "position": "C",
-      "height": "6-9"
+      "position": "G"
     },
     {
       "personId": "1642277",
@@ -2803,8 +2736,7 @@
       "familyName": "Furphy",
       "fullName": "Johnny Furphy",
       "jerseyNum": "12",
-      "position": "G",
-      "height": "6-8"
+      "position": "G"
     },
     {
       "personId": "1641771",
@@ -2812,8 +2744,7 @@
       "familyName": "Slawson",
       "fullName": "Jalen Slawson",
       "jerseyNum": "18",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
       "personId": "1630174",
@@ -2821,8 +2752,7 @@
       "familyName": "Nesmith",
       "fullName": "Aaron Nesmith",
       "jerseyNum": "23",
-      "position": "G-F",
-      "height": "6-5"
+      "position": "G-F"
     },
     {
       "personId": "1641738",
@@ -2830,8 +2760,7 @@
       "familyName": "Brown",
       "fullName": "Kobe Brown",
       "jerseyNum": "24",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
       "personId": "1641767",
@@ -2839,8 +2768,7 @@
       "familyName": "Sheppard",
       "fullName": "Ben Sheppard",
       "jerseyNum": "26",
-      "position": "G",
-      "height": "6-6"
+      "position": "G"
     },
     {
       "personId": "1631245",
@@ -2848,8 +2776,7 @@
       "familyName": "Jackson",
       "fullName": "Quenton Jackson",
       "jerseyNum": "29",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "1630643",
@@ -2857,8 +2784,7 @@
       "familyName": "Huff",
       "fullName": "Jay Huff",
       "jerseyNum": "32",
-      "position": "C",
-      "height": "7-1"
+      "position": "C"
     },
     {
       "personId": "1627826",
@@ -2866,8 +2792,7 @@
       "familyName": "Zubac",
       "fullName": "Ivica Zubac",
       "jerseyNum": "40",
-      "position": "C",
-      "height": "7-0"
+      "position": "C"
     },
     {
       "personId": "1627783",
@@ -2875,8 +2800,7 @@
       "familyName": "Siakam",
       "fullName": "Pascal Siakam",
       "jerseyNum": "43",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
     },
     {
       "personId": "1630679",
@@ -2884,8 +2808,7 @@
       "familyName": "Thompson",
       "fullName": "Ethan Thompson",
       "jerseyNum": "55",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     }
   ],
   "1610612755": [
@@ -2895,26 +2818,31 @@
       "familyName": "Maxey",
       "fullName": "Tyrese Maxey",
       "jerseyNum": "0",
-      "position": "G",
-      "height": "6-2"
+      "position": "G"
     },
     {
-      "personId": "203083",
-      "firstName": "Andre",
-      "familyName": "Drummond",
-      "fullName": "Andre Drummond",
-      "jerseyNum": "1",
-      "position": "C",
-      "height": "6-11"
+      "personId": "1642889",
+      "firstName": "Labaron",
+      "familyName": "Philon",
+      "fullName": "Labaron Philon",
+      "jerseyNum": "00",
+      "position": "G"
     },
     {
-      "personId": "1629656",
-      "firstName": "Quentin",
-      "familyName": "Grimes",
-      "fullName": "Quentin Grimes",
-      "jerseyNum": "5",
-      "position": "G",
-      "height": "6-5"
+      "personId": "1631126",
+      "firstName": "Caleb",
+      "familyName": "Love",
+      "fullName": "Caleb Love",
+      "jerseyNum": "2",
+      "position": "G"
+    },
+    {
+      "personId": "1627759",
+      "firstName": "Jaylen",
+      "familyName": "Brown",
+      "fullName": "Jaylen Brown",
+      "jerseyNum": "7",
+      "position": "G-F"
     },
     {
       "personId": "200768",
@@ -2922,26 +2850,7 @@
       "familyName": "Lowry",
       "fullName": "Kyle Lowry",
       "jerseyNum": "7",
-      "position": "G",
-      "height": "6-0"
-    },
-    {
-      "personId": "202331",
-      "firstName": "Paul",
-      "familyName": "George",
-      "fullName": "Paul George",
-      "jerseyNum": "8",
-      "position": "F",
-      "height": "6-8"
-    },
-    {
-      "personId": "1626162",
-      "firstName": "Kelly",
-      "familyName": "Oubre Jr.",
-      "fullName": "Kelly Oubre Jr.",
-      "jerseyNum": "9",
-      "position": "F-G",
-      "height": "6-8"
+      "position": "G"
     },
     {
       "personId": "1642348",
@@ -2949,8 +2858,7 @@
       "familyName": "Edwards",
       "fullName": "Justin Edwards",
       "jerseyNum": "11",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
       "personId": "1630570",
@@ -2958,8 +2866,7 @@
       "familyName": "Watford",
       "fullName": "Trendon Watford",
       "jerseyNum": "12",
-      "position": "G-F",
-      "height": "6-8"
+      "position": "G-F"
     },
     {
       "personId": "1631207",
@@ -2967,8 +2874,7 @@
       "familyName": "Terry",
       "fullName": "Dalen Terry",
       "jerseyNum": "14",
-      "position": "F",
-      "height": "6-6"
+      "position": "F"
     },
     {
       "personId": "1630699",
@@ -2976,8 +2882,7 @@
       "familyName": "Beauchamp",
       "fullName": "MarJon Beauchamp",
       "jerseyNum": "16",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
       "personId": "203954",
@@ -2985,8 +2890,23 @@
       "familyName": "Embiid",
       "fullName": "Joel Embiid",
       "jerseyNum": "21",
-      "position": "C-F",
-      "height": "7-0"
+      "position": "C-F"
+    },
+    {
+      "personId": "1641712",
+      "firstName": "Rayan",
+      "familyName": "Rupert",
+      "fullName": "Rayan Rupert",
+      "jerseyNum": "21",
+      "position": "G-F"
+    },
+    {
+      "personId": "1629014",
+      "firstName": "Anfernee",
+      "familyName": "Simons",
+      "fullName": "Anfernee Simons",
+      "jerseyNum": "22",
+      "position": "G"
     },
     {
       "personId": "1641780",
@@ -2994,8 +2914,7 @@
       "familyName": "Broome",
       "fullName": "Johni Broome",
       "jerseyNum": "22",
-      "position": "F",
-      "height": "6-9"
+      "position": "F"
     },
     {
       "personId": "1631213",
@@ -3003,8 +2922,7 @@
       "familyName": "Martin",
       "fullName": "Tyrese Martin",
       "jerseyNum": "23",
-      "position": "F",
-      "height": "6-6"
+      "position": "F"
     },
     {
       "personId": "1631230",
@@ -3012,8 +2930,7 @@
       "familyName": "Barlow",
       "fullName": "Dominick Barlow",
       "jerseyNum": "25",
-      "position": "F",
-      "height": "6-9"
+      "position": "F"
     },
     {
       "personId": "1641737",
@@ -3021,8 +2938,15 @@
       "familyName": "Bona",
       "fullName": "Adem Bona",
       "jerseyNum": "30",
-      "position": "F",
-      "height": "6-10"
+      "position": "F"
+    },
+    {
+      "personId": "1629731",
+      "firstName": "Dean",
+      "familyName": "Wade",
+      "fullName": "Dean Wade",
+      "jerseyNum": "32",
+      "position": "F-C"
     },
     {
       "personId": "1631133",
@@ -3030,8 +2954,15 @@
       "familyName": "Walker",
       "fullName": "Jabari Walker",
       "jerseyNum": "33",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
+    },
+    {
+      "personId": "1630574",
+      "firstName": "Ariel",
+      "familyName": "Hukporti",
+      "fullName": "Ariel Hukporti",
+      "jerseyNum": "55",
+      "position": "C"
     },
     {
       "personId": "1642845",
@@ -3039,37 +2970,33 @@
       "familyName": "Edgecombe",
       "fullName": "VJ Edgecombe",
       "jerseyNum": "77",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
+    },
+    {
+      "personId": "1643575",
+      "firstName": "Duke",
+      "familyName": "Miles",
+      "fullName": "Duke Miles",
+      "jerseyNum": "",
+      "position": "G"
     }
   ],
   "1610612756": [
-    {
-      "personId": "1626220",
-      "firstName": "Royce",
-      "familyName": "O'Neale",
-      "fullName": "Royce O'Neale",
-      "jerseyNum": "00",
-      "position": "F",
-      "height": "6-6"
-    },
     {
       "personId": "1642346",
       "firstName": "Ryan",
       "familyName": "Dunn",
       "fullName": "Ryan Dunn",
       "jerseyNum": "0",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
-      "personId": "1626164",
-      "firstName": "Devin",
-      "familyName": "Booker",
-      "fullName": "Devin Booker",
-      "jerseyNum": "1",
-      "position": "G",
-      "height": "6-5"
+      "personId": "1626220",
+      "firstName": "Royce",
+      "familyName": "O'Neale",
+      "fullName": "Royce O'Neale",
+      "jerseyNum": "00",
+      "position": "F"
     },
     {
       "personId": "1629599",
@@ -3077,8 +3004,7 @@
       "familyName": "Coffey",
       "fullName": "Amir Coffey",
       "jerseyNum": "2",
-      "position": "G-F",
-      "height": "6-7"
+      "position": "G-F"
     },
     {
       "personId": "1628415",
@@ -3086,8 +3012,7 @@
       "familyName": "Brooks",
       "fullName": "Dillon Brooks",
       "jerseyNum": "3",
-      "position": "G-F",
-      "height": "6-7"
+      "position": "G-F"
     },
     {
       "personId": "1630224",
@@ -3095,8 +3020,7 @@
       "familyName": "Green",
       "fullName": "Jalen Green",
       "jerseyNum": "4",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "1629312",
@@ -3104,8 +3028,7 @@
       "familyName": "Highsmith",
       "fullName": "Haywood Highsmith",
       "jerseyNum": "7",
-      "position": "F",
-      "height": "6-5"
+      "position": "F"
     },
     {
       "personId": "1628960",
@@ -3113,8 +3036,7 @@
       "familyName": "Allen",
       "fullName": "Grayson Allen",
       "jerseyNum": "8",
-      "position": "G",
-      "height": "6-3"
+      "position": "G"
     },
     {
       "personId": "1642863",
@@ -3122,8 +3044,7 @@
       "familyName": "Maluach",
       "fullName": "Khaman Maluach",
       "jerseyNum": "10",
-      "position": "C",
-      "height": "7-1"
+      "position": "C"
     },
     {
       "personId": "1642345",
@@ -3131,8 +3052,7 @@
       "familyName": "Ighodaro",
       "fullName": "Oso Ighodaro",
       "jerseyNum": "11",
-      "position": "F",
-      "height": "6-11"
+      "position": "F"
     },
     {
       "personId": "1631221",
@@ -3140,8 +3060,7 @@
       "familyName": "Gillespie",
       "fullName": "Collin Gillespie",
       "jerseyNum": "12",
-      "position": "G",
-      "height": "6-1"
+      "position": "G"
     },
     {
       "personId": "1642886",
@@ -3149,8 +3068,15 @@
       "familyName": "Brea",
       "fullName": "Koby Brea",
       "jerseyNum": "14",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
+    },
+    {
+      "personId": "1626164",
+      "firstName": "Devin",
+      "familyName": "Booker",
+      "fullName": "Devin Booker",
+      "jerseyNum": "15",
+      "position": "G"
     },
     {
       "personId": "1631109",
@@ -3158,8 +3084,7 @@
       "familyName": "Williams",
       "fullName": "Mark Williams",
       "jerseyNum": "15",
-      "position": "C",
-      "height": "7-1"
+      "position": "C"
     },
     {
       "personId": "1631123",
@@ -3167,8 +3092,7 @@
       "familyName": "Bouyea",
       "fullName": "Jamaree Bouyea",
       "jerseyNum": "17",
-      "position": "G",
-      "height": "6-2"
+      "position": "G"
     },
     {
       "personId": "1630587",
@@ -3176,8 +3100,15 @@
       "familyName": "Livers",
       "fullName": "Isaiah Livers",
       "jerseyNum": "18",
-      "position": "F",
-      "height": "6-6"
+      "position": "F"
+    },
+    {
+      "personId": "1643520",
+      "firstName": "Koa",
+      "familyName": "Peat",
+      "fullName": "Koa Peat",
+      "jerseyNum": "18",
+      "position": "F"
     },
     {
       "personId": "1642853",
@@ -3185,8 +3116,7 @@
       "familyName": "Fleming",
       "fullName": "Rasheer Fleming",
       "jerseyNum": "20",
-      "position": "F",
-      "height": "6-9"
+      "position": "F"
     },
     {
       "personId": "1643047",
@@ -3194,8 +3124,7 @@
       "familyName": "Huntley",
       "fullName": "CJ Huntley",
       "jerseyNum": "22",
-      "position": "F",
-      "height": "6-11"
+      "position": "F"
     },
     {
       "personId": "1630692",
@@ -3203,8 +3132,15 @@
       "familyName": "Goodwin",
       "fullName": "Jordan Goodwin",
       "jerseyNum": "23",
-      "position": "G",
-      "height": "6-3"
+      "position": "G"
+    },
+    {
+      "personId": "1630311",
+      "firstName": "Pat",
+      "familyName": "Spencer",
+      "fullName": "Pat Spencer",
+      "jerseyNum": "61",
+      "position": "G"
     }
   ],
   "1610612757": [
@@ -3214,8 +3150,7 @@
       "familyName": "Lillard",
       "fullName": "Damian Lillard",
       "jerseyNum": "0",
-      "position": "G",
-      "height": "6-2"
+      "position": "G"
     },
     {
       "personId": "1630703",
@@ -3223,8 +3158,7 @@
       "familyName": "Henderson",
       "fullName": "Scoot Henderson",
       "jerseyNum": "00",
-      "position": "G",
-      "height": "6-3"
+      "position": "G"
     },
     {
       "personId": "1631104",
@@ -3232,17 +3166,7 @@
       "familyName": "Wesley",
       "fullName": "Blake Wesley",
       "jerseyNum": "1",
-      "position": "G",
-      "height": "6-4"
-    },
-    {
-      "personId": "1631126",
-      "firstName": "Caleb",
-      "familyName": "Love",
-      "fullName": "Caleb Love",
-      "jerseyNum": "2",
-      "position": "G",
-      "height": "6-3"
+      "position": "G"
     },
     {
       "personId": "1642959",
@@ -3250,8 +3174,7 @@
       "familyName": "Youngblood",
       "fullName": "Chris Youngblood",
       "jerseyNum": "3",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "1629680",
@@ -3259,8 +3182,7 @@
       "familyName": "Thybulle",
       "fullName": "Matisse Thybulle",
       "jerseyNum": "4",
-      "position": "G-F",
-      "height": "6-5"
+      "position": "G-F"
     },
     {
       "personId": "201950",
@@ -3268,8 +3190,7 @@
       "familyName": "Holiday",
       "fullName": "Jrue Holiday",
       "jerseyNum": "5",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "1630166",
@@ -3277,17 +3198,23 @@
       "familyName": "Avdija",
       "fullName": "Deni Avdija",
       "jerseyNum": "8",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
     },
     {
-      "personId": "203924",
-      "firstName": "Jerami",
-      "familyName": "Grant",
-      "fullName": "Jerami Grant",
-      "jerseyNum": "9",
-      "position": "F",
-      "height": "6-7"
+      "personId": "1629630",
+      "firstName": "Ja",
+      "familyName": "Morant",
+      "fullName": "Ja Morant",
+      "jerseyNum": "12",
+      "position": "G"
+    },
+    {
+      "personId": "1642382",
+      "firstName": "Branden",
+      "familyName": "Carlson",
+      "fullName": "Branden Carlson",
+      "jerseyNum": "15",
+      "position": "C"
     },
     {
       "personId": "1642905",
@@ -3295,8 +3222,7 @@
       "familyName": "Hansen",
       "fullName": "Yang Hansen",
       "jerseyNum": "16",
-      "position": "C",
-      "height": "7-1"
+      "position": "C"
     },
     {
       "personId": "1631101",
@@ -3304,8 +3230,7 @@
       "familyName": "Sharpe",
       "fullName": "Shaedon Sharpe",
       "jerseyNum": "17",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
     },
     {
       "personId": "1642270",
@@ -3313,17 +3238,7 @@
       "familyName": "Clingan",
       "fullName": "Donovan Clingan",
       "jerseyNum": "23",
-      "position": "C",
-      "height": "7-2"
-    },
-    {
-      "personId": "1631200",
-      "firstName": "Kris",
-      "familyName": "Murray",
-      "fullName": "Kris Murray",
-      "jerseyNum": "24",
-      "position": "F",
-      "height": "6-8"
+      "position": "C"
     },
     {
       "personId": "1630249",
@@ -3331,8 +3246,7 @@
       "familyName": "Krejčí",
       "fullName": "Vít Krejčí",
       "jerseyNum": "27",
-      "position": "G",
-      "height": "6-8"
+      "position": "G"
     },
     {
       "personId": "1641739",
@@ -3340,8 +3254,7 @@
       "familyName": "Camara",
       "fullName": "Toumani Camara",
       "jerseyNum": "33",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
       "personId": "1629057",
@@ -3349,8 +3262,7 @@
       "familyName": "Williams III",
       "fullName": "Robert Williams III",
       "jerseyNum": "35",
-      "position": "C-F",
-      "height": "6-9"
+      "position": "C-F"
     },
     {
       "personId": "1631321",
@@ -3358,8 +3270,7 @@
       "familyName": "Cissoko",
       "fullName": "Sidy Cissoko",
       "jerseyNum": "91",
-      "position": "G",
-      "height": "6-6"
+      "position": "G"
     },
     {
       "personId": "1643257",
@@ -3367,8 +3278,7 @@
       "familyName": "Kent",
       "fullName": "Jayson Kent",
       "jerseyNum": "",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
     }
   ],
   "1610612758": [
@@ -3378,17 +3288,31 @@
       "familyName": "Monk",
       "fullName": "Malik Monk",
       "jerseyNum": "0",
-      "position": "G",
-      "height": "6-3"
+      "position": "G"
     },
     {
       "personId": "1642363",
       "firstName": "Nique",
       "familyName": "Clifford",
       "fullName": "Nique Clifford",
+      "jerseyNum": "00",
+      "position": "G"
+    },
+    {
+      "personId": "1642367",
+      "firstName": "Jonathan",
+      "familyName": "Mogbo",
+      "fullName": "Jonathan Mogbo",
+      "jerseyNum": "2",
+      "position": "F"
+    },
+    {
+      "personId": "1643411",
+      "firstName": "Darius",
+      "familyName": "Acuff Jr.",
+      "fullName": "Darius Acuff Jr.",
       "jerseyNum": "5",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
     },
     {
       "personId": "203926",
@@ -3396,8 +3320,7 @@
       "familyName": "McDermott",
       "fullName": "Doug McDermott",
       "jerseyNum": "7",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
       "personId": "1630165",
@@ -3405,8 +3328,7 @@
       "familyName": "Hayes",
       "fullName": "Killian Hayes",
       "jerseyNum": "7",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "203897",
@@ -3414,8 +3336,7 @@
       "familyName": "LaVine",
       "fullName": "Zach LaVine",
       "jerseyNum": "8",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
     },
     {
       "personId": "1630173",
@@ -3423,17 +3344,7 @@
       "familyName": "Achiuwa",
       "fullName": "Precious Achiuwa",
       "jerseyNum": "9",
-      "position": "F",
-      "height": "6-8"
-    },
-    {
-      "personId": "201942",
-      "firstName": "DeMar",
-      "familyName": "DeRozan",
-      "fullName": "DeMar DeRozan",
-      "jerseyNum": "10",
-      "position": "G-F",
-      "height": "6-6"
+      "position": "F"
     },
     {
       "personId": "1627734",
@@ -3441,8 +3352,7 @@
       "familyName": "Sabonis",
       "fullName": "Domantas Sabonis",
       "jerseyNum": "11",
-      "position": "F-C",
-      "height": "6-10"
+      "position": "F-C"
     },
     {
       "personId": "1631099",
@@ -3450,8 +3360,15 @@
       "familyName": "Murray",
       "fullName": "Keegan Murray",
       "jerseyNum": "13",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
+    },
+    {
+      "personId": "1641745",
+      "firstName": "Adam",
+      "familyName": "Flagler",
+      "fullName": "Adam Flagler",
+      "jerseyNum": "14",
+      "position": "G"
     },
     {
       "personId": "1629631",
@@ -3459,8 +3376,7 @@
       "familyName": "Hunter",
       "fullName": "De'Andre Hunter",
       "jerseyNum": "15",
-      "position": "F-G",
-      "height": "6-7"
+      "position": "F-G"
     },
     {
       "personId": "201566",
@@ -3468,8 +3384,7 @@
       "familyName": "Westbrook",
       "fullName": "Russell Westbrook",
       "jerseyNum": "18",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "1629234",
@@ -3477,17 +3392,7 @@
       "familyName": "Eubanks",
       "fullName": "Drew Eubanks",
       "jerseyNum": "19",
-      "position": "F-C",
-      "height": "6-10"
-    },
-    {
-      "personId": "1642269",
-      "firstName": "Devin",
-      "familyName": "Carter",
-      "fullName": "Devin Carter",
-      "jerseyNum": "22",
-      "position": "G",
-      "height": "6-2"
+      "position": "F-C"
     },
     {
       "personId": "1631116",
@@ -3495,8 +3400,7 @@
       "familyName": "Baldwin Jr.",
       "fullName": "Patrick Baldwin Jr.",
       "jerseyNum": "23",
-      "position": "F",
-      "height": "7-0"
+      "position": "F"
     },
     {
       "personId": "1641815",
@@ -3504,8 +3408,7 @@
       "familyName": "Stevens",
       "fullName": "Isaiah Stevens",
       "jerseyNum": "24",
-      "position": "G",
-      "height": "5-11"
+      "position": "G"
     },
     {
       "personId": "1631342",
@@ -3513,8 +3416,7 @@
       "familyName": "Plowden",
       "fullName": "Daeqwon Plowden",
       "jerseyNum": "29",
-      "position": "G-F",
-      "height": "6-4"
+      "position": "G-F"
     },
     {
       "personId": "1642928",
@@ -3522,8 +3424,23 @@
       "familyName": "Cardwell",
       "fullName": "Dylan Cardwell",
       "jerseyNum": "32",
-      "position": "C",
-      "height": "6-10"
+      "position": "C"
+    },
+    {
+      "personId": "1642284",
+      "firstName": "Alex",
+      "familyName": "Karaban",
+      "fullName": "Alex Karaban",
+      "jerseyNum": "33",
+      "position": "F"
+    },
+    {
+      "personId": "1643567",
+      "firstName": "Emanuel",
+      "familyName": "Sharp",
+      "fullName": "Emanuel Sharp",
+      "jerseyNum": "34",
+      "position": "G"
     },
     {
       "personId": "1642875",
@@ -3531,8 +3448,7 @@
       "familyName": "Raynaud",
       "fullName": "Maxime Raynaud",
       "jerseyNum": "42",
-      "position": "C",
-      "height": "7-1"
+      "position": "C"
     }
   ],
   "1610612759": [
@@ -3542,8 +3458,7 @@
       "familyName": "McLaughlin",
       "fullName": "Jordan McLaughlin",
       "jerseyNum": "0",
-      "position": "G",
-      "height": "5-11"
+      "position": "G"
     },
     {
       "personId": "1641705",
@@ -3551,8 +3466,7 @@
       "familyName": "Wembanyama",
       "fullName": "Victor Wembanyama",
       "jerseyNum": "1",
-      "position": "F-C",
-      "height": "7-4"
+      "position": "F-C"
     },
     {
       "personId": "1642844",
@@ -3560,8 +3474,7 @@
       "familyName": "Harper",
       "fullName": "Dylan Harper",
       "jerseyNum": "2",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
     },
     {
       "personId": "1629640",
@@ -3569,8 +3482,7 @@
       "familyName": "Johnson",
       "fullName": "Keldon Johnson",
       "jerseyNum": "3",
-      "position": "F-G",
-      "height": "6-6"
+      "position": "F-G"
     },
     {
       "personId": "1628368",
@@ -3578,8 +3490,7 @@
       "familyName": "Fox",
       "fullName": "De'Aaron Fox",
       "jerseyNum": "4",
-      "position": "G",
-      "height": "6-3"
+      "position": "G"
     },
     {
       "personId": "1642264",
@@ -3587,8 +3498,7 @@
       "familyName": "Castle",
       "fullName": "Stephon Castle",
       "jerseyNum": "5",
-      "position": "G",
-      "height": "6-6"
+      "position": "G"
     },
     {
       "personId": "1628436",
@@ -3596,8 +3506,7 @@
       "familyName": "Kornet",
       "fullName": "Luke Kornet",
       "jerseyNum": "7",
-      "position": "C-F",
-      "height": "7-1"
+      "position": "C-F"
     },
     {
       "personId": "203482",
@@ -3605,8 +3514,15 @@
       "familyName": "Olynyk",
       "fullName": "Kelly Olynyk",
       "jerseyNum": "8",
-      "position": "F-C",
-      "height": "7-0"
+      "position": "F-C"
+    },
+    {
+      "personId": "1643542",
+      "firstName": "Tarris",
+      "familyName": "Reed Jr.",
+      "fullName": "Tarris Reed Jr.",
+      "jerseyNum": "10",
+      "position": "C"
     },
     {
       "personId": "1642868",
@@ -3614,8 +3530,15 @@
       "familyName": "Bryant",
       "fullName": "Carter Bryant",
       "jerseyNum": "11",
-      "position": "F",
-      "height": "6-6"
+      "position": "F"
+    },
+    {
+      "personId": "202699",
+      "firstName": "Tobias",
+      "familyName": "Harris",
+      "fullName": "Tobias Harris",
+      "jerseyNum": "12",
+      "position": "F"
     },
     {
       "personId": "1641801",
@@ -3623,8 +3546,7 @@
       "familyName": "Miller",
       "fullName": "Emanuel Miller",
       "jerseyNum": "14",
-      "position": "F",
-      "height": "6-5"
+      "position": "F"
     },
     {
       "personId": "202687",
@@ -3632,8 +3554,15 @@
       "familyName": "Biyombo",
       "fullName": "Bismack Biyombo",
       "jerseyNum": "18",
-      "position": "C",
-      "height": "6-8"
+      "position": "C"
+    },
+    {
+      "personId": "1643519",
+      "firstName": "Jayden",
+      "familyName": "Quaintance",
+      "fullName": "Jayden Quaintance",
+      "jerseyNum": "22",
+      "position": "F"
     },
     {
       "personId": "1630170",
@@ -3641,8 +3570,7 @@
       "familyName": "Vassell",
       "fullName": "Devin Vassell",
       "jerseyNum": "24",
-      "position": "G-F",
-      "height": "6-5"
+      "position": "G-F"
     },
     {
       "personId": "1642357",
@@ -3650,8 +3578,7 @@
       "familyName": "Jones Garcia",
       "fullName": "David Jones Garcia",
       "jerseyNum": "25",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "1630577",
@@ -3659,8 +3586,7 @@
       "familyName": "Champagnie",
       "fullName": "Julian Champagnie",
       "jerseyNum": "30",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
       "personId": "203084",
@@ -3668,8 +3594,7 @@
       "familyName": "Barnes",
       "fullName": "Harrison Barnes",
       "jerseyNum": "40",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
       "personId": "1630322",
@@ -3677,8 +3602,7 @@
       "familyName": "Waters III",
       "fullName": "Lindy Waters III",
       "jerseyNum": "43",
-      "position": "F",
-      "height": "6-5"
+      "position": "F"
     },
     {
       "personId": "203486",
@@ -3686,8 +3610,7 @@
       "familyName": "Plumlee",
       "fullName": "Mason Plumlee",
       "jerseyNum": "45",
-      "position": "F-C",
-      "height": "7-0"
+      "position": "F-C"
     },
     {
       "personId": "1631127",
@@ -3695,8 +3618,23 @@
       "familyName": "Ingram",
       "fullName": "Harrison Ingram",
       "jerseyNum": "55",
-      "position": "F",
-      "height": "6-5"
+      "position": "F"
+    },
+    {
+      "personId": "1643551",
+      "firstName": "Ja'Kobi",
+      "familyName": "Gillespie",
+      "fullName": "Ja'Kobi Gillespie",
+      "jerseyNum": "",
+      "position": "G"
+    },
+    {
+      "personId": "1643576",
+      "firstName": "Maliq",
+      "familyName": "Brown",
+      "fullName": "Maliq Brown",
+      "jerseyNum": "",
+      "position": "F"
     }
   ],
   "1610612760": [
@@ -3706,8 +3644,7 @@
       "familyName": "Gilgeous-Alexander",
       "fullName": "Shai Gilgeous-Alexander",
       "jerseyNum": "2",
-      "position": "G",
-      "height": "6-6"
+      "position": "G"
     },
     {
       "personId": "1642272",
@@ -3715,8 +3652,7 @@
       "familyName": "McCain",
       "fullName": "Jared McCain",
       "jerseyNum": "3",
-      "position": "G",
-      "height": "6-3"
+      "position": "G"
     },
     {
       "personId": "1629652",
@@ -3724,8 +3660,7 @@
       "familyName": "Dort",
       "fullName": "Luguentz Dort",
       "jerseyNum": "5",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "1631119",
@@ -3733,8 +3668,7 @@
       "familyName": "Williams",
       "fullName": "Jaylin Williams",
       "jerseyNum": "6",
-      "position": "F",
-      "height": "6-9"
+      "position": "F"
     },
     {
       "personId": "1631096",
@@ -3742,8 +3676,7 @@
       "familyName": "Holmgren",
       "fullName": "Chet Holmgren",
       "jerseyNum": "7",
-      "position": "C-F",
-      "height": "7-1"
+      "position": "C-F"
     },
     {
       "personId": "1631114",
@@ -3751,8 +3684,7 @@
       "familyName": "Williams",
       "fullName": "Jalen Williams",
       "jerseyNum": "8",
-      "position": "G-F",
-      "height": "6-5"
+      "position": "G-F"
     },
     {
       "personId": "1627936",
@@ -3760,17 +3692,7 @@
       "familyName": "Caruso",
       "fullName": "Alex Caruso",
       "jerseyNum": "9",
-      "position": "G",
-      "height": "6-5"
-    },
-    {
-      "personId": "1630198",
-      "firstName": "Isaiah",
-      "familyName": "Joe",
-      "fullName": "Isaiah Joe",
-      "jerseyNum": "11",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "1642850",
@@ -3778,35 +3700,31 @@
       "familyName": "Sorber",
       "fullName": "Thomas Sorber",
       "jerseyNum": "12",
-      "position": "C",
-      "height": "6-9"
+      "position": "C"
     },
     {
-      "personId": "1642362",
-      "firstName": "Payton",
-      "familyName": "Sandfort",
-      "fullName": "Payton Sandfort",
+      "personId": "1642923",
+      "firstName": "Otega",
+      "familyName": "Oweh",
+      "fullName": "Otega Oweh",
+      "jerseyNum": "13",
+      "position": "G"
+    },
+    {
+      "personId": "1642892",
+      "firstName": "Bennett",
+      "familyName": "Stirtz",
+      "fullName": "Bennett Stirtz",
       "jerseyNum": "14",
-      "position": "F",
-      "height": "6-7"
+      "position": "G"
     },
     {
-      "personId": "1642382",
-      "firstName": "Branden",
-      "familyName": "Carlson",
-      "fullName": "Branden Carlson",
+      "personId": "1643530",
+      "firstName": "Aday",
+      "familyName": "Mara",
+      "fullName": "Aday Mara",
       "jerseyNum": "15",
-      "position": "C",
-      "height": "7-0"
-    },
-    {
-      "personId": "1630598",
-      "firstName": "Aaron",
-      "familyName": "Wiggins",
-      "fullName": "Aaron Wiggins",
-      "jerseyNum": "21",
-      "position": "G",
-      "height": "6-5"
+      "position": "C"
     },
     {
       "personId": "1641717",
@@ -3814,8 +3732,7 @@
       "familyName": "Wallace",
       "fullName": "Cason Wallace",
       "jerseyNum": "22",
-      "position": "G",
-      "height": "6-3"
+      "position": "G"
     },
     {
       "personId": "1642964",
@@ -3823,8 +3740,7 @@
       "familyName": "Barnhizer",
       "fullName": "Brooks Barnhizer",
       "jerseyNum": "23",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
     },
     {
       "personId": "1642349",
@@ -3832,8 +3748,7 @@
       "familyName": "Mitchell",
       "fullName": "Ajay Mitchell",
       "jerseyNum": "25",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "1629026",
@@ -3841,8 +3756,7 @@
       "familyName": "Williams",
       "fullName": "Kenrich Williams",
       "jerseyNum": "34",
-      "position": "G-F",
-      "height": "6-7"
+      "position": "G-F"
     },
     {
       "personId": "1642260",
@@ -3850,8 +3764,7 @@
       "familyName": "Topić",
       "fullName": "Nikola Topić",
       "jerseyNum": "44",
-      "position": "G",
-      "height": "6-6"
+      "position": "G"
     },
     {
       "personId": "1628392",
@@ -3859,8 +3772,15 @@
       "familyName": "Hartenstein",
       "fullName": "Isaiah Hartenstein",
       "jerseyNum": "55",
-      "position": "C-F",
-      "height": "7-0"
+      "position": "C-F"
+    },
+    {
+      "personId": "1643717",
+      "firstName": "Josh",
+      "familyName": "Dix",
+      "fullName": "Josh Dix",
+      "jerseyNum": "",
+      "position": ""
     }
   ],
   "1610612761": [
@@ -3870,8 +3790,7 @@
       "familyName": "Lawson",
       "fullName": "A.J. Lawson",
       "jerseyNum": "0",
-      "position": "G",
-      "height": "6-6"
+      "position": "G"
     },
     {
       "personId": "1641711",
@@ -3879,17 +3798,7 @@
       "familyName": "Dick",
       "fullName": "Gradey Dick",
       "jerseyNum": "1",
-      "position": "G-F",
-      "height": "6-7"
-    },
-    {
-      "personId": "1642367",
-      "firstName": "Jonathan",
-      "familyName": "Mogbo",
-      "fullName": "Jonathan Mogbo",
-      "jerseyNum": "2",
-      "position": "F",
-      "height": "6-9"
+      "position": "G-F"
     },
     {
       "personId": "1627742",
@@ -3897,8 +3806,7 @@
       "familyName": "Ingram",
       "fullName": "Brandon Ingram",
       "jerseyNum": "3",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
     },
     {
       "personId": "1630567",
@@ -3906,8 +3814,7 @@
       "familyName": "Barnes",
       "fullName": "Scottie Barnes",
       "jerseyNum": "4",
-      "position": "F-G",
-      "height": "6-8"
+      "position": "F-G"
     },
     {
       "personId": "1630193",
@@ -3915,8 +3822,7 @@
       "familyName": "Quickley",
       "fullName": "Immanuel Quickley",
       "jerseyNum": "5",
-      "position": "G",
-      "height": "6-2"
+      "position": "G"
     },
     {
       "personId": "1629628",
@@ -3924,17 +3830,15 @@
       "familyName": "Barrett",
       "fullName": "RJ Barrett",
       "jerseyNum": "9",
-      "position": "F-G",
-      "height": "6-6"
+      "position": "F-G"
     },
     {
-      "personId": "1642867",
-      "firstName": "Collin",
-      "familyName": "Murray-Boyles",
-      "fullName": "Collin Murray-Boyles",
+      "personId": "203937",
+      "firstName": "Kyle",
+      "familyName": "Anderson",
+      "fullName": "Kyle Anderson",
       "jerseyNum": "12",
-      "position": "F",
-      "height": "6-7"
+      "position": "F-G"
     },
     {
       "personId": "1642266",
@@ -3942,8 +3846,7 @@
       "familyName": "Walter",
       "fullName": "Ja'Kobe Walter",
       "jerseyNum": "14",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "202066",
@@ -3951,8 +3854,7 @@
       "familyName": "Temple",
       "fullName": "Garrett Temple",
       "jerseyNum": "17",
-      "position": "G-F",
-      "height": "6-5"
+      "position": "G-F"
     },
     {
       "personId": "1627751",
@@ -3960,8 +3862,15 @@
       "familyName": "Poeltl",
       "fullName": "Jakob Poeltl",
       "jerseyNum": "19",
-      "position": "C",
-      "height": "7-0"
+      "position": "C"
+    },
+    {
+      "personId": "1643512",
+      "firstName": "Allen",
+      "familyName": "Graves",
+      "fullName": "Allen Graves",
+      "jerseyNum": "22",
+      "position": "F"
     },
     {
       "personId": "1642347",
@@ -3969,8 +3878,7 @@
       "familyName": "Shead",
       "fullName": "Jamal Shead",
       "jerseyNum": "23",
-      "position": "G",
-      "height": "6-1"
+      "position": "G"
     },
     {
       "personId": "1642935",
@@ -3978,8 +3886,15 @@
       "familyName": "Hepburn",
       "fullName": "Chucky Hepburn",
       "jerseyNum": "24",
-      "position": "G",
-      "height": "6-0"
+      "position": "G"
+    },
+    {
+      "personId": "1642867",
+      "firstName": "Collin",
+      "familyName": "Murray-Boyles",
+      "fullName": "Collin Murray-Boyles",
+      "jerseyNum": "30",
+      "position": "F"
     },
     {
       "personId": "1631218",
@@ -3987,17 +3902,7 @@
       "familyName": "Jackson-Davis",
       "fullName": "Trayce Jackson-Davis",
       "jerseyNum": "32",
-      "position": "F",
-      "height": "6-9"
-    },
-    {
-      "personId": "1630572",
-      "firstName": "Sandro",
-      "familyName": "Mamukelashvili",
-      "fullName": "Sandro Mamukelashvili",
-      "jerseyNum": "54",
-      "position": "F-C",
-      "height": "6-9"
+      "position": "F"
     },
     {
       "personId": "1642918",
@@ -4005,8 +3910,7 @@
       "familyName": "Martin",
       "fullName": "Alijah Martin",
       "jerseyNum": "55",
-      "position": "G",
-      "height": "6-2"
+      "position": "G"
     },
     {
       "personId": "1642419",
@@ -4014,8 +3918,15 @@
       "familyName": "Battle",
       "fullName": "Jamison Battle",
       "jerseyNum": "77",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
+    },
+    {
+      "personId": "1643558",
+      "firstName": "Jaden",
+      "familyName": "Bradley",
+      "fullName": "Jaden Bradley",
+      "jerseyNum": "",
+      "position": "G"
     }
   ],
   "1610612762": [
@@ -4025,8 +3936,15 @@
       "familyName": "Hinson",
       "fullName": "Blake Hinson",
       "jerseyNum": "2",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
+    },
+    {
+      "personId": "1642271",
+      "firstName": "Kyle",
+      "familyName": "Filipowski",
+      "fullName": "Kyle Filipowski",
+      "jerseyNum": "2",
+      "position": "C"
     },
     {
       "personId": "1641718",
@@ -4034,8 +3952,7 @@
       "familyName": "George",
       "fullName": "Keyonte George",
       "jerseyNum": "3",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "1642262",
@@ -4043,8 +3960,15 @@
       "familyName": "Williams",
       "fullName": "Cody Williams",
       "jerseyNum": "5",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
+    },
+    {
+      "personId": "1642926",
+      "firstName": "Tamar",
+      "familyName": "Bates",
+      "fullName": "Tamar Bates",
+      "jerseyNum": "7",
+      "position": "G"
     },
     {
       "personId": "1642268",
@@ -4052,8 +3976,7 @@
       "familyName": "Collier",
       "fullName": "Isaiah Collier",
       "jerseyNum": "8",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "1629004",
@@ -4061,8 +3984,7 @@
       "familyName": "Mykhailiuk",
       "fullName": "Svi Mykhailiuk",
       "jerseyNum": "10",
-      "position": "G-F",
-      "height": "6-7"
+      "position": "G-F"
     },
     {
       "personId": "1641989",
@@ -4070,8 +3992,7 @@
       "familyName": "Harkless",
       "fullName": "Elijah Harkless",
       "jerseyNum": "16",
-      "position": "G",
-      "height": "6-3"
+      "position": "G"
     },
     {
       "personId": "1642846",
@@ -4079,8 +4000,7 @@
       "familyName": "Bailey",
       "fullName": "Ace Bailey",
       "jerseyNum": "19",
-      "position": "F",
-      "height": "6-9"
+      "position": "F"
     },
     {
       "personId": "1628991",
@@ -4088,8 +4008,7 @@
       "familyName": "Jackson Jr.",
       "fullName": "Jaren Jackson Jr.",
       "jerseyNum": "20",
-      "position": "F-C",
-      "height": "6-10"
+      "position": "F-C"
     },
     {
       "personId": "1643016",
@@ -4097,17 +4016,15 @@
       "familyName": "Mbeng",
       "fullName": "Bez Mbeng",
       "jerseyNum": "21",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
-      "personId": "1642271",
-      "firstName": "Kyle",
-      "familyName": "Filipowski",
-      "fullName": "Kyle Filipowski",
+      "personId": "1643408",
+      "firstName": "Darryn",
+      "familyName": "Peterson",
+      "fullName": "Darryn Peterson",
       "jerseyNum": "22",
-      "position": "C",
-      "height": "6-11"
+      "position": "G"
     },
     {
       "personId": "1628374",
@@ -4115,17 +4032,15 @@
       "familyName": "Markkanen",
       "fullName": "Lauri Markkanen",
       "jerseyNum": "23",
-      "position": "F-C",
-      "height": "7-1"
+      "position": "F-C"
     },
     {
-      "personId": "1631117",
-      "firstName": "Walker",
-      "familyName": "Kessler",
-      "fullName": "Walker Kessler",
-      "jerseyNum": "24",
-      "position": "C",
-      "height": "7-2"
+      "personId": "1641725",
+      "firstName": "Trey",
+      "familyName": "Alexander",
+      "fullName": "Trey Alexander",
+      "jerseyNum": "23",
+      "position": "G"
     },
     {
       "personId": "1641729",
@@ -4133,8 +4048,7 @@
       "familyName": "Sensabaugh",
       "fullName": "Brice Sensabaugh",
       "jerseyNum": "28",
-      "position": "F",
-      "height": "6-6"
+      "position": "F"
     },
     {
       "personId": "203994",
@@ -4142,8 +4056,7 @@
       "familyName": "Nurkić",
       "fullName": "Jusuf Nurkić",
       "jerseyNum": "30",
-      "position": "C",
-      "height": "6-11"
+      "position": "C"
     },
     {
       "personId": "1631131",
@@ -4151,8 +4064,7 @@
       "familyName": "Tshiebwe",
       "fullName": "Oscar Tshiebwe",
       "jerseyNum": "34",
-      "position": "F-C",
-      "height": "6-8"
+      "position": "F-C"
     },
     {
       "personId": "201567",
@@ -4160,8 +4072,7 @@
       "familyName": "Love",
       "fullName": "Kevin Love",
       "jerseyNum": "42",
-      "position": "F-C",
-      "height": "6-10"
+      "position": "F-C"
     },
     {
       "personId": "1629723",
@@ -4169,8 +4080,7 @@
       "familyName": "Konchar",
       "fullName": "John Konchar",
       "jerseyNum": "55",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
     },
     {
       "personId": "1643060",
@@ -4178,8 +4088,7 @@
       "familyName": "Gray",
       "fullName": "Hayden Gray",
       "jerseyNum": "",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     }
   ],
   "1610612763": [
@@ -4189,8 +4098,7 @@
       "familyName": "Wells",
       "fullName": "Jaylen Wells",
       "jerseyNum": "0",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
       "personId": "1630590",
@@ -4198,8 +4106,7 @@
       "familyName": "Pippen Jr.",
       "fullName": "Scotty Pippen Jr.",
       "jerseyNum": "1",
-      "position": "G",
-      "height": "6-2"
+      "position": "G"
     },
     {
       "personId": "1629660",
@@ -4207,8 +4114,7 @@
       "familyName": "Jerome",
       "fullName": "Ty Jerome",
       "jerseyNum": "2",
-      "position": "G-F",
-      "height": "6-5"
+      "position": "G-F"
     },
     {
       "personId": "203484",
@@ -4216,8 +4122,7 @@
       "familyName": "Caldwell-Pope",
       "fullName": "Kentavious Caldwell-Pope",
       "jerseyNum": "3",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
     },
     {
       "personId": "1642383",
@@ -4225,17 +4130,31 @@
       "familyName": "Clayton Jr.",
       "fullName": "Walter Clayton Jr.",
       "jerseyNum": "4",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
-      "personId": "1630583",
-      "firstName": "Santi",
-      "familyName": "Aldama",
-      "fullName": "Santi Aldama",
-      "jerseyNum": "7",
-      "position": "F-C",
-      "height": "7-0"
+      "personId": "1626156",
+      "firstName": "D'Angelo",
+      "familyName": "Russell",
+      "fullName": "D'Angelo Russell",
+      "jerseyNum": "5",
+      "position": "G"
+    },
+    {
+      "personId": "1642358",
+      "firstName": "AJ",
+      "familyName": "Johnson",
+      "fullName": "AJ Johnson",
+      "jerseyNum": "8",
+      "position": "G"
+    },
+    {
+      "personId": "203924",
+      "firstName": "Jerami",
+      "familyName": "Grant",
+      "fullName": "Jerami Grant",
+      "jerseyNum": "9",
+      "position": "F"
     },
     {
       "personId": "1642914",
@@ -4243,17 +4162,7 @@
       "familyName": "Small",
       "fullName": "Javon Small",
       "jerseyNum": "10",
-      "position": "G",
-      "height": "6-1"
-    },
-    {
-      "personId": "1629630",
-      "firstName": "Ja",
-      "familyName": "Morant",
-      "fullName": "Ja Morant",
-      "jerseyNum": "12",
-      "position": "G",
-      "height": "6-2"
+      "position": "G"
     },
     {
       "personId": "1641744",
@@ -4261,17 +4170,7 @@
       "familyName": "Edey",
       "fullName": "Zach Edey",
       "jerseyNum": "14",
-      "position": "C",
-      "height": "7-3"
-    },
-    {
-      "personId": "1629634",
-      "firstName": "Brandon",
-      "familyName": "Clarke",
-      "fullName": "Brandon Clarke",
-      "jerseyNum": "15",
-      "position": "F",
-      "height": "6-8"
+      "position": "C"
     },
     {
       "personId": "1641765",
@@ -4279,17 +4178,15 @@
       "familyName": "Prosper",
       "fullName": "Olivier-Maxence Prosper",
       "jerseyNum": "18",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
-      "personId": "1641712",
-      "firstName": "Rayan",
-      "familyName": "Rupert",
-      "fullName": "Rayan Rupert",
+      "personId": "1642366",
+      "firstName": "Quinten",
+      "familyName": "Post",
+      "fullName": "Quinten Post",
       "jerseyNum": "21",
-      "position": "G-F",
-      "height": "6-7"
+      "position": "C"
     },
     {
       "personId": "1641707",
@@ -4297,8 +4194,7 @@
       "familyName": "Hendricks",
       "fullName": "Taylor Hendricks",
       "jerseyNum": "22",
-      "position": "F",
-      "height": "6-9"
+      "position": "F"
     },
     {
       "personId": "1642907",
@@ -4306,8 +4202,7 @@
       "familyName": "Coward",
       "fullName": "Cedric Coward",
       "jerseyNum": "23",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
     },
     {
       "personId": "1642285",
@@ -4315,8 +4210,39 @@
       "familyName": "Spencer",
       "fullName": "Cam Spencer",
       "jerseyNum": "24",
-      "position": "G",
-      "height": "6-3"
+      "position": "G"
+    },
+    {
+      "personId": "1631200",
+      "firstName": "Kris",
+      "familyName": "Murray",
+      "fullName": "Kris Murray",
+      "jerseyNum": "24",
+      "position": "F"
+    },
+    {
+      "personId": "1643409",
+      "firstName": "Cameron",
+      "familyName": "Boozer",
+      "fullName": "Cameron Boozer",
+      "jerseyNum": "27",
+      "position": "F"
+    },
+    {
+      "personId": "1630191",
+      "firstName": "Isaiah",
+      "familyName": "Stewart",
+      "fullName": "Isaiah Stewart",
+      "jerseyNum": "28",
+      "position": "F-C"
+    },
+    {
+      "personId": "1643510",
+      "firstName": "Karim",
+      "familyName": "Lopez",
+      "fullName": "Karim Lopez",
+      "jerseyNum": "35",
+      "position": "F"
     },
     {
       "personId": "1641713",
@@ -4324,8 +4250,7 @@
       "familyName": "Jackson",
       "fullName": "GG Jackson",
       "jerseyNum": "45",
-      "position": "F",
-      "height": "6-9"
+      "position": "F"
     },
     {
       "personId": "201959",
@@ -4333,8 +4258,7 @@
       "familyName": "Gibson",
       "fullName": "Taj Gibson",
       "jerseyNum": "67",
-      "position": "F",
-      "height": "6-9"
+      "position": "F"
     },
     {
       "personId": "1642942",
@@ -4342,8 +4266,15 @@
       "familyName": "Mashack",
       "fullName": "Jahmai Mashack",
       "jerseyNum": "",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
+    },
+    {
+      "personId": "1643563",
+      "firstName": "Richie",
+      "familyName": "Saunders",
+      "fullName": "Richie Saunders",
+      "jerseyNum": "",
+      "position": "G"
     }
   ],
   "1610612764": [
@@ -4353,8 +4284,7 @@
       "familyName": "Coulibaly",
       "fullName": "Bilal Coulibaly",
       "jerseyNum": "0",
-      "position": "G",
-      "height": "6-7"
+      "position": "G"
     },
     {
       "personId": "1641774",
@@ -4362,8 +4292,7 @@
       "familyName": "Vukcevic",
       "fullName": "Tristan Vukcevic",
       "jerseyNum": "00",
-      "position": "F",
-      "height": "7-0"
+      "position": "F"
     },
     {
       "personId": "1641715",
@@ -4371,8 +4300,7 @@
       "familyName": "Whitmore",
       "fullName": "Cam Whitmore",
       "jerseyNum": "1",
-      "position": "F",
-      "height": "6-6"
+      "position": "F"
     },
     {
       "personId": "1629027",
@@ -4380,17 +4308,23 @@
       "familyName": "Young",
       "fullName": "Trae Young",
       "jerseyNum": "3",
-      "position": "G",
-      "height": "6-2"
+      "position": "G"
     },
     {
-      "personId": "1626156",
-      "firstName": "D'Angelo",
-      "familyName": "Russell",
-      "fullName": "D'Angelo Russell",
+      "personId": "1643407",
+      "firstName": "AJ",
+      "familyName": "Dybantsa",
+      "fullName": "AJ Dybantsa",
+      "jerseyNum": "4",
+      "position": "F"
+    },
+    {
+      "personId": "1629028",
+      "firstName": "Deandre",
+      "familyName": "Ayton",
+      "fullName": "Deandre Ayton",
       "jerseyNum": "5",
-      "position": "G",
-      "height": "6-3"
+      "position": "C"
     },
     {
       "personId": "1642364",
@@ -4398,8 +4332,7 @@
       "familyName": "Watkins",
       "fullName": "Jamir Watkins",
       "jerseyNum": "5",
-      "position": "F",
-      "height": "6-6"
+      "position": "F"
     },
     {
       "personId": "1642267",
@@ -4407,17 +4340,7 @@
       "familyName": "Carrington",
       "fullName": "Bub Carrington",
       "jerseyNum": "7",
-      "position": "G",
-      "height": "6-4"
-    },
-    {
-      "personId": "1630702",
-      "firstName": "Jaden",
-      "familyName": "Hardy",
-      "fullName": "Jaden Hardy",
-      "jerseyNum": "8",
-      "position": "G",
-      "height": "6-3"
+      "position": "G"
     },
     {
       "personId": "1630551",
@@ -4425,17 +4348,7 @@
       "familyName": "Champagnie",
       "fullName": "Justin Champagnie",
       "jerseyNum": "9",
-      "position": "G-F",
-      "height": "6-6"
-    },
-    {
-      "personId": "1641778",
-      "firstName": "Leaky",
-      "familyName": "Black",
-      "fullName": "Leaky Black",
-      "jerseyNum": "12",
-      "position": "F",
-      "height": "6-6"
+      "position": "G-F"
     },
     {
       "personId": "1642848",
@@ -4443,8 +4356,7 @@
       "familyName": "Johnson",
       "fullName": "Tre Johnson",
       "jerseyNum": "12",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
     },
     {
       "personId": "1630536",
@@ -4452,8 +4364,7 @@
       "familyName": "Cooper",
       "fullName": "Sharife Cooper",
       "jerseyNum": "13",
-      "position": "G",
-      "height": "6-0"
+      "position": "G"
     },
     {
       "personId": "1630264",
@@ -4461,8 +4372,7 @@
       "familyName": "Gill",
       "fullName": "Anthony Gill",
       "jerseyNum": "16",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
       "personId": "1642273",
@@ -4470,8 +4380,7 @@
       "familyName": "George",
       "fullName": "Kyshawn George",
       "jerseyNum": "18",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
     },
     {
       "personId": "1642259",
@@ -4479,8 +4388,15 @@
       "familyName": "Sarr",
       "fullName": "Alex Sarr",
       "jerseyNum": "20",
-      "position": "C",
-      "height": "7-0"
+      "position": "C"
+    },
+    {
+      "personId": "203114",
+      "firstName": "Khris",
+      "familyName": "Middleton",
+      "fullName": "Khris Middleton",
+      "jerseyNum": "20",
+      "position": "F"
     },
     {
       "personId": "203076",
@@ -4488,8 +4404,7 @@
       "familyName": "Davis",
       "fullName": "Anthony Davis",
       "jerseyNum": "23",
-      "position": "F-C",
-      "height": "6-10"
+      "position": "F-C"
     },
     {
       "personId": "1642860",
@@ -4497,8 +4412,15 @@
       "familyName": "Riley",
       "fullName": "Will Riley",
       "jerseyNum": "27",
-      "position": "F",
-      "height": "6-9"
+      "position": "F"
+    },
+    {
+      "personId": "1643590",
+      "firstName": "Felix",
+      "familyName": "Okpara",
+      "fullName": "Felix Okpara",
+      "jerseyNum": "",
+      "position": "C"
     },
     {
       "personId": "1642882",
@@ -4506,8 +4428,7 @@
       "familyName": "Reese",
       "fullName": "Julian Reese",
       "jerseyNum": "",
-      "position": "F",
-      "height": "6-9"
+      "position": "F"
     }
   ],
   "1610612765": [
@@ -4517,8 +4438,7 @@
       "familyName": "Duren",
       "fullName": "Jalen Duren",
       "jerseyNum": "0",
-      "position": "C",
-      "height": "6-10"
+      "position": "C"
     },
     {
       "personId": "1630595",
@@ -4526,8 +4446,7 @@
       "familyName": "Cunningham",
       "fullName": "Cade Cunningham",
       "jerseyNum": "2",
-      "position": "G",
-      "height": "6-6"
+      "position": "G"
     },
     {
       "personId": "1642403",
@@ -4535,8 +4454,7 @@
       "familyName": "Jones",
       "fullName": "Isaac Jones",
       "jerseyNum": "3",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
     },
     {
       "personId": "1641842",
@@ -4544,8 +4462,7 @@
       "familyName": "Holland II",
       "fullName": "Ronald Holland II",
       "jerseyNum": "5",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
     },
     {
       "personId": "1630194",
@@ -4553,17 +4470,7 @@
       "familyName": "Reed",
       "fullName": "Paul Reed",
       "jerseyNum": "7",
-      "position": "F",
-      "height": "6-9"
-    },
-    {
-      "personId": "1627747",
-      "firstName": "Caris",
-      "familyName": "LeVert",
-      "fullName": "Caris LeVert",
-      "jerseyNum": "8",
-      "position": "G",
-      "height": "6-7"
+      "position": "F"
     },
     {
       "personId": "1641709",
@@ -4571,17 +4478,31 @@
       "familyName": "Thompson",
       "fullName": "Ausar Thompson",
       "jerseyNum": "9",
-      "position": "G-F",
-      "height": "6-7"
+      "position": "G-F"
     },
     {
-      "personId": "202699",
-      "firstName": "Tobias",
+      "personId": "203914",
+      "firstName": "Gary",
       "familyName": "Harris",
-      "fullName": "Tobias Harris",
+      "fullName": "Gary Harris",
+      "jerseyNum": "11",
+      "position": "G"
+    },
+    {
+      "personId": "1630198",
+      "firstName": "Isaiah",
+      "familyName": "Joe",
+      "fullName": "Isaiah Joe",
+      "jerseyNum": "11",
+      "position": "G"
+    },
+    {
+      "personId": "1627752",
+      "firstName": "Taurean",
+      "familyName": "Prince",
+      "fullName": "Taurean Prince",
       "jerseyNum": "12",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
     },
     {
       "personId": "1631111",
@@ -4589,8 +4510,7 @@
       "familyName": "Moore Jr.",
       "fullName": "Wendell Moore Jr.",
       "jerseyNum": "14",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
     },
     {
       "personId": "1642404",
@@ -4598,8 +4518,15 @@
       "familyName": "Lanier",
       "fullName": "Chaz Lanier",
       "jerseyNum": "20",
-      "position": "G",
-      "height": "6-3"
+      "position": "G"
+    },
+    {
+      "personId": "1628381",
+      "firstName": "John",
+      "familyName": "Collins",
+      "fullName": "John Collins",
+      "jerseyNum": "20",
+      "position": "F-C"
     },
     {
       "personId": "1642450",
@@ -4607,17 +4534,7 @@
       "familyName": "Jenkins",
       "fullName": "Daniss Jenkins",
       "jerseyNum": "24",
-      "position": "G",
-      "height": "6-4"
-    },
-    {
-      "personId": "1631204",
-      "firstName": "Marcus",
-      "familyName": "Sasser",
-      "fullName": "Marcus Sasser",
-      "jerseyNum": "25",
-      "position": "G",
-      "height": "6-1"
+      "position": "G"
     },
     {
       "personId": "1628989",
@@ -4625,17 +4542,7 @@
       "familyName": "Huerter",
       "fullName": "Kevin Huerter",
       "jerseyNum": "27",
-      "position": "G-F",
-      "height": "6-6"
-    },
-    {
-      "personId": "1630191",
-      "firstName": "Isaiah",
-      "familyName": "Stewart",
-      "fullName": "Isaiah Stewart",
-      "jerseyNum": "28",
-      "position": "F-C",
-      "height": "6-8"
+      "position": "G-F"
     },
     {
       "personId": "1629750",
@@ -4643,8 +4550,7 @@
       "familyName": "Green",
       "fullName": "Javonte Green",
       "jerseyNum": "31",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
     },
     {
       "personId": "1642449",
@@ -4652,8 +4558,7 @@
       "familyName": "Smith",
       "fullName": "Tolu Smith",
       "jerseyNum": "35",
-      "position": "F",
-      "height": "6-11"
+      "position": "F"
     },
     {
       "personId": "1629130",
@@ -4661,8 +4566,23 @@
       "familyName": "Robinson",
       "fullName": "Duncan Robinson",
       "jerseyNum": "55",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
+    },
+    {
+      "personId": "1643536",
+      "firstName": "Ebuka",
+      "familyName": "Okorie",
+      "fullName": "Ebuka Okorie",
+      "jerseyNum": "",
+      "position": "G"
+    },
+    {
+      "personId": "1642391",
+      "firstName": "Ugonna",
+      "familyName": "Onyenso",
+      "fullName": "Ugonna Onyenso",
+      "jerseyNum": "",
+      "position": "C"
     }
   ],
   "1610612766": [
@@ -4672,8 +4592,7 @@
       "familyName": "Bridges",
       "fullName": "Miles Bridges",
       "jerseyNum": "0",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
       "personId": "1630163",
@@ -4681,8 +4600,15 @@
       "familyName": "Ball",
       "fullName": "LaMelo Ball",
       "jerseyNum": "1",
-      "position": "G",
-      "height": "6-7"
+      "position": "G"
+    },
+    {
+      "personId": "1627827",
+      "firstName": "Dorian",
+      "familyName": "Finney-Smith",
+      "fullName": "Dorian Finney-Smith",
+      "jerseyNum": "2",
+      "position": "F"
     },
     {
       "personId": "1629684",
@@ -4690,8 +4616,7 @@
       "familyName": "Williams",
       "fullName": "Grant Williams",
       "jerseyNum": "2",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
       "personId": "1629632",
@@ -4699,8 +4624,7 @@
       "familyName": "White",
       "fullName": "Coby White",
       "jerseyNum": "3",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "1642883",
@@ -4708,8 +4632,15 @@
       "familyName": "James",
       "fullName": "Sion James",
       "jerseyNum": "4",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
+    },
+    {
+      "personId": "1643515",
+      "firstName": "Christian",
+      "familyName": "Anderson",
+      "fullName": "Christian Anderson",
+      "jerseyNum": "5",
+      "position": "G"
     },
     {
       "personId": "1642851",
@@ -4717,8 +4648,7 @@
       "familyName": "Knueppel",
       "fullName": "Kon Knueppel",
       "jerseyNum": "7",
-      "position": "G-F",
-      "height": "6-6"
+      "position": "G-F"
     },
     {
       "personId": "1630182",
@@ -4726,8 +4656,7 @@
       "familyName": "Green",
       "fullName": "Josh Green",
       "jerseyNum": "10",
-      "position": "G",
-      "height": "6-6"
+      "position": "G"
     },
     {
       "personId": "1641750",
@@ -4735,8 +4664,7 @@
       "familyName": "Kalkbrenner",
       "fullName": "Ryan Kalkbrenner",
       "jerseyNum": "11",
-      "position": "C",
-      "height": "7-1"
+      "position": "C"
     },
     {
       "personId": "1641810",
@@ -4744,8 +4672,7 @@
       "familyName": "Reeves",
       "fullName": "Antonio Reeves",
       "jerseyNum": "12",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
     },
     {
       "personId": "1631217",
@@ -4753,8 +4680,7 @@
       "familyName": "Diabaté",
       "fullName": "Moussa Diabaté",
       "jerseyNum": "14",
-      "position": "F",
-      "height": "6-10"
+      "position": "F"
     },
     {
       "personId": "1641790",
@@ -4762,17 +4688,7 @@
       "familyName": "Hall",
       "fullName": "PJ Hall",
       "jerseyNum": "16",
-      "position": "C",
-      "height": "6-8"
-    },
-    {
-      "personId": "1641787",
-      "firstName": "Tosan",
-      "familyName": "Evbuomwan",
-      "fullName": "Tosan Evbuomwan",
-      "jerseyNum": "20",
-      "position": "F",
-      "height": "6-8"
+      "position": "C"
     },
     {
       "personId": "1626192",
@@ -4780,8 +4696,15 @@
       "familyName": "Connaughton",
       "fullName": "Pat Connaughton",
       "jerseyNum": "21",
-      "position": "G",
-      "height": "6-5"
+      "position": "G"
+    },
+    {
+      "personId": "1643419",
+      "firstName": "Hannes",
+      "familyName": "Steinbach",
+      "fullName": "Hannes Steinbach",
+      "jerseyNum": "22",
+      "position": "F"
     },
     {
       "personId": "1630544",
@@ -4789,8 +4712,7 @@
       "familyName": "Mann",
       "fullName": "Tre Mann",
       "jerseyNum": "23",
-      "position": "G",
-      "height": "6-4"
+      "position": "G"
     },
     {
       "personId": "1641706",
@@ -4798,8 +4720,7 @@
       "familyName": "Miller",
       "fullName": "Brandon Miller",
       "jerseyNum": "24",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
     },
     {
       "personId": "1630214",
@@ -4807,8 +4728,7 @@
       "familyName": "Tillman",
       "fullName": "Xavier Tillman",
       "jerseyNum": "26",
-      "position": "F",
-      "height": "6-8"
+      "position": "F"
     },
     {
       "personId": "1642275",
@@ -4816,8 +4736,7 @@
       "familyName": "Salaün",
       "fullName": "Tidjane Salaün",
       "jerseyNum": "31",
-      "position": "F",
-      "height": "6-10"
+      "position": "F"
     },
     {
       "personId": "1642862",
@@ -4825,8 +4744,23 @@
       "familyName": "McNeeley",
       "fullName": "Liam McNeeley",
       "jerseyNum": "33",
-      "position": "F",
-      "height": "6-7"
+      "position": "F"
+    },
+    {
+      "personId": "1643573",
+      "firstName": "Kylan",
+      "familyName": "Boswell",
+      "fullName": "Kylan Boswell",
+      "jerseyNum": "",
+      "position": "G"
+    },
+    {
+      "personId": "1642369",
+      "firstName": "Michael",
+      "familyName": "Ajayi",
+      "fullName": "Michael Ajayi",
+      "jerseyNum": "",
+      "position": "G"
     }
   ]
 }

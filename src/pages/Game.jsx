@@ -2692,11 +2692,6 @@ export default function Game({ variant = "full" }) {
 	              {status || game.gameStatusText}
 	            </div>
 	            {clock && <div className={styles.clock}>{clock}</div>}
-	            {shouldShowFreshness && freshness.label ? (
-	              <div className={`${styles.freshnessBadge} ${styles[`freshness${freshness.level}`] || ""}`}>
-	                {freshness.label}
-	              </div>
-	            ) : null}
 	          </div>
 
           <div className={`${styles.teamBlock} ${styles.homeTeamBlock}`}>
@@ -2734,6 +2729,14 @@ export default function Game({ variant = "full" }) {
             </div>
           </div>
         </section>
+
+      {shouldShowFreshness && freshness.label ? (
+        <div className={styles.freshnessFooter}>
+          <div className={`${styles.freshnessBadge} ${styles[`freshness${freshness.level}`] || ""}`}>
+            {freshness.label}
+          </div>
+        </div>
+      ) : null}
 
       {showExtras && (
         <>

@@ -120,6 +120,21 @@
   gap: 12px;
 }
 
+.matchupPlayerSlot {
+  display: grid;
+  gap: 10px;
+}
+
+.matchupCustomFields {
+  display: grid;
+  grid-template-columns: minmax(80px, 0.7fr) minmax(120px, 1fr) minmax(160px, 1.2fr);
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+}
+
 .field {
   display: grid;
   gap: 8px;
@@ -550,6 +565,8 @@
 .depthChartPreviewActions {
   display: flex;
   justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 @media (max-width: 900px) {
@@ -562,6 +579,10 @@
   }
 
   .scoutingSetupGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .matchupCustomFields {
     grid-template-columns: 1fr;
   }
 

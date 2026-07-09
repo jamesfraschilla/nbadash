@@ -1,5 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { useAuth } from "../auth/useAuth.js";
 import { GLEAGUE_TEAMS, NBA_TEAMS } from "../data/nbaTeams.js";
+import {
+  deleteSavedToolRecord,
+  deleteSavedToolRecordRemote,
+  getSavedToolRecord,
+  getSavedToolRecordRemote,
+  saveToolRecord,
+  saveToolRecordRemote,
+  TOOL_RECORD_TYPES,
+} from "../toolVault.js";
 import { DEPTH_CHART_EXPORT_SIZE, exportDepthChartGraphic, renderDepthChartGraphic } from "./depthChartGraphicExport.js";
 import styles from "./Tools.module.css";
 
@@ -35,6 +46,29 @@ function buildEmptySlots() {
     ...POSITION_VALUES.map((position) => buildSlot(`bench-1-${position}`, position, "bench")),
     ...POSITION_VALUES.map((position) => buildSlot(`bench-2-${position}`, position, "bench")),
   ];
+}
+
+function hydrateDepthChartSlots(value) {
+  const incomingSlots = Array.isArray(value) ? value : [];
+  const byId = new Map(incomingSlots.map((slot) => [String(slot?.id || "").trim(), slot]));
+  return buildEmptySlots().map((emptySlot) => {
+    const savedSlot = byId.get(emptySlot.id) || {};
+    return {
+      ...emptySlot,
+      selection: String(savedSlot?.selection || "").trim(),
+      customNumber: String(savedSlot?.customNumber || "").trim(),
+      customLastName: String(savedSlot?.customLastName || "").trim(),
+      customHeadshotDataUrl: String(savedSlot?.customHeadshotDataUrl || "").trim(),
+    };
+  });
+}
+
+function hydrateDepthChartPayload(payload) {
+  return {
+    league: String(payload?.league || "nba").trim() === "gleague" ? "gleague" : "nba",
+    teamId: String(payload?.teamId || "").trim(),
+    slots: hydrateDepthChartSlots(payload?.slots),
+  };
 }
 
 function buildSortableJersey(value) {
@@ -92,6 +126,11 @@ function getTeamFileLabel(team) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "") || "team";
+}
+
+function buildDepthChartTitle({ selectedTeam, league }) {
+  const fallback = league === "gleague" ? "G League" : "NBA";
+  return `${selectedTeam?.fullName || fallback} Depth Chart`;
 }
 
 function SlotEditor({
@@ -167,11 +206,16 @@ function SlotEditor({
 }
 
 export default function DepthChartGraphicAdmin({ rosterSources }) {
+  const { accountsEnabled, user } = useAuth();
+  const [params, setParams] = useSearchParams();
   const previewCanvasRef = useRef(null);
   const [league, setLeague] = useState("nba");
   const [teamId, setTeamId] = useState("");
   const [slots, setSlots] = useState(() => buildEmptySlots());
   const [status, setStatus] = useState("");
+  const [recordId, setRecordId] = useState("");
+  const [busyAction, setBusyAction] = useState("");
+  const depthChartParam = String(params.get("depthChart") || "").trim();
 
   const teams = league === "gleague" ? GLEAGUE_TEAMS : NBA_TEAMS;
   const selectedTeam = teams.find((team) => String(team.teamId) === String(teamId)) || null;
@@ -217,9 +261,7 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
     if (!canvas) return undefined;
 
     renderDepthChartGraphic(canvas, { slots: exportSlots })
-      .then(() => {
-        if (active) setStatus("");
-      })
+      .then(() => undefined)
       .catch((error) => {
         if (active) setStatus(error?.message || "Unable to render preview.");
       });
@@ -228,6 +270,55 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
       active = false;
     };
   }, [exportSlots]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSavedDepthChart() {
+      if (!depthChartParam || !user?.id) {
+        if (cancelled) return;
+        setRecordId("");
+        return;
+      }
+
+      let savedRecord = null;
+      try {
+        savedRecord = accountsEnabled
+          ? await getSavedToolRecordRemote(user.id, depthChartParam)
+          : getSavedToolRecord(user.id, depthChartParam);
+      } catch (error) {
+        console.error("Failed to load remote depth chart draft, falling back to local storage.", error);
+        savedRecord = getSavedToolRecord(user.id, depthChartParam);
+      }
+
+      if (cancelled) return;
+
+      if (!savedRecord?.payload || savedRecord.type !== TOOL_RECORD_TYPES.DEPTH_CHART_GRAPHIC) {
+        setRecordId("");
+        setStatus("Saved depth chart not found.");
+        return;
+      }
+
+      const hydrated = hydrateDepthChartPayload(savedRecord.payload);
+      setRecordId(savedRecord.id);
+      setLeague(hydrated.league);
+      setTeamId(hydrated.teamId);
+      setSlots(hydrated.slots);
+      setStatus(`Loaded ${savedRecord.title}`);
+    }
+
+    loadSavedDepthChart();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accountsEnabled, depthChartParam, user?.id]);
+
+  const buildSavedPayload = () => ({
+    league,
+    teamId,
+    slots,
+  });
 
   const updateSlot = (slotId, patch) => {
     setSlots((current) => current.map((slot) => (
@@ -239,12 +330,14 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
     setLeague(nextLeague === "gleague" ? "gleague" : "nba");
     setTeamId("");
     setSlots(buildEmptySlots());
+    setRecordId("");
     setStatus("");
   };
 
   const handleTeamChange = (nextTeamId) => {
     setTeamId(nextTeamId);
     setSlots(buildEmptySlots());
+    setRecordId("");
     setStatus("");
   };
 
@@ -291,6 +384,99 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
     } catch (error) {
       setStatus(error?.message || "Unable to export PNG.");
     }
+  };
+
+  const handleSave = async () => {
+    if (!user?.id) {
+      setStatus("Sign in to save this depth chart.");
+      return;
+    }
+    if (!hasSelectedPlayer || busyAction) {
+      setStatus("Select at least one player.");
+      return;
+    }
+    setBusyAction("save");
+    const id = recordId || crypto.randomUUID();
+    const timestamp = new Date().toISOString();
+    const record = {
+      id,
+      type: TOOL_RECORD_TYPES.DEPTH_CHART_GRAPHIC,
+      title: buildDepthChartTitle({ selectedTeam, league }),
+      updatedAt: timestamp,
+      createdAt: timestamp,
+      payload: buildSavedPayload(),
+    };
+
+    try {
+      const savedRecord = accountsEnabled
+        ? await saveToolRecordRemote(user.id, record)
+        : saveToolRecord(user.id, record);
+      if (!savedRecord) return;
+      setRecordId(savedRecord.id);
+      const nextParams = new URLSearchParams(params);
+      nextParams.set("tab", "depth-chart");
+      nextParams.set("depthChart", savedRecord.id);
+      setParams(nextParams, { replace: true });
+      setStatus(`Saved to My Vault as ${savedRecord.title}`);
+    } catch (error) {
+      console.error("Failed to save depth chart draft remotely, falling back to local storage.", error);
+      const savedRecord = saveToolRecord(user.id, record);
+      if (!savedRecord) return;
+      setRecordId(savedRecord.id);
+      const nextParams = new URLSearchParams(params);
+      nextParams.set("tab", "depth-chart");
+      nextParams.set("depthChart", savedRecord.id);
+      setParams(nextParams, { replace: true });
+      setStatus(`Saved locally as ${savedRecord.title}`);
+    } finally {
+      setBusyAction("");
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!user?.id || !recordId || busyAction) return;
+    const confirmed = window.confirm("Delete this saved depth chart draft?");
+    if (!confirmed) return;
+    setBusyAction("delete");
+    try {
+      if (accountsEnabled) {
+        await deleteSavedToolRecordRemote(user.id, recordId);
+      } else {
+        deleteSavedToolRecord(user.id, recordId);
+      }
+      setRecordId("");
+      setLeague("nba");
+      setTeamId("");
+      setSlots(buildEmptySlots());
+      const nextParams = new URLSearchParams(params);
+      nextParams.set("tab", "depth-chart");
+      nextParams.delete("depthChart");
+      setParams(nextParams, { replace: true });
+      setStatus("Deleted saved depth chart.");
+    } catch (error) {
+      console.error("Failed to delete remote depth chart draft, falling back to local storage.", error);
+      deleteSavedToolRecord(user.id, recordId);
+      setRecordId("");
+      const nextParams = new URLSearchParams(params);
+      nextParams.set("tab", "depth-chart");
+      nextParams.delete("depthChart");
+      setParams(nextParams, { replace: true });
+      setStatus("Deleted saved depth chart locally.");
+    } finally {
+      setBusyAction("");
+    }
+  };
+
+  const handleReset = () => {
+    setRecordId("");
+    setLeague("nba");
+    setTeamId("");
+    setSlots(buildEmptySlots());
+    const nextParams = new URLSearchParams(params);
+    nextParams.set("tab", "depth-chart");
+    nextParams.delete("depthChart");
+    setParams(nextParams, { replace: true });
+    setStatus("Reset depth chart.");
   };
 
   const starterSlots = slots.filter((slot) => slot.group === "starter");
@@ -379,10 +565,36 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
             <canvas ref={previewCanvasRef} className={styles.depthChartPreviewCanvas} width="400" height="400" />
           </div>
           <div className={styles.depthChartPreviewActions}>
+            {recordId ? (
+              <button
+                type="button"
+                className={styles.secondaryButton}
+                disabled={Boolean(busyAction)}
+                onClick={handleDelete}
+              >
+                Delete
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              disabled={Boolean(busyAction)}
+              onClick={handleReset}
+            >
+              Reset
+            </button>
             <button
               type="button"
               className={styles.primaryButton}
-              disabled={!hasSelectedPlayer}
+              disabled={!hasSelectedPlayer || Boolean(busyAction)}
+              onClick={handleSave}
+            >
+              {busyAction === "save" ? "Saving..." : "Save"}
+            </button>
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              disabled={!hasSelectedPlayer || Boolean(busyAction)}
               onClick={handleExport}
             >
               Export PNG
