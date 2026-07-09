@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { Link, useSearchParams } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchCurrentGLeagueRosters, fetchCurrentNbaRosters, teamLogoUrl } from "../api.js";
 import { useAuth } from "../auth/useAuth.js";
 import {
@@ -420,6 +420,7 @@ function ToolColumn({
 
 export default function Tools() {
   const { accountsEnabled, user, profile, hasFeature } = useAuth();
+  const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
   const defaultDraft = useMemo(() => buildDefaultDraftForProfile(profile), [profile]);
   const defaultScoutingDraft = useMemo(() => buildDefaultScoutingDraftForProfile(profile), [profile]);
@@ -1062,6 +1063,7 @@ export default function Tools() {
         ? await saveToolRecordRemote(user.id, record)
         : saveToolRecord(user.id, record);
       if (!savedRecord) return;
+      queryClient.invalidateQueries({ queryKey: ["owned-tools", user.id] });
       setRecordId(savedRecord.id);
       const nextParams = new URLSearchParams(params);
       nextParams.set("draft", savedRecord.id);
@@ -1071,6 +1073,7 @@ export default function Tools() {
       console.error("Failed to save tool draft remotely, falling back to local storage.", error);
       const savedRecord = saveToolRecord(user.id, record);
       if (!savedRecord) return;
+      queryClient.invalidateQueries({ queryKey: ["owned-tools", user.id] });
       setRecordId(savedRecord.id);
       const nextParams = new URLSearchParams(params);
       nextParams.set("draft", savedRecord.id);
@@ -1093,6 +1096,7 @@ export default function Tools() {
       } else {
         deleteSavedToolRecord(user.id, recordId);
       }
+      queryClient.invalidateQueries({ queryKey: ["owned-tools", user.id] });
       setRecordId("");
       setDraft(defaultDraft);
       const nextParams = new URLSearchParams(params);
@@ -1102,6 +1106,7 @@ export default function Tools() {
     } catch (error) {
       console.error("Failed to delete remote tool draft, falling back to local storage.", error);
       deleteSavedToolRecord(user.id, recordId);
+      queryClient.invalidateQueries({ queryKey: ["owned-tools", user.id] });
       setRecordId("");
       setDraft(defaultDraft);
       const nextParams = new URLSearchParams(params);
@@ -1390,7 +1395,17 @@ export default function Tools() {
             </div>
           </div>
 
-          {saveStatus ? <div className={styles.statusNote}>{saveStatus}</div> : null}
+          {saveStatus ? (
+            <div className={styles.statusNote}>
+              {saveStatus}
+              {recordId && saveStatus.startsWith("Saved") ? (
+                <>
+                  {" "}
+                  <Link className={styles.inlineStatusLink} to="/me?tab=tools">View in My Vault</Link>
+                </>
+              ) : null}
+            </div>
+          ) : null}
         </section>
       ) : activeTab === TOOL_TABS.DEPTH_CHART ? (
         <section className={styles.workspace}>

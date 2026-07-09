@@ -338,6 +338,16 @@
   color: var(--muted);
 }
 
+.inlineStatusLink {
+  color: var(--highlight-text);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.inlineStatusLink:hover {
+  text-decoration: underline;
+}
+
 .requestPanel,
 .requestResult {
   display: grid;

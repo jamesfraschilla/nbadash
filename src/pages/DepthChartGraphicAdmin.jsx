@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../auth/useAuth.js";
 import { GLEAGUE_TEAMS, NBA_TEAMS } from "../data/nbaTeams.js";
 import {
@@ -207,6 +208,7 @@ function SlotEditor({
 
 export default function DepthChartGraphicAdmin({ rosterSources }) {
   const { accountsEnabled, user } = useAuth();
+  const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
   const previewCanvasRef = useRef(null);
   const [league, setLeague] = useState("nba");
@@ -412,6 +414,7 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
         ? await saveToolRecordRemote(user.id, record)
         : saveToolRecord(user.id, record);
       if (!savedRecord) return;
+      queryClient.invalidateQueries({ queryKey: ["owned-tools", user.id] });
       setRecordId(savedRecord.id);
       const nextParams = new URLSearchParams(params);
       nextParams.set("tab", "depth-chart");
@@ -422,6 +425,7 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
       console.error("Failed to save depth chart draft remotely, falling back to local storage.", error);
       const savedRecord = saveToolRecord(user.id, record);
       if (!savedRecord) return;
+      queryClient.invalidateQueries({ queryKey: ["owned-tools", user.id] });
       setRecordId(savedRecord.id);
       const nextParams = new URLSearchParams(params);
       nextParams.set("tab", "depth-chart");
@@ -444,6 +448,7 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
       } else {
         deleteSavedToolRecord(user.id, recordId);
       }
+      queryClient.invalidateQueries({ queryKey: ["owned-tools", user.id] });
       setRecordId("");
       setLeague("nba");
       setTeamId("");
@@ -456,6 +461,7 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
     } catch (error) {
       console.error("Failed to delete remote depth chart draft, falling back to local storage.", error);
       deleteSavedToolRecord(user.id, recordId);
+      queryClient.invalidateQueries({ queryKey: ["owned-tools", user.id] });
       setRecordId("");
       const nextParams = new URLSearchParams(params);
       nextParams.set("tab", "depth-chart");

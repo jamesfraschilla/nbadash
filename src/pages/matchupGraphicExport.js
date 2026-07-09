@@ -4,7 +4,7 @@ import { playerHeadshotUrls, teamLogoUrl } from "../api.js";
 
 const EXPORT_WIDTH = 1920;
 const EXPORT_HEIGHT = 1080;
-const NAVY = "#15284a";
+const BLACK = "#000000";
 const WEDGE = "#24211f";
 const PAPER = "#efebe2";
 const WHITE = "#ffffff";
@@ -182,10 +182,7 @@ function drawArrow(context, centerX, startY, endY) {
 }
 
 function drawBackdrop(context) {
-  const gradient = context.createLinearGradient(0, 0, 0, EXPORT_HEIGHT);
-  gradient.addColorStop(0, "#17305c");
-  gradient.addColorStop(1, NAVY);
-  context.fillStyle = gradient;
+  context.fillStyle = BLACK;
   context.fillRect(0, 0, EXPORT_WIDTH, EXPORT_HEIGHT);
 
   context.fillStyle = WEDGE;
@@ -336,7 +333,7 @@ export async function exportMatchupGraphic({ league = "nba", leftPlayers, rightP
     loadImage(logoTeamId ? buildProxyUrl(teamLogoUrl(logoTeamId, league)) : null),
   ]);
 
-  const { canvas, context } = makeCanvas(EXPORT_WIDTH, EXPORT_HEIGHT, NAVY);
+  const { canvas, context } = makeCanvas(EXPORT_WIDTH, EXPORT_HEIGHT, BLACK);
   drawBackdrop(context);
   drawHeader(context);
   drawLogo(context, logoImage);
