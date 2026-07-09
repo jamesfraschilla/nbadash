@@ -20,6 +20,11 @@ const OTHER_GAME_INTERVALS = {
   pregame: 120_000,
 };
 
+const PREGAME_POLLING_WINDOW_MS = 30 * 60_000;
+const POST_TIP_PREGAME_INTERVAL_MS = 30_000;
+const STALE_PREGAME_STOP_AFTER_MS = 6 * 60 * 60_000;
+const MAX_SLEEP_INTERVAL_MS = 24 * 60 * 60_000;
+
 const TRACKED_POLLING_GAME_IDS = new Set([
   "1322600002",
 ]);
@@ -74,6 +79,40 @@ function statusText(game) {
   return String(game?.gameStatusText || "").trim().toLowerCase();
 }
 
+function parseTimestampMs(value, options = {}) {
+  const text = String(value || "").trim();
+  if (!text) return null;
+
+  const hasTimezone = /(?:z|[+-]\d{2}:?\d{2})$/i.test(text);
+  const normalized = options.assumeUtc && !hasTimezone && /^\d{4}-\d{2}-\d{2}T/.test(text)
+    ? `${text}Z`
+    : text;
+
+  if (!options.assumeUtc && !hasTimezone) return null;
+
+  const time = Date.parse(normalized);
+  return Number.isFinite(time) ? time : null;
+}
+
+function officialTipMs(game) {
+  return parseTimestampMs(game?.gameTimeUTC || game?.gameTimeUtc, { assumeUtc: true })
+    ?? parseTimestampMs(game?.gameEt || game?.gameTimeEastern);
+}
+
+function getPregamePollingInterval(game, intervals, now) {
+  const tipMs = officialTipMs(game);
+  if (tipMs == null) return intervals.pregame;
+
+  const msUntilTip = tipMs - now;
+  if (msUntilTip > PREGAME_POLLING_WINDOW_MS) {
+    return Math.min(MAX_SLEEP_INTERVAL_MS, msUntilTip - PREGAME_POLLING_WINDOW_MS);
+  }
+
+  if (msUntilTip < -STALE_PREGAME_STOP_AFTER_MS) return false;
+  if (msUntilTip <= 0) return Math.min(intervals.pregame, POST_TIP_PREGAME_INTERVAL_MS);
+  return intervals.pregame;
+}
+
 export function getGamePollingInterval(game, options = {}) {
   const intervals = options.isTrackedGame || isGameDayPollingGame(game || options.gameId)
     ? TRACKED_GAME_INTERVALS
@@ -87,7 +126,7 @@ export function getGamePollingInterval(game, options = {}) {
 
   if (status === 3 || text.includes("final")) return intervals.final;
   if (text.includes("halftime") || text === "half" || text === "ht") return intervals.halftime;
-  if (status !== 2) return intervals.pregame;
+  if (status !== 2) return getPregamePollingInterval(game, intervals, Number(options.now ?? Date.now()));
   if (period === 2 && seconds === 0) return intervals.halftime;
   if (seconds === 0) return intervals.quarterBreak;
   if (period >= 4 && seconds != null && seconds <= 4 * 60) return intervals.lateGame;
@@ -100,6 +139,7 @@ export function getGamesListPollingInterval(games, options = {}) {
   const intervals = list
     .map((game) => getGamePollingInterval(game, {
       isTrackedGame: Boolean(options.isTrackedGame?.(game)) || isGameDayPollingGame(game),
+      now: options.now,
     }))
     .filter((interval) => typeof interval === "number" && interval > 0);
 

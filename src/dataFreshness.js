@@ -19,7 +19,10 @@ export function formatAge(ms) {
 export function formatPollingInterval(ms) {
   if (!Number.isFinite(ms) || ms <= 0) return "";
   if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
-  return `${Math.round(ms / 60_000)}m`;
+  const minutes = Math.round(ms / 60_000);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.round((ms / (60 * 60_000)) * 10) / 10;
+  return `${Number.isInteger(hours) ? hours.toFixed(0) : hours}h`;
 }
 
 function freshnessLevel(maxAgeMs) {

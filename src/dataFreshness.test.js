@@ -46,7 +46,8 @@ test("buildFreshnessSummary marks stale data after ninety seconds", () => {
   );
 });
 
-test("formatPollingInterval formats seconds and minutes", () => {
+test("formatPollingInterval formats seconds, minutes, and hours", () => {
   assert.equal(formatPollingInterval(2_000), "2s");
   assert.equal(formatPollingInterval(120_000), "2m");
+  assert.equal(formatPollingInterval(150 * 60_000), "2.5h");
 });
