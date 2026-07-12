@@ -32,6 +32,7 @@ import {
 } from "../components/lateGamePanelHelpers.js";
 import { exportMatchupGraphic } from "./matchupGraphicExport.js";
 import DepthChartGraphicAdmin from "./DepthChartGraphicAdmin.jsx";
+import VisualDrillGenerator from "./VisualDrillGenerator.jsx";
 import { requestCustomDashboardRequest } from "../customRequestsData.js";
 import styles from "./Tools.module.css";
 
@@ -45,6 +46,7 @@ const TOOL_TABS = {
   SCOUTING: "scouting",
   LATE_GAME: "late-game",
   CUSTOM_REQUESTS: "custom-requests",
+  VISUAL_DRILL: "visual-drill",
 };
 const PREVIOUS_GAME_OPTIONS = Array.from({ length: 20 }, (_, index) => index + 1);
 
@@ -455,6 +457,8 @@ export default function Tools() {
     ? TOOL_TABS.LATE_GAME
     : rawTab === TOOL_TABS.CUSTOM_REQUESTS
       ? TOOL_TABS.CUSTOM_REQUESTS
+    : rawTab === TOOL_TABS.VISUAL_DRILL
+      ? TOOL_TABS.VISUAL_DRILL
     : rawTab === TOOL_TABS.DEPTH_CHART
       ? TOOL_TABS.DEPTH_CHART
     : rawTab === TOOL_TABS.SCOUTING
@@ -836,6 +840,8 @@ export default function Tools() {
       ? TOOL_TABS.LATE_GAME
       : nextTab === TOOL_TABS.CUSTOM_REQUESTS
         ? TOOL_TABS.CUSTOM_REQUESTS
+      : nextTab === TOOL_TABS.VISUAL_DRILL
+        ? TOOL_TABS.VISUAL_DRILL
       : nextTab === TOOL_TABS.DEPTH_CHART
         ? TOOL_TABS.DEPTH_CHART
       : nextTab === TOOL_TABS.SCOUTING
@@ -1265,6 +1271,13 @@ export default function Tools() {
       <div className={styles.tabBar}>
         <button
           type="button"
+          className={`${styles.tabButton} ${activeTab === TOOL_TABS.VISUAL_DRILL ? styles.tabButtonActive : ""}`}
+          onClick={() => handleToolTabChange(TOOL_TABS.VISUAL_DRILL)}
+        >
+          Visual Drill
+        </button>
+        <button
+          type="button"
           className={`${styles.tabButton} ${activeTab === TOOL_TABS.MATCHUP ? styles.tabButtonActive : ""}`}
           onClick={() => handleToolTabChange(TOOL_TABS.MATCHUP)}
         >
@@ -1406,6 +1419,10 @@ export default function Tools() {
               ) : null}
             </div>
           ) : null}
+        </section>
+      ) : activeTab === TOOL_TABS.VISUAL_DRILL ? (
+        <section className={styles.workspace}>
+          <VisualDrillGenerator />
         </section>
       ) : activeTab === TOOL_TABS.DEPTH_CHART ? (
         <section className={styles.workspace}>

@@ -1,0 +1,43 @@
+.builder { display: grid; gap: 20px; }
+.intro, .previewHeader { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.intro h2, .intro p, .setupCard h3, .previewHeader h3 { margin: 0; }
+.intro p { margin-top: 6px; color: var(--muted); }
+.eyebrow, .fieldLabel { display: block; color: var(--muted); font-size: .72rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.startButton, .previewRefresh { min-height: 42px; padding: 0 18px; border: 1px solid var(--button-primary-bg); border-radius: var(--radius-md); background: var(--button-primary-bg); color: var(--button-primary-text); font-weight: 800; cursor: pointer; white-space: nowrap; }
+.startButton:disabled, .previewRefresh:disabled { opacity: .45; cursor: not-allowed; }
+.setupGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.subfilterGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.setupCard, .previewCard { position: relative; display: grid; gap: 16px; padding: 18px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-panel); }
+.stepNumber { position: absolute; right: 16px; top: 12px; color: color-mix(in srgb, var(--muted) 35%, transparent); font-size: 2rem; font-weight: 900; }
+.field, .paletteField { display: grid; gap: 8px; }
+.select { width: 100%; min-height: 44px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--input-bg); color: var(--text); }
+.rangeGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.colorGrid { display: grid; gap: 8px; }
+.colorField { display: grid; grid-template-columns: 1fr 38px 78px; align-items: center; gap: 8px; min-height: 42px; padding: 6px 8px 6px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-muted); font-size: .84rem; font-weight: 700; }
+.colorField input { width: 38px; height: 30px; padding: 1px; border: 0; background: transparent; cursor: pointer; }
+.colorField code { color: var(--muted); font-size: .7rem; }
+.checkGrid, .shapeOptions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.checkOption { display: flex; align-items: center; gap: 9px; min-height: 44px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-muted); cursor: pointer; font-weight: 700; }
+.checkOption input { width: 18px; height: 18px; accent-color: var(--button-primary-bg); }
+.hint, .validation { margin: 0; color: var(--muted); font-size: .84rem; }
+.validation { color: var(--danger-text); }
+.previewCard { gap: 12px; }
+.previewFrame { overflow: hidden; width: 100%; aspect-ratio: 16 / 9; border: 1px solid var(--border); border-radius: var(--radius-md); background: #000; }
+.graphic { position: absolute; inset: 0; overflow: hidden; }
+.previewFrame .graphic { position: relative; width: 100%; height: 100%; }
+.components { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; width: 100%; height: 100%; }
+.componentSpace { display: grid; place-items: center; min-width: 0; padding: clamp(8px, 2.2vw, 34px); }
+.digit { font-family: Arial, Helvetica, sans-serif; font-size: clamp(7rem, 32vh, 27rem); font-weight: 800; line-height: .8; }
+.shape { display: block; width: min(72%, 42vh); aspect-ratio: 1; }
+.circle { border-radius: 50%; }
+.triangle { clip-path: polygon(50% 3%, 97% 97%, 3% 97%); }
+.star { clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 94%, 50% 72%, 21% 94%, 32% 57%, 2% 35%, 39% 35%); }
+.drillMode { display: none; position: fixed; inset: 0; z-index: 10000; background: #000; }
+.drillModeOpen { display: block; }
+.exitButton, .refreshButton { position: absolute; z-index: 2; border: 1px solid rgba(255,255,255,.34); background: rgba(0,0,0,.58); color: #fff; box-shadow: 0 8px 24px rgba(0,0,0,.28); cursor: pointer; backdrop-filter: blur(8px); }
+.exitButton { top: 16px; right: 16px; width: 42px; height: 42px; border-radius: 50%; font-size: 1.7rem; line-height: 1; }
+.refreshButton { right: 18px; bottom: 18px; display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 0 14px; border-radius: 999px; font-size: .88rem; font-weight: 800; }
+.refreshButton span { font-size: 1.2rem; }
+@media (max-width: 900px) { .setupGrid, .subfilterGrid { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { .intro { align-items: stretch; flex-direction: column; } .rangeGrid, .checkGrid, .shapeOptions { grid-template-columns: 1fr; } .digit { font-size: clamp(4rem, 24vh, 10rem); } }
+@media (orientation: portrait) { .drillModeOpen .digit { font-size: clamp(5rem, 19vw, 12rem); } .drillModeOpen .shape { width: min(70%, 26vw); } }
