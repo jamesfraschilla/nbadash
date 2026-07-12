@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { generateVisualDrill, randomIntegerInRange } from "./visualDrillGenerator.js";
+import {
+  generateVisualDrill,
+  hasVisibleComponentCombination,
+  randomIntegerInRange,
+} from "./visualDrillGenerator.js";
 
 const config = {
   minimumSpaces: 2, maximumSpaces: 4, backgroundColors: ["#fff"],
@@ -52,4 +56,53 @@ test("generates uploaded image components", () => {
 test("random integer ranges support fixed and variable intervals", () => {
   assert.equal(randomIntegerInRange(5, 5, 1, 20, () => 0.9), 5);
   assert.equal(randomIntegerInRange(1, 20, 1, 20, () => 0.999), 20);
+});
+
+test("never generates a digit matching the selected background", () => {
+  const graphic = generateVisualDrill({
+    ...config,
+    minimumSpaces: 3,
+    maximumSpaces: 3,
+    backgroundColors: ["#ff0000", "#0000ff"],
+    digitColors: ["#ff0000", "#00ff00"],
+  }, () => 0);
+
+  assert.equal(graphic.backgroundColor, "#ff0000");
+  assert.deepEqual(graphic.components.map((item) => item.color), ["#00ff00", "#00ff00", "#00ff00"]);
+});
+
+test("chooses a compatible background when a component has one possible color", () => {
+  const graphic = generateVisualDrill({
+    ...config,
+    minimumSpaces: 1,
+    maximumSpaces: 1,
+    backgroundColors: ["#ff0000", "#0000ff"],
+    digitColors: ["#ff0000"],
+  }, () => 0);
+
+  assert.equal(graphic.backgroundColor, "#0000ff");
+  assert.equal(graphic.components[0].color, "#ff0000");
+});
+
+test("color collision checks are case-insensitive", () => {
+  const graphic = generateVisualDrill({
+    ...config,
+    minimumSpaces: 1,
+    maximumSpaces: 1,
+    useDigits: false,
+    useShapes: true,
+    backgroundColors: ["#FF0000"],
+    shapeColors: ["#ff0000", "#00ff00"],
+  }, () => 0);
+
+  assert.equal(graphic.components[0].color, "#00ff00");
+});
+
+test("reports impossible same-color-only filter sets", () => {
+  assert.equal(hasVisibleComponentCombination({
+    ...config,
+    maximumSpaces: 2,
+    backgroundColors: ["#ff0000"],
+    digitColors: ["#FF0000"],
+  }), false);
 });

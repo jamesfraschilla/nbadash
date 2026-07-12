@@ -21,6 +21,7 @@ import {
   clampInteger,
   DRILL_SHAPES,
   generateVisualDrill,
+  hasVisibleComponentCombination,
   randomIntegerInRange,
 } from "../visualDrillGenerator.js";
 import styles from "./VisualDrillGenerator.module.css";
@@ -222,15 +223,17 @@ export default function VisualDrillGenerator() {
   const drillRef = useRef(null);
   const loadedPresetRef = useRef("");
 
-  const viableTypes = [
+  const configuredTypes = [
     config.useDigits,
     config.useShapes && config.shapes.length > 0,
     config.useImages && config.images.some((image) => image.url),
   ].filter(Boolean).length;
-  const canGenerate = config.maximumSpaces === 0 || viableTypes > 0;
+  const canGenerate = hasVisibleComponentCombination(config);
   const validationMessage = canGenerate
     ? ""
-    : config.useImages && !config.images.some((image) => image.url)
+    : configuredTypes > 0
+      ? "Add at least one digit or shape color that differs from an available background color."
+      : config.useImages && !config.images.some((image) => image.url)
       ? "Upload and select at least one image, or enable another component type."
       : "Select Digits, Shapes / Symbols, Images, or a combination.";
 
