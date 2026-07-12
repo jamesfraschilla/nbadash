@@ -5,6 +5,7 @@ function randomIndex(length, random) {
 }
 
 function pick(values, random) {
+  if (!values.length) return null;
   return values[randomIndex(values.length, random)];
 }
 
@@ -14,37 +15,52 @@ export function clampInteger(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, parsed));
 }
 
+export function randomIntegerInRange(minimumValue, maximumValue, minimum, maximum, random = Math.random) {
+  const minimumResult = clampInteger(minimumValue, minimum, maximum);
+  const maximumResult = Math.max(minimumResult, clampInteger(maximumValue, minimum, maximum));
+  return minimumResult + randomIndex((maximumResult - minimumResult) + 1, random);
+}
+
 export function generateVisualDrill(config, random = Math.random) {
-  const minimumSpaces = clampInteger(config.minimumSpaces, 0, 5);
-  const maximumSpaces = Math.max(minimumSpaces, clampInteger(config.maximumSpaces, 0, 5));
-  const spaceCount = minimumSpaces + randomIndex((maximumSpaces - minimumSpaces) + 1, random);
+  const spaceCount = randomIntegerInRange(config.minimumSpaces, config.maximumSpaces, 0, 5, random);
   const backgroundColors = config.backgroundColors.filter(Boolean);
+  const images = Array.isArray(config.images) ? config.images.filter((image) => image?.url) : [];
+  const shapes = Array.isArray(config.shapes) ? config.shapes.filter(Boolean) : [];
   const enabledTypes = [
     config.useDigits ? "digit" : null,
-    config.useShapes ? "shape" : null,
+    config.useShapes && shapes.length ? "shape" : null,
+    config.useImages && images.length ? "image" : null,
   ].filter(Boolean);
 
   const components = Array.from({ length: enabledTypes.length ? spaceCount : 0 }, () => {
     const type = pick(enabledTypes, random);
     if (type === "digit") {
-      const minimumDigit = clampInteger(config.minimumDigit, 0, 9);
-      const maximumDigit = Math.max(minimumDigit, clampInteger(config.maximumDigit, 0, 9));
       return {
         type,
-        value: minimumDigit + randomIndex((maximumDigit - minimumDigit) + 1, random),
+        value: randomIntegerInRange(config.minimumDigit, config.maximumDigit, 0, 9, random),
         color: pick(config.digitColors.filter(Boolean), random),
+      };
+    }
+
+    if (type === "image") {
+      const image = pick(images, random);
+      return {
+        type,
+        value: image.id || image.path || image.url,
+        url: image.url,
+        label: image.name || "Uploaded image",
       };
     }
 
     return {
       type,
-      value: pick(config.shapes, random),
+      value: pick(shapes, random),
       color: pick(config.shapeColors.filter(Boolean), random),
     };
   });
 
   return {
-    backgroundColor: pick(backgroundColors, random),
+    backgroundColor: pick(backgroundColors, random) || "#ffffff",
     components,
   };
 }

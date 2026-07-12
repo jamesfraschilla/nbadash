@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { generateVisualDrill } from "./visualDrillGenerator.js";
+import { generateVisualDrill, randomIntegerInRange } from "./visualDrillGenerator.js";
 
 const config = {
   minimumSpaces: 2, maximumSpaces: 4, backgroundColors: ["#fff"],
@@ -18,4 +18,38 @@ test("generates within the configured ranges", () => {
 test("supports background-only drills", () => {
   const graphic = generateVisualDrill({ ...config, minimumSpaces: 0, maximumSpaces: 0 }, () => 0);
   assert.deepEqual(graphic, { backgroundColor: "#fff", components: [] });
+});
+
+test("does not generate a fallback symbol when no shapes are selected", () => {
+  const graphic = generateVisualDrill({
+    ...config,
+    minimumSpaces: 2,
+    maximumSpaces: 2,
+    useDigits: false,
+    useShapes: true,
+    shapes: [],
+  }, () => 0);
+  assert.deepEqual(graphic.components, []);
+});
+
+test("generates uploaded image components", () => {
+  const graphic = generateVisualDrill({
+    ...config,
+    minimumSpaces: 1,
+    maximumSpaces: 1,
+    useDigits: false,
+    useImages: true,
+    images: [{ id: "logo", name: "Logo", url: "https://example.com/logo.png" }],
+  }, () => 0);
+  assert.deepEqual(graphic.components[0], {
+    type: "image",
+    value: "logo",
+    label: "Logo",
+    url: "https://example.com/logo.png",
+  });
+});
+
+test("random integer ranges support fixed and variable intervals", () => {
+  assert.equal(randomIntegerInRange(5, 5, 1, 20, () => 0.9), 5);
+  assert.equal(randomIntegerInRange(1, 20, 1, 20, () => 0.999), 20);
 });

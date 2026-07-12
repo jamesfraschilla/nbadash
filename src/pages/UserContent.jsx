@@ -262,6 +262,10 @@ export default function UserContent() {
     () => savedTools.filter((record) => record.type === TOOL_RECORD_TYPES.PREGAME_SCOUTING_PACKET),
     [savedTools]
   );
+  const visualDrillPresetRecords = useMemo(
+    () => savedTools.filter((record) => record.type === TOOL_RECORD_TYPES.VISUAL_DRILL_PRESET),
+    [savedTools]
+  );
   const lateGameFeedbackRecords = useMemo(
     () => savedTools.filter((record) => record.type === TOOL_RECORD_TYPES.LATE_GAME_FEEDBACK),
     [savedTools]
@@ -614,10 +618,48 @@ export default function UserContent() {
         </section>
       ) : tab === "tools" ? (
         <section className={styles.section}>
-          {matchupToolRecords.length === 0 && depthChartToolRecords.length === 0 && analysisToolRecords.length === 0 && scoutingToolRecords.length === 0 ? (
+          {matchupToolRecords.length === 0 && depthChartToolRecords.length === 0 && analysisToolRecords.length === 0 && scoutingToolRecords.length === 0 && visualDrillPresetRecords.length === 0 ? (
             <div className={styles.emptyState}>You have not saved any tools yet.</div>
           ) : (
             <div className={styles.list}>
+              {visualDrillPresetRecords.map((toolRecord) => {
+                const isDeleting = deletingKey === `tool:${toolRecord.id}`;
+                const config = toolRecord.payload?.config && typeof toolRecord.payload.config === "object"
+                  ? toolRecord.payload.config
+                  : toolRecord.payload || {};
+                const componentTypes = [
+                  config.useDigits ? "digits" : null,
+                  config.useShapes ? "shapes" : null,
+                  config.useImages ? "images" : null,
+                ].filter(Boolean).join(" + ");
+                return (
+                  <article key={toolRecord.id} className={styles.card}>
+                    <div className={styles.cardHeader}>
+                      <div className={styles.cardTitleGroup}>
+                        <div className={styles.cardTitle}>{toolRecord.title || "Untitled"}</div>
+                        <div className={styles.cardMeta}>Visual Drill · Favorite filters</div>
+                      </div>
+                      <div className={styles.cardActions}>
+                        <Link className={styles.cardLink} to={`/tools?tab=visual-drill&preset=${encodeURIComponent(toolRecord.id)}`}>Open Tool</Link>
+                        <button
+                          type="button"
+                          className={styles.deleteButton}
+                          onClick={() => handleDeleteTool(toolRecord)}
+                          disabled={isDeleting}
+                        >
+                          {isDeleting ? "Deleting..." : "Delete"}
+                        </button>
+                      </div>
+                    </div>
+                    <div className={styles.cardBody}>
+                      {`${config.minimumSpaces ?? 0}–${config.maximumSpaces ?? 0} spaces`}
+                      {componentTypes ? ` · ${componentTypes}` : " · background only"}
+                      {config.selfTimerEnabled ? ` · auto ${config.minimumInterval ?? 1}–${config.maximumInterval ?? 1}s` : ""}
+                    </div>
+                    <div className={styles.cardFooter}>Updated {formatTimestamp(toolRecord.updatedAt)}</div>
+                  </article>
+                );
+              })}
               {scoutingToolRecords.map((toolRecord) => {
                 const isDeleting = deletingKey === `tool:${toolRecord.id}`;
                 const payload = toolRecord.payload && typeof toolRecord.payload === "object" ? toolRecord.payload : {};
