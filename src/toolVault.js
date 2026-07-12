@@ -2,6 +2,14 @@ import { supabase } from "./supabaseClient.js";
 import { readLocalStorage, writeLocalStorage } from "./storage.js";
 
 const TOOL_VAULT_STORAGE_PREFIX = "nba-dashboard:tool-vault:v1:";
+const TOOL_VAULT_EVICTION_PREFIXES = [
+  "nba-dashboard-season-games:",
+  "nba-dashboard-team-season-games:",
+  "nba-dashboard:match-ups:",
+  "pregame:players:v2:",
+  "pregame:players:v1",
+];
+
 export const TOOL_RECORD_TYPES = {
   MATCHUP_GRAPHIC: "matchup_graphic",
   DEPTH_CHART_GRAPHIC: "depth_chart_graphic",
@@ -67,6 +75,30 @@ function mergeToolRecords(...lists) {
   return [...byId.values()].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
 }
 
+function evictToolVaultStorageCaches() {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    const storageKeys = new Set(Object.keys(window.localStorage));
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index);
+      if (key) storageKeys.add(key);
+    }
+    [...storageKeys]
+      .filter((key) => TOOL_VAULT_EVICTION_PREFIXES.some((prefix) => key.startsWith(prefix)))
+      .forEach((key) => window.localStorage.removeItem(key));
+  } catch {
+    // Ignore restrictive browser storage failures.
+  }
+}
+
+function writeToolVaultRecords(userId, records) {
+  const key = toolVaultKey(userId);
+  const value = JSON.stringify(records);
+  if (writeLocalStorage(key, value)) return true;
+  evictToolVaultStorageCaches();
+  return writeLocalStorage(key, value);
+}
+
 export function getSavedToolRecord(userId, recordId) {
   return listSavedToolRecords(userId).find((record) => record.id === String(recordId || "").trim()) || null;
 }
@@ -86,18 +118,17 @@ export function saveToolRecord(userId, record) {
   } else {
     nextRecords.unshift(normalized);
   }
-  writeLocalStorage(toolVaultKey(userId), JSON.stringify(nextRecords));
-  return normalized;
+  return writeToolVaultRecords(userId, nextRecords) ? normalized : null;
 }
 
 export function deleteSavedToolRecord(userId, recordId) {
   const nextRecords = listSavedToolRecords(userId).filter((record) => record.id !== String(recordId || "").trim());
-  writeLocalStorage(toolVaultKey(userId), JSON.stringify(nextRecords));
+  writeToolVaultRecords(userId, nextRecords);
 }
 
 function syncRemoteRecordsToLocal(userId, records) {
   const merged = mergeToolRecords(listSavedToolRecords(userId), records);
-  writeLocalStorage(toolVaultKey(userId), JSON.stringify(merged));
+  writeToolVaultRecords(userId, merged);
   return merged;
 }
 

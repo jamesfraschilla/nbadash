@@ -5,6 +5,7 @@ import { useAuth } from "../auth/useAuth.js";
 import {
   deleteSavedToolRecord,
   deleteSavedToolRecordRemote,
+  getSavedToolRecord,
   listSavedToolRecords,
   listSavedToolRecordsRemote,
   saveToolRecord,
@@ -119,6 +120,11 @@ function reconcileConfigImages(config, imageLibrary, libraryLoaded) {
     )))
     .filter(Boolean);
   return normalizeConfig({ ...config, images });
+}
+
+function upsertFavoriteRecord(records, record) {
+  return [record, ...records.filter((favorite) => favorite.id !== record.id)]
+    .sort((left, right) => String(right.updatedAt).localeCompare(String(left.updatedAt)));
 }
 
 function RangeSelect({ minimum, maximum, lowerBound, upperBound, unit = "", onChange }) {
@@ -411,25 +417,43 @@ export default function VisualDrillGenerator() {
       updatedAt: timestamp,
     };
     try {
-      const localRecord = saveToolRecord(vaultUserId, record);
-      const saved = accountsEnabled && user?.id
-        ? await saveToolRecordRemote(user.id, record)
-        : localRecord;
-      if (!saved) throw new Error("Unable to save this favorite.");
+      let saved = null;
+      let remoteError = null;
+      let savedRemotely = false;
+
+      if (accountsEnabled && user?.id) {
+        try {
+          saved = await saveToolRecordRemote(user.id, record);
+          savedRemotely = Boolean(saved);
+        } catch (error) {
+          remoteError = error;
+          console.error("Failed to save Visual Drill favorite remotely.", error);
+        }
+      }
+
+      if (!saved) {
+        saveToolRecord(vaultUserId, record);
+        saved = getSavedToolRecord(vaultUserId, record.id);
+      }
+
+      if (!saved) {
+        const remoteMessage = String(remoteError?.message || "").trim();
+        throw new Error(remoteMessage
+          ? `Supabase returned “${remoteMessage}”, and the browser fallback could not be written.`
+          : "The browser could not write this favorite. Its local storage may be full or unavailable.");
+      }
+
+      setFavorites((current) => upsertFavoriteRecord(current, saved));
       setFavoriteId(saved.id);
-      setFavoriteStatus(`Saved ${saved.title}.`);
-      await queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] });
-      await refreshFavorites();
+      setFavoriteStatus(savedRemotely
+        ? `Saved ${saved.title} to your account.`
+        : remoteError
+          ? `Saved ${saved.title} in this browser only. Supabase said: ${remoteError.message || "remote save failed"}`
+          : `Saved ${saved.title} in this browser.`);
+      await queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] }).catch(() => {});
     } catch (error) {
       console.error("Failed to save Visual Drill favorite.", error);
-      const localRecord = saveToolRecord(vaultUserId, record);
-      if (localRecord) {
-        setFavoriteId(localRecord.id);
-        setFavoriteStatus(`Saved ${localRecord.title} in this browser.`);
-        await refreshFavorites();
-      } else {
-        setFavoriteStatus(error?.message || "Unable to save this favorite.");
-      }
+      setFavoriteStatus(error?.message || "Unable to save this favorite.");
     } finally {
       setFavoriteBusy(false);
     }
