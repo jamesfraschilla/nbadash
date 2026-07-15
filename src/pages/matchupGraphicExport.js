@@ -1,6 +1,10 @@
 import dinFontUrl from "../assets/fonts/DIN.ttf";
 import dinAltFontUrl from "../assets/fonts/DINalt.ttf";
 import { playerHeadshotUrls, teamLogoUrl } from "../api.js";
+import {
+  buildNbaFallbackHeadshotUrl,
+  pixelBuffersMatch,
+} from "../nbaHeadshotFallback.js";
 
 export const EXPORT_WIDTH = 1920;
 export const EXPORT_HEIGHT = 1080;
@@ -18,6 +22,7 @@ const SUPABASE_FUNCTIONS_BASE = import.meta.env.VITE_SUPABASE_URL
   : "";
 
 const loadedImageCache = new Map();
+const imageFingerprintCache = new WeakMap();
 let exportFontsPromise = null;
 
 function setCanvasFont(context, { weight, size, family }) {
@@ -141,26 +146,40 @@ function loadImage(url) {
 export async function loadFirstImage(urls) {
   for (const url of urls) {
     const image = await loadImage(buildProxyUrl(url));
-    if (image) return image;
+    if (!image) continue;
+    const fallbackUrl = buildNbaFallbackHeadshotUrl(url);
+    if (fallbackUrl) {
+      const fallbackImage = await loadImage(buildProxyUrl(fallbackUrl));
+      if (fallbackImage && imagesMatch(image, fallbackImage)) continue;
+    }
+    return image;
   }
   return null;
 }
 
-function drawFallbackPlayer(context, label, x, y, width, height) {
-  context.save();
-  context.fillStyle = "rgba(255, 255, 255, 0.08)";
-  context.beginPath();
-  context.roundRect(x + 24, y + 12, width - 48, height - 20, 28);
-  context.fill();
-  drawCenteredText(context, label, x, y + height / 2 - 20, width, {
-    size: 34,
-    minSize: 20,
-    family: EXPORT_FONT_FAMILIES.body,
-    weight: 700,
-    color: "rgba(255, 255, 255, 0.52)",
-    baseline: "middle",
-  });
-  context.restore();
+function imageFingerprint(image) {
+  if (imageFingerprintCache.has(image)) return imageFingerprintCache.get(image);
+  const canvas = document.createElement("canvas");
+  canvas.width = 32;
+  canvas.height = 24;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+  imageFingerprintCache.set(image, pixels);
+  return pixels;
+}
+
+function imagesMatch(left, right) {
+  try {
+    const leftWidth = left.naturalWidth || left.width;
+    const leftHeight = left.naturalHeight || left.height;
+    const rightWidth = right.naturalWidth || right.width;
+    const rightHeight = right.naturalHeight || right.height;
+    if (leftWidth !== rightWidth || leftHeight !== rightHeight) return false;
+    return pixelBuffersMatch(imageFingerprint(left), imageFingerprint(right));
+  } catch {
+    return false;
+  }
 }
 
 function drawArrow(context, centerX, startY, endY) {
@@ -237,11 +256,7 @@ function drawPlayerRow(context, players, images, headshotY, labelY) {
     const image = images[index];
     const label = getPlayerExportLabel(player);
 
-    if (image) {
-      drawContainBottom(context, image, headshotX, headshotY, headshotWidth, headshotHeight);
-    } else {
-      drawFallbackPlayer(context, label, headshotX, headshotY, headshotWidth, headshotHeight);
-    }
+    if (image) drawContainBottom(context, image, headshotX, headshotY, headshotWidth, headshotHeight);
 
     context.save();
     context.shadowColor = SHADOW;

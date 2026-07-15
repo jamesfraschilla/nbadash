@@ -95,23 +95,6 @@ function playerLabel(player) {
   return `${jersey ? `#${jersey} ` : ""}${normalizeLastName(player)}`;
 }
 
-function drawFallbackHeadshot(context, label) {
-  context.save();
-  context.fillStyle = "rgba(255, 255, 255, 0.08)";
-  context.beginPath();
-  context.roundRect(620, 70, 680, 382, 32);
-  context.fill();
-  drawCenteredText(context, label, 620, 248, 680, {
-    size: 46,
-    minSize: 28,
-    family: EXPORT_FONT_FAMILIES.body,
-    weight: 700,
-    color: "rgba(255, 255, 255, 0.5)",
-    baseline: "middle",
-  });
-  context.restore();
-}
-
 function drawPlayerName(context, player) {
   context.save();
   context.shadowColor = "rgba(0, 0, 0, 0.34)";
@@ -283,11 +266,7 @@ export async function renderPersonnelGraphic({
   drawBackdrop(context);
   drawLogo(context, resolvedLogo);
 
-  if (resolvedHeadshot) {
-    drawContainBottom(context, resolvedHeadshot, 560, 42, 800, 412);
-  } else {
-    drawFallbackHeadshot(context, playerLabel(player));
-  }
+  if (resolvedHeadshot) drawContainBottom(context, resolvedHeadshot, 560, 42, 800, 412);
 
   drawPlayerName(context, player);
   drawStatsBox(context, stats, selectedStats);

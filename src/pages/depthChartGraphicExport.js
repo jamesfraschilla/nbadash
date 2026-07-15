@@ -1,4 +1,5 @@
 import { playerHeadshotUrls } from "../api.js";
+import { loadFirstImage } from "./matchupGraphicExport.js";
 
 const DEPTH_CHART_LAYOUT_SIZE = 400;
 export const DEPTH_CHART_EXPORT_SIZE = 1600;
@@ -12,11 +13,6 @@ const RED = "#e31837";
 const WHITE = "#f8fafc";
 const PLATE_FILL = "rgba(42, 48, 58, 0.74)";
 const PLATE_OUTLINE = "rgba(248, 250, 252, 0.4)";
-const SUPABASE_FUNCTIONS_BASE = import.meta.env.VITE_SUPABASE_URL
-  ? `${String(import.meta.env.VITE_SUPABASE_URL).replace(/\/$/, "")}/functions/v1`
-  : "";
-
-const loadedImageCache = new Map();
 const NAME_SUFFIXES = new Set([
   "JR",
   "JUNIOR",
@@ -140,38 +136,6 @@ function buildHeadshotCandidates(slot) {
     ...candidates.filter((url) => isOfficialNbaHeadshot(url) && String(url || "").includes("/1040x760/")),
     ...candidates.filter((url) => isOfficialNbaHeadshot(url) && !String(url || "").includes("/1040x760/")),
   ];
-}
-
-function buildProxyUrl(url) {
-  const safeUrl = String(url || "").trim();
-  if (!safeUrl || !SUPABASE_FUNCTIONS_BASE || !/^https?:\/\//i.test(safeUrl)) return safeUrl;
-  return `${SUPABASE_FUNCTIONS_BASE}/export-image?url=${encodeURIComponent(safeUrl)}`;
-}
-
-function loadImage(url) {
-  const safeUrl = String(url || "").trim();
-  if (!safeUrl) return Promise.resolve(null);
-  if (loadedImageCache.has(safeUrl)) return loadedImageCache.get(safeUrl);
-
-  const promise = new Promise((resolve) => {
-    const image = new Image();
-    image.crossOrigin = "anonymous";
-    image.decoding = "async";
-    image.onload = () => resolve(image);
-    image.onerror = () => resolve(null);
-    image.src = safeUrl;
-  });
-
-  loadedImageCache.set(safeUrl, promise);
-  return promise;
-}
-
-async function loadFirstImage(urls) {
-  for (const url of urls) {
-    const image = await loadImage(buildProxyUrl(url));
-    if (image) return image;
-  }
-  return null;
 }
 
 function drawContainBottom(context, image, x, y, width, height) {
