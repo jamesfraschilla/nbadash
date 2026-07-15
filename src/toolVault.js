@@ -12,6 +12,7 @@ const TOOL_VAULT_EVICTION_PREFIXES = [
 
 export const TOOL_RECORD_TYPES = {
   MATCHUP_GRAPHIC: "matchup_graphic",
+  PERSONNEL_GRAPHIC: "personnel_graphic",
   DEPTH_CHART_GRAPHIC: "depth_chart_graphic",
   GAME_ANALYSIS: "game_analysis",
   PREGAME_SCOUTING_PACKET: "pregame_scouting_packet",

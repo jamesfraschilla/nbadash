@@ -2,14 +2,14 @@ import dinFontUrl from "../assets/fonts/DIN.ttf";
 import dinAltFontUrl from "../assets/fonts/DINalt.ttf";
 import { playerHeadshotUrls, teamLogoUrl } from "../api.js";
 
-const EXPORT_WIDTH = 1920;
-const EXPORT_HEIGHT = 1080;
-const BLACK = "#000000";
+export const EXPORT_WIDTH = 1920;
+export const EXPORT_HEIGHT = 1080;
+export const BLACK = "#000000";
 const WEDGE = "#24211f";
 const PAPER = "#efebe2";
-const WHITE = "#ffffff";
+export const WHITE = "#ffffff";
 const SHADOW = "rgba(0, 0, 0, 0.28)";
-const EXPORT_FONT_FAMILIES = {
+export const EXPORT_FONT_FAMILIES = {
   header: "\"DIN\"",
   body: "\"DINalt\", sans-serif",
 };
@@ -36,7 +36,7 @@ function fitTextSize(context, text, maxWidth, baseSize, minSize, family, weight)
   return minSize;
 }
 
-function drawCenteredText(context, text, x, y, width, options) {
+export function drawCenteredText(context, text, x, y, width, options) {
   const {
     size,
     minSize = size,
@@ -54,7 +54,7 @@ function drawCenteredText(context, text, x, y, width, options) {
   return finalSize;
 }
 
-function makeCanvas(width, height, background) {
+export function makeCanvas(width, height, background) {
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -66,7 +66,7 @@ function makeCanvas(width, height, background) {
   return { canvas, context };
 }
 
-function drawContainBottom(context, source, targetX, targetY, targetWidth, targetHeight) {
+export function drawContainBottom(context, source, targetX, targetY, targetWidth, targetHeight) {
   const sourceWidth = source.width || source.naturalWidth;
   const sourceHeight = source.height || source.naturalHeight;
   if (!sourceWidth || !sourceHeight) return;
@@ -78,7 +78,7 @@ function drawContainBottom(context, source, targetX, targetY, targetWidth, targe
   context.drawImage(source, drawX, drawY, drawWidth, drawHeight);
 }
 
-function drawContain(context, source, targetX, targetY, targetWidth, targetHeight) {
+export function drawContain(context, source, targetX, targetY, targetWidth, targetHeight) {
   const sourceWidth = source.width || source.naturalWidth;
   const sourceHeight = source.height || source.naturalHeight;
   if (!sourceWidth || !sourceHeight) return;
@@ -104,7 +104,7 @@ function getPlayerExportLabel(player) {
   return `${jersey ? `#${jersey} ` : ""}${lastName}`.trim();
 }
 
-function buildPlayerHeadshotCandidates(player) {
+export function buildPlayerHeadshotCandidates(player) {
   const customUrl = String(player?.headshotDataUrl || player?.headshotUrl || "").trim();
   if (customUrl) return [customUrl];
   const personId = String(player?.personId || "").trim();
@@ -138,7 +138,7 @@ function loadImage(url) {
   return promise;
 }
 
-async function loadFirstImage(urls) {
+export async function loadFirstImage(urls) {
   for (const url of urls) {
     const image = await loadImage(buildProxyUrl(url));
     if (image) return image;
@@ -181,7 +181,7 @@ function drawArrow(context, centerX, startY, endY) {
   context.restore();
 }
 
-function drawBackdrop(context) {
+export function drawBackdrop(context) {
   context.fillStyle = BLACK;
   context.fillRect(0, 0, EXPORT_WIDTH, EXPORT_HEIGHT);
 
@@ -258,7 +258,7 @@ function drawPlayerRow(context, players, images, headshotY, labelY) {
   });
 }
 
-function drawLogo(context, logoImage) {
+export function drawLogo(context, logoImage) {
   if (!logoImage) return;
   const boxWidth = 124;
   const boxHeight = 100;

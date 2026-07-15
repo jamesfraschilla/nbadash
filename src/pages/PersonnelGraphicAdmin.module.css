@@ -1,0 +1,361 @@
+.panel {
+  display: grid;
+  gap: 16px;
+}
+
+.setupCard {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
+}
+
+.setupFields {
+  display: grid;
+  grid-template-columns: minmax(260px, 420px) minmax(180px, auto);
+  gap: 14px;
+  align-items: end;
+}
+
+.field {
+  display: grid;
+  gap: 7px;
+}
+
+.fieldLabel,
+.eyebrow {
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.select {
+  width: 100%;
+  min-height: var(--control-height-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--input-bg);
+  color: var(--text);
+  padding: 0 12px;
+}
+
+.sourceMeta {
+  display: grid;
+  gap: 4px;
+  min-width: 220px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  text-align: right;
+}
+
+.sourceMeta strong {
+  color: var(--text);
+}
+
+.notice,
+.errorNotice {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.errorNotice {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+.tableShell {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
+}
+
+.table {
+  min-width: 1430px;
+}
+
+.headerRow,
+.playerRow {
+  display: grid;
+  grid-template-columns: 42px minmax(250px, 1.5fr) repeat(7, minmax(86px, 0.52fr)) 126px 140px;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 12px;
+}
+
+.headerRow {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  min-height: 48px;
+  border-bottom: 1px solid var(--border);
+  background: var(--table-header-bg);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.playerRow {
+  min-height: 60px;
+  border-bottom: 1px solid var(--border);
+}
+
+.playerRow:last-child {
+  border-bottom: 0;
+}
+
+.playerRow:nth-child(odd) {
+  background: var(--table-stripe-bg);
+}
+
+.playerRow:hover {
+  background: var(--row-hover);
+}
+
+.playerRowInvalid {
+  box-shadow: inset 3px 0 0 var(--danger-text);
+}
+
+.rowToggle,
+.statToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.rowToggle {
+  justify-content: center;
+}
+
+.rowToggle input,
+.statToggle input,
+.dialogOption input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--button-primary-bg);
+}
+
+.playerCell {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 7px;
+  align-items: center;
+}
+
+.slotNumber {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.rowSelect {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--input-bg);
+  color: var(--text);
+  padding: 0 10px;
+}
+
+.statCell {
+  display: grid;
+  gap: 3px;
+}
+
+.statCount {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.popupButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--button-bg);
+  color: var(--text);
+  padding: 0 10px;
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.popupButton:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--button-hover);
+}
+
+.popupButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.colorSwatch {
+  width: 34px;
+  height: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.35);
+  border-radius: 3px;
+  flex: 0 0 auto;
+}
+
+.actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.actionGroup {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.primaryButton,
+.secondaryButton,
+.exportAllButton {
+  min-height: var(--control-height-md);
+  border-radius: var(--radius-md);
+  padding: 0 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.primaryButton {
+  border: 1px solid var(--button-primary-bg);
+  background: var(--button-primary-bg);
+  color: var(--button-primary-text);
+}
+
+.secondaryButton {
+  border: 1px solid var(--border);
+  background: var(--button-bg);
+  color: var(--text);
+}
+
+.exportAllButton {
+  border: 1px solid #16a34a;
+  background: #16a34a;
+  color: #fff;
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled,
+.exportAllButton:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+.status {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.status a {
+  color: var(--highlight-text);
+  font-weight: 800;
+}
+
+.dialogGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dialogOption {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 74px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.tagPreview {
+  width: 78px;
+  height: 46px;
+  object-fit: contain;
+}
+
+.dialogColorSwatch {
+  width: 92px;
+  height: 34px;
+  border: 1px solid rgba(15, 23, 42, 0.4);
+}
+
+.dialogHint {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 760px) {
+  .setupFields {
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .sourceMeta {
+    text-align: left;
+  }
+
+  .actions,
+  .actionGroup {
+    align-items: stretch;
+  }
+
+  .actionGroup {
+    width: 100%;
+  }
+
+  .primaryButton,
+  .secondaryButton,
+  .exportAllButton {
+    flex: 1 1 140px;
+  }
+
+  .dialogGrid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -32,6 +32,7 @@ import {
 } from "../components/lateGamePanelHelpers.js";
 import { exportMatchupGraphic } from "./matchupGraphicExport.js";
 import DepthChartGraphicAdmin from "./DepthChartGraphicAdmin.jsx";
+import PersonnelGraphicAdmin from "./PersonnelGraphicAdmin.jsx";
 import VisualDrillGenerator from "./VisualDrillGenerator.jsx";
 import { requestCustomDashboardRequest } from "../customRequestsData.js";
 import styles from "./Tools.module.css";
@@ -42,6 +43,7 @@ const WIZARDS_TEAM_ID = "1610612764";
 const CAPITAL_CITY_TEAM_ID = "1612709928";
 const TOOL_TABS = {
   MATCHUP: "matchup",
+  PERSONNEL: "personnel",
   DEPTH_CHART: "depth-chart",
   SCOUTING: "scouting",
   LATE_GAME: "late-game",
@@ -459,6 +461,8 @@ export default function Tools() {
       ? TOOL_TABS.CUSTOM_REQUESTS
     : rawTab === TOOL_TABS.VISUAL_DRILL
       ? TOOL_TABS.VISUAL_DRILL
+    : rawTab === TOOL_TABS.PERSONNEL
+      ? TOOL_TABS.PERSONNEL
     : rawTab === TOOL_TABS.DEPTH_CHART
       ? TOOL_TABS.DEPTH_CHART
     : rawTab === TOOL_TABS.SCOUTING
@@ -842,6 +846,8 @@ export default function Tools() {
         ? TOOL_TABS.CUSTOM_REQUESTS
       : nextTab === TOOL_TABS.VISUAL_DRILL
         ? TOOL_TABS.VISUAL_DRILL
+      : nextTab === TOOL_TABS.PERSONNEL
+        ? TOOL_TABS.PERSONNEL
       : nextTab === TOOL_TABS.DEPTH_CHART
         ? TOOL_TABS.DEPTH_CHART
       : nextTab === TOOL_TABS.SCOUTING
@@ -1285,6 +1291,13 @@ export default function Tools() {
         </button>
         <button
           type="button"
+          className={`${styles.tabButton} ${activeTab === TOOL_TABS.PERSONNEL ? styles.tabButtonActive : ""}`}
+          onClick={() => handleToolTabChange(TOOL_TABS.PERSONNEL)}
+        >
+          Personnel Graphics
+        </button>
+        <button
+          type="button"
           className={`${styles.tabButton} ${activeTab === TOOL_TABS.DEPTH_CHART ? styles.tabButtonActive : ""}`}
           onClick={() => handleToolTabChange(TOOL_TABS.DEPTH_CHART)}
         >
@@ -1419,6 +1432,14 @@ export default function Tools() {
               ) : null}
             </div>
           ) : null}
+        </section>
+      ) : activeTab === TOOL_TABS.PERSONNEL ? (
+        <section className={styles.workspace}>
+          <PersonnelGraphicAdmin
+            rosterMap={nbaRosterMap}
+            rosterFetchedAt={remoteNbaRostersPayload?.fetchedAt}
+            rosterSeason={remoteNbaRostersPayload?.season}
+          />
         </section>
       ) : activeTab === TOOL_TABS.VISUAL_DRILL ? (
         <section className={styles.workspace}>

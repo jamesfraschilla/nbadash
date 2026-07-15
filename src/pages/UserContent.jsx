@@ -250,6 +250,10 @@ export default function UserContent() {
     () => savedTools.filter((record) => record.type === TOOL_RECORD_TYPES.MATCHUP_GRAPHIC),
     [savedTools]
   );
+  const personnelToolRecords = useMemo(
+    () => savedTools.filter((record) => record.type === TOOL_RECORD_TYPES.PERSONNEL_GRAPHIC),
+    [savedTools]
+  );
   const depthChartToolRecords = useMemo(
     () => savedTools.filter((record) => record.type === TOOL_RECORD_TYPES.DEPTH_CHART_GRAPHIC),
     [savedTools]
@@ -618,7 +622,7 @@ export default function UserContent() {
         </section>
       ) : tab === "tools" ? (
         <section className={styles.section}>
-          {matchupToolRecords.length === 0 && depthChartToolRecords.length === 0 && analysisToolRecords.length === 0 && scoutingToolRecords.length === 0 && visualDrillPresetRecords.length === 0 ? (
+          {matchupToolRecords.length === 0 && personnelToolRecords.length === 0 && depthChartToolRecords.length === 0 && analysisToolRecords.length === 0 && scoutingToolRecords.length === 0 && visualDrillPresetRecords.length === 0 ? (
             <div className={styles.emptyState}>You have not saved any tools yet.</div>
           ) : (
             <div className={styles.list}>
@@ -729,6 +733,43 @@ export default function UserContent() {
                     </div>
                     <div className={styles.cardBody}>
                       {analysisHeadline || rangeLabel || "Saved analysis chunk."}
+                    </div>
+                    <div className={styles.cardFooter}>Updated {formatTimestamp(toolRecord.updatedAt)}</div>
+                  </article>
+                );
+              })}
+              {personnelToolRecords.map((toolRecord) => {
+                const isDeleting = deletingKey === `tool:${toolRecord.id}`;
+                const team = getLeagueTeam(toolRecord.payload?.teamId, "nba");
+                const playerCount = Array.isArray(toolRecord.payload?.rows)
+                  ? toolRecord.payload.rows.filter((row) => String(row?.personId || row?.playerId || "").trim()).length
+                  : 0;
+                return (
+                  <article key={toolRecord.id} className={styles.card}>
+                    <div className={styles.cardHeader}>
+                      <div className={styles.cardTitleGroup}>
+                        <div className={styles.cardTitle}>{toolRecord.title || "Untitled"}</div>
+                        <div className={styles.cardMeta}>
+                          Personnel Graphics · Saved draft
+                        </div>
+                      </div>
+                      <div className={styles.cardActions}>
+                        <Link className={styles.cardLink} to={`/tools?tab=personnel&personnel=${encodeURIComponent(toolRecord.id)}`}>
+                          Open Tool
+                        </Link>
+                        <button
+                          type="button"
+                          className={styles.deleteButton}
+                          onClick={() => handleDeleteTool(toolRecord)}
+                          disabled={isDeleting}
+                        >
+                          {isDeleting ? "Deleting..." : "Delete"}
+                        </button>
+                      </div>
+                    </div>
+                    <div className={styles.cardBody}>
+                      {team?.fullName || "NBA personnel draft"}
+                      {playerCount ? ` · ${playerCount} players` : ""}
                     </div>
                     <div className={styles.cardFooter}>Updated {formatTimestamp(toolRecord.updatedAt)}</div>
                   </article>

@@ -4,6 +4,9 @@ verify_jwt = false
 [functions.nba-rosters]
 verify_jwt = false
 
+[functions.nba-player-stats]
+verify_jwt = false
+
 [functions.gleague-rosters]
 verify_jwt = false
 

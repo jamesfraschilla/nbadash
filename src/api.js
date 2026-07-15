@@ -1801,6 +1801,18 @@ export async function fetchCurrentNbaRosters() {
   return requestJson(`${SUPABASE_FUNCTIONS_BASE}/nba-rosters`);
 }
 
+export async function fetchNbaPlayerStats(teamId = "") {
+  if (!SUPABASE_FUNCTIONS_BASE) {
+    throw new Error("Supabase functions are not configured.");
+  }
+  const url = new URL(`${SUPABASE_FUNCTIONS_BASE}/nba-player-stats`);
+  const safeTeamId = typeof teamId === "string" || typeof teamId === "number"
+    ? String(teamId).trim()
+    : "";
+  if (safeTeamId) url.searchParams.set("teamId", safeTeamId);
+  return requestJson(url.toString(), { timeoutMs: 45000 });
+}
+
 export async function fetchCurrentGLeagueRosters() {
   if (!SUPABASE_FUNCTIONS_BASE) {
     throw new Error("Supabase functions are not configured.");
