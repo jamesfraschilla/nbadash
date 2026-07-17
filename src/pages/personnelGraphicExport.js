@@ -137,10 +137,10 @@ function drawStatsBox(context, stats, selectedStats) {
       family: EXPORT_FONT_FAMILIES.header,
       weight: 700,
       color: WHITE,
-      underlineGap: 12,
+      underlineGap: 9,
     });
 
-    drawCenteredText(context, formatPersonnelStatValue(stats, statKey), slotX, y + 116, slotWidth, {
+    drawCenteredText(context, formatPersonnelStatValue(stats, statKey), slotX, y + 113, slotWidth, {
       size: 72,
       minSize: 48,
       family: EXPORT_FONT_FAMILIES.header,
@@ -172,13 +172,6 @@ function drawThreePointBar(context, stats, colorKey) {
   context.strokeStyle = "#161616";
   context.lineWidth = 1.5;
   context.strokeRect(x, y, width, height);
-  for (let index = 1; index < 10; index += 1) {
-    const segmentX = x + ((width / 10) * index);
-    context.beginPath();
-    context.moveTo(segmentX, y);
-    context.lineTo(segmentX, y + height);
-    context.stroke();
-  }
   context.restore();
 }
 
