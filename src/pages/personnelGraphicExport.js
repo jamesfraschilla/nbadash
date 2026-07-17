@@ -127,16 +127,16 @@ function drawStatsBox(context, stats, selectedStats) {
   selectedStats.slice(0, 4).forEach((statKey, index) => {
     const slotX = x + (slotWidth * index);
     const label = STAT_LABELS[statKey] || String(statKey || "").toUpperCase();
-    drawUnderlinedCenteredText(context, label, slotX, y + 17, slotWidth, {
-      size: 49,
+    drawUnderlinedCenteredText(context, label, slotX, y + 23, slotWidth, {
+      size: 52,
       minSize: 34,
       family: EXPORT_FONT_FAMILIES.header,
       weight: 700,
       color: WHITE,
     });
 
-    drawCenteredText(context, formatPersonnelStatValue(stats, statKey), slotX, y + 88, slotWidth, {
-      size: 65,
+    drawCenteredText(context, formatPersonnelStatValue(stats, statKey), slotX, y + 94, slotWidth, {
+      size: 72,
       minSize: 48,
       family: EXPORT_FONT_FAMILIES.header,
       weight: 700,
@@ -182,7 +182,13 @@ function drawTags(context, tags, tagImages) {
   if (!selectedTags.length) return;
   const boxHeight = PERSONNEL_LAYOUT.tags.height;
   const gap = 18;
-  const tagWidths = selectedTags.map((tag) => (tag.startsWith("drives_") ? 132 : 78));
+  const tagWidths = selectedTags.map((tag) => {
+    const image = tagImages[tag];
+    if (!tag.startsWith("drives_")) return 78;
+    const sourceWidth = image.width || image.naturalWidth || 1;
+    const sourceHeight = image.height || image.naturalHeight || 1;
+    return Math.round((sourceWidth / (sourceHeight * 0.76)) * boxHeight);
+  });
   const totalWidth = tagWidths.reduce((sum, width) => sum + width, 0) + ((selectedTags.length - 1) * gap);
   const startX = (EXPORT_WIDTH - totalWidth) / 2;
   let nextX = startX;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import fireTagUrl from "../assets/personnel/fire.png";
@@ -32,7 +32,6 @@ import {
   deleteSavedToolRecordRemote,
   getSavedToolRecord,
   getSavedToolRecordRemote,
-  saveToolRecord,
   saveToolRecordRemote,
   TOOL_RECORD_TYPES,
 } from "../toolVault.js";
@@ -75,6 +74,14 @@ function buildDraftTitle(team, season) {
   return `${team?.fullName || "NBA"} Personnel Graphics · ${season}`;
 }
 
+function formatSupabaseSaveError(error) {
+  const message = String(error?.message || "").trim();
+  if (message.startsWith("Sign in") || message.startsWith("Select a team")) return message;
+  return message
+    ? `Unable to save this draft to Supabase. ${message}`
+    : "Unable to save this draft to Supabase. Sign in again and try once more.";
+}
+
 function buildExportItems(rows, rosterById, statsById) {
   return rows.map((row) => ({
     player: rosterById[row.personId] || row,
@@ -93,7 +100,12 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
   const [recordId, setRecordId] = useState("");
   const [busyAction, setBusyAction] = useState("");
   const [status, setStatus] = useState("");
+  const [autoSaveStatus, setAutoSaveStatus] = useState("");
   const [dialog, setDialog] = useState(null);
+  const recordIdRef = useRef("");
+  const draftRef = useRef(draft);
+  const autoSaveTimerRef = useRef(null);
+  const autoSaveRunRef = useRef(0);
   const vaultUserId = user?.id || (!accountsEnabled ? "guest" : "");
   const personnelParam = String(params.get("personnel") || "").trim();
   const teamId = String(draft.teamId || "").trim();
@@ -154,8 +166,88 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
   const allPopulatedRowsEnabled = populatedRows.length > 0 && populatedRows.every((row) => row.enabled);
 
   useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
+
+  useEffect(() => {
+    recordIdRef.current = recordId;
+  }, [recordId]);
+
+  useEffect(() => () => {
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+  }, []);
+
+  const cancelPendingAutoSave = useCallback(() => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    autoSaveRunRef.current += 1;
+  }, []);
+
+  const persistPersonnelDraft = useCallback(async (draftToPersist) => {
+    const draftTeamId = String(draftToPersist?.teamId || "").trim();
+    if (!draftTeamId) throw new Error("Select a team before saving.");
+    if (!accountsEnabled || !user?.id) {
+      throw new Error("Sign in to save personnel graphics to Supabase.");
+    }
+
+    const draftSeason = String(draftToPersist?.season || "").trim();
+    const draftTeam = NBA_TEAMS.find((team) => team.teamId === draftTeamId) || null;
+    const id = recordIdRef.current || crypto.randomUUID();
+    const timestamp = new Date().toISOString();
+    const record = {
+      id,
+      type: TOOL_RECORD_TYPES.PERSONNEL_GRAPHIC,
+      title: buildDraftTitle(draftTeam, draftSeason),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      payload: draftToPersist,
+    };
+
+    const savedRecord = await saveToolRecordRemote(user.id, record);
+    if (!savedRecord) throw new Error("Supabase did not return a saved draft.");
+
+    recordIdRef.current = savedRecord.id;
+    setRecordId(savedRecord.id);
+    await queryClient.invalidateQueries({ queryKey: ["owned-tools", user.id] });
+
+    const nextParams = new URLSearchParams(params);
+    nextParams.set("tab", "personnel");
+    nextParams.set("personnel", savedRecord.id);
+    setParams(nextParams, { replace: true });
+    return savedRecord;
+  }, [accountsEnabled, params, queryClient, setParams, user?.id]);
+
+  const queueTagColorAutoSave = useCallback((nextDraft) => {
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    const runId = autoSaveRunRef.current + 1;
+    autoSaveRunRef.current = runId;
+    setAutoSaveStatus("Autosaving tags and colors to Supabase...");
+
+    autoSaveTimerRef.current = setTimeout(() => {
+      persistPersonnelDraft(nextDraft)
+        .then(() => {
+          if (autoSaveRunRef.current === runId) {
+            setAutoSaveStatus("Tags and colors autosaved to Supabase.");
+          }
+        })
+        .catch((error) => {
+          console.error("Failed to autosave personnel tags/colors.", error);
+          if (autoSaveRunRef.current === runId) {
+            setAutoSaveStatus(formatSupabaseSaveError(error));
+          }
+        });
+    }, 450);
+  }, [persistPersonnelDraft]);
+
+  useEffect(() => {
     if (!teamId || !roster.length) return;
-    setDraft((current) => populatePersonnelDraftFromRoster(current, roster, { teamId }));
+    setDraft((current) => {
+      const nextDraft = populatePersonnelDraftFromRoster(current, roster, { teamId });
+      draftRef.current = nextDraft;
+      return nextDraft;
+    });
   }, [roster, teamId]);
 
   useEffect(() => {
@@ -173,7 +265,10 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
         changed = true;
         return { ...row, threePointColor: defaultColor };
       });
-      return changed ? { ...current, rows } : current;
+      if (!changed) return current;
+      const nextDraft = { ...current, rows };
+      draftRef.current = nextDraft;
+      return nextDraft;
     });
   }, [statsById, statsReady]);
 
@@ -204,7 +299,10 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
       }
 
       setRecordId(savedRecord.id);
-      setDraft(hydratePersonnelDraft(savedRecord.payload));
+      const hydratedDraft = hydratePersonnelDraft(savedRecord.payload);
+      draftRef.current = hydratedDraft;
+      setDraft(hydratedDraft);
+      setAutoSaveStatus("");
       setStatus(`Loaded ${savedRecord.title}`);
     }
 
@@ -214,24 +312,37 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
     };
   }, [accountsEnabled, personnelParam, user?.id, vaultUserId]);
 
-  const updateRow = (index, updater) => {
-    setDraft((current) => ({
-      ...current,
-      rows: current.rows.map((row, rowIndex) => (
+  const updateRow = (index, updater, options = {}) => {
+    const nextDraft = {
+      ...draftRef.current,
+      rows: draftRef.current.rows.map((row, rowIndex) => (
         rowIndex === index
           ? (typeof updater === "function" ? updater(row) : { ...row, ...updater })
           : row
       )),
-    }));
+    };
+    draftRef.current = nextDraft;
+    setDraft(nextDraft);
     setStatus("");
+    if (options.autoSaveTagsAndColors) {
+      queueTagColorAutoSave(nextDraft);
+    } else {
+      cancelPendingAutoSave();
+      setAutoSaveStatus("");
+    }
   };
 
   const handleTeamChange = (nextTeamId) => {
     const nextRoster = Array.isArray(rosterMap?.[nextTeamId]) ? rosterMap[nextTeamId] : [];
     const emptyDraft = createPersonnelDraft({ teamId: nextTeamId, season });
-    setDraft(populatePersonnelDraftFromRoster(emptyDraft, nextRoster, { teamId: nextTeamId }));
+    const nextDraft = populatePersonnelDraftFromRoster(emptyDraft, nextRoster, { teamId: nextTeamId });
+    draftRef.current = nextDraft;
+    setDraft(nextDraft);
+    cancelPendingAutoSave();
     setRecordId("");
+    recordIdRef.current = "";
     setDialog(null);
+    setAutoSaveStatus("");
     setStatus(nextTeamId && !nextRoster.length ? "Waiting for this team's roster..." : "");
     const nextParams = new URLSearchParams(params);
     nextParams.set("tab", "personnel");
@@ -240,7 +351,11 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
   };
 
   const handleSeasonChange = (nextSeason) => {
-    setDraft((current) => ({ ...current, season: nextSeason }));
+    const nextDraft = { ...draftRef.current, season: nextSeason };
+    draftRef.current = nextDraft;
+    setDraft(nextDraft);
+    cancelPendingAutoSave();
+    setAutoSaveStatus("");
     setStatus("");
   };
 
@@ -261,12 +376,16 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
 
   const handleToggleAllRows = () => {
     const nextEnabled = !allPopulatedRowsEnabled;
-    setDraft((current) => ({
-      ...current,
-      rows: current.rows.map((row) => (
+    const nextDraft = {
+      ...draftRef.current,
+      rows: draftRef.current.rows.map((row) => (
         row.personId ? { ...row, enabled: nextEnabled } : row
       )),
-    }));
+    };
+    draftRef.current = nextDraft;
+    setDraft(nextDraft);
+    cancelPendingAutoSave();
+    setAutoSaveStatus("");
     setStatus("");
   };
 
@@ -276,53 +395,24 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
       tags: row.tags.includes(tagKey)
         ? row.tags.filter((key) => key !== tagKey)
         : [...row.tags, tagKey],
-    }));
+    }), { autoSaveTagsAndColors: true });
   };
 
   const handleSave = async () => {
-    if (!vaultUserId || busyAction || !teamId) {
+    if (busyAction || !teamId) {
       if (!teamId) setStatus("Select a team before saving.");
       return;
     }
     setBusyAction("save");
-    const id = recordId || crypto.randomUUID();
-    const timestamp = new Date().toISOString();
-    const record = {
-      id,
-      type: TOOL_RECORD_TYPES.PERSONNEL_GRAPHIC,
-      title: buildDraftTitle(selectedTeam, season),
-      createdAt: timestamp,
-      updatedAt: timestamp,
-      payload: draft,
-    };
+    cancelPendingAutoSave();
+    setAutoSaveStatus("");
 
     try {
-      const localRecord = saveToolRecord(vaultUserId, record);
-      const savedRecord = accountsEnabled && user?.id
-        ? await saveToolRecordRemote(user.id, record)
-        : localRecord;
-      if (!savedRecord) throw new Error("The draft could not be saved.");
-      await queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] });
-      setRecordId(savedRecord.id);
-      const nextParams = new URLSearchParams(params);
-      nextParams.set("tab", "personnel");
-      nextParams.set("personnel", savedRecord.id);
-      setParams(nextParams, { replace: true });
-      setStatus(`Saved to My Vault as ${savedRecord.title}`);
+      const savedRecord = await persistPersonnelDraft(draft);
+      setStatus(`Saved to Supabase as ${savedRecord.title}`);
     } catch (error) {
-      console.error("Failed to save the remote personnel draft, falling back to local storage.", error);
-      const savedRecord = getSavedToolRecord(vaultUserId, id) || saveToolRecord(vaultUserId, record);
-      if (!savedRecord) {
-        setStatus("Unable to save this draft. Try deleting older browser data or sign in again.");
-      } else {
-        await queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] });
-        setRecordId(savedRecord.id);
-        const nextParams = new URLSearchParams(params);
-        nextParams.set("tab", "personnel");
-        nextParams.set("personnel", savedRecord.id);
-        setParams(nextParams, { replace: true });
-        setStatus(`Saved locally as ${savedRecord.title}`);
-      }
+      console.error("Failed to save personnel draft to Supabase.", error);
+      setStatus(formatSupabaseSaveError(error));
     } finally {
       setBusyAction("");
     }
@@ -332,6 +422,7 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
     if (!vaultUserId || !recordId || busyAction) return;
     if (!window.confirm("Delete this saved personnel graphics draft?")) return;
     setBusyAction("delete");
+    cancelPendingAutoSave();
     try {
       if (accountsEnabled && user?.id) {
         await deleteSavedToolRecordRemote(user.id, recordId);
@@ -340,7 +431,10 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
       }
       await queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] });
       setRecordId("");
-      setDraft(createPersonnelDraft());
+      recordIdRef.current = "";
+      const emptyDraft = createPersonnelDraft();
+      draftRef.current = emptyDraft;
+      setDraft(emptyDraft);
       const nextParams = new URLSearchParams(params);
       nextParams.set("tab", "personnel");
       nextParams.delete("personnel");
@@ -351,7 +445,10 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
       deleteSavedToolRecord(vaultUserId, recordId);
       await queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] });
       setRecordId("");
-      setDraft(createPersonnelDraft());
+      recordIdRef.current = "";
+      const emptyDraft = createPersonnelDraft();
+      draftRef.current = emptyDraft;
+      setDraft(emptyDraft);
       const nextParams = new URLSearchParams(params);
       nextParams.set("tab", "personnel");
       nextParams.delete("personnel");
@@ -364,9 +461,14 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
 
   const handleReset = () => {
     if (teamId && !window.confirm("Reset all personnel graphic selections?")) return;
-    setDraft(createPersonnelDraft());
+    const emptyDraft = createPersonnelDraft();
+    draftRef.current = emptyDraft;
+    setDraft(emptyDraft);
+    cancelPendingAutoSave();
     setRecordId("");
+    recordIdRef.current = "";
     setDialog(null);
+    setAutoSaveStatus("");
     const nextParams = new URLSearchParams(params);
     nextParams.set("tab", "personnel");
     nextParams.delete("personnel");
@@ -535,12 +637,14 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
                 </button>
                 <button
                   type="button"
-                  className={styles.popupButton}
+                  className={`${styles.popupButton} ${styles.colorButton}`}
                   onClick={() => setDialog({ type: "color", rowIndex: index })}
                   disabled={!row.personId}
+                  title={selectedColor.label}
+                  aria-label={`3P color: ${selectedColor.label}`}
                 >
-                  <span>{selectedColor.label}</span>
                   <span className={styles.colorSwatch} style={{ background: selectedColor.color }} aria-hidden="true" />
+                  <span aria-hidden="true">▾</span>
                 </button>
               </div>
             );
@@ -562,7 +666,7 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
 
       <div className={styles.actions}>
         <div className={styles.status}>
-          {status || (teamId
+          {status || autoSaveStatus || (teamId
             ? `${selectedValidation.rows.length} selected · exactly 4 stats required per exported player`
             : "Choose a team to begin")}
           {recordId && status.startsWith("Saved") ? (
@@ -634,19 +738,19 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
         ) : (
           <>
             <p className={styles.dialogHint}>Choose one color. Fill length always comes from 3PA ÷ FGA.</p>
-            <div className={styles.dialogGrid}>
+            <div className={`${styles.dialogGrid} ${styles.colorDialogGrid}`}>
               {PERSONNEL_THREE_POINT_COLOR_OPTIONS.map((option) => (
-                <label key={option.key} className={styles.dialogOption}>
+                <label key={option.key} className={`${styles.dialogOption} ${styles.colorDialogOption}`} title={option.label}>
                   <input
                     type="checkbox"
                     checked={currentColor?.key === option.key}
                     onChange={() => updateRow(dialog.rowIndex, {
                       threePointColor: option.key,
                       threePointColorEdited: true,
-                    })}
+                    }, { autoSaveTagsAndColors: true })}
+                    aria-label={option.label}
                   />
                   <span className={styles.dialogColorSwatch} style={{ background: option.color }} aria-hidden="true" />
-                  <span>{option.label}</span>
                 </label>
               ))}
             </div>

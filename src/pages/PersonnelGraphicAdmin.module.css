@@ -86,35 +86,35 @@
 }
 
 .table {
-  min-width: 1430px;
+  min-width: 1140px;
 }
 
 .headerRow,
 .playerRow,
 .bulkRow {
   display: grid;
-  grid-template-columns: 42px minmax(250px, 1.5fr) repeat(7, minmax(86px, 0.52fr)) 126px 140px;
-  gap: 8px;
+  grid-template-columns: 34px minmax(210px, 1.35fr) repeat(7, minmax(62px, 0.42fr)) 92px 68px;
+  gap: 6px;
   align-items: center;
-  padding: 9px 12px;
+  padding: 7px 10px;
 }
 
 .headerRow {
   position: sticky;
   top: 0;
   z-index: 2;
-  min-height: 48px;
+  min-height: 42px;
   border-bottom: 1px solid var(--border);
   background: var(--table-header-bg);
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 800;
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
 
 .playerRow {
-  min-height: 60px;
+  min-height: 54px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -131,7 +131,7 @@
 }
 
 .bulkRow {
-  min-height: 52px;
+  min-height: 46px;
   border-top: 1px solid var(--border);
   background: var(--surface-muted);
 }
@@ -154,7 +154,7 @@
   gap: 7px;
   min-width: 0;
   color: var(--text);
-  font-size: 0.88rem;
+  font-size: 0.82rem;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -174,8 +174,8 @@
 
 .playerCell {
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr);
-  gap: 7px;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 5px;
   align-items: center;
 }
 
@@ -201,12 +201,12 @@
 .rowSelect {
   width: 100%;
   min-width: 0;
-  min-height: 40px;
+  min-height: 36px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--input-bg);
   color: var(--text);
-  padding: 0 10px;
+  padding: 0 8px;
 }
 
 .statCell {
@@ -226,15 +226,20 @@
   justify-content: space-between;
   gap: 8px;
   width: 100%;
-  min-height: 40px;
+  min-height: 36px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--button-bg);
   color: var(--text);
-  padding: 0 10px;
+  padding: 0 8px;
   cursor: pointer;
   font-size: 0.86rem;
   font-weight: 700;
+}
+
+.colorButton {
+  justify-content: center;
+  padding: 0 6px;
 }
 
 .popupButton:hover:not(:disabled) {
@@ -324,6 +329,10 @@
   gap: 10px;
 }
 
+.colorDialogGrid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .dialogOption {
   display: flex;
   align-items: center;
@@ -336,6 +345,11 @@
   color: var(--text);
   cursor: pointer;
   font-weight: 700;
+}
+
+.colorDialogOption {
+  justify-content: center;
+  min-height: 64px;
 }
 
 .tagPreview {
