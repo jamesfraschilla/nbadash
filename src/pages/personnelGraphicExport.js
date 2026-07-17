@@ -51,7 +51,7 @@ const PERSONNEL_LAYOUT = {
   headshot: { x: 560, y: 68, width: 800, height: 412 },
   name: { x: 455, y: 500, width: 1010 },
   statsBox: { x: 515, y: 620, width: 890, height: 190 },
-  threePointBar: { labelX: 485, x: 577, y: 830, width: 767, height: 42 },
+  threePointBar: { labelX: 497, x: 577, y: 830, width: 767, height: 42 },
   tags: { y: 906, height: 78 },
 };
 
@@ -94,7 +94,11 @@ function drawPlayerName(context, player) {
 }
 
 function drawUnderlinedCenteredText(context, text, x, y, width, options) {
-  const finalSize = drawCenteredText(context, text, x, y, width, options);
+  const {
+    underlineGap = 8,
+    ...textOptions
+  } = options;
+  const finalSize = drawCenteredText(context, text, x, y, width, textOptions);
   const centerX = x + width / 2;
   const metrics = context.measureText(text);
   const measuredWidth = Math.max(
@@ -102,10 +106,10 @@ function drawUnderlinedCenteredText(context, text, x, y, width, options) {
     Math.abs(metrics.actualBoundingBoxLeft || 0) + Math.abs(metrics.actualBoundingBoxRight || 0)
   );
   const underlineWidth = Math.ceil(measuredWidth) + 8;
-  const underlineY = y + finalSize + 8;
+  const underlineY = y + finalSize + underlineGap;
 
   context.save();
-  context.strokeStyle = options.color;
+  context.strokeStyle = textOptions.color;
   context.lineWidth = 3;
   context.beginPath();
   context.moveTo(centerX - underlineWidth / 2, underlineY);
@@ -127,15 +131,16 @@ function drawStatsBox(context, stats, selectedStats) {
   selectedStats.slice(0, 4).forEach((statKey, index) => {
     const slotX = x + (slotWidth * index);
     const label = STAT_LABELS[statKey] || String(statKey || "").toUpperCase();
-    drawUnderlinedCenteredText(context, label, slotX, y + 23, slotWidth, {
+    drawUnderlinedCenteredText(context, label, slotX, y + 33, slotWidth, {
       size: 52,
       minSize: 34,
       family: EXPORT_FONT_FAMILIES.header,
       weight: 700,
       color: WHITE,
+      underlineGap: 12,
     });
 
-    drawCenteredText(context, formatPersonnelStatValue(stats, statKey), slotX, y + 94, slotWidth, {
+    drawCenteredText(context, formatPersonnelStatValue(stats, statKey), slotX, y + 116, slotWidth, {
       size: 72,
       minSize: 48,
       family: EXPORT_FONT_FAMILIES.header,
