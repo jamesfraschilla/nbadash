@@ -47,6 +47,14 @@ const TAG_ASSET_URLS = {
   drives_left: drivesLeftTagUrl,
 };
 
+const PERSONNEL_LAYOUT = {
+  headshot: { x: 560, y: 68, width: 800, height: 412 },
+  name: { x: 455, y: 500, width: 1010 },
+  statsBox: { x: 515, y: 620, width: 890, height: 190 },
+  threePointBar: { labelX: 485, x: 577, y: 830, width: 767, height: 42 },
+  tags: { y: 906, height: 78 },
+};
+
 function getThreePointRatio(stats) {
   return calculateThreePointAttemptRatio(stats);
 }
@@ -68,21 +76,47 @@ function drawPlayerName(context, player) {
   context.shadowColor = "rgba(0, 0, 0, 0.34)";
   context.shadowBlur = 14;
   context.shadowOffsetY = 5;
-  drawCenteredText(context, playerLabel(player), 455, 470, 1010, {
-    size: 132,
-    minSize: 72,
-    family: EXPORT_FONT_FAMILIES.header,
-    weight: 700,
-    color: WHITE,
-  });
+  drawCenteredText(
+    context,
+    playerLabel(player),
+    PERSONNEL_LAYOUT.name.x,
+    PERSONNEL_LAYOUT.name.y,
+    PERSONNEL_LAYOUT.name.width,
+    {
+      size: 132,
+      minSize: 72,
+      family: EXPORT_FONT_FAMILIES.header,
+      weight: 700,
+      color: WHITE,
+    }
+  );
   context.restore();
 }
 
+function drawUnderlinedCenteredText(context, text, x, y, width, options) {
+  const finalSize = drawCenteredText(context, text, x, y, width, options);
+  const centerX = x + width / 2;
+  const metrics = context.measureText(text);
+  const measuredWidth = Math.max(
+    metrics.width,
+    Math.abs(metrics.actualBoundingBoxLeft || 0) + Math.abs(metrics.actualBoundingBoxRight || 0)
+  );
+  const underlineWidth = Math.ceil(measuredWidth) + 8;
+  const underlineY = y + finalSize + 8;
+
+  context.save();
+  context.strokeStyle = options.color;
+  context.lineWidth = 3;
+  context.beginPath();
+  context.moveTo(centerX - underlineWidth / 2, underlineY);
+  context.lineTo(centerX + underlineWidth / 2, underlineY);
+  context.stroke();
+  context.restore();
+  return finalSize;
+}
+
 function drawStatsBox(context, stats, selectedStats) {
-  const x = 515;
-  const y = 650;
-  const width = 890;
-  const height = 190;
+  const { x, y, width, height } = PERSONNEL_LAYOUT.statsBox;
   const slotWidth = width / 4;
 
   context.save();
@@ -92,27 +126,19 @@ function drawStatsBox(context, stats, selectedStats) {
 
   selectedStats.slice(0, 4).forEach((statKey, index) => {
     const slotX = x + (slotWidth * index);
-    const centerX = slotX + (slotWidth / 2);
     const label = STAT_LABELS[statKey] || String(statKey || "").toUpperCase();
-    drawCenteredText(context, label, slotX, y + 18, slotWidth, {
+    drawUnderlinedCenteredText(context, label, slotX, y + 17, slotWidth, {
       size: 49,
       minSize: 34,
-      family: EXPORT_FONT_FAMILIES.body,
+      family: EXPORT_FONT_FAMILIES.header,
       weight: 700,
       color: WHITE,
     });
 
-    context.strokeStyle = WHITE;
-    context.lineWidth = 3;
-    context.beginPath();
-    context.moveTo(centerX - 33, y + 64);
-    context.lineTo(centerX + 33, y + 64);
-    context.stroke();
-
     drawCenteredText(context, formatPersonnelStatValue(stats, statKey), slotX, y + 88, slotWidth, {
       size: 65,
       minSize: 48,
-      family: EXPORT_FONT_FAMILIES.body,
+      family: EXPORT_FONT_FAMILIES.header,
       weight: 700,
       color: WHITE,
     });
@@ -121,16 +147,13 @@ function drawStatsBox(context, stats, selectedStats) {
 }
 
 function drawThreePointBar(context, stats, colorKey) {
-  const x = 577;
-  const y = 860;
-  const width = 767;
-  const height = 42;
+  const { labelX, x, y, width, height } = PERSONNEL_LAYOUT.threePointBar;
   const ratio = getThreePointRatio(stats);
 
-  drawCenteredText(context, "3P", 485, y + 3, 82, {
+  drawCenteredText(context, "3P", labelX, y + 3, 82, {
     size: 42,
     minSize: 36,
-    family: EXPORT_FONT_FAMILIES.body,
+    family: EXPORT_FONT_FAMILIES.header,
     weight: 700,
     color: WHITE,
   });
@@ -157,7 +180,7 @@ function drawThreePointBar(context, stats, colorKey) {
 function drawTags(context, tags, tagImages) {
   const selectedTags = (Array.isArray(tags) ? tags : []).filter((tag) => tagImages[tag]);
   if (!selectedTags.length) return;
-  const boxHeight = 78;
+  const boxHeight = PERSONNEL_LAYOUT.tags.height;
   const gap = 18;
   const tagWidths = selectedTags.map((tag) => (tag.startsWith("drives_") ? 132 : 78));
   const totalWidth = tagWidths.reduce((sum, width) => sum + width, 0) + ((selectedTags.length - 1) * gap);
@@ -177,12 +200,12 @@ function drawTags(context, tags, tagImages) {
         sourceWidth,
         sourceHeight * 0.76,
         nextX,
-        936,
+        PERSONNEL_LAYOUT.tags.y,
         tagWidth,
         boxHeight
       );
     } else {
-      drawContain(context, image, nextX, 936, tagWidth, boxHeight);
+      drawContain(context, image, nextX, PERSONNEL_LAYOUT.tags.y, tagWidth, boxHeight);
     }
     nextX += tagWidth + gap;
   });
@@ -234,7 +257,16 @@ export async function renderPersonnelGraphic({
   drawBackdrop(context);
   drawLogo(context, resolvedLogo);
 
-  if (resolvedHeadshot) drawContainBottom(context, resolvedHeadshot, 560, 42, 800, 412);
+  if (resolvedHeadshot) {
+    drawContainBottom(
+      context,
+      resolvedHeadshot,
+      PERSONNEL_LAYOUT.headshot.x,
+      PERSONNEL_LAYOUT.headshot.y,
+      PERSONNEL_LAYOUT.headshot.width,
+      PERSONNEL_LAYOUT.headshot.height
+    );
+  }
 
   drawPlayerName(context, player);
   drawStatsBox(context, stats, selectedStats);

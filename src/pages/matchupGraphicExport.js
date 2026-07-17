@@ -114,10 +114,16 @@ export function buildPlayerHeadshotCandidates(player) {
   if (customUrl) return [customUrl];
   const personId = String(player?.personId || "").trim();
   if (!personId) return [];
-  return [
+  const candidates = [
     ...playerHeadshotUrls(personId, player?.teamId),
     `https://cdn.nba.com/headshots/nba/latest/1040x760/${personId}.png`,
   ].filter((url, index, urls) => url && urls.indexOf(url) === index);
+  const isOfficialNbaHeadshot = (url) => /cdn\.nba\.com\/headshots\/nba\/latest\/(260x190|1040x760)\//i.test(String(url || ""));
+  return [
+    ...candidates.filter((url) => !isOfficialNbaHeadshot(url)),
+    ...candidates.filter((url) => isOfficialNbaHeadshot(url) && String(url || "").includes("/1040x760/")),
+    ...candidates.filter((url) => isOfficialNbaHeadshot(url) && !String(url || "").includes("/1040x760/")),
+  ];
 }
 
 function buildProxyUrl(url) {
