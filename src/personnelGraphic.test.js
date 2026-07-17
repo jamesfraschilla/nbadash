@@ -16,6 +16,7 @@ import {
   getPreviousPersonnelSeason,
   hasExactlyFourPersonnelStats,
   hydratePersonnelDraft,
+  mergePersonnelStatOverrides,
   normalizePersonnelPlayerStats,
   normalizePersonnelSeason,
   normalizePersonnelStatsMap,
@@ -72,7 +73,7 @@ test("createPersonnelDraft produces 18 independent rows with the exact draft sha
   assert.equal(draft.rows.length, 18);
   assert.deepEqual(Object.keys(draft.rows[0]), [
     "id", "enabled", "personId", "teamId", "fullName", "firstName", "familyName", "jerseyNum",
-    "selectedStats", "tags", "threePointColor", "threePointColorEdited",
+    "selectedStats", "statOverrides", "tags", "threePointColor", "threePointColorEdited",
   ]);
   assert.deepEqual(draft.rows[0], {
     id: "personnel-slot-1",
@@ -84,6 +85,7 @@ test("createPersonnelDraft produces 18 independent rows with the exact draft sha
     familyName: "",
     jerseyNum: "",
     selectedStats: ["ppg", "rpg", "threePointPercentage", "apg"],
+    statOverrides: {},
     tags: [],
     threePointColor: "bright_green",
     threePointColorEdited: false,
@@ -100,6 +102,7 @@ test("createPersonnelRow and hydration sanitize aliases while preserving 0 throu
     personId: 22,
     selected: "false",
     selectedStats: ["PTS", "REB", "3P%", "AST", "BLK", "STL", "FTA", "AST", "bogus"],
+    statOverrides: { PTS: 12.25, "3P%": "41.8", bogus: "9" },
     tags: ["hot", "Drives Right", "fire", "unknown"],
     threeColor: "Dark Green",
   }), {
@@ -112,6 +115,7 @@ test("createPersonnelRow and hydration sanitize aliases while preserving 0 throu
     familyName: "",
     jerseyNum: "",
     selectedStats: ["ppg", "rpg", "threePointPercentage", "apg", "bpg", "spg", "fta"],
+    statOverrides: { ppg: "12.25", threePointPercentage: "41.8" },
     tags: ["fire", "drives_right"],
     threePointColor: "dark_green",
     threePointColorEdited: true,
@@ -177,6 +181,7 @@ test("populatePersonnelDraftFromRoster preserves configuration by player across 
         playerId: "10",
         enabled: false,
         selectedStats: ["ppg", "rpg", "bpg"],
+        statOverrides: { ppg: "14.2", spg: "" },
         tags: ["fire", "drives_left"],
         threePointColor: "red",
       },
@@ -201,6 +206,7 @@ test("populatePersonnelDraftFromRoster preserves configuration by player across 
   assert.equal(populated.rows[1].personId, "10");
   assert.equal(populated.rows[1].enabled, false);
   assert.deepEqual(populated.rows[1].selectedStats, ["ppg", "rpg", "bpg"]);
+  assert.deepEqual(populated.rows[1].statOverrides, { ppg: "14.2", spg: "" });
   assert.deepEqual(populated.rows[1].tags, ["fire", "drives_left"]);
   assert.equal(populated.rows[1].threePointColor, "red");
   assert.equal(populated.rows[2].enabled, true);
@@ -280,6 +286,22 @@ test("stat formatting leaves missing values blank while preserving legitimate ze
   assert.equal(formatPersonnelStatValue({ ppg: "" }, "PPG"), "");
   assert.equal(formatPersonnelStatValue({ ppg: 0 }, "PPG"), "0.0");
   assert.equal(formatPersonnelStatValue({ FG3_PCT: 0.4 }, "3P%"), "40.0");
+  assert.deepEqual(mergePersonnelStatOverrides(
+    { ppg: 10.25, rpg: 4.5, threePointPercentage: 38.2 },
+    { PTS: "12.4", "3P%": "", notAStat: "9" }
+  ), {
+    ppg: "12.4",
+    rpg: 4.5,
+    threePointPercentage: "",
+  });
+  assert.equal(formatPersonnelStatValue(
+    mergePersonnelStatOverrides({ ppg: 10.25 }, { ppg: "12.4" }),
+    "PPG"
+  ), "12.4");
+  assert.equal(formatPersonnelStatValue(
+    mergePersonnelStatOverrides({ threePointPercentage: 38.2 }, { threePointPercentage: "" }),
+    "3P%"
+  ), "");
 });
 
 test("stats normalization handles NBA fields and percentage scaling", () => {

@@ -193,6 +193,15 @@ function normalizeTags(value) {
   return normalizeUniqueList(value, normalizeTagKey);
 }
 
+function normalizeStatOverrides(value) {
+  if (!value || typeof value !== "object") return {};
+  return Object.fromEntries(Object.entries(value).flatMap(([rawKey, rawValue]) => {
+    const key = normalizeStatKey(rawKey);
+    if (!key) return [];
+    return [[key, normalizeString(rawValue)]];
+  }));
+}
+
 export function createPersonnelRow(index = 0, overrides = {}) {
   const source = index && typeof index === "object"
     ? index
@@ -202,6 +211,7 @@ export function createPersonnelRow(index = 0, overrides = {}) {
   const safeIndex = Number.isInteger(index) && index >= 0 ? index : 0;
   const personId = normalizePlayerId(firstPresentValue(source, ["personId", "playerId", "PLAYER_ID"]));
   const selectedStats = firstPresentValue(source, ["selectedStats", "stats", "statKeys"]);
+  const statOverrides = firstPresentValue(source, ["statOverrides", "manualStats", "statValues"]);
   const tags = firstPresentValue(source, ["tags", "tagKeys"]);
   const enabled = firstPresentValue(source, ["enabled", "selected", "included"]);
   const threePointColor = firstPresentValue(source, [
@@ -225,6 +235,7 @@ export function createPersonnelRow(index = 0, overrides = {}) {
     familyName: normalizeString(firstPresentValue(source, ["familyName", "lastName", "LAST_NAME"])),
     jerseyNum: normalizeString(firstPresentValue(source, ["jerseyNum", "jerseyNumber", "number", "NUM"])),
     selectedStats: normalizeSelectedStats(selectedStats, selectedStats === undefined),
+    statOverrides: normalizeStatOverrides(statOverrides),
     tags: normalizeTags(tags),
     threePointColor: normalizeThreePointColor(threePointColor),
     threePointColorEdited: normalizeBoolean(threePointColorEdited, threePointColor !== undefined),
@@ -283,6 +294,7 @@ export function populatePersonnelDraftFromRoster(draft, roster, options = {}) {
       configByPersonId.set(row.personId, {
         enabled: row.enabled,
         selectedStats: row.selectedStats,
+        statOverrides: row.statOverrides,
         tags: row.tags,
         threePointColor: row.threePointColor,
         threePointColorEdited: row.threePointColorEdited,
@@ -436,6 +448,12 @@ export function formatPersonnelStatValue(stats, statKey) {
     : firstFiniteValue(stats, aliasesByKey[key] || []);
   if (key === "threePointPercentage" && value !== null && Math.abs(value) <= 1) value *= 100;
   return value === null ? "" : value.toFixed(1);
+}
+
+export function mergePersonnelStatOverrides(stats, statOverrides) {
+  const normalizedOverrides = normalizeStatOverrides(statOverrides);
+  if (!Object.keys(normalizedOverrides).length) return stats || {};
+  return { ...(stats || {}), ...normalizedOverrides };
 }
 
 export function normalizePersonnelPlayerStats(record) {

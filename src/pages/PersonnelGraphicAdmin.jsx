@@ -17,11 +17,13 @@ import {
   PERSONNEL_THREE_POINT_COLOR_OPTIONS,
   createPersonnelDraft,
   createPersonnelRow,
+  formatPersonnelStatValue,
   getCurrentPersonnelSeason,
   getPersonnelThreePointColorForPercentage,
   getPreviousPersonnelSeason,
   hasExactlyFourPersonnelStats,
   hydratePersonnelDraft,
+  mergePersonnelStatOverrides,
   normalizePersonnelStatsMap,
   populatePersonnelDraftFromRoster,
   togglePersonnelRowStat,
@@ -85,7 +87,7 @@ function formatSupabaseSaveError(error) {
 function buildExportItems(rows, rosterById, statsById) {
   return rows.map((row) => ({
     player: rosterById[row.personId] || row,
-    stats: statsById[row.personId] || {},
+    stats: mergePersonnelStatOverrides(statsById[row.personId] || {}, row.statOverrides),
     selectedStats: row.selectedStats,
     tags: row.tags,
     threePointColor: row.threePointColor,
@@ -383,6 +385,25 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
       : createPersonnelRow(index));
   };
 
+  const getRowStatInputValue = (row, statKey) => {
+    if (!row?.personId) return "";
+    const overrides = row.statOverrides || {};
+    if (Object.prototype.hasOwnProperty.call(overrides, statKey)) {
+      return overrides[statKey];
+    }
+    return formatPersonnelStatValue(statsById[row.personId] || {}, statKey);
+  };
+
+  const handleStatOverrideChange = (index, statKey, value) => {
+    updateRow(index, (row) => ({
+      ...row,
+      statOverrides: {
+        ...(row.statOverrides || {}),
+        [statKey]: value,
+      },
+    }));
+  };
+
   const handleToggleAllRows = () => {
     const nextEnabled = !allPopulatedRowsEnabled;
     const nextDraft = {
@@ -625,15 +646,26 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
                   const checked = row.selectedStats.includes(option.key);
                   const atMaximum = row.selectedStats.length >= 4;
                   return (
-                    <label key={option.key} className={styles.statToggle}>
+                    <div key={option.key} className={styles.statToggle}>
+                      <label className={styles.statCheckbox}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={!row.personId || (!checked && atMaximum)}
+                          onChange={() => updateRow(index, (currentRow) => togglePersonnelRowStat(currentRow, option.key))}
+                        />
+                        <span>{option.label}</span>
+                      </label>
                       <input
-                        type="checkbox"
-                        checked={checked}
-                        disabled={!row.personId || (!checked && atMaximum)}
-                        onChange={() => updateRow(index, (currentRow) => togglePersonnelRowStat(currentRow, option.key))}
+                        type="text"
+                        className={styles.statValueInput}
+                        value={getRowStatInputValue(row, option.key)}
+                        disabled={!row.personId}
+                        inputMode="decimal"
+                        onChange={(event) => handleStatOverrideChange(index, option.key, event.target.value)}
+                        aria-label={`${option.label} value for ${rosterById[row.personId]?.fullName || row.fullName || `slot ${index + 1}`}`}
                       />
-                      <span>{option.label}</span>
-                    </label>
+                    </div>
                   );
                 })}
                 <button
