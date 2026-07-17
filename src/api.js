@@ -10,6 +10,10 @@ import {
   normalizeSummerLeagueMinutesData,
   shouldUseDirectSummerLeagueGame,
 } from "./summerLeagueGameSource.js";
+import {
+  fetchBrowserPlayerStatsFallback,
+  fetchOfficialNbaPlayerStatsFallback,
+} from "./personnelStatsFallback.js";
 import { supabase } from "./supabaseClient.js";
 import { currentSeasonString, formatDateInput, seasonBoundsForSeason } from "./utils.js";
 
@@ -1801,16 +1805,57 @@ export async function fetchCurrentNbaRosters() {
   return requestJson(`${SUPABASE_FUNCTIONS_BASE}/nba-rosters`);
 }
 
-export async function fetchNbaPlayerStats(teamId = "") {
-  if (!SUPABASE_FUNCTIONS_BASE) {
-    throw new Error("Supabase functions are not configured.");
-  }
-  const url = new URL(`${SUPABASE_FUNCTIONS_BASE}/nba-player-stats`);
-  const safeTeamId = typeof teamId === "string" || typeof teamId === "number"
-    ? String(teamId).trim()
+export async function fetchNbaPlayerStats(options = {}) {
+  const safeOptions = options && typeof options === "object" ? options : { teamId: options };
+  const safeTeamId = typeof safeOptions.teamId === "string" || typeof safeOptions.teamId === "number"
+    ? String(safeOptions.teamId).trim()
     : "";
-  if (safeTeamId) url.searchParams.set("teamId", safeTeamId);
-  return requestJson(url.toString(), { timeoutMs: 45000 });
+  const safeSeason = typeof safeOptions.season === "string" ? safeOptions.season.trim() : "";
+  const safePlayers = Array.isArray(safeOptions.players) ? safeOptions.players : [];
+  if (!safeSeason) throw new Error("A stats season is required.");
+
+  const edgeRequest = SUPABASE_FUNCTIONS_BASE
+    ? (() => {
+      const url = new URL(`${SUPABASE_FUNCTIONS_BASE}/nba-player-stats`);
+      if (safeTeamId) url.searchParams.set("teamId", safeTeamId);
+      url.searchParams.set("season", safeSeason);
+      return requestJson(url.toString(), { timeoutMs: 15000 }).then((payload) => {
+        if (payload?.season && payload.season !== safeSeason) {
+          throw new Error(`Stats service returned ${payload.season} instead of ${safeSeason}.`);
+        }
+        return payload;
+      });
+    })()
+    : Promise.reject(new Error("Supabase functions are not configured."));
+  const officialFallbackRequest = fetchOfficialNbaPlayerStatsFallback({
+    season: safeSeason,
+    teamId: safeTeamId,
+    players: safePlayers,
+  });
+  const asOutcome = (kind, promise) => promise.then(
+    (payload) => ({ kind, payload, error: null }),
+    (error) => ({ kind, payload: null, error })
+  );
+  const edgeOutcome = asOutcome("edge", edgeRequest);
+  const officialOutcome = asOutcome("official", officialFallbackRequest);
+  const first = await Promise.race([edgeOutcome, officialOutcome]);
+  const firstIsEdgeFallback = first.kind === "edge"
+    && String(first.payload?.source || "").includes("espn");
+  if (first.payload && !firstIsEdgeFallback) return first.payload;
+  const pendingPrimary = first.kind === "edge" ? officialOutcome : edgeOutcome;
+  if (first.kind === "edge") {
+    const officialResult = await pendingPrimary;
+    if (officialResult.payload) return officialResult.payload;
+    if (first.payload) return first.payload;
+    return fetchBrowserPlayerStatsFallback(safeSeason);
+  }
+
+  const browserOutcome = asOutcome("browser", fetchBrowserPlayerStatsFallback(safeSeason));
+  const second = await Promise.race([pendingPrimary, browserOutcome]);
+  if (second.payload) return second.payload;
+  const third = await (second.kind === "browser" ? pendingPrimary : browserOutcome);
+  if (third.payload) return third.payload;
+  throw first.error || second.error || third.error || new Error("Unable to load NBA player stats.");
 }
 
 export async function fetchCurrentGLeagueRosters() {

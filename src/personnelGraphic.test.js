@@ -10,9 +10,13 @@ import {
   calculateThreePointAttemptRatio,
   createPersonnelDraft,
   createPersonnelRow,
+  formatPersonnelStatValue,
+  getCurrentPersonnelSeason,
+  getPreviousPersonnelSeason,
   hasExactlyFourPersonnelStats,
   hydratePersonnelDraft,
   normalizePersonnelPlayerStats,
+  normalizePersonnelSeason,
   normalizePersonnelStatsMap,
   populatePersonnelDraftFromRoster,
   togglePersonnelRowStat,
@@ -35,11 +39,21 @@ test("constants expose the requested slots, stats, tags, and 3P colors", () => {
   assert.equal(DEFAULT_PERSONNEL_THREE_POINT_COLOR, "bright_green");
 });
 
-test("createPersonnelDraft produces 18 independent rows with the exact draft shape", () => {
-  const draft = createPersonnelDraft({ teamId: 1610612764 });
+test("personnel seasons roll over on October 1 and validate saved values", () => {
+  assert.equal(getCurrentPersonnelSeason(new Date(2026, 8, 30, 23, 59, 59)), "2025-26");
+  assert.equal(getCurrentPersonnelSeason(new Date(2026, 9, 1, 0, 0, 0)), "2026-27");
+  assert.equal(getPreviousPersonnelSeason("2026-27"), "2025-26");
+  assert.equal(normalizePersonnelSeason("2025-26", "fallback"), "2025-26");
+  assert.equal(normalizePersonnelSeason("2025-27", "fallback"), "fallback");
+  assert.equal(normalizePersonnelSeason("not-a-season", "fallback"), "fallback");
+});
 
-  assert.deepEqual(Object.keys(draft), ["league", "teamId", "rows"]);
+test("createPersonnelDraft produces 18 independent rows with the exact draft shape", () => {
+  const draft = createPersonnelDraft({ teamId: 1610612764, season: "2025-26" });
+
+  assert.deepEqual(Object.keys(draft), ["league", "teamId", "season", "rows"]);
   assert.equal(draft.teamId, "1610612764");
+  assert.equal(draft.season, "2025-26");
   assert.equal(draft.rows.length, 18);
   assert.deepEqual(Object.keys(draft.rows[0]), [
     "id", "enabled", "personId", "teamId", "fullName", "firstName", "familyName", "jerseyNum",
@@ -140,6 +154,7 @@ test("populatePersonnelDraftFromRoster takes 18 unique players and pads blanks",
 test("populatePersonnelDraftFromRoster preserves configuration by player across reorder", () => {
   const draft = hydratePersonnelDraft({
     teamId: "old-team",
+    season: "2024-25",
     rows: [
       {
         playerId: "10",
@@ -163,6 +178,7 @@ test("populatePersonnelDraftFromRoster preserves configuration by player across 
   ], { teamId: "new-team" });
 
   assert.equal(populated.teamId, "new-team");
+  assert.equal(populated.season, "2024-25");
   assert.deepEqual(populated.rows[0].tags, ["cold"]);
   assert.equal(populated.rows[0].threePointColor, "yellow");
   assert.equal(populated.rows[1].personId, "10");
@@ -241,6 +257,14 @@ test("3PA/FGA ratio supports aliases and clamps to zero through one", () => {
   assert.equal(calculateThreePointAttemptRatio({ FG3A: 2 }), 0);
 });
 
+test("stat formatting leaves missing values blank while preserving legitimate zeroes", () => {
+  assert.equal(formatPersonnelStatValue({}, "PPG"), "");
+  assert.equal(formatPersonnelStatValue({ ppg: null }, "PPG"), "");
+  assert.equal(formatPersonnelStatValue({ ppg: "" }, "PPG"), "");
+  assert.equal(formatPersonnelStatValue({ ppg: 0 }, "PPG"), "0.0");
+  assert.equal(formatPersonnelStatValue({ FG3_PCT: 0.4 }, "3P%"), "40.0");
+});
+
 test("stats normalization handles NBA fields and percentage scaling", () => {
   assert.deepEqual(normalizePersonnelPlayerStats({
     PLAYER_ID: 22,
@@ -302,4 +326,17 @@ test("stats map normalization accepts raw NBA result sets and keyed maps", () =>
   });
   assert.equal(keyedMap["3"].ppg, 14.5);
   assert.equal(keyedMap["3"].threePointPercentage, 37.5);
+
+  const matchedByName = normalizePersonnelStatsMap({
+    players: {
+      "espn-1": { personId: "espn-1", fullName: "José Alvarado", pointsPerGame: 9.5 },
+      "espn-2": { personId: "espn-2", fullName: "Bobby Portis", pointsPerGame: 14.2 },
+    },
+  }, [
+    { personId: "1630631", fullName: "Jose Alvarado" },
+    { personId: "1626171", fullName: "Bobby Portis Jr." },
+  ]);
+  assert.equal(matchedByName["1630631"].personId, "1630631");
+  assert.equal(matchedByName["1630631"].ppg, 9.5);
+  assert.equal(matchedByName["1626171"].ppg, 14.2);
 });

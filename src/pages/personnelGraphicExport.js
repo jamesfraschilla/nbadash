@@ -6,6 +6,7 @@ import { teamLogoUrl } from "../api.js";
 import {
   PERSONNEL_THREE_POINT_COLOR_OPTIONS,
   calculateThreePointAttemptRatio,
+  formatPersonnelStatValue,
 } from "../personnelGraphic.js";
 import {
   BLACK,
@@ -45,39 +46,6 @@ const TAG_ASSET_URLS = {
   drives_right: drivesRightTagUrl,
   drives_left: drivesLeftTagUrl,
 };
-
-function numberFromAliases(source, aliases) {
-  for (const alias of aliases) {
-    const value = Number(source?.[alias]);
-    if (Number.isFinite(value)) return value;
-  }
-  return null;
-}
-
-function statValue(stats, statKey) {
-  if (statKey === "ppg") return numberFromAliases(stats, ["ppg", "points", "PTS"]);
-  if (statKey === "rpg") return numberFromAliases(stats, ["rpg", "rebounds", "REB"]);
-  if (statKey === "apg") return numberFromAliases(stats, ["apg", "assists", "AST"]);
-  if (statKey === "bpg") return numberFromAliases(stats, ["bpg", "blocks", "BLK"]);
-  if (statKey === "spg") return numberFromAliases(stats, ["spg", "steals", "STL"]);
-  if (statKey === "fta") return numberFromAliases(stats, ["fta", "freeThrowsAttempted", "FTA"]);
-  if (statKey === "threePointPercentage") {
-    const raw = numberFromAliases(stats, [
-      "threePointPercentage",
-      "threePointPct",
-      "fg3Pct",
-      "FG3_PCT",
-    ]);
-    if (raw == null) return null;
-    return Math.abs(raw) <= 1 ? raw * 100 : raw;
-  }
-  return null;
-}
-
-function formatStatValue(stats, statKey) {
-  const value = statValue(stats, statKey);
-  return value == null ? "—" : value.toFixed(1);
-}
 
 function getThreePointRatio(stats) {
   return calculateThreePointAttemptRatio(stats);
@@ -141,7 +109,7 @@ function drawStatsBox(context, stats, selectedStats) {
     context.lineTo(centerX + 33, y + 64);
     context.stroke();
 
-    drawCenteredText(context, formatStatValue(stats, statKey), slotX, y + 88, slotWidth, {
+    drawCenteredText(context, formatPersonnelStatValue(stats, statKey), slotX, y + 88, slotWidth, {
       size: 65,
       minSize: 48,
       family: EXPORT_FONT_FAMILIES.body,

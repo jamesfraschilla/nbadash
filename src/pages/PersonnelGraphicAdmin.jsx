@@ -17,6 +17,8 @@ import {
   PERSONNEL_THREE_POINT_COLOR_OPTIONS,
   createPersonnelDraft,
   createPersonnelRow,
+  getCurrentPersonnelSeason,
+  getPreviousPersonnelSeason,
   hasExactlyFourPersonnelStats,
   hydratePersonnelDraft,
   normalizePersonnelStatsMap,
@@ -55,14 +57,21 @@ function formatSourceDate(value) {
   return `Live roster updated ${date.toLocaleString()}`;
 }
 
+function formatStatsSource(value) {
+  const source = String(value || "");
+  if (source.includes("espn")) return " · ESPN fallback";
+  if (source === "nba-web-fallback") return " · NBA.com";
+  return source ? " · NBA API" : "";
+}
+
 function getValidationMessage(validation) {
   const firstError = validation?.errors?.[0];
   if (!firstError) return "Ready to export";
   return firstError.message || "Every exported player must have exactly four stats selected.";
 }
 
-function buildDraftTitle(team) {
-  return `${team?.fullName || "NBA"} Personnel Graphics`;
+function buildDraftTitle(team, season) {
+  return `${team?.fullName || "NBA"} Personnel Graphics · ${season}`;
 }
 
 function buildExportItems(rows, rosterById, statsById) {
@@ -87,6 +96,15 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
   const vaultUserId = user?.id || (!accountsEnabled ? "guest" : "");
   const personnelParam = String(params.get("personnel") || "").trim();
   const teamId = String(draft.teamId || "").trim();
+  const season = String(draft.season || "").trim();
+  const currentStatsSeason = useMemo(() => getCurrentPersonnelSeason(), []);
+  const previousStatsSeason = useMemo(
+    () => getPreviousPersonnelSeason(currentStatsSeason),
+    [currentStatsSeason]
+  );
+  const seasonOptions = useMemo(() => (
+    [...new Set([currentStatsSeason, previousStatsSeason, season].filter(Boolean))]
+  ), [currentStatsSeason, previousStatsSeason, season]);
   const selectedTeam = NBA_TEAMS.find((team) => team.teamId === teamId) || null;
   const roster = useMemo(() => (
     Array.isArray(rosterMap?.[teamId]) ? rosterMap[teamId] : []
@@ -94,21 +112,33 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
   const rosterById = useMemo(() => (
     Object.fromEntries(roster.map((player) => [String(player.personId), player]))
   ), [roster]);
+  const statsPlayers = useMemo(() => draft.rows
+    .filter((row) => row.personId)
+    .map((row) => rosterById[row.personId] || row), [draft.rows, rosterById]);
+  const statsPlayerKey = statsPlayers.map((player) => player.personId).join(",");
 
   const {
     data: statsPayload,
     isLoading: statsLoading,
     isFetching: statsFetching,
+    isSuccess: statsLoaded,
     error: statsError,
   } = useQuery({
-    queryKey: ["personnel-player-stats"],
-    queryFn: () => fetchNbaPlayerStats(),
+    queryKey: ["personnel-player-stats", season, teamId, statsPlayerKey],
+    queryFn: () => fetchNbaPlayerStats({
+      season,
+      teamId,
+      players: statsPlayers,
+    }),
     enabled: Boolean(teamId),
     staleTime: 6 * 60 * 60 * 1000,
-    retry: 1,
+    retry: 0,
   });
-  const statsById = useMemo(() => normalizePersonnelStatsMap(statsPayload), [statsPayload]);
-  const statsReady = Boolean(teamId && Object.keys(statsById).length && !statsError);
+  const statsById = useMemo(
+    () => normalizePersonnelStatsMap(statsPayload, roster),
+    [roster, statsPayload]
+  );
+  const statsReady = Boolean(teamId && statsLoaded && !statsError);
   const selectedValidation = useMemo(
     () => validatePersonnelDraftForExport(draft, { mode: "selected" }),
     [draft]
@@ -176,7 +206,7 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
 
   const handleTeamChange = (nextTeamId) => {
     const nextRoster = Array.isArray(rosterMap?.[nextTeamId]) ? rosterMap[nextTeamId] : [];
-    const emptyDraft = createPersonnelDraft({ teamId: nextTeamId });
+    const emptyDraft = createPersonnelDraft({ teamId: nextTeamId, season });
     setDraft(populatePersonnelDraftFromRoster(emptyDraft, nextRoster, { teamId: nextTeamId }));
     setRecordId("");
     setDialog(null);
@@ -185,6 +215,11 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
     nextParams.set("tab", "personnel");
     nextParams.delete("personnel");
     setParams(nextParams, { replace: true });
+  };
+
+  const handleSeasonChange = (nextSeason) => {
+    setDraft((current) => ({ ...current, season: nextSeason }));
+    setStatus("");
   };
 
   const handlePlayerChange = (index, nextPersonId) => {
@@ -218,7 +253,7 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
     const record = {
       id,
       type: TOOL_RECORD_TYPES.PERSONNEL_GRAPHIC,
-      title: buildDraftTitle(selectedTeam),
+      title: buildDraftTitle(selectedTeam, season),
       createdAt: timestamp,
       updatedAt: timestamp,
       payload: draft,
@@ -309,7 +344,7 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
       return;
     }
     if (!statsReady) {
-      setStatus("Current NBA stats must finish loading before export.");
+      setStatus(`${season} NBA stats must finish loading before export.`);
       return;
     }
     if (busyAction) return;
@@ -352,6 +387,16 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
               ))}
             </select>
           </label>
+          <label className={styles.field}>
+            <span className={styles.fieldLabel}>Stats Season</span>
+            <select className={styles.select} value={season} onChange={(event) => handleSeasonChange(event.target.value)}>
+              {seasonOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}{option === currentStatsSeason ? " (Current)" : option === previousStatsSeason ? " (Previous)" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
           <button type="button" className={styles.secondaryButton} onClick={handleReset} disabled={Boolean(busyAction)}>
             Reset
           </button>
@@ -359,16 +404,18 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
         <div className={styles.sourceMeta}>
           <strong>{rosterSeason ? `Roster season ${rosterSeason}` : "NBA roster"}</strong>
           <span>{formatSourceDate(rosterFetchedAt)}</span>
-          {statsPayload?.season ? <span>Stats: {statsPayload.season} regular season</span> : null}
+          {statsPayload?.season ? (
+            <span>Stats: {statsPayload.season} regular season{formatStatsSource(statsPayload.source)}</span>
+          ) : null}
         </div>
       </div>
 
       {!teamId ? (
         <p className={styles.notice}>Select a team to populate all {PERSONNEL_SLOT_COUNT} player slots.</p>
       ) : statsError ? (
-        <p className={styles.errorNotice}>Current player stats could not be loaded. Try again before exporting.</p>
+        <p className={styles.errorNotice}>{season} player stats could not be loaded. Try again before exporting.</p>
       ) : statsLoading || statsFetching ? (
-        <p className={styles.notice}>Loading current NBA player stats...</p>
+        <p className={styles.notice}>Loading {season} NBA player stats...</p>
       ) : null}
 
       <div className={styles.tableShell}>
@@ -383,6 +430,7 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
 
           {draft.rows.map((row, index) => {
             const statCountValid = hasExactlyFourPersonnelStats(row);
+            const missingStats = Boolean(row.personId && statsReady && !statsById[row.personId]);
             const selectedColor = PERSONNEL_THREE_POINT_COLOR_OPTIONS.find((option) => option.key === row.threePointColor)
               || PERSONNEL_THREE_POINT_COLOR_OPTIONS[0];
             return (
@@ -402,24 +450,27 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
                 </label>
                 <div className={styles.playerCell}>
                   <span className={styles.slotNumber}>{index + 1}</span>
-                  <select
-                    className={styles.rowSelect}
-                    value={row.personId}
-                    onChange={(event) => handlePlayerChange(index, event.target.value)}
-                    disabled={!teamId}
-                    aria-label={`Player slot ${index + 1}`}
-                  >
-                    <option value="">Player</option>
-                    {roster.map((player) => (
-                      <option
-                        key={player.personId}
-                        value={player.personId}
-                        disabled={usedPersonIds.has(player.personId) && row.personId !== player.personId}
-                      >
-                        {formatPlayerOption(player)}
-                      </option>
-                    ))}
-                  </select>
+                  <div className={styles.playerSelection}>
+                    <select
+                      className={styles.rowSelect}
+                      value={row.personId}
+                      onChange={(event) => handlePlayerChange(index, event.target.value)}
+                      disabled={!teamId}
+                      aria-label={`Player slot ${index + 1}`}
+                    >
+                      <option value="">Player</option>
+                      {roster.map((player) => (
+                        <option
+                          key={player.personId}
+                          value={player.personId}
+                          disabled={usedPersonIds.has(player.personId) && row.personId !== player.personId}
+                        >
+                          {formatPlayerOption(player)}
+                        </option>
+                      ))}
+                    </select>
+                    {missingStats ? <span className={styles.missingStats}>No {season} stats available</span> : null}
+                  </div>
                 </div>
                 {PERSONNEL_STAT_OPTIONS.map((option) => {
                   const checked = row.selectedStats.includes(option.key);
@@ -486,7 +537,7 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
             title={!selectedValidation.valid
               ? getValidationMessage(selectedValidation)
               : !statsReady
-                ? "Current NBA stats must finish loading before export"
+                ? `${season} NBA stats must finish loading before export`
                 : "Export checked players"}
           >
             {busyAction === "export-selected" ? "Exporting..." : "Export Selected"}
@@ -499,7 +550,7 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
             title={!allValidation.valid
               ? getValidationMessage(allValidation)
               : !statsReady
-                ? "Current NBA stats must finish loading before export"
+                ? `${season} NBA stats must finish loading before export`
                 : "Export every populated roster slot"}
           >
             {busyAction === "export-all" ? "Exporting..." : "Export All"}

@@ -31,6 +31,28 @@ export const PERSONNEL_THREE_POINT_COLOR_OPTIONS = Object.freeze([
 
 export const DEFAULT_PERSONNEL_THREE_POINT_COLOR = PERSONNEL_THREE_POINT_COLOR_OPTIONS[0].key;
 
+export function getCurrentPersonnelSeason(date = new Date()) {
+  const parsedDate = date instanceof Date ? date : new Date(date);
+  const safeDate = Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
+  const year = safeDate.getFullYear();
+  const startYear = safeDate.getMonth() >= 9 ? year : year - 1;
+  return `${startYear}-${String(startYear + 1).slice(-2)}`;
+}
+
+export function normalizePersonnelSeason(value, fallback = getCurrentPersonnelSeason()) {
+  const normalized = String(value ?? "").trim();
+  const match = /^(\d{4})-(\d{2})$/.exec(normalized);
+  if (!match) return fallback;
+  const expectedEndYear = String(Number(match[1]) + 1).slice(-2);
+  return match[2] === expectedEndYear ? normalized : fallback;
+}
+
+export function getPreviousPersonnelSeason(season) {
+  const normalized = normalizePersonnelSeason(season);
+  const startYear = Number(normalized.slice(0, 4)) - 1;
+  return `${startYear}-${String(startYear + 1).slice(-2)}`;
+}
+
 const STAT_KEY_SET = new Set(PERSONNEL_STAT_OPTIONS.map((option) => option.key));
 const TAG_KEY_SET = new Set(PERSONNEL_TAG_OPTIONS.map((option) => option.key));
 const COLOR_KEY_SET = new Set(PERSONNEL_THREE_POINT_COLOR_OPTIONS.map((option) => option.key));
@@ -198,6 +220,7 @@ export function createPersonnelDraft(options = {}) {
   return {
     league: "nba",
     teamId: normalizePlayerId(safeOptions.teamId),
+    season: normalizePersonnelSeason(safeOptions.season),
     rows: Array.from(
       { length: PERSONNEL_SLOT_COUNT },
       (_, index) => createPersonnelRow(index, incomingRows[index])
@@ -212,6 +235,7 @@ export function hydratePersonnelDraft(payload) {
     : rawPayload;
   return createPersonnelDraft({
     teamId: normalizePlayerId(source.teamId),
+    season: source.season,
     rows: Array.isArray(source) ? source : source.rows,
   });
 }
@@ -260,10 +284,12 @@ export function populatePersonnelDraftFromRoster(draft, roster, options = {}) {
 
   const optionTeamId = options && typeof options === "object" ? options.teamId : options;
   const teamId = normalizePlayerId(optionTeamId) || rosterPlayers[0]?.teamId || currentDraft.teamId;
+  const optionSeason = options && typeof options === "object" ? options.season : "";
 
   return {
     league: "nba",
     teamId,
+    season: normalizePersonnelSeason(optionSeason, currentDraft.season),
     rows: Array.from({ length: PERSONNEL_SLOT_COUNT }, (_, index) => {
       const player = rosterPlayers[index];
       if (!player) return createPersonnelRow(index);
@@ -370,6 +396,30 @@ function normalizePercentage(value) {
   return Number(percentage.toFixed(3));
 }
 
+export function formatPersonnelStatValue(stats, statKey) {
+  const key = normalizeStatKey(statKey);
+  const aliasesByKey = {
+    ppg: ["ppg", "pointsPerGame", "points", "PTS"],
+    rpg: ["rpg", "reboundsPerGame", "rebounds", "REB"],
+    apg: ["apg", "assistsPerGame", "assists", "AST"],
+    bpg: ["bpg", "blocksPerGame", "blocks", "BLK"],
+    spg: ["spg", "stealsPerGame", "steals", "STL"],
+    fta: ["fta", "freeThrowAttemptsPerGame", "freeThrowAttempts", "FTA"],
+  };
+
+  let value = key === "threePointPercentage"
+    ? firstFiniteValue(stats, [
+      "threePointPercentage",
+      "threePointPercent",
+      "threePointPct",
+      "fg3Pct",
+      "FG3_PCT",
+    ])
+    : firstFiniteValue(stats, aliasesByKey[key] || []);
+  if (key === "threePointPercentage" && value !== null && Math.abs(value) <= 1) value *= 100;
+  return value === null ? "" : value.toFixed(1);
+}
+
 export function normalizePersonnelPlayerStats(record) {
   if (!record || typeof record !== "object") return null;
   const personId = getRosterPlayerId(record);
@@ -449,11 +499,37 @@ function extractPersonnelStatsRows(payload) {
   return resultSet ? rowsFromResultSet(resultSet) : [];
 }
 
-export function normalizePersonnelStatsMap(payload) {
+function normalizeComparablePlayerName(value) {
+  const parts = normalizeString(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (["jr", "sr", "ii", "iii", "iv", "v"].includes(parts.at(-1))) parts.pop();
+  return parts.join("");
+}
+
+export function normalizePersonnelStatsMap(payload, roster = []) {
   const result = {};
+  const statsByName = new Map();
   extractPersonnelStatsRows(payload).forEach((record) => {
     const normalized = normalizePersonnelPlayerStats(record);
-    if (normalized) result[normalized.personId] = normalized;
+    if (!normalized) return;
+    result[normalized.personId] = normalized;
+    const nameKey = normalizeComparablePlayerName(normalized.fullName);
+    if (!nameKey) return;
+    statsByName.set(nameKey, statsByName.has(nameKey) ? null : normalized);
   });
+
+  for (const player of Array.isArray(roster) ? roster : []) {
+    const personId = getRosterPlayerId(player);
+    if (!personId || result[personId]) continue;
+    const fullName = firstPresentValue(player, ["fullName", "playerName", "PLAYER_NAME"]);
+    const nameMatch = statsByName.get(normalizeComparablePlayerName(fullName));
+    if (nameMatch) result[personId] = { ...nameMatch, personId };
+  }
   return result;
 }

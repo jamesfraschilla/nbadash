@@ -18,7 +18,7 @@
 
 .setupFields {
   display: grid;
-  grid-template-columns: minmax(260px, 420px) minmax(180px, auto);
+  grid-template-columns: minmax(260px, 420px) minmax(180px, 230px) auto;
   gap: 14px;
   align-items: end;
 }
@@ -163,6 +163,18 @@
   grid-template-columns: 30px minmax(0, 1fr);
   gap: 7px;
   align-items: center;
+}
+
+.playerSelection {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.missingStats {
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.2;
 }
 
 .slotNumber {
