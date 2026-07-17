@@ -137,7 +137,7 @@ function drawStatsBox(context, stats, selectedStats) {
       family: EXPORT_FONT_FAMILIES.header,
       weight: 700,
       color: WHITE,
-      underlineGap: 9,
+      underlineGap: 5,
     });
 
     drawCenteredText(context, formatPersonnelStatValue(stats, statKey), slotX, y + 113, slotWidth, {
