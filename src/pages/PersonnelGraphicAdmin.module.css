@@ -90,7 +90,8 @@
 }
 
 .headerRow,
-.playerRow {
+.playerRow,
+.bulkRow {
   display: grid;
   grid-template-columns: 42px minmax(250px, 1.5fr) repeat(7, minmax(86px, 0.52fr)) 126px 140px;
   gap: 8px;
@@ -117,7 +118,7 @@
   border-bottom: 1px solid var(--border);
 }
 
-.playerRow:last-child {
+.playerRow:nth-last-child(2) {
   border-bottom: 0;
 }
 
@@ -127,6 +128,19 @@
 
 .playerRow:hover {
   background: var(--row-hover);
+}
+
+.bulkRow {
+  min-height: 52px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-muted);
+}
+
+.bulkLabel {
+  grid-column: 2 / -1;
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 800;
 }
 
 .playerRowInvalid {

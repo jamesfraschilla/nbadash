@@ -31,6 +31,17 @@ export const PERSONNEL_THREE_POINT_COLOR_OPTIONS = Object.freeze([
 
 export const DEFAULT_PERSONNEL_THREE_POINT_COLOR = PERSONNEL_THREE_POINT_COLOR_OPTIONS[0].key;
 
+export function getPersonnelThreePointColorForPercentage(value) {
+  const percentage = normalizePercentage(value);
+  if (percentage === null) return DEFAULT_PERSONNEL_THREE_POINT_COLOR;
+  if (percentage >= 40) return "bright_green";
+  if (percentage >= 30) return "dark_green";
+  if (percentage >= 20) return "yellow";
+  if (percentage >= 15) return "orange";
+  if (percentage >= 0) return "red";
+  return DEFAULT_PERSONNEL_THREE_POINT_COLOR;
+}
+
 export function getCurrentPersonnelSeason(date = new Date()) {
   const parsedDate = date instanceof Date ? date : new Date(date);
   const safeDate = Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
@@ -198,6 +209,11 @@ export function createPersonnelRow(index = 0, overrides = {}) {
     "threeColor",
     "threePointColorKey",
   ]);
+  const threePointColorEdited = firstPresentValue(source, [
+    "threePointColorEdited",
+    "threePointColorManual",
+    "colorEdited",
+  ]);
 
   return {
     id: `personnel-slot-${safeIndex + 1}`,
@@ -211,6 +227,7 @@ export function createPersonnelRow(index = 0, overrides = {}) {
     selectedStats: normalizeSelectedStats(selectedStats, selectedStats === undefined),
     tags: normalizeTags(tags),
     threePointColor: normalizeThreePointColor(threePointColor),
+    threePointColorEdited: normalizeBoolean(threePointColorEdited, threePointColor !== undefined),
   };
 }
 
@@ -268,6 +285,7 @@ export function populatePersonnelDraftFromRoster(draft, roster, options = {}) {
         selectedStats: row.selectedStats,
         tags: row.tags,
         threePointColor: row.threePointColor,
+        threePointColorEdited: row.threePointColorEdited,
       });
     }
   });

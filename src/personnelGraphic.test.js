@@ -12,6 +12,7 @@ import {
   createPersonnelRow,
   formatPersonnelStatValue,
   getCurrentPersonnelSeason,
+  getPersonnelThreePointColorForPercentage,
   getPreviousPersonnelSeason,
   hasExactlyFourPersonnelStats,
   hydratePersonnelDraft,
@@ -48,6 +49,20 @@ test("personnel seasons roll over on October 1 and validate saved values", () =>
   assert.equal(normalizePersonnelSeason("not-a-season", "fallback"), "fallback");
 });
 
+test("default 3P colors are selected from the player's 3FG percentage", () => {
+  assert.equal(getPersonnelThreePointColorForPercentage(40), "bright_green");
+  assert.equal(getPersonnelThreePointColorForPercentage(0.401), "bright_green");
+  assert.equal(getPersonnelThreePointColorForPercentage(39.9), "dark_green");
+  assert.equal(getPersonnelThreePointColorForPercentage(30), "dark_green");
+  assert.equal(getPersonnelThreePointColorForPercentage(29.9), "yellow");
+  assert.equal(getPersonnelThreePointColorForPercentage(20), "yellow");
+  assert.equal(getPersonnelThreePointColorForPercentage(19.9), "orange");
+  assert.equal(getPersonnelThreePointColorForPercentage(15), "orange");
+  assert.equal(getPersonnelThreePointColorForPercentage(14.9), "red");
+  assert.equal(getPersonnelThreePointColorForPercentage(0), "red");
+  assert.equal(getPersonnelThreePointColorForPercentage(null), DEFAULT_PERSONNEL_THREE_POINT_COLOR);
+});
+
 test("createPersonnelDraft produces 18 independent rows with the exact draft shape", () => {
   const draft = createPersonnelDraft({ teamId: 1610612764, season: "2025-26" });
 
@@ -57,7 +72,7 @@ test("createPersonnelDraft produces 18 independent rows with the exact draft sha
   assert.equal(draft.rows.length, 18);
   assert.deepEqual(Object.keys(draft.rows[0]), [
     "id", "enabled", "personId", "teamId", "fullName", "firstName", "familyName", "jerseyNum",
-    "selectedStats", "tags", "threePointColor",
+    "selectedStats", "tags", "threePointColor", "threePointColorEdited",
   ]);
   assert.deepEqual(draft.rows[0], {
     id: "personnel-slot-1",
@@ -71,6 +86,7 @@ test("createPersonnelDraft produces 18 independent rows with the exact draft sha
     selectedStats: ["ppg", "rpg", "threePointPercentage", "apg"],
     tags: [],
     threePointColor: "bright_green",
+    threePointColorEdited: false,
   });
 
   draft.rows[0].selectedStats.pop();
@@ -98,6 +114,7 @@ test("createPersonnelRow and hydration sanitize aliases while preserving 0 throu
     selectedStats: ["ppg", "rpg", "threePointPercentage", "apg", "bpg", "spg", "fta"],
     tags: ["fire", "drives_right"],
     threePointColor: "dark_green",
+    threePointColorEdited: true,
   });
 
   const hydrated = hydratePersonnelDraft({

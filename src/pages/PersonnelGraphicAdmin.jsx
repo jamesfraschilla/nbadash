@@ -18,6 +18,7 @@ import {
   createPersonnelDraft,
   createPersonnelRow,
   getCurrentPersonnelSeason,
+  getPersonnelThreePointColorForPercentage,
   getPreviousPersonnelSeason,
   hasExactlyFourPersonnelStats,
   hydratePersonnelDraft,
@@ -149,11 +150,32 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
   );
   const selectedExportReady = selectedValidation.valid && statsReady;
   const allExportReady = allValidation.valid && statsReady;
+  const populatedRows = useMemo(() => draft.rows.filter((row) => row.personId), [draft.rows]);
+  const allPopulatedRowsEnabled = populatedRows.length > 0 && populatedRows.every((row) => row.enabled);
 
   useEffect(() => {
     if (!teamId || !roster.length) return;
     setDraft((current) => populatePersonnelDraftFromRoster(current, roster, { teamId }));
   }, [roster, teamId]);
+
+  useEffect(() => {
+    if (!statsReady) return;
+    setDraft((current) => {
+      let changed = false;
+      const rows = current.rows.map((row) => {
+        if (!row.personId || row.threePointColorEdited) return row;
+        const rowStats = statsById[row.personId];
+        if (!rowStats || rowStats.threePointPercentage === null || rowStats.threePointPercentage === undefined) {
+          return row;
+        }
+        const defaultColor = getPersonnelThreePointColorForPercentage(rowStats.threePointPercentage);
+        if (row.threePointColor === defaultColor) return row;
+        changed = true;
+        return { ...row, threePointColor: defaultColor };
+      });
+      return changed ? { ...current, rows } : current;
+    });
+  }, [statsById, statsReady]);
 
   useEffect(() => {
     let cancelled = false;
@@ -229,8 +251,23 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
         ...player,
         enabled: true,
         selectedStats: DEFAULT_PERSONNEL_STAT_KEYS,
+        threePointColor: getPersonnelThreePointColorForPercentage(
+          statsById[nextPersonId]?.threePointPercentage
+        ),
+        threePointColorEdited: false,
       })
       : createPersonnelRow(index));
+  };
+
+  const handleToggleAllRows = () => {
+    const nextEnabled = !allPopulatedRowsEnabled;
+    setDraft((current) => ({
+      ...current,
+      rows: current.rows.map((row) => (
+        row.personId ? { ...row, enabled: nextEnabled } : row
+      )),
+    }));
+    setStatus("");
   };
 
   const handleToggleTag = (index, tagKey) => {
@@ -508,6 +545,18 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
               </div>
             );
           })}
+          <div className={styles.bulkRow} role="row">
+            <label className={styles.rowToggle} title={allPopulatedRowsEnabled ? "Deselect all players" : "Select all players"}>
+              <input
+                type="checkbox"
+                checked={allPopulatedRowsEnabled}
+                disabled={!populatedRows.length}
+                onChange={handleToggleAllRows}
+                aria-label={allPopulatedRowsEnabled ? "Deselect all players" : "Select all players"}
+              />
+            </label>
+            <span className={styles.bulkLabel}>{allPopulatedRowsEnabled ? "Deselect All" : "Select All"}</span>
+          </div>
         </div>
       </div>
 
@@ -591,7 +640,10 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
                   <input
                     type="checkbox"
                     checked={currentColor?.key === option.key}
-                    onChange={() => updateRow(dialog.rowIndex, { threePointColor: option.key })}
+                    onChange={() => updateRow(dialog.rowIndex, {
+                      threePointColor: option.key,
+                      threePointColorEdited: true,
+                    })}
                   />
                   <span className={styles.dialogColorSwatch} style={{ background: option.color }} aria-hidden="true" />
                   <span>{option.label}</span>
