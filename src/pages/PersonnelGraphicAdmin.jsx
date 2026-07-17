@@ -160,10 +160,19 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
     () => validatePersonnelDraftForExport(draft, { mode: "all" }),
     [draft]
   );
-  const selectedExportReady = selectedValidation.valid && statsReady;
-  const allExportReady = allValidation.valid && statsReady;
   const populatedRows = useMemo(() => draft.rows.filter((row) => row.personId), [draft.rows]);
   const allPopulatedRowsEnabled = populatedRows.length > 0 && populatedRows.every((row) => row.enabled);
+  const exportMode = allPopulatedRowsEnabled ? "all" : "selected";
+  const exportValidation = exportMode === "all" ? allValidation : selectedValidation;
+  const exportReady = exportValidation.valid && statsReady;
+  const exportButtonLabel = exportMode === "all" ? "Export All" : "Export Selected";
+  const exportButtonTitle = !exportValidation.valid
+    ? getValidationMessage(exportValidation)
+    : !statsReady
+      ? `${season} NBA stats must finish loading before export`
+      : exportMode === "all"
+        ? "Export every populated roster slot"
+        : "Export checked players";
 
   useEffect(() => {
     draftRef.current = draft;
@@ -496,7 +505,8 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
         team: selectedTeam,
         teamId,
       });
-      setStatus(`Exported ${exportedCount} personnel PNG${exportedCount === 1 ? "" : "s"}.`);
+      const zipSuffix = exportedCount > 1 ? " in one ZIP" : "";
+      setStatus(`Exported ${exportedCount} personnel PNG${exportedCount === 1 ? "" : "s"}${zipSuffix}.`);
     } catch (error) {
       console.error("Failed to export personnel graphics.", error);
       setStatus(error?.message || "Unable to export personnel graphics.");
@@ -684,29 +694,12 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
           </button>
           <button
             type="button"
-            className={styles.secondaryButton}
-            onClick={() => handleExport("selected")}
-            disabled={!selectedExportReady || Boolean(busyAction)}
-            title={!selectedValidation.valid
-              ? getValidationMessage(selectedValidation)
-              : !statsReady
-                ? `${season} NBA stats must finish loading before export`
-                : "Export checked players"}
+            className={exportMode === "all" ? styles.exportAllButton : styles.secondaryButton}
+            onClick={() => handleExport(exportMode)}
+            disabled={!exportReady || Boolean(busyAction)}
+            title={exportButtonTitle}
           >
-            {busyAction === "export-selected" ? "Exporting..." : "Export Selected"}
-          </button>
-          <button
-            type="button"
-            className={styles.exportAllButton}
-            onClick={() => handleExport("all")}
-            disabled={!allExportReady || Boolean(busyAction)}
-            title={!allValidation.valid
-              ? getValidationMessage(allValidation)
-              : !statsReady
-                ? `${season} NBA stats must finish loading before export`
-                : "Export every populated roster slot"}
-          >
-            {busyAction === "export-all" ? "Exporting..." : "Export All"}
+            {busyAction?.startsWith("export-") ? "Exporting..." : exportButtonLabel}
           </button>
         </div>
       </div>
