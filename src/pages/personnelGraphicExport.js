@@ -269,6 +269,7 @@ export async function renderPersonnelGraphic({
   tags,
   threePointColor,
   teamId,
+  league = "nba",
   logoImage = null,
   tagImages = null,
   headshotImage = null,
@@ -278,7 +279,7 @@ export async function renderPersonnelGraphic({
 
   const [resolvedHeadshot, resolvedLogo, resolvedTags] = await Promise.all([
     headshotImage || loadFirstImage(buildPlayerHeadshotCandidates(player)),
-    logoImage || loadFirstImage(teamId ? [teamLogoUrl(teamId, "nba")] : []),
+    logoImage || loadFirstImage(teamId ? [teamLogoUrl(teamId, league)] : []),
     tagImages || loadTagImages(),
   ]);
 
@@ -304,13 +305,13 @@ export async function renderPersonnelGraphic({
   return canvas;
 }
 
-export async function exportPersonnelGraphics({ items, team, teamId }) {
+export async function exportPersonnelGraphics({ items, team, teamId, league = "nba" }) {
   const exportItems = Array.isArray(items) ? items.filter((item) => item?.player) : [];
   if (!exportItems.length) return 0;
 
   await ensureMatchupExportFonts();
   const [logoImage, tagImages] = await Promise.all([
-    loadFirstImage(teamId ? [teamLogoUrl(teamId, "nba")] : []),
+    loadFirstImage(teamId ? [teamLogoUrl(teamId, league)] : []),
     loadTagImages(),
   ]);
 
@@ -319,6 +320,7 @@ export async function exportPersonnelGraphics({ items, team, teamId }) {
     const canvas = await renderPersonnelGraphic({
       ...item,
       teamId,
+      league,
       logoImage,
       tagImages,
     });

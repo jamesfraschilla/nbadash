@@ -8,7 +8,7 @@ import drivesLeftTagUrl from "../assets/personnel/drives-left.png";
 import { fetchNbaPlayerStats } from "../api.js";
 import { useAuth } from "../auth/useAuth.js";
 import Dialog from "../components/ui/Dialog.jsx";
-import { NBA_TEAMS } from "../data/nbaTeams.js";
+import { GLEAGUE_TEAMS, NBA_TEAMS, getLeagueTeam } from "../data/nbaTeams.js";
 import {
   DEFAULT_PERSONNEL_STAT_KEYS,
   PERSONNEL_SLOT_COUNT,
@@ -55,9 +55,13 @@ function formatPlayerOption(player) {
   return jersey ? `#${jersey} ${name}` : name;
 }
 
-function formatSourceDate(value) {
+function formatSourceDate(value, league = "nba") {
   const date = new Date(value);
-  if (!value || Number.isNaN(date.getTime())) return "Live roster unavailable — using the local roster snapshot";
+  if (!value || Number.isNaN(date.getTime())) {
+    return league === "gleague"
+      ? "Live G League roster unavailable"
+      : "Live roster unavailable — using the local roster snapshot";
+  }
   return `Live roster updated ${date.toLocaleString()}`;
 }
 
@@ -67,9 +71,11 @@ function formatStatsSource(value) {
     .map((source) => source.trim())
     .filter(Boolean)
     .map((source) => (
-      source.includes("espn")
-        ? "ESPN fallback"
-        : source === "nba-web-fallback"
+      source.includes("gleague")
+        ? "G League API"
+        : source.includes("espn")
+          ? "ESPN fallback"
+          : source === "nba-web-fallback"
           ? "NBA.com"
           : "NBA API"
     ));
@@ -82,8 +88,8 @@ function getValidationMessage(validation) {
   return firstError.message || "Every exported player must have exactly four stats selected.";
 }
 
-function buildDraftTitle(team, season) {
-  return `${team?.fullName || "NBA"} Personnel Graphics · ${season}`;
+function buildDraftTitle(team, season, league = "nba") {
+  return `${team?.fullName || (league === "gleague" ? "G League" : "NBA")} Personnel Graphics · ${season}`;
 }
 
 function formatSupabaseSaveError(error) {
@@ -104,7 +110,7 @@ function buildExportItems(rows, rosterById, statsById) {
   }));
 }
 
-export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rosterSeason }) {
+export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata }) {
   const { accountsEnabled, user } = useAuth();
   const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
@@ -125,6 +131,12 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
   const personnelParam = String(params.get("personnel") || "").trim();
   const teamId = String(draft.teamId || "").trim();
   const season = String(draft.season || "").trim();
+  const league = draft.league === "gleague" ? "gleague" : "nba";
+  const leagueLabel = league === "gleague" ? "G League" : "NBA";
+  const teams = league === "gleague" ? GLEAGUE_TEAMS : NBA_TEAMS;
+  const rosterMap = rosterSources?.[league] || {};
+  const rosterFetchedAt = rosterMetadata?.[league]?.fetchedAt;
+  const rosterSeason = rosterMetadata?.[league]?.season;
   const currentStatsSeason = useMemo(() => getCurrentPersonnelSeason(), []);
   const previousStatsSeason = useMemo(
     () => getPreviousPersonnelSeason(currentStatsSeason),
@@ -133,7 +145,7 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
   const seasonOptions = useMemo(() => (
     [...new Set([currentStatsSeason, previousStatsSeason, season].filter(Boolean))]
   ), [currentStatsSeason, previousStatsSeason, season]);
-  const selectedTeam = NBA_TEAMS.find((team) => team.teamId === teamId) || null;
+  const selectedTeam = getLeagueTeam(teamId, league);
   const roster = useMemo(() => (
     Array.isArray(rosterMap?.[teamId]) ? rosterMap[teamId] : []
   ), [rosterMap, teamId]);
@@ -152,8 +164,9 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
     isSuccess: statsLoaded,
     error: statsError,
   } = useQuery({
-    queryKey: ["personnel-player-stats", season, teamId, statsPlayerKey],
+    queryKey: ["personnel-player-stats", league, season, teamId, statsPlayerKey],
     queryFn: () => fetchNbaPlayerStats({
+      league,
       season,
       teamId,
       players: statsPlayers,
@@ -185,7 +198,7 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
   const exportButtonTitle = !exportValidation.valid
     ? getValidationMessage(exportValidation)
     : !statsReady
-      ? `${season} NBA stats must finish loading before export`
+      ? `${season} ${leagueLabel} stats must finish loading before export`
       : exportMode === "all"
         ? "Export every populated roster slot"
         : "Export checked players";
@@ -215,13 +228,14 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
     }
 
     const draftSeason = String(draftToPersist?.season || "").trim();
-    const draftTeam = NBA_TEAMS.find((team) => team.teamId === draftTeamId) || null;
+    const draftLeague = draftToPersist?.league === "gleague" ? "gleague" : "nba";
+    const draftTeam = getLeagueTeam(draftTeamId, draftLeague);
     const id = recordIdRef.current || crypto.randomUUID();
     const timestamp = new Date().toISOString();
     const record = {
       id,
       type: TOOL_RECORD_TYPES.PERSONNEL_GRAPHIC,
-      title: buildDraftTitle(draftTeam, draftSeason),
+      title: buildDraftTitle(draftTeam, draftSeason, draftLeague),
       createdAt: timestamp,
       updatedAt: timestamp,
       payload: draftToPersist,
@@ -304,11 +318,11 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
   useEffect(() => {
     if (!teamId || !roster.length) return;
     setDraft((current) => {
-      const nextDraft = populatePersonnelDraftFromRoster(current, roster, { teamId });
+      const nextDraft = populatePersonnelDraftFromRoster(current, roster, { teamId, league });
       draftRef.current = nextDraft;
       return nextDraft;
     });
-  }, [roster, teamId]);
+  }, [league, roster, teamId]);
 
   useEffect(() => {
     if (!statsReady) return;
@@ -391,11 +405,29 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
     }
   };
 
+  const handleLeagueChange = async (nextLeagueValue) => {
+    await flushPendingAutoSave().catch(() => undefined);
+    const nextLeague = nextLeagueValue === "gleague" ? "gleague" : "nba";
+    const nextDraft = createPersonnelDraft({ league: nextLeague, season });
+    draftRef.current = nextDraft;
+    setDraft(nextDraft);
+    setRecordId("");
+    recordIdRef.current = "";
+    setDialog(null);
+    setAutoSaveStatus("");
+    setStatus("");
+    const nextParams = new URLSearchParams(params);
+    nextParams.set("tab", "graphics");
+    nextParams.set("graphic", "personnel");
+    nextParams.delete("personnel");
+    setParams(nextParams, { replace: true });
+  };
+
   const handleTeamChange = async (nextTeamId) => {
     await flushPendingAutoSave().catch(() => undefined);
     const nextRoster = Array.isArray(rosterMap?.[nextTeamId]) ? rosterMap[nextTeamId] : [];
-    const emptyDraft = createPersonnelDraft({ teamId: nextTeamId, season });
-    const nextDraft = populatePersonnelDraftFromRoster(emptyDraft, nextRoster, { teamId: nextTeamId });
+    const emptyDraft = createPersonnelDraft({ league, teamId: nextTeamId, season });
+    const nextDraft = populatePersonnelDraftFromRoster(emptyDraft, nextRoster, { league, teamId: nextTeamId });
     draftRef.current = nextDraft;
     setDraft(nextDraft);
     setRecordId("");
@@ -554,7 +586,7 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
       return;
     }
     if (!statsReady) {
-      setStatus(`${season} NBA stats must finish loading before export.`);
+      setStatus(`${season} ${leagueLabel} stats must finish loading before export.`);
       return;
     }
     if (busyAction) return;
@@ -566,6 +598,7 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
         items: buildExportItems(validation.rows, rosterById, statsById),
         team: selectedTeam,
         teamId,
+        league,
       });
       const zipSuffix = exportedCount > 1 ? " in one ZIP" : "";
       setStatus(`Exported ${exportedCount} personnel PNG${exportedCount === 1 ? "" : "s"}${zipSuffix}.`);
@@ -592,7 +625,7 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
           <div className={styles.loadingCard}>
             <span className={styles.loadingSpinner} aria-hidden="true" />
             <strong>Loading all available {season} stats</strong>
-            <span>Checking NBA and fallback sources. Empty player stats will remain blank once confirmed.</span>
+            <span>Checking {leagueLabel} sources. Empty player stats will remain blank once confirmed.</span>
           </div>
         </div>
       ) : null}
@@ -600,10 +633,17 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
       <div className={styles.setupCard}>
         <div className={styles.setupFields}>
           <label className={styles.field}>
-            <span className={styles.fieldLabel}>NBA Team</span>
+            <span className={styles.fieldLabel}>League</span>
+            <select className={styles.select} value={league} onChange={(event) => handleLeagueChange(event.target.value)}>
+              <option value="nba">NBA</option>
+              <option value="gleague">G League</option>
+            </select>
+          </label>
+          <label className={styles.field}>
+            <span className={styles.fieldLabel}>{leagueLabel} Team</span>
             <select className={styles.select} value={teamId} onChange={(event) => handleTeamChange(event.target.value)}>
               <option value="">Select team</option>
-              {NBA_TEAMS.map((team) => (
+              {teams.map((team) => (
                 <option key={team.teamId} value={team.teamId}>{team.fullName}</option>
               ))}
             </select>
@@ -623,8 +663,8 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
           </button>
         </div>
         <div className={styles.sourceMeta}>
-          <strong>{rosterSeason ? `Roster season ${rosterSeason}` : "NBA roster"}</strong>
-          <span>{formatSourceDate(rosterFetchedAt)}</span>
+          <strong>{rosterSeason ? `Roster season ${rosterSeason}` : `${leagueLabel} roster`}</strong>
+          <span>{formatSourceDate(rosterFetchedAt, league)}</span>
           {statsPayload?.season ? (
             <span>Stats: {statsPayload.season} regular season{formatStatsSource(statsPayload.source)}</span>
           ) : null}
@@ -636,7 +676,7 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
       ) : statsError ? (
         <p className={styles.errorNotice}>{season} player stats could not be loaded. Try again before exporting.</p>
       ) : statsLoading || statsFetching ? (
-        <p className={styles.notice}>Loading {season} NBA player stats...</p>
+        <p className={styles.notice}>Loading {season} {leagueLabel} player stats...</p>
       ) : null}
 
       <div className={styles.tableShell}>

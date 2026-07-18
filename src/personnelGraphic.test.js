@@ -98,6 +98,20 @@ test("createPersonnelDraft produces 18 independent rows with the exact draft sha
   assert.deepEqual(draft.rows[1].tags, []);
 });
 
+test("personnel drafts preserve G League selection through hydration and roster population", () => {
+  const draft = createPersonnelDraft({ league: "gleague", teamId: "1612709928", season: "2025-26" });
+  const populated = populatePersonnelDraftFromRoster(draft, [{
+    personId: "1",
+    teamId: "1612709928",
+    fullName: "G League Player",
+  }], { league: "gleague", teamId: "1612709928" });
+
+  assert.equal(draft.league, "gleague");
+  assert.equal(hydratePersonnelDraft(draft).league, "gleague");
+  assert.equal(populated.league, "gleague");
+  assert.equal(populated.rows[0].fullName, "G League Player");
+});
+
 test("changing personnel seasons clears every manual stat override", () => {
   const draft = createPersonnelDraft({ season: "2026-27" });
   draft.rows[0].statOverrides = { ppg: "20.1" };

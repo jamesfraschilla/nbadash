@@ -64,6 +64,10 @@ export function getPreviousPersonnelSeason(season) {
   return `${startYear}-${String(startYear + 1).slice(-2)}`;
 }
 
+export function normalizePersonnelLeague(value) {
+  return String(value || "").trim() === "gleague" ? "gleague" : "nba";
+}
+
 const STAT_KEY_SET = new Set(PERSONNEL_STAT_OPTIONS.map((option) => option.key));
 const TAG_KEY_SET = new Set(PERSONNEL_TAG_OPTIONS.map((option) => option.key));
 const COLOR_KEY_SET = new Set(PERSONNEL_THREE_POINT_COLOR_OPTIONS.map((option) => option.key));
@@ -246,7 +250,7 @@ export function createPersonnelDraft(options = {}) {
   const safeOptions = options && typeof options === "object" ? options : { teamId: options };
   const incomingRows = Array.isArray(safeOptions.rows) ? safeOptions.rows : [];
   return {
-    league: "nba",
+    league: normalizePersonnelLeague(safeOptions.league),
     teamId: normalizePlayerId(safeOptions.teamId),
     season: normalizePersonnelSeason(safeOptions.season),
     rows: Array.from(
@@ -262,6 +266,7 @@ export function hydratePersonnelDraft(payload) {
     ? rawPayload.personnelDraft
     : rawPayload;
   return createPersonnelDraft({
+    league: source.league,
     teamId: normalizePlayerId(source.teamId),
     season: source.season,
     rows: Array.isArray(source) ? source : source.rows,
@@ -315,9 +320,10 @@ export function populatePersonnelDraftFromRoster(draft, roster, options = {}) {
   const optionTeamId = options && typeof options === "object" ? options.teamId : options;
   const teamId = normalizePlayerId(optionTeamId) || rosterPlayers[0]?.teamId || currentDraft.teamId;
   const optionSeason = options && typeof options === "object" ? options.season : "";
+  const optionLeague = options && typeof options === "object" ? options.league : currentDraft.league;
 
   return {
-    league: "nba",
+    league: normalizePersonnelLeague(optionLeague || currentDraft.league),
     teamId,
     season: normalizePersonnelSeason(optionSeason, currentDraft.season),
     rows: Array.from({ length: PERSONNEL_SLOT_COUNT }, (_, index) => {

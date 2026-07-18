@@ -1,5 +1,7 @@
 const NBA_PLAYER_STATS_URL =
   "https://stats.nba.com/stats/leaguedashplayerstats";
+const GLEAGUE_PLAYER_STATS_URL =
+  "https://stats.gleague.nba.com/stats/leaguedashplayerstats";
 const ESPN_PLAYER_STATS_URL =
   "https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/statistics/byathlete";
 
@@ -114,8 +116,9 @@ function normalizeNbaPlayerRow(row: StatsRow) {
   };
 }
 
-function buildNbaStatsUrl(season: string, teamId: string) {
-  const url = new URL(NBA_PLAYER_STATS_URL);
+function buildLeagueStatsUrl(season: string, teamId: string, league: string) {
+  const isGLeague = league === "gleague";
+  const url = new URL(isGLeague ? GLEAGUE_PLAYER_STATS_URL : NBA_PLAYER_STATS_URL);
   const params: Record<string, string> = {
     College: "",
     Conference: "",
@@ -129,7 +132,7 @@ function buildNbaStatsUrl(season: string, teamId: string) {
     GameSegment: "",
     Height: "",
     LastNGames: "0",
-    LeagueID: "00",
+    LeagueID: isGLeague ? "20" : "00",
     Location: "",
     MeasureType: "Base",
     Month: "0",
@@ -163,14 +166,16 @@ function buildNbaStatsUrl(season: string, teamId: string) {
 async function fetchNbaPlayerStats(
   season: string,
   teamId: string,
+  league = "nba",
 ) {
-  const url = buildNbaStatsUrl(season, teamId);
+  const isGLeague = league === "gleague";
+  const url = buildLeagueStatsUrl(season, teamId, league);
   const response = await fetch(url.toString(), {
     headers: {
       Accept: "application/json, text/plain, */*",
       "Accept-Language": "en-US,en;q=0.9",
-      Origin: "https://www.nba.com",
-      Referer: "https://www.nba.com/",
+      Origin: isGLeague ? "https://gleague.nba.com" : "https://www.nba.com",
+      Referer: isGLeague ? "https://gleague.nba.com/" : "https://www.nba.com/",
       "User-Agent":
         "Mozilla/5.0 (compatible; NBA Dashboard Player Stats Resolver)",
       "x-nba-stats-origin": "stats",
@@ -182,7 +187,7 @@ async function fetchNbaPlayerStats(
 
   if (!response.ok) {
     throw new Error(
-      `NBA player stats request failed (${response.status}) for ${season}`,
+      `${isGLeague ? "G League" : "NBA"} player stats request failed (${response.status}) for ${season}`,
     );
   }
 
@@ -325,6 +330,11 @@ Deno.serve(async (req) => {
   }
 
   const url = new URL(req.url);
+  const leagueParam = String(url.searchParams.get("league") || "nba").trim().toLowerCase();
+  if (leagueParam !== "nba" && leagueParam !== "gleague") {
+    return jsonResponse(400, { error: "league must be nba or gleague" });
+  }
+  const league = leagueParam === "gleague" ? "gleague" : "nba";
   const teamId = String(url.searchParams.get("teamId") || "").trim();
   if (teamId && !/^\d+$/.test(teamId)) {
     return jsonResponse(400, { error: "teamId must contain only digits" });
@@ -339,16 +349,24 @@ Deno.serve(async (req) => {
   const requestedSeason = seasonParam || currentSeasonString();
 
   let rows: StatsRow[] = [];
-  let source = "nba";
+  let source = league;
   let nbaError = "";
 
   try {
-    rows = await fetchNbaPlayerStats(requestedSeason, "");
+    rows = await fetchNbaPlayerStats(requestedSeason, teamId, league);
   } catch (error) {
     nbaError = errorMessage(error);
   }
 
-  if (!rows.length) {
+  if (league === "gleague") {
+    if (nbaError) {
+      return jsonResponse(502, {
+        error: "Unable to resolve G League player stats",
+        detail: nbaError,
+        source: GLEAGUE_PLAYER_STATS_URL,
+      });
+    }
+  } else if (!rows.length) {
     try {
       rows = await fetchEspnPlayerStats(requestedSeason);
       source = "espn-fallback";
@@ -375,6 +393,7 @@ Deno.serve(async (req) => {
     fetchedAt: new Date().toISOString(),
     requestedSeason,
     season: requestedSeason,
+    league,
     seasonType: "Regular Season",
     perMode: "PerGame",
     teamId: teamId || null,

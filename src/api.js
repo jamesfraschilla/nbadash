@@ -1811,6 +1811,7 @@ export async function fetchCurrentNbaRosters() {
 
 export async function fetchNbaPlayerStats(options = {}) {
   const safeOptions = options && typeof options === "object" ? options : { teamId: options };
+  const safeLeague = safeOptions.league === "gleague" ? "gleague" : "nba";
   const safeTeamId = typeof safeOptions.teamId === "string" || typeof safeOptions.teamId === "number"
     ? String(safeOptions.teamId).trim()
     : "";
@@ -1821,8 +1822,10 @@ export async function fetchNbaPlayerStats(options = {}) {
   const edgeRequest = SUPABASE_FUNCTIONS_BASE
     ? (() => {
       const url = new URL(`${SUPABASE_FUNCTIONS_BASE}/nba-player-stats`);
+      url.searchParams.set("apiVersion", "2");
       if (safeTeamId) url.searchParams.set("teamId", safeTeamId);
       url.searchParams.set("season", safeSeason);
+      url.searchParams.set("league", safeLeague);
       return requestJson(url.toString(), { timeoutMs: 15000 }).then((payload) => {
         if (payload?.season && payload.season !== safeSeason) {
           throw new Error(`Stats service returned ${payload.season} instead of ${safeSeason}.`);
@@ -1831,15 +1834,27 @@ export async function fetchNbaPlayerStats(options = {}) {
       });
     })()
     : Promise.reject(new Error("Supabase functions are not configured."));
+  const asOutcome = (kind, promise) => promise.then(
+    (payload) => ({ kind, payload, error: null }),
+    (error) => ({ kind, payload: null, error })
+  );
+
+  if (safeLeague === "gleague") {
+    const edgeOutcome = await asOutcome("edge", edgeRequest);
+    if (!edgeOutcome.payload) {
+      throw edgeOutcome.error || new Error("Unable to load G League player stats.");
+    }
+    if (edgeOutcome.payload.league !== "gleague") {
+      throw new Error("The G League player stats function needs to be deployed in Supabase.");
+    }
+    return mergePersonnelStatsPayloads([edgeOutcome.payload], safeSeason);
+  }
+
   const officialFallbackRequest = fetchOfficialNbaPlayerStatsFallback({
     season: safeSeason,
     teamId: safeTeamId,
     players: safePlayers,
   });
-  const asOutcome = (kind, promise) => promise.then(
-    (payload) => ({ kind, payload, error: null }),
-    (error) => ({ kind, payload: null, error })
-  );
   const primaryOutcomes = await Promise.all([
     asOutcome("edge", edgeRequest),
     asOutcome("official", officialFallbackRequest),
@@ -1873,7 +1888,9 @@ export async function fetchCurrentGLeagueRosters() {
   if (!SUPABASE_FUNCTIONS_BASE) {
     throw new Error("Supabase functions are not configured.");
   }
-  return requestJson(`${SUPABASE_FUNCTIONS_BASE}/gleague-rosters`);
+  const url = new URL(`${SUPABASE_FUNCTIONS_BASE}/gleague-rosters`);
+  url.searchParams.set("apiVersion", "2");
+  return requestJson(url.toString());
 }
 
 async function fetchTeamSeasonGamesFromFunction(teamId, season = currentSeasonString()) {

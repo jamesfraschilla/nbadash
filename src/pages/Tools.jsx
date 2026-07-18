@@ -1533,9 +1533,17 @@ export default function Tools() {
       ) : activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.PERSONNEL ? (
         <section className={styles.workspace}>
           <PersonnelGraphicAdmin
-            rosterMap={nbaRosterMap}
-            rosterFetchedAt={remoteNbaRostersPayload?.fetchedAt}
-            rosterSeason={remoteNbaRostersPayload?.season}
+            rosterSources={{ nba: nbaRosterMap, gleague: gLeagueRosterMap }}
+            rosterMetadata={{
+              nba: {
+                fetchedAt: remoteNbaRostersPayload?.fetchedAt,
+                season: remoteNbaRostersPayload?.season,
+              },
+              gleague: {
+                fetchedAt: remoteGLeagueRostersPayload?.fetchedAt,
+                season: remoteGLeagueRostersPayload?.season,
+              },
+            }}
           />
         </section>
       ) : activeTab === TOOL_TABS.VISUAL_DRILL ? (

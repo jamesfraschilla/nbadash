@@ -112,13 +112,14 @@ function buildGameMeta(game) {
 
 function getSavedGraphicPresentation(toolRecord) {
   if (toolRecord.type === TOOL_RECORD_TYPES.PERSONNEL_GRAPHIC) {
-    const team = getLeagueTeam(toolRecord.payload?.teamId, "nba");
+    const league = toolRecord.payload?.league === "gleague" ? "gleague" : "nba";
+    const team = getLeagueTeam(toolRecord.payload?.teamId, league);
     const playerCount = Array.isArray(toolRecord.payload?.rows)
       ? toolRecord.payload.rows.filter((row) => String(row?.personId || row?.playerId || "").trim()).length
       : 0;
     return {
       meta: "Personnel Graphic · Saved draft",
-      body: `${team?.fullName || "NBA personnel draft"}${playerCount ? ` · ${playerCount} players` : ""}`,
+      body: `${team?.fullName || `${league === "gleague" ? "G League" : "NBA"} personnel draft`}${playerCount ? ` · ${playerCount} players` : ""}`,
       link: `/tools?tab=graphics&graphic=personnel&personnel=${encodeURIComponent(toolRecord.id)}`,
     };
   }
