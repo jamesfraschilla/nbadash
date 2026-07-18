@@ -1360,12 +1360,8 @@ export default function Game({ variant = "full" }) {
       setParams(nextParams, { replace: true });
       setAnalysisSaveStatus(`Saved to My Vault as ${savedRecord.title}`);
     } catch (error) {
-      const savedRecord = saveToolRecord(user.id, record);
-      if (!savedRecord) return;
-      const nextParams = new URLSearchParams(params);
-      nextParams.set("analysis", savedRecord.id);
-      setParams(nextParams, { replace: true });
-      setAnalysisSaveStatus(`Saved locally as ${savedRecord.title}`);
+      console.error("Failed to save game analysis to Supabase.", error);
+      setAnalysisSaveStatus("Unable to save this analysis to My Vault. It was not saved; try again.");
     } finally {
       setAnalysisSaving(false);
     }
@@ -2334,12 +2330,7 @@ export default function Game({ variant = "full" }) {
           return next.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
         });
       } catch (error) {
-        const savedRecord = saveToolRecord(user.id, record);
-        if (!savedRecord || cancelled) return;
-        setStrategyHistoryRecords((prev) => {
-          const next = [savedRecord, ...prev.filter((entry) => entry.id !== savedRecord.id)];
-          return next.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
-        });
+        console.error("Failed to save late-game history to Supabase.", error);
       }
     })();
 
@@ -2502,9 +2493,8 @@ export default function Game({ variant = "full" }) {
       if (!savedRecord) return;
       setStrategyFeedbackStatus(`Saved to My Vault as ${savedRecord.title}`);
     } catch (error) {
-      const savedRecord = saveToolRecord(user.id, record);
-      if (!savedRecord) return;
-      setStrategyFeedbackStatus(`Saved locally as ${savedRecord.title}`);
+      console.error("Failed to save late-game feedback to Supabase.", error);
+      setStrategyFeedbackStatus("Unable to save this feedback to My Vault. It was not saved; try again.");
     } finally {
       setStrategyFeedbackSaving(false);
     }

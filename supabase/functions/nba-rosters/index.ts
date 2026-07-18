@@ -123,6 +123,7 @@ async function fetchTeamRoster(team: TeamRecord, season: string) {
       "x-nba-stats-origin": "stats",
       "x-nba-stats-token": "true",
     },
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!response.ok) {
@@ -164,6 +165,31 @@ async function fetchTeamRoster(team: TeamRecord, season: string) {
   };
 }
 
+async function mapSettledWithConcurrency<T, R>(
+  values: T[],
+  worker: (value: T, index: number) => Promise<R>,
+  concurrency = 6,
+) {
+  const results: PromiseSettledResult<R>[] = Array(values.length);
+  let nextIndex = 0;
+  const workers = Array.from(
+    { length: Math.min(concurrency, values.length) },
+    async () => {
+      while (nextIndex < values.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        try {
+          results[index] = { status: "fulfilled", value: await worker(values[index], index) };
+        } catch (reason) {
+          results[index] = { status: "rejected", reason };
+        }
+      }
+    },
+  );
+  await Promise.all(workers);
+  return results;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return responseWithHeaders(200, "ok");
@@ -175,7 +201,23 @@ Deno.serve(async (req) => {
 
   try {
     const season = currentSeasonString();
-    const teamRosters = await Promise.all(NBA_TEAMS.map((team) => fetchTeamRoster(team, season)));
+    const rosterResults = await mapSettledWithConcurrency(
+      NBA_TEAMS,
+      (team) => fetchTeamRoster(team, season),
+      6,
+    );
+    const teamRosters = rosterResults
+      .filter((result): result is PromiseFulfilledResult<Awaited<ReturnType<typeof fetchTeamRoster>>> => result.status === "fulfilled")
+      .map((result) => result.value);
+    const errors = rosterResults.flatMap((result, index) => (
+      result.status === "rejected"
+        ? [{
+          teamId: NBA_TEAMS[index].teamId,
+          teamAbbreviation: NBA_TEAMS[index].teamAbbreviation,
+          error: result.reason instanceof Error ? result.reason.message : "unknown",
+        }]
+        : []
+    ));
     const teams = teamRosters.reduce<Record<string, Awaited<ReturnType<typeof fetchTeamRoster>>>>((accumulator, team) => {
       accumulator[team.teamId] = team;
       return accumulator;
@@ -185,9 +227,13 @@ Deno.serve(async (req) => {
       fetchedAt: new Date().toISOString(),
       season,
       teams,
+      partial: errors.length > 0,
+      errors,
     }), {
       "Content-Type": "application/json",
-      "Cache-Control": "public, max-age=21600, s-maxage=21600, stale-while-revalidate=86400",
+      "Cache-Control": errors.length
+        ? "public, max-age=60, s-maxage=60, stale-while-revalidate=300"
+        : "public, max-age=21600, s-maxage=21600, stale-while-revalidate=86400",
     });
   } catch (error) {
     return jsonResponse(502, {

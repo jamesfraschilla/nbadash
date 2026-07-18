@@ -8,6 +8,7 @@ import {
   PERSONNEL_TAG_OPTIONS,
   PERSONNEL_THREE_POINT_COLOR_OPTIONS,
   calculateThreePointAttemptRatio,
+  clearPersonnelStatOverridesForSeason,
   createPersonnelDraft,
   createPersonnelRow,
   formatPersonnelStatValue,
@@ -41,9 +42,9 @@ test("constants expose the requested slots, stats, tags, and 3P colors", () => {
   assert.equal(DEFAULT_PERSONNEL_THREE_POINT_COLOR, "bright_green");
 });
 
-test("personnel seasons roll over on October 1 and validate saved values", () => {
-  assert.equal(getCurrentPersonnelSeason(new Date(2026, 8, 30, 23, 59, 59)), "2025-26");
-  assert.equal(getCurrentPersonnelSeason(new Date(2026, 9, 1, 0, 0, 0)), "2026-27");
+test("personnel seasons roll over on July 1 and validate saved values", () => {
+  assert.equal(getCurrentPersonnelSeason(new Date(2026, 5, 30, 23, 59, 59)), "2025-26");
+  assert.equal(getCurrentPersonnelSeason(new Date(2026, 6, 1, 0, 0, 0)), "2026-27");
   assert.equal(getPreviousPersonnelSeason("2026-27"), "2025-26");
   assert.equal(normalizePersonnelSeason("2025-26", "fallback"), "2025-26");
   assert.equal(normalizePersonnelSeason("2025-27", "fallback"), "fallback");
@@ -95,6 +96,16 @@ test("createPersonnelDraft produces 18 independent rows with the exact draft sha
   draft.rows[0].tags.push("fire");
   assert.equal(draft.rows[1].selectedStats.length, 4);
   assert.deepEqual(draft.rows[1].tags, []);
+});
+
+test("changing personnel seasons clears every manual stat override", () => {
+  const draft = createPersonnelDraft({ season: "2026-27" });
+  draft.rows[0].statOverrides = { ppg: "20.1" };
+  draft.rows[1].statOverrides = { rpg: "7.2" };
+  const changed = clearPersonnelStatOverridesForSeason(draft, "2025-26");
+  assert.equal(changed.season, "2025-26");
+  assert.deepEqual(changed.rows[0].statOverrides, {});
+  assert.deepEqual(changed.rows[1].statOverrides, {});
 });
 
 test("createPersonnelRow and hydration sanitize aliases while preserving 0 through 7 selections", () => {

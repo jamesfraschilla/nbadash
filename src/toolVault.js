@@ -63,19 +63,6 @@ async function requireSupabase() {
   }
 }
 
-function mergeToolRecords(...lists) {
-  const byId = new Map();
-  lists.flat().forEach((record) => {
-    const normalized = normalizeRecord(record);
-    if (!normalized) return;
-    const existing = byId.get(normalized.id);
-    if (!existing || String(normalized.updatedAt) >= String(existing.updatedAt)) {
-      byId.set(normalized.id, normalized);
-    }
-  });
-  return [...byId.values()].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
-}
-
 function evictToolVaultStorageCaches() {
   if (typeof window === "undefined" || !window.localStorage) return;
   try {
@@ -127,10 +114,13 @@ export function deleteSavedToolRecord(userId, recordId) {
   writeToolVaultRecords(userId, nextRecords);
 }
 
-function syncRemoteRecordsToLocal(userId, records) {
-  const merged = mergeToolRecords(listSavedToolRecords(userId), records);
-  writeToolVaultRecords(userId, merged);
-  return merged;
+export function replaceSavedToolRecords(userId, records) {
+  const normalized = (Array.isArray(records) ? records : [])
+    .map(normalizeRecord)
+    .filter(Boolean)
+    .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+  writeToolVaultRecords(userId, normalized);
+  return normalized;
 }
 
 export async function listSavedToolRecordsRemote(userId) {
@@ -152,7 +142,7 @@ export async function listSavedToolRecordsRemote(userId) {
       updatedAt: row.updated_at,
     }))
     .filter(Boolean);
-  return syncRemoteRecordsToLocal(userId, records);
+  return replaceSavedToolRecords(userId, records);
 }
 
 export async function getSavedToolRecordRemote(userId, recordId) {
@@ -174,10 +164,9 @@ export async function getSavedToolRecordRemote(userId, recordId) {
     createdAt: data.created_at,
     updatedAt: data.updated_at,
   }) : null;
-  if (record) {
-    syncRemoteRecordsToLocal(userId, [record]);
-  }
-  return record || getSavedToolRecord(userId, normalizedId);
+  if (record) saveToolRecord(userId, record);
+  else deleteSavedToolRecord(userId, normalizedId);
+  return record;
 }
 
 export async function saveToolRecordRemote(userId, record) {
@@ -208,7 +197,7 @@ export async function saveToolRecordRemote(userId, record) {
     createdAt: data.created_at,
     updatedAt: data.updated_at,
   });
-  syncRemoteRecordsToLocal(userId, [saved]);
+  saveToolRecord(userId, saved);
   return saved;
 }
 
@@ -216,11 +205,15 @@ export async function deleteSavedToolRecordRemote(userId, recordId) {
   const normalizedId = String(recordId || "").trim();
   if (!userId || !normalizedId) return;
   await requireSupabase();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("user_tool_records")
     .delete()
     .eq("owner_id", userId)
-    .eq("id", normalizedId);
+    .eq("id", normalizedId)
+    .select("id");
   if (error) throw error;
+  if (!Array.isArray(data) || !data.some((row) => row.id === normalizedId)) {
+    throw new Error("Supabase did not confirm that the saved record was deleted.");
+  }
   deleteSavedToolRecord(userId, normalizedId);
 }

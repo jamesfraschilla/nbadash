@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test, { afterEach } from "node:test";
 import {
   listSavedToolRecords,
+  replaceSavedToolRecords,
   saveToolRecord,
   TOOL_RECORD_TYPES,
 } from "./toolVault.js";
@@ -84,4 +85,25 @@ test("tool vault reports failed local writes", () => {
   });
 
   assert.equal(saved, null);
+});
+
+test("a successful remote snapshot replaces stale local records", () => {
+  installMockLocalStorage();
+  saveToolRecord("coach", {
+    id: "deleted-remotely",
+    type: TOOL_RECORD_TYPES.MATCHUP_GRAPHIC,
+    title: "Stale local draft",
+    payload: {},
+  });
+
+  const records = replaceSavedToolRecords("coach", [{
+    id: "remote-draft",
+    type: TOOL_RECORD_TYPES.PERSONNEL_GRAPHIC,
+    title: "Remote draft",
+    payload: {},
+    updatedAt: "2026-07-18T12:00:00.000Z",
+  }]);
+
+  assert.deepEqual(records.map((record) => record.id), ["remote-draft"]);
+  assert.deepEqual(listSavedToolRecords("coach").map((record) => record.id), ["remote-draft"]);
 });

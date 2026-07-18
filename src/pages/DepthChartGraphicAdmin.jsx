@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../auth/useAuth.js";
 import { GLEAGUE_TEAMS, NBA_TEAMS } from "../data/nbaTeams.js";
@@ -218,6 +218,7 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
   const [recordId, setRecordId] = useState("");
   const [busyAction, setBusyAction] = useState("");
   const depthChartParam = String(params.get("depthChart") || "").trim();
+  const vaultUserId = user?.id || (!accountsEnabled ? "guest" : "");
 
   const teams = league === "gleague" ? GLEAGUE_TEAMS : NBA_TEAMS;
   const selectedTeam = teams.find((team) => String(team.teamId) === String(teamId)) || null;
@@ -277,7 +278,7 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
     let cancelled = false;
 
     async function loadSavedDepthChart() {
-      if (!depthChartParam || !user?.id) {
+      if (!depthChartParam || !vaultUserId) {
         if (cancelled) return;
         setRecordId("");
         return;
@@ -285,12 +286,12 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
 
       let savedRecord = null;
       try {
-        savedRecord = accountsEnabled
+        savedRecord = accountsEnabled && user?.id
           ? await getSavedToolRecordRemote(user.id, depthChartParam)
-          : getSavedToolRecord(user.id, depthChartParam);
+          : getSavedToolRecord(vaultUserId, depthChartParam);
       } catch (error) {
         console.error("Failed to load remote depth chart draft, falling back to local storage.", error);
-        savedRecord = getSavedToolRecord(user.id, depthChartParam);
+        savedRecord = getSavedToolRecord(vaultUserId, depthChartParam);
       }
 
       if (cancelled) return;
@@ -314,7 +315,7 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
     return () => {
       cancelled = true;
     };
-  }, [accountsEnabled, depthChartParam, user?.id]);
+  }, [accountsEnabled, depthChartParam, user?.id, vaultUserId]);
 
   const buildSavedPayload = () => ({
     league,
@@ -389,7 +390,7 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
   };
 
   const handleSave = async () => {
-    if (!user?.id) {
+    if (!vaultUserId) {
       setStatus("Sign in to save this depth chart.");
       return;
     }
@@ -410,64 +411,54 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
     };
 
     try {
-      const savedRecord = accountsEnabled
+      const savedRecord = accountsEnabled && user?.id
         ? await saveToolRecordRemote(user.id, record)
-        : saveToolRecord(user.id, record);
-      if (!savedRecord) return;
-      queryClient.invalidateQueries({ queryKey: ["owned-tools", user.id] });
+        : saveToolRecord(vaultUserId, record);
+      if (!savedRecord) {
+        setStatus("Unable to save this depth chart. Try deleting older browser data or sign in again.");
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] });
       setRecordId(savedRecord.id);
       const nextParams = new URLSearchParams(params);
-      nextParams.set("tab", "depth-chart");
+      nextParams.set("tab", "graphics");
+      nextParams.set("graphic", "depth-chart");
       nextParams.set("depthChart", savedRecord.id);
       setParams(nextParams, { replace: true });
       setStatus(`Saved to My Vault as ${savedRecord.title}`);
     } catch (error) {
-      console.error("Failed to save depth chart draft remotely, falling back to local storage.", error);
-      const savedRecord = saveToolRecord(user.id, record);
-      if (!savedRecord) return;
-      queryClient.invalidateQueries({ queryKey: ["owned-tools", user.id] });
-      setRecordId(savedRecord.id);
-      const nextParams = new URLSearchParams(params);
-      nextParams.set("tab", "depth-chart");
-      nextParams.set("depthChart", savedRecord.id);
-      setParams(nextParams, { replace: true });
-      setStatus(`Saved locally as ${savedRecord.title}`);
+      console.error("Failed to save depth chart draft.", error);
+      setStatus("Unable to save this depth chart to Supabase. It was not saved; try again.");
     } finally {
       setBusyAction("");
     }
   };
 
   const handleDelete = async () => {
-    if (!user?.id || !recordId || busyAction) return;
+    if (!vaultUserId || !recordId || busyAction) return;
     const confirmed = window.confirm("Delete this saved depth chart draft?");
     if (!confirmed) return;
     setBusyAction("delete");
     try {
-      if (accountsEnabled) {
+      if (accountsEnabled && user?.id) {
         await deleteSavedToolRecordRemote(user.id, recordId);
       } else {
-        deleteSavedToolRecord(user.id, recordId);
+        deleteSavedToolRecord(vaultUserId, recordId);
       }
-      queryClient.invalidateQueries({ queryKey: ["owned-tools", user.id] });
+      await queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] });
       setRecordId("");
       setLeague("nba");
       setTeamId("");
       setSlots(buildEmptySlots());
       const nextParams = new URLSearchParams(params);
-      nextParams.set("tab", "depth-chart");
+      nextParams.set("tab", "graphics");
+      nextParams.set("graphic", "depth-chart");
       nextParams.delete("depthChart");
       setParams(nextParams, { replace: true });
       setStatus("Deleted saved depth chart.");
     } catch (error) {
-      console.error("Failed to delete remote depth chart draft, falling back to local storage.", error);
-      deleteSavedToolRecord(user.id, recordId);
-      queryClient.invalidateQueries({ queryKey: ["owned-tools", user.id] });
-      setRecordId("");
-      const nextParams = new URLSearchParams(params);
-      nextParams.set("tab", "depth-chart");
-      nextParams.delete("depthChart");
-      setParams(nextParams, { replace: true });
-      setStatus("Deleted saved depth chart locally.");
+      console.error("Failed to delete remote depth chart draft.", error);
+      setStatus("Unable to delete this Supabase draft. It has not been removed; try again.");
     } finally {
       setBusyAction("");
     }
@@ -479,7 +470,8 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
     setTeamId("");
     setSlots(buildEmptySlots());
     const nextParams = new URLSearchParams(params);
-    nextParams.set("tab", "depth-chart");
+    nextParams.set("tab", "graphics");
+    nextParams.set("graphic", "depth-chart");
     nextParams.delete("depthChart");
     setParams(nextParams, { replace: true });
     setStatus("Reset depth chart.");
@@ -606,7 +598,17 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
               Export PNG
             </button>
           </div>
-          {status ? <div className={styles.statusNote}>{status}</div> : null}
+          {status ? (
+            <div className={styles.statusNote}>
+              {status}
+              {recordId && status.startsWith("Saved") ? (
+                <>
+                  {" "}
+                  <Link className={styles.inlineStatusLink} to="/me?tab=graphics">View in My Vault</Link>
+                </>
+              ) : null}
+            </div>
+          ) : null}
         </aside>
       </div>
     </div>

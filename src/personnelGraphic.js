@@ -46,7 +46,7 @@ export function getCurrentPersonnelSeason(date = new Date()) {
   const parsedDate = date instanceof Date ? date : new Date(date);
   const safeDate = Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
   const year = safeDate.getFullYear();
-  const startYear = safeDate.getMonth() >= 9 ? year : year - 1;
+  const startYear = safeDate.getMonth() >= 6 ? year : year - 1;
   return `${startYear}-${String(startYear + 1).slice(-2)}`;
 }
 
@@ -454,6 +454,15 @@ export function mergePersonnelStatOverrides(stats, statOverrides) {
   const normalizedOverrides = normalizeStatOverrides(statOverrides);
   if (!Object.keys(normalizedOverrides).length) return stats || {};
   return { ...(stats || {}), ...normalizedOverrides };
+}
+
+export function clearPersonnelStatOverridesForSeason(draft, season) {
+  const hydrated = hydratePersonnelDraft(draft);
+  return {
+    ...hydrated,
+    season: normalizePersonnelSeason(season, hydrated.season),
+    rows: hydrated.rows.map((row) => ({ ...row, statOverrides: {} })),
+  };
 }
 
 export function normalizePersonnelPlayerStats(record) {

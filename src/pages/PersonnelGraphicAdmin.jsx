@@ -17,6 +17,7 @@ import {
   PERSONNEL_THREE_POINT_COLOR_OPTIONS,
   createPersonnelDraft,
   createPersonnelRow,
+  clearPersonnelStatOverridesForSeason,
   formatPersonnelStatValue,
   getCurrentPersonnelSeason,
   getPersonnelThreePointColorForPercentage,
@@ -38,6 +39,7 @@ import {
   TOOL_RECORD_TYPES,
 } from "../toolVault.js";
 import { exportPersonnelGraphics } from "./personnelGraphicExport.js";
+import { createSerialTaskQueue } from "../serialTaskQueue.js";
 import styles from "./PersonnelGraphicAdmin.module.css";
 
 const TAG_IMAGE_URLS = {
@@ -60,10 +62,18 @@ function formatSourceDate(value) {
 }
 
 function formatStatsSource(value) {
-  const source = String(value || "");
-  if (source.includes("espn")) return " · ESPN fallback";
-  if (source === "nba-web-fallback") return " · NBA.com";
-  return source ? " · NBA API" : "";
+  const labels = String(value || "")
+    .split("+")
+    .map((source) => source.trim())
+    .filter(Boolean)
+    .map((source) => (
+      source.includes("espn")
+        ? "ESPN fallback"
+        : source === "nba-web-fallback"
+          ? "NBA.com"
+          : "NBA API"
+    ));
+  return labels.length ? ` · ${[...new Set(labels)].join(" + ")}` : "";
 }
 
 function getValidationMessage(validation) {
@@ -108,6 +118,9 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
   const draftRef = useRef(draft);
   const autoSaveTimerRef = useRef(null);
   const autoSaveRunRef = useRef(0);
+  const autoSavePendingDraftRef = useRef(null);
+  const autoSaveQueueRef = useRef(createSerialTaskQueue());
+  const persistPersonnelDraftRef = useRef(null);
   const vaultUserId = user?.id || (!accountsEnabled ? "guest" : "");
   const personnelParam = String(params.get("personnel") || "").trim();
   const teamId = String(draft.teamId || "").trim();
@@ -154,6 +167,7 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
     [roster, statsPayload]
   );
   const statsReady = Boolean(teamId && statsLoaded && !statsError);
+  const statsBlocking = Boolean(teamId && (statsLoading || statsFetching));
   const selectedValidation = useMemo(
     () => validatePersonnelDraftForExport(draft, { mode: "selected" }),
     [draft]
@@ -184,15 +198,12 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
     recordIdRef.current = recordId;
   }, [recordId]);
 
-  useEffect(() => () => {
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-  }, []);
-
-  const cancelPendingAutoSave = useCallback(() => {
+  const discardPendingAutoSave = useCallback(() => {
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
       autoSaveTimerRef.current = null;
     }
+    autoSavePendingDraftRef.current = null;
     autoSaveRunRef.current += 1;
   }, []);
 
@@ -224,33 +235,71 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
     await queryClient.invalidateQueries({ queryKey: ["owned-tools", user.id] });
 
     const nextParams = new URLSearchParams(params);
-    nextParams.set("tab", "personnel");
+    nextParams.set("tab", "graphics");
+    nextParams.set("graphic", "personnel");
     nextParams.set("personnel", savedRecord.id);
     setParams(nextParams, { replace: true });
     return savedRecord;
   }, [accountsEnabled, params, queryClient, setParams, user?.id]);
 
-  const queueTagColorAutoSave = useCallback((nextDraft) => {
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+  useEffect(() => {
+    persistPersonnelDraftRef.current = persistPersonnelDraft;
+  }, [persistPersonnelDraft]);
+
+  const persistDraftInOrder = useCallback((nextDraft, { autoSave = false } = {}) => {
     const runId = autoSaveRunRef.current + 1;
     autoSaveRunRef.current = runId;
+    const operation = autoSaveQueueRef.current.run(() => persistPersonnelDraft(nextDraft));
+
+    if (autoSave) {
+      operation.then(() => {
+        if (autoSaveRunRef.current === runId) {
+          setAutoSaveStatus("Tags and colors autosaved to Supabase.");
+        }
+      }).catch((error) => {
+        console.error("Failed to autosave personnel tags/colors.", error);
+        if (autoSaveRunRef.current === runId) {
+          setAutoSaveStatus(formatSupabaseSaveError(error));
+        }
+      });
+    }
+    return operation;
+  }, [persistPersonnelDraft]);
+
+  const queueTagColorAutoSave = useCallback((nextDraft) => {
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSavePendingDraftRef.current = nextDraft;
     setAutoSaveStatus("Autosaving tags and colors to Supabase...");
 
     autoSaveTimerRef.current = setTimeout(() => {
-      persistPersonnelDraft(nextDraft)
-        .then(() => {
-          if (autoSaveRunRef.current === runId) {
-            setAutoSaveStatus("Tags and colors autosaved to Supabase.");
-          }
-        })
-        .catch((error) => {
-          console.error("Failed to autosave personnel tags/colors.", error);
-          if (autoSaveRunRef.current === runId) {
-            setAutoSaveStatus(formatSupabaseSaveError(error));
-          }
-        });
+      autoSaveTimerRef.current = null;
+      const pendingDraft = autoSavePendingDraftRef.current;
+      autoSavePendingDraftRef.current = null;
+      if (pendingDraft) persistDraftInOrder(pendingDraft, { autoSave: true });
     }, 450);
-  }, [persistPersonnelDraft]);
+  }, [persistDraftInOrder]);
+
+  const flushPendingAutoSave = useCallback(() => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    const pendingDraft = autoSavePendingDraftRef.current;
+    autoSavePendingDraftRef.current = null;
+    return pendingDraft
+      ? persistDraftInOrder(pendingDraft, { autoSave: true })
+      : autoSaveQueueRef.current.wait();
+  }, [persistDraftInOrder]);
+
+  useEffect(() => () => {
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    const pendingDraft = autoSavePendingDraftRef.current;
+    if (pendingDraft && persistPersonnelDraftRef.current) {
+      void autoSaveQueueRef.current
+        .run(() => persistPersonnelDraftRef.current?.(pendingDraft))
+        .catch(() => undefined);
+    }
+  }, []);
 
   useEffect(() => {
     if (!teamId || !roster.length) return;
@@ -337,35 +386,35 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
     setStatus("");
     if (options.autoSaveTagsAndColors) {
       queueTagColorAutoSave(nextDraft);
-    } else {
-      cancelPendingAutoSave();
-      setAutoSaveStatus("");
+    } else if (autoSavePendingDraftRef.current) {
+      autoSavePendingDraftRef.current = nextDraft;
     }
   };
 
-  const handleTeamChange = (nextTeamId) => {
+  const handleTeamChange = async (nextTeamId) => {
+    await flushPendingAutoSave().catch(() => undefined);
     const nextRoster = Array.isArray(rosterMap?.[nextTeamId]) ? rosterMap[nextTeamId] : [];
     const emptyDraft = createPersonnelDraft({ teamId: nextTeamId, season });
     const nextDraft = populatePersonnelDraftFromRoster(emptyDraft, nextRoster, { teamId: nextTeamId });
     draftRef.current = nextDraft;
     setDraft(nextDraft);
-    cancelPendingAutoSave();
     setRecordId("");
     recordIdRef.current = "";
     setDialog(null);
     setAutoSaveStatus("");
     setStatus(nextTeamId && !nextRoster.length ? "Waiting for this team's roster..." : "");
     const nextParams = new URLSearchParams(params);
-    nextParams.set("tab", "personnel");
+    nextParams.set("tab", "graphics");
+    nextParams.set("graphic", "personnel");
     nextParams.delete("personnel");
     setParams(nextParams, { replace: true });
   };
 
-  const handleSeasonChange = (nextSeason) => {
-    const nextDraft = { ...draftRef.current, season: nextSeason };
+  const handleSeasonChange = async (nextSeason) => {
+    await flushPendingAutoSave().catch(() => undefined);
+    const nextDraft = clearPersonnelStatOverridesForSeason(draftRef.current, nextSeason);
     draftRef.current = nextDraft;
     setDraft(nextDraft);
-    cancelPendingAutoSave();
     setAutoSaveStatus("");
     setStatus("");
   };
@@ -414,8 +463,7 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
     };
     draftRef.current = nextDraft;
     setDraft(nextDraft);
-    cancelPendingAutoSave();
-    setAutoSaveStatus("");
+    if (autoSavePendingDraftRef.current) autoSavePendingDraftRef.current = nextDraft;
     setStatus("");
   };
 
@@ -434,11 +482,11 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
       return;
     }
     setBusyAction("save");
-    cancelPendingAutoSave();
+    discardPendingAutoSave();
     setAutoSaveStatus("");
 
     try {
-      const savedRecord = await persistPersonnelDraft(draft);
+      const savedRecord = await persistDraftInOrder(draftRef.current);
       setStatus(`Saved to Supabase as ${savedRecord.title}`);
     } catch (error) {
       console.error("Failed to save personnel draft to Supabase.", error);
@@ -452,8 +500,9 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
     if (!vaultUserId || !recordId || busyAction) return;
     if (!window.confirm("Delete this saved personnel graphics draft?")) return;
     setBusyAction("delete");
-    cancelPendingAutoSave();
+    discardPendingAutoSave();
     try {
+      await autoSaveQueueRef.current.wait();
       if (accountsEnabled && user?.id) {
         await deleteSavedToolRecordRemote(user.id, recordId);
       } else {
@@ -466,41 +515,33 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
       draftRef.current = emptyDraft;
       setDraft(emptyDraft);
       const nextParams = new URLSearchParams(params);
-      nextParams.set("tab", "personnel");
+      nextParams.set("tab", "graphics");
+      nextParams.set("graphic", "personnel");
       nextParams.delete("personnel");
       setParams(nextParams, { replace: true });
       setStatus("Deleted saved personnel draft.");
     } catch (error) {
-      console.error("Failed to delete the remote personnel draft, falling back to local storage.", error);
-      deleteSavedToolRecord(vaultUserId, recordId);
-      await queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] });
-      setRecordId("");
-      recordIdRef.current = "";
-      const emptyDraft = createPersonnelDraft();
-      draftRef.current = emptyDraft;
-      setDraft(emptyDraft);
-      const nextParams = new URLSearchParams(params);
-      nextParams.set("tab", "personnel");
-      nextParams.delete("personnel");
-      setParams(nextParams, { replace: true });
-      setStatus("Deleted saved personnel draft locally.");
+      console.error("Failed to delete the remote personnel draft.", error);
+      setStatus("Unable to delete this Supabase draft. It has not been removed; try again.");
     } finally {
       setBusyAction("");
     }
   };
 
-  const handleReset = () => {
+  const handleReset = async () => {
     if (teamId && !window.confirm("Reset all personnel graphic selections?")) return;
+    discardPendingAutoSave();
+    await autoSaveQueueRef.current.wait();
     const emptyDraft = createPersonnelDraft();
     draftRef.current = emptyDraft;
     setDraft(emptyDraft);
-    cancelPendingAutoSave();
     setRecordId("");
     recordIdRef.current = "";
     setDialog(null);
     setAutoSaveStatus("");
     const nextParams = new URLSearchParams(params);
-    nextParams.set("tab", "personnel");
+    nextParams.set("tab", "graphics");
+    nextParams.set("graphic", "personnel");
     nextParams.delete("personnel");
     setParams(nextParams, { replace: true });
     setStatus("Reset personnel graphics.");
@@ -545,7 +586,17 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
   );
 
   return (
-    <div className={styles.panel}>
+    <div className={styles.panel} aria-busy={statsBlocking}>
+      {statsBlocking ? (
+        <div className={styles.loadingOverlay} role="status" aria-live="polite">
+          <div className={styles.loadingCard}>
+            <span className={styles.loadingSpinner} aria-hidden="true" />
+            <strong>Loading all available {season} stats</strong>
+            <span>Checking NBA and fallback sources. Empty player stats will remain blank once confirmed.</span>
+          </div>
+        </div>
+      ) : null}
+      <div className={`${styles.panelContent} ${statsBlocking ? styles.panelContentLoading : ""}`}>
       <div className={styles.setupCard}>
         <div className={styles.setupFields}>
           <label className={styles.field}>
@@ -712,7 +763,7 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
             ? `${selectedValidation.rows.length} selected · exactly 4 stats required per exported player`
             : "Choose a team to begin")}
           {recordId && status.startsWith("Saved") ? (
-            <> · <Link to="/me?tab=tools">View in My Vault</Link></>
+            <> · <Link to="/me?tab=graphics">View in My Vault</Link></>
           ) : null}
         </div>
         <div className={styles.actionGroup}>
@@ -782,6 +833,7 @@ export default function PersonnelGraphicAdmin({ rosterMap, rosterFetchedAt, rost
           </>
         )}
       </Dialog>
+      </div>
     </div>
   );
 }

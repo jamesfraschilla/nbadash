@@ -110,14 +110,97 @@ function buildGameMeta(game) {
   };
 }
 
+function getSavedGraphicPresentation(toolRecord) {
+  if (toolRecord.type === TOOL_RECORD_TYPES.PERSONNEL_GRAPHIC) {
+    const team = getLeagueTeam(toolRecord.payload?.teamId, "nba");
+    const playerCount = Array.isArray(toolRecord.payload?.rows)
+      ? toolRecord.payload.rows.filter((row) => String(row?.personId || row?.playerId || "").trim()).length
+      : 0;
+    return {
+      meta: "Personnel Graphic · Saved draft",
+      body: `${team?.fullName || "NBA personnel draft"}${playerCount ? ` · ${playerCount} players` : ""}`,
+      link: `/tools?tab=graphics&graphic=personnel&personnel=${encodeURIComponent(toolRecord.id)}`,
+    };
+  }
+  if (toolRecord.type === TOOL_RECORD_TYPES.DEPTH_CHART_GRAPHIC) {
+    const league = String(toolRecord.payload?.league || "nba").trim() === "gleague" ? "gleague" : "nba";
+    const team = getLeagueTeam(toolRecord.payload?.teamId, league);
+    const selectedSlots = Array.isArray(toolRecord.payload?.slots)
+      ? toolRecord.payload.slots.filter((slot) => String(slot?.selection || slot?.customLastName || "").trim()).length
+      : 0;
+    return {
+      meta: "Depth Chart Graphic · Saved draft",
+      body: `${team?.fullName || (league === "gleague" ? "G League depth chart" : "NBA depth chart")}${selectedSlots ? ` · ${selectedSlots} slots filled` : ""}`,
+      link: `/tools?tab=graphics&graphic=depth-chart&depthChart=${encodeURIComponent(toolRecord.id)}`,
+    };
+  }
+  const league = String(toolRecord.payload?.league || "nba").trim() === "gleague" ? "gleague" : "nba";
+  const leftTeam = getLeagueTeam(toolRecord.payload?.leftTeamId, league);
+  const rightTeam = getLeagueTeam(toolRecord.payload?.rightTeamId, league);
+  return {
+    meta: "Match-Up Graphic · Saved draft",
+    body: leftTeam || rightTeam
+      ? `${leftTeam?.fullName || "Left side empty"} vs ${rightTeam?.fullName || "Right side empty"}`
+      : "Saved match-up graphic.",
+    link: `/tools?tab=graphics&graphic=matchup&draft=${encodeURIComponent(toolRecord.id)}`,
+  };
+}
+
+function SavedGraphicArea({ title, records, deletingKey, onDelete }) {
+  return (
+    <section className={styles.graphicsArea}>
+      <div className={styles.graphicsAreaHeader}>
+        <h2>{title}</h2>
+        <span>{records.length} saved</span>
+      </div>
+      {records.length ? (
+        <div className={styles.list}>
+          {records.map((toolRecord) => {
+            const presentation = getSavedGraphicPresentation(toolRecord);
+            const isDeleting = deletingKey === `tool:${toolRecord.id}`;
+            return (
+              <article key={toolRecord.id} className={styles.card}>
+                <div className={styles.cardHeader}>
+                  <div className={styles.cardTitleGroup}>
+                    <div className={styles.cardTitle}>{toolRecord.title || "Untitled"}</div>
+                    <div className={styles.cardMeta}>{presentation.meta}</div>
+                  </div>
+                  <div className={styles.cardActions}>
+                    <Link className={styles.cardLink} to={presentation.link}>Open Graphic</Link>
+                    <button
+                      type="button"
+                      className={styles.deleteButton}
+                      onClick={() => onDelete(toolRecord)}
+                      disabled={isDeleting}
+                    >
+                      {isDeleting ? "Deleting..." : "Delete"}
+                    </button>
+                  </div>
+                </div>
+                <div className={styles.cardBody}>{presentation.body}</div>
+                <div className={styles.cardFooter}>Updated {formatTimestamp(toolRecord.updatedAt)}</div>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <div className={styles.emptyState}>No saved {title.toLowerCase()} yet.</div>
+      )}
+    </section>
+  );
+}
+
 export default function UserContent() {
   const { user, profile, hasFeature, accountsEnabled } = useAuth();
   const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
-  const canUseTools = hasFeature("tools");
+  const canUseTools = !accountsEnabled || hasFeature("tools");
+  const vaultUserId = user?.id || (!accountsEnabled ? "guest" : "");
   const rawTab = params.get("tab");
   const tab = rawTab === "drawings"
     ? "drawings"
+    : rawTab === "graphics" && canUseTools
+      ? "graphics"
     : rawTab === "late-game" && canUseTools
       ? "late-game"
       : rawTab === "tools" && canUseTools
@@ -129,6 +212,7 @@ export default function UserContent() {
   const [tagFilters, setTagFilters] = useState([]);
   const [deletingKey, setDeletingKey] = useState("");
   const [toolExportStatus, setToolExportStatus] = useState("");
+  const [toolVaultStatus, setToolVaultStatus] = useState("");
 
   const { data: notes = [], isLoading: loadingNotes } = useQuery({
     queryKey: ["owned-notes", user?.id],
@@ -143,16 +227,16 @@ export default function UserContent() {
   });
 
   const { data: savedTools = [] } = useQuery({
-    queryKey: ["owned-tools", user?.id],
-    enabled: Boolean(user?.id && canUseTools),
+    queryKey: ["owned-tools", vaultUserId],
+    enabled: Boolean(vaultUserId && canUseTools),
     queryFn: async () => {
-      if (!user?.id || !canUseTools) return [];
-      if (!accountsEnabled) return listSavedToolRecords(user.id);
+      if (!vaultUserId || !canUseTools) return [];
+      if (!accountsEnabled || !user?.id) return listSavedToolRecords(vaultUserId);
       try {
         return await listSavedToolRecordsRemote(user.id);
       } catch (error) {
         console.error("Failed to load remote tool drafts, falling back to local storage.", error);
-        return listSavedToolRecords(user.id);
+        return listSavedToolRecords(vaultUserId);
       }
     },
   });
@@ -318,22 +402,22 @@ export default function UserContent() {
   };
 
   const handleDeleteTool = async (toolRecord) => {
-    if (!user?.id) return;
+    if (!vaultUserId) return;
     const confirmed = window.confirm(`Delete "${toolRecord.title || "Untitled"}"?`);
     if (!confirmed) return;
     const key = `tool:${toolRecord.id}`;
     try {
       setDeletingKey(key);
-      if (accountsEnabled) {
+      if (accountsEnabled && user?.id) {
         await deleteSavedToolRecordRemote(user.id, toolRecord.id);
       } else {
-        deleteSavedToolRecord(user.id, toolRecord.id);
+        deleteSavedToolRecord(vaultUserId, toolRecord.id);
       }
-      await queryClient.invalidateQueries({ queryKey: ["owned-tools", user.id] });
+      await queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] });
+      setToolVaultStatus(`Deleted "${toolRecord.title || "Untitled"}".`);
     } catch (error) {
-      console.error("Failed to delete remote tool draft, falling back to local storage.", error);
-      deleteSavedToolRecord(user.id, toolRecord.id);
-      await queryClient.invalidateQueries({ queryKey: ["owned-tools", user.id] });
+      console.error("Failed to delete remote tool draft.", error);
+      setToolVaultStatus("Unable to delete this Supabase record. It has not been removed; try again.");
     } finally {
       setDeletingKey("");
     }
@@ -380,7 +464,7 @@ export default function UserContent() {
     document.body.appendChild(anchor);
     anchor.click();
     document.body.removeChild(anchor);
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     setToolExportStatus(`Exported ${payload.length} feedback record${payload.length === 1 ? "" : "s"} as JSON.`);
   };
 
@@ -419,6 +503,15 @@ export default function UserContent() {
         {canUseTools ? (
           <button
             type="button"
+            className={`${styles.tabButton} ${tab === "graphics" ? styles.tabButtonActive : ""}`}
+            onClick={() => setTab("graphics")}
+          >
+            Graphics
+          </button>
+        ) : null}
+        {canUseTools ? (
+          <button
+            type="button"
             className={`${styles.tabButton} ${tab === "tools" ? styles.tabButtonActive : ""}`}
             onClick={() => setTab("tools")}
           >
@@ -436,7 +529,7 @@ export default function UserContent() {
         ) : null}
       </div>
 
-      {tab === "tools" || tab === "late-game" ? null : (
+      {tab === "graphics" || tab === "tools" || tab === "late-game" ? null : (
         <section className={styles.filterPanel}>
         <div className={styles.filterGrid}>
           <label className={styles.filterField}>
@@ -620,9 +713,32 @@ export default function UserContent() {
             </div>
           )}
         </section>
+      ) : tab === "graphics" ? (
+        <section className={styles.graphicsVault}>
+          {toolVaultStatus ? <div className={styles.toolToolbarStatus}>{toolVaultStatus}</div> : null}
+          <SavedGraphicArea
+            title="Match-Up Graphics"
+            records={matchupToolRecords}
+            deletingKey={deletingKey}
+            onDelete={handleDeleteTool}
+          />
+          <SavedGraphicArea
+            title="Personnel Graphics"
+            records={personnelToolRecords}
+            deletingKey={deletingKey}
+            onDelete={handleDeleteTool}
+          />
+          <SavedGraphicArea
+            title="Depth Chart Graphics"
+            records={depthChartToolRecords}
+            deletingKey={deletingKey}
+            onDelete={handleDeleteTool}
+          />
+        </section>
       ) : tab === "tools" ? (
         <section className={styles.section}>
-          {matchupToolRecords.length === 0 && personnelToolRecords.length === 0 && depthChartToolRecords.length === 0 && analysisToolRecords.length === 0 && scoutingToolRecords.length === 0 && visualDrillPresetRecords.length === 0 ? (
+          {toolVaultStatus ? <div className={styles.toolToolbarStatus}>{toolVaultStatus}</div> : null}
+          {analysisToolRecords.length === 0 && scoutingToolRecords.length === 0 && visualDrillPresetRecords.length === 0 ? (
             <div className={styles.emptyState}>You have not saved any tools yet.</div>
           ) : (
             <div className={styles.list}>
@@ -738,123 +854,12 @@ export default function UserContent() {
                   </article>
                 );
               })}
-              {personnelToolRecords.map((toolRecord) => {
-                const isDeleting = deletingKey === `tool:${toolRecord.id}`;
-                const team = getLeagueTeam(toolRecord.payload?.teamId, "nba");
-                const playerCount = Array.isArray(toolRecord.payload?.rows)
-                  ? toolRecord.payload.rows.filter((row) => String(row?.personId || row?.playerId || "").trim()).length
-                  : 0;
-                return (
-                  <article key={toolRecord.id} className={styles.card}>
-                    <div className={styles.cardHeader}>
-                      <div className={styles.cardTitleGroup}>
-                        <div className={styles.cardTitle}>{toolRecord.title || "Untitled"}</div>
-                        <div className={styles.cardMeta}>
-                          Personnel Graphics · Saved draft
-                        </div>
-                      </div>
-                      <div className={styles.cardActions}>
-                        <Link className={styles.cardLink} to={`/tools?tab=personnel&personnel=${encodeURIComponent(toolRecord.id)}`}>
-                          Open Tool
-                        </Link>
-                        <button
-                          type="button"
-                          className={styles.deleteButton}
-                          onClick={() => handleDeleteTool(toolRecord)}
-                          disabled={isDeleting}
-                        >
-                          {isDeleting ? "Deleting..." : "Delete"}
-                        </button>
-                      </div>
-                    </div>
-                    <div className={styles.cardBody}>
-                      {team?.fullName || "NBA personnel draft"}
-                      {playerCount ? ` · ${playerCount} players` : ""}
-                    </div>
-                    <div className={styles.cardFooter}>Updated {formatTimestamp(toolRecord.updatedAt)}</div>
-                  </article>
-                );
-              })}
-              {depthChartToolRecords.map((toolRecord) => {
-                const isDeleting = deletingKey === `tool:${toolRecord.id}`;
-                const league = String(toolRecord.payload?.league || "nba").trim() === "gleague" ? "gleague" : "nba";
-                const team = getLeagueTeam(toolRecord.payload?.teamId, league);
-                const selectedSlots = Array.isArray(toolRecord.payload?.slots)
-                  ? toolRecord.payload.slots.filter((slot) => String(slot?.selection || slot?.customLastName || "").trim()).length
-                  : 0;
-                return (
-                  <article key={toolRecord.id} className={styles.card}>
-                    <div className={styles.cardHeader}>
-                      <div className={styles.cardTitleGroup}>
-                        <div className={styles.cardTitle}>{toolRecord.title || "Untitled"}</div>
-                        <div className={styles.cardMeta}>
-                          Depth Chart Graphic · Saved draft
-                        </div>
-                      </div>
-                      <div className={styles.cardActions}>
-                        <Link className={styles.cardLink} to={`/tools?tab=depth-chart&depthChart=${encodeURIComponent(toolRecord.id)}`}>
-                          Open Tool
-                        </Link>
-                        <button
-                          type="button"
-                          className={styles.deleteButton}
-                          onClick={() => handleDeleteTool(toolRecord)}
-                          disabled={isDeleting}
-                        >
-                          {isDeleting ? "Deleting..." : "Delete"}
-                        </button>
-                      </div>
-                    </div>
-                    <div className={styles.cardBody}>
-                      {team?.fullName || (league === "gleague" ? "G League depth chart" : "NBA depth chart")}
-                      {selectedSlots ? ` · ${selectedSlots} slots filled` : ""}
-                    </div>
-                    <div className={styles.cardFooter}>Updated {formatTimestamp(toolRecord.updatedAt)}</div>
-                  </article>
-                );
-              })}
-              {matchupToolRecords.map((toolRecord) => {
-                const isDeleting = deletingKey === `tool:${toolRecord.id}`;
-                const league = String(toolRecord.payload?.league || "nba").trim() === "gleague" ? "gleague" : "nba";
-                const leftTeam = getLeagueTeam(toolRecord.payload?.leftTeamId, league);
-                const rightTeam = getLeagueTeam(toolRecord.payload?.rightTeamId, league);
-                return (
-                  <article key={toolRecord.id} className={styles.card}>
-                    <div className={styles.cardHeader}>
-                      <div className={styles.cardTitleGroup}>
-                        <div className={styles.cardTitle}>{toolRecord.title || "Untitled"}</div>
-                        <div className={styles.cardMeta}>
-                          Match-Up Graphics · Saved draft
-                        </div>
-                      </div>
-                      <div className={styles.cardActions}>
-                        <Link className={styles.cardLink} to={`/tools?draft=${encodeURIComponent(toolRecord.id)}`}>
-                          Open Tool
-                        </Link>
-                        <button
-                          type="button"
-                          className={styles.deleteButton}
-                          onClick={() => handleDeleteTool(toolRecord)}
-                          disabled={isDeleting}
-                        >
-                          {isDeleting ? "Deleting..." : "Delete"}
-                        </button>
-                      </div>
-                    </div>
-                    <div className={styles.cardBody}>
-                      {leftTeam || rightTeam
-                        ? `${leftTeam?.fullName || "Left side empty"} vs ${rightTeam?.fullName || "Right side empty"}`
-                        : "Saved match-up graphic."}
-                    </div>
-                    <div className={styles.cardFooter}>Updated {formatTimestamp(toolRecord.updatedAt)}</div>
-                  </article>
-                );
-              })}
             </div>
           )}
         </section>
       ) : (
         <section className={styles.section}>
+          {toolVaultStatus ? <div className={styles.toolToolbarStatus}>{toolVaultStatus}</div> : null}
           {lateGameFeedbackRecords.length ? (
             <div className={styles.toolToolbar}>
               <button

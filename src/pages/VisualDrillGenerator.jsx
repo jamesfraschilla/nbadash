@@ -5,7 +5,6 @@ import { useAuth } from "../auth/useAuth.js";
 import {
   deleteSavedToolRecord,
   deleteSavedToolRecordRemote,
-  getSavedToolRecord,
   listSavedToolRecords,
   listSavedToolRecordsRemote,
   saveToolRecord,
@@ -420,39 +419,20 @@ export default function VisualDrillGenerator() {
       updatedAt: timestamp,
     };
     try {
-      let saved = null;
-      let remoteError = null;
-      let savedRemotely = false;
-
-      if (accountsEnabled && user?.id) {
-        try {
-          saved = await saveToolRecordRemote(user.id, record);
-          savedRemotely = Boolean(saved);
-        } catch (error) {
-          remoteError = error;
-          console.error("Failed to save Visual Drill favorite remotely.", error);
-        }
-      }
-
+      const saved = accountsEnabled && user?.id
+        ? await saveToolRecordRemote(user.id, record)
+        : saveToolRecord(vaultUserId, record);
       if (!saved) {
-        saveToolRecord(vaultUserId, record);
-        saved = getSavedToolRecord(vaultUserId, record.id);
-      }
-
-      if (!saved) {
-        const remoteMessage = String(remoteError?.message || "").trim();
-        throw new Error(remoteMessage
-          ? `Supabase returned “${remoteMessage}”, and the browser fallback could not be written.`
+        throw new Error(accountsEnabled
+          ? "Supabase did not return a saved favorite."
           : "The browser could not write this favorite. Its local storage may be full or unavailable.");
       }
 
       setFavorites((current) => upsertFavoriteRecord(current, saved));
       setFavoriteId(saved.id);
-      setFavoriteStatus(savedRemotely
+      setFavoriteStatus(accountsEnabled
         ? `Saved ${saved.title} to your account.`
-        : remoteError
-          ? `Saved ${saved.title} in this browser only. Supabase said: ${remoteError.message || "remote save failed"}`
-          : `Saved ${saved.title} in this browser.`);
+        : `Saved ${saved.title} in this browser.`);
       await queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] }).catch(() => {});
     } catch (error) {
       console.error("Failed to save Visual Drill favorite.", error);
@@ -475,9 +455,7 @@ export default function VisualDrillGenerator() {
       await refreshFavorites();
     } catch (error) {
       console.error("Failed to delete Visual Drill favorite remotely.", error);
-      deleteSavedToolRecord(vaultUserId, favoriteId);
-      handleNewFavorite();
-      await refreshFavorites();
+      setFavoriteStatus("Unable to delete this Supabase favorite. It has not been removed; try again.");
     } finally {
       setFavoriteBusy(false);
     }

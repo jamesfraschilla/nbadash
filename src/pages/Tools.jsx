@@ -42,6 +42,7 @@ const CUSTOM_PLAYER_VALUE = "__custom__";
 const WIZARDS_TEAM_ID = "1610612764";
 const CAPITAL_CITY_TEAM_ID = "1612709928";
 const TOOL_TABS = {
+  GRAPHICS: "graphics",
   MATCHUP: "matchup",
   PERSONNEL: "personnel",
   DEPTH_CHART: "depth-chart",
@@ -451,23 +452,27 @@ export default function Tools() {
   const [customRequestResult, setCustomRequestResult] = useState(null);
   const [customTableSort, setCustomTableSort] = useState({ table: "", column: "", direction: "asc" });
 
-  const canUseTools = hasFeature("tools");
+  const canUseTools = !accountsEnabled || hasFeature("tools");
+  const vaultUserId = user?.id || (!accountsEnabled ? "guest" : "");
   const draftParam = String(params.get("draft") || "").trim();
   const packetParam = String(params.get("packet") || "").trim();
   const rawTab = String(params.get("tab") || "").trim();
+  const rawGraphic = String(params.get("graphic") || "").trim();
   const activeTab = rawTab === TOOL_TABS.LATE_GAME
     ? TOOL_TABS.LATE_GAME
     : rawTab === TOOL_TABS.CUSTOM_REQUESTS
       ? TOOL_TABS.CUSTOM_REQUESTS
     : rawTab === TOOL_TABS.VISUAL_DRILL
       ? TOOL_TABS.VISUAL_DRILL
-    : rawTab === TOOL_TABS.PERSONNEL
-      ? TOOL_TABS.PERSONNEL
-    : rawTab === TOOL_TABS.DEPTH_CHART
-      ? TOOL_TABS.DEPTH_CHART
     : rawTab === TOOL_TABS.SCOUTING
       ? TOOL_TABS.SCOUTING
-      : TOOL_TABS.MATCHUP;
+      : TOOL_TABS.GRAPHICS;
+  const legacyGraphicTab = [TOOL_TABS.MATCHUP, TOOL_TABS.PERSONNEL, TOOL_TABS.DEPTH_CHART].includes(rawTab)
+    ? rawTab
+    : "";
+  const activeGraphic = [TOOL_TABS.MATCHUP, TOOL_TABS.PERSONNEL, TOOL_TABS.DEPTH_CHART].includes(rawGraphic)
+    ? rawGraphic
+    : legacyGraphicTab || TOOL_TABS.MATCHUP;
   const { data: remoteNbaRostersPayload } = useQuery({
     queryKey: ["tools-current-nba-rosters"],
     queryFn: fetchCurrentNbaRosters,
@@ -658,7 +663,7 @@ export default function Tools() {
     let cancelled = false;
 
     async function loadDraft() {
-      if (!draftParam || !user?.id) {
+      if (!draftParam || !vaultUserId) {
         if (cancelled) return;
         setRecordId("");
         setDraft(defaultDraft);
@@ -668,12 +673,12 @@ export default function Tools() {
 
       let savedRecord = null;
       try {
-        savedRecord = accountsEnabled
+        savedRecord = accountsEnabled && user?.id
           ? await getSavedToolRecordRemote(user.id, draftParam)
-          : getSavedToolRecord(user.id, draftParam);
+          : getSavedToolRecord(vaultUserId, draftParam);
       } catch (error) {
         console.error("Failed to load remote tool draft, falling back to local storage.", error);
-        savedRecord = getSavedToolRecord(user.id, draftParam);
+        savedRecord = getSavedToolRecord(vaultUserId, draftParam);
       }
 
       if (cancelled) return;
@@ -695,7 +700,7 @@ export default function Tools() {
     return () => {
       cancelled = true;
     };
-  }, [accountsEnabled, defaultDraft, draftParam, user?.id]);
+  }, [accountsEnabled, defaultDraft, draftParam, user?.id, vaultUserId]);
 
   useEffect(() => {
     if (draftParam) return;
@@ -706,7 +711,7 @@ export default function Tools() {
     let cancelled = false;
 
     async function loadPacket() {
-      if (!packetParam || !user?.id) {
+      if (!packetParam || !vaultUserId) {
         if (cancelled) return;
         setScoutingRecordId("");
         setScoutingDraft(defaultScoutingDraft);
@@ -718,12 +723,12 @@ export default function Tools() {
 
       let savedRecord = null;
       try {
-        savedRecord = accountsEnabled
+        savedRecord = accountsEnabled && user?.id
           ? await getSavedToolRecordRemote(user.id, packetParam)
-          : getSavedToolRecord(user.id, packetParam);
+          : getSavedToolRecord(vaultUserId, packetParam);
       } catch (error) {
         console.error("Failed to load remote scouting packet, falling back to local storage.", error);
-        savedRecord = getSavedToolRecord(user.id, packetParam);
+        savedRecord = getSavedToolRecord(vaultUserId, packetParam);
       }
 
       if (cancelled) return;
@@ -749,7 +754,7 @@ export default function Tools() {
     return () => {
       cancelled = true;
     };
-  }, [accountsEnabled, defaultScoutingDraft, packetParam, user?.id]);
+  }, [accountsEnabled, defaultScoutingDraft, packetParam, user?.id, vaultUserId]);
 
   useEffect(() => {
     if (packetParam) return;
@@ -846,19 +851,24 @@ export default function Tools() {
         ? TOOL_TABS.CUSTOM_REQUESTS
       : nextTab === TOOL_TABS.VISUAL_DRILL
         ? TOOL_TABS.VISUAL_DRILL
-      : nextTab === TOOL_TABS.PERSONNEL
-        ? TOOL_TABS.PERSONNEL
-      : nextTab === TOOL_TABS.DEPTH_CHART
-        ? TOOL_TABS.DEPTH_CHART
       : nextTab === TOOL_TABS.SCOUTING
         ? TOOL_TABS.SCOUTING
-        : TOOL_TABS.MATCHUP;
+        : TOOL_TABS.GRAPHICS;
     const nextParams = new URLSearchParams(params);
-    if (normalized === TOOL_TABS.MATCHUP) {
-      nextParams.delete("tab");
-    } else {
-      nextParams.set("tab", normalized);
+    nextParams.set("tab", normalized);
+    if (normalized === TOOL_TABS.GRAPHICS && !nextParams.get("graphic")) {
+      nextParams.set("graphic", activeGraphic);
     }
+    setParams(nextParams, { replace: true });
+  };
+
+  const handleGraphicTabChange = (nextGraphic) => {
+    const normalized = [TOOL_TABS.PERSONNEL, TOOL_TABS.DEPTH_CHART].includes(nextGraphic)
+      ? nextGraphic
+      : TOOL_TABS.MATCHUP;
+    const nextParams = new URLSearchParams(params);
+    nextParams.set("tab", TOOL_TABS.GRAPHICS);
+    nextParams.set("graphic", normalized);
     setParams(nextParams, { replace: true });
   };
 
@@ -1056,7 +1066,10 @@ export default function Tools() {
   };
 
   const handleSave = async () => {
-    if (!user?.id) return;
+    if (!vaultUserId) {
+      setSaveStatus("Sign in to save this match-up graphic.");
+      return;
+    }
     if (busyAction) return;
     setBusyAction("save");
     const id = recordId || crypto.randomUUID();
@@ -1071,44 +1084,42 @@ export default function Tools() {
     };
 
     try {
-      const savedRecord = accountsEnabled
+      const savedRecord = accountsEnabled && user?.id
         ? await saveToolRecordRemote(user.id, record)
-        : saveToolRecord(user.id, record);
-      if (!savedRecord) return;
-      queryClient.invalidateQueries({ queryKey: ["owned-tools", user.id] });
+        : saveToolRecord(vaultUserId, record);
+      if (!savedRecord) {
+        setSaveStatus("Unable to save this draft. Try deleting older browser data or sign in again.");
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] });
       setRecordId(savedRecord.id);
       const nextParams = new URLSearchParams(params);
+      nextParams.set("tab", TOOL_TABS.GRAPHICS);
+      nextParams.set("graphic", TOOL_TABS.MATCHUP);
       nextParams.set("draft", savedRecord.id);
       setParams(nextParams, { replace: true });
       setSaveStatus(`Saved to My Vault as ${savedRecord.title}`);
     } catch (error) {
-      console.error("Failed to save tool draft remotely, falling back to local storage.", error);
-      const savedRecord = saveToolRecord(user.id, record);
-      if (!savedRecord) return;
-      queryClient.invalidateQueries({ queryKey: ["owned-tools", user.id] });
-      setRecordId(savedRecord.id);
-      const nextParams = new URLSearchParams(params);
-      nextParams.set("draft", savedRecord.id);
-      setParams(nextParams, { replace: true });
-      setSaveStatus(`Saved locally as ${savedRecord.title}`);
+      console.error("Failed to save match-up graphic draft.", error);
+      setSaveStatus("Unable to save this draft to Supabase. It was not saved; try again.");
     } finally {
       setBusyAction("");
     }
   };
 
   const handleDelete = async () => {
-    if (!user?.id || !recordId) return;
+    if (!vaultUserId || !recordId) return;
     const confirmed = window.confirm("Delete this saved match-up draft?");
     if (!confirmed) return;
     if (busyAction) return;
     setBusyAction("delete");
     try {
-      if (accountsEnabled) {
+      if (accountsEnabled && user?.id) {
         await deleteSavedToolRecordRemote(user.id, recordId);
       } else {
-        deleteSavedToolRecord(user.id, recordId);
+        deleteSavedToolRecord(vaultUserId, recordId);
       }
-      queryClient.invalidateQueries({ queryKey: ["owned-tools", user.id] });
+      await queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] });
       setRecordId("");
       setDraft(defaultDraft);
       const nextParams = new URLSearchParams(params);
@@ -1116,15 +1127,8 @@ export default function Tools() {
       setParams(nextParams, { replace: true });
       setSaveStatus("Deleted saved draft.");
     } catch (error) {
-      console.error("Failed to delete remote tool draft, falling back to local storage.", error);
-      deleteSavedToolRecord(user.id, recordId);
-      queryClient.invalidateQueries({ queryKey: ["owned-tools", user.id] });
-      setRecordId("");
-      setDraft(defaultDraft);
-      const nextParams = new URLSearchParams(params);
-      nextParams.delete("draft");
-      setParams(nextParams, { replace: true });
-      setSaveStatus("Deleted saved draft locally.");
+      console.error("Failed to delete remote match-up graphic draft.", error);
+      setSaveStatus("Unable to delete this Supabase draft. It has not been removed; try again.");
     } finally {
       setBusyAction("");
     }
@@ -1164,7 +1168,7 @@ export default function Tools() {
   };
 
   const handleSaveScoutingPacket = async () => {
-    if (!user?.id || !scoutingResult || scoutingBusyAction || scoutingLoading) return;
+    if (!vaultUserId || !scoutingResult || scoutingBusyAction || scoutingLoading) return;
     setScoutingBusyAction("save");
     const id = scoutingRecordId || crypto.randomUUID();
     const timestamp = new Date().toISOString();
@@ -1181,10 +1185,14 @@ export default function Tools() {
     };
 
     try {
-      const savedRecord = accountsEnabled
+      const savedRecord = accountsEnabled && user?.id
         ? await saveToolRecordRemote(user.id, record)
-        : saveToolRecord(user.id, record);
-      if (!savedRecord) return;
+        : saveToolRecord(vaultUserId, record);
+      if (!savedRecord) {
+        setScoutingSaveStatus("Unable to save this packet. Try deleting older browser data or sign in again.");
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] });
       setScoutingRecordId(savedRecord.id);
       const nextParams = new URLSearchParams(params);
       nextParams.set("tab", TOOL_TABS.SCOUTING);
@@ -1192,31 +1200,25 @@ export default function Tools() {
       setParams(nextParams, { replace: true });
       setScoutingSaveStatus(`Saved to My Vault as ${savedRecord.title}`);
     } catch (error) {
-      console.error("Failed to save scouting packet remotely, falling back to local storage.", error);
-      const savedRecord = saveToolRecord(user.id, record);
-      if (!savedRecord) return;
-      setScoutingRecordId(savedRecord.id);
-      const nextParams = new URLSearchParams(params);
-      nextParams.set("tab", TOOL_TABS.SCOUTING);
-      nextParams.set("packet", savedRecord.id);
-      setParams(nextParams, { replace: true });
-      setScoutingSaveStatus(`Saved locally as ${savedRecord.title}`);
+      console.error("Failed to save scouting packet.", error);
+      setScoutingSaveStatus("Unable to save this packet to Supabase. It was not saved; try again.");
     } finally {
       setScoutingBusyAction("");
     }
   };
 
   const handleDeleteScoutingPacket = async () => {
-    if (!user?.id || !scoutingRecordId || scoutingBusyAction) return;
+    if (!vaultUserId || !scoutingRecordId || scoutingBusyAction) return;
     const confirmed = window.confirm("Delete this saved scouting packet?");
     if (!confirmed) return;
     setScoutingBusyAction("delete");
     try {
-      if (accountsEnabled) {
+      if (accountsEnabled && user?.id) {
         await deleteSavedToolRecordRemote(user.id, scoutingRecordId);
       } else {
-        deleteSavedToolRecord(user.id, scoutingRecordId);
+        deleteSavedToolRecord(vaultUserId, scoutingRecordId);
       }
+      await queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] });
       setScoutingRecordId("");
       setScoutingDraft(defaultScoutingDraft);
       setScoutingResult(null);
@@ -1229,19 +1231,8 @@ export default function Tools() {
       setScoutingSaveStatus("Deleted saved scouting packet.");
       setScoutingError("");
     } catch (error) {
-      console.error("Failed to delete remote scouting packet, falling back to local storage.", error);
-      deleteSavedToolRecord(user.id, scoutingRecordId);
-      setScoutingRecordId("");
-      setScoutingDraft(defaultScoutingDraft);
-      setScoutingResult(null);
-      const nextParams = new URLSearchParams(params);
-      nextParams.delete("packet");
-      if (activeTab === TOOL_TABS.SCOUTING) {
-        nextParams.set("tab", TOOL_TABS.SCOUTING);
-      }
-      setParams(nextParams, { replace: true });
-      setScoutingSaveStatus("Deleted saved scouting packet locally.");
-      setScoutingError("");
+      console.error("Failed to delete remote scouting packet.", error);
+      setScoutingSaveStatus("Unable to delete this Supabase packet. It has not been removed; try again.");
     } finally {
       setScoutingBusyAction("");
     }
@@ -1284,24 +1275,10 @@ export default function Tools() {
         </button>
         <button
           type="button"
-          className={`${styles.tabButton} ${activeTab === TOOL_TABS.MATCHUP ? styles.tabButtonActive : ""}`}
-          onClick={() => handleToolTabChange(TOOL_TABS.MATCHUP)}
+          className={`${styles.tabButton} ${activeTab === TOOL_TABS.GRAPHICS ? styles.tabButtonActive : ""}`}
+          onClick={() => handleToolTabChange(TOOL_TABS.GRAPHICS)}
         >
-          Match-Up Graphic
-        </button>
-        <button
-          type="button"
-          className={`${styles.tabButton} ${activeTab === TOOL_TABS.PERSONNEL ? styles.tabButtonActive : ""}`}
-          onClick={() => handleToolTabChange(TOOL_TABS.PERSONNEL)}
-        >
-          Personnel Graphics
-        </button>
-        <button
-          type="button"
-          className={`${styles.tabButton} ${activeTab === TOOL_TABS.DEPTH_CHART ? styles.tabButtonActive : ""}`}
-          onClick={() => handleToolTabChange(TOOL_TABS.DEPTH_CHART)}
-        >
-          Depth Chart Graphic
+          Graphics
         </button>
         <button
           type="button"
@@ -1326,7 +1303,33 @@ export default function Tools() {
         </button>
       </div>
 
-      {activeTab === TOOL_TABS.MATCHUP ? (
+      {activeTab === TOOL_TABS.GRAPHICS ? (
+        <div className={styles.graphicTabBar} aria-label="Graphic tools">
+          <button
+            type="button"
+            className={`${styles.graphicTabButton} ${activeGraphic === TOOL_TABS.MATCHUP ? styles.graphicTabButtonActive : ""}`}
+            onClick={() => handleGraphicTabChange(TOOL_TABS.MATCHUP)}
+          >
+            Match-Up
+          </button>
+          <button
+            type="button"
+            className={`${styles.graphicTabButton} ${activeGraphic === TOOL_TABS.PERSONNEL ? styles.graphicTabButtonActive : ""}`}
+            onClick={() => handleGraphicTabChange(TOOL_TABS.PERSONNEL)}
+          >
+            Personnel
+          </button>
+          <button
+            type="button"
+            className={`${styles.graphicTabButton} ${activeGraphic === TOOL_TABS.DEPTH_CHART ? styles.graphicTabButtonActive : ""}`}
+            onClick={() => handleGraphicTabChange(TOOL_TABS.DEPTH_CHART)}
+          >
+            Depth Chart
+          </button>
+        </div>
+      ) : null}
+
+      {activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.MATCHUP ? (
         <section className={styles.workspace}>
           {!remoteRostersPayload?.teams && league === "gleague" ? (
             <p className={styles.statusNote}>
@@ -1427,13 +1430,13 @@ export default function Tools() {
               {recordId && saveStatus.startsWith("Saved") ? (
                 <>
                   {" "}
-                  <Link className={styles.inlineStatusLink} to="/me?tab=tools">View in My Vault</Link>
+                  <Link className={styles.inlineStatusLink} to="/me?tab=graphics">View in My Vault</Link>
                 </>
               ) : null}
             </div>
           ) : null}
         </section>
-      ) : activeTab === TOOL_TABS.PERSONNEL ? (
+      ) : activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.PERSONNEL ? (
         <section className={styles.workspace}>
           <PersonnelGraphicAdmin
             rosterMap={nbaRosterMap}
@@ -1445,7 +1448,7 @@ export default function Tools() {
         <section className={styles.workspace}>
           <VisualDrillGenerator />
         </section>
-      ) : activeTab === TOOL_TABS.DEPTH_CHART ? (
+      ) : activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.DEPTH_CHART ? (
         <section className={styles.workspace}>
           <DepthChartGraphicAdmin rosterSources={{ nba: nbaRosterMap, gleague: gLeagueRosterMap }} />
         </section>

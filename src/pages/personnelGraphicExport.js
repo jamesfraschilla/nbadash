@@ -8,6 +8,7 @@ import {
   calculateThreePointAttemptRatio,
   formatPersonnelStatValue,
 } from "../personnelGraphic.js";
+import { PERSONNEL_LAYOUT } from "../personnelGraphicLayout.js";
 import {
   BLACK,
   EXPORT_FONT_FAMILIES,
@@ -15,6 +16,7 @@ import {
   EXPORT_WIDTH,
   WHITE,
   buildPlayerHeadshotCandidates,
+  clearExportImageCache,
   downloadCanvas,
   drawBackdrop,
   drawCenteredText,
@@ -25,6 +27,7 @@ import {
   loadFirstImage,
   makeCanvas,
 } from "./matchupGraphicExport.js";
+import { StoredZipBuilder } from "../storedZip.js";
 
 const STAT_LABELS = {
   ppg: "PPG",
@@ -45,14 +48,6 @@ const TAG_ASSET_URLS = {
   cold: coldTagUrl,
   drives_right: drivesRightTagUrl,
   drives_left: drivesLeftTagUrl,
-};
-
-const PERSONNEL_LAYOUT = {
-  headshot: { x: 560, y: 68, width: 800, height: 412 },
-  name: { x: 455, y: 500, width: 1010 },
-  statsBox: { x: 515, y: 620, width: 890, height: 190 },
-  threePointBar: { labelX: 497, x: 577, y: 830, width: 767, height: 42 },
-  tags: { y: 906, height: 78 },
 };
 
 function getThreePointRatio(stats) {
@@ -121,6 +116,7 @@ function drawUnderlinedCenteredText(context, text, x, y, width, options) {
 
 function drawStatsBox(context, stats, selectedStats) {
   const { x, y, width, height } = PERSONNEL_LAYOUT.statsBox;
+  const typography = PERSONNEL_LAYOUT.stats;
   const slotWidth = width / 4;
 
   context.save();
@@ -131,18 +127,18 @@ function drawStatsBox(context, stats, selectedStats) {
   selectedStats.slice(0, 4).forEach((statKey, index) => {
     const slotX = x + (slotWidth * index);
     const label = STAT_LABELS[statKey] || String(statKey || "").toUpperCase();
-    drawUnderlinedCenteredText(context, label, slotX, y + 33, slotWidth, {
-      size: 52,
-      minSize: 34,
+    drawUnderlinedCenteredText(context, label, slotX, y + typography.labelInsetY, slotWidth, {
+      size: typography.labelSize,
+      minSize: typography.labelMinSize,
       family: EXPORT_FONT_FAMILIES.header,
       weight: 700,
       color: WHITE,
-      underlineGap: 5,
+      underlineGap: typography.underlineGap,
     });
 
-    drawCenteredText(context, formatPersonnelStatValue(stats, statKey), slotX, y + 113, slotWidth, {
-      size: 72,
-      minSize: 48,
+    drawCenteredText(context, formatPersonnelStatValue(stats, statKey), slotX, y + typography.valueInsetY, slotWidth, {
+      size: typography.valueSize,
+      minSize: typography.valueMinSize,
       family: EXPORT_FONT_FAMILIES.header,
       weight: 700,
       color: WHITE,
@@ -250,7 +246,7 @@ function downloadBlob(blob, fileName) {
   document.body?.appendChild(link);
   link.click();
   link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 async function canvasToPngBlob(canvas) {
@@ -264,109 +260,6 @@ async function canvasToPngBlob(canvas) {
       else reject(new Error("Unable to render personnel graphic PNG."));
     }, "image/png");
   });
-}
-
-const CRC_TABLE = Array.from({ length: 256 }, (_, tableIndex) => {
-  let value = tableIndex;
-  for (let bit = 0; bit < 8; bit += 1) {
-    value = (value & 1) ? (0xedb88320 ^ (value >>> 1)) : (value >>> 1);
-  }
-  return value >>> 0;
-});
-
-function getCrc32(bytes) {
-  let crc = 0xffffffff;
-  for (const byte of bytes) {
-    crc = CRC_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
-
-function getDosDateTime(date = new Date()) {
-  const year = Math.max(1980, date.getFullYear());
-  const dosTime = (
-    (date.getHours() << 11)
-    | (date.getMinutes() << 5)
-    | Math.floor(date.getSeconds() / 2)
-  );
-  const dosDate = (
-    ((year - 1980) << 9)
-    | ((date.getMonth() + 1) << 5)
-    | date.getDate()
-  );
-  return { dosDate, dosTime };
-}
-
-function createZipHeader(byteLength) {
-  const buffer = new ArrayBuffer(byteLength);
-  return {
-    bytes: new Uint8Array(buffer),
-    view: new DataView(buffer),
-  };
-}
-
-async function createStoredZipBlob(files) {
-  const encoder = new TextEncoder();
-  const { dosDate, dosTime } = getDosDateTime();
-  const localParts = [];
-  const centralParts = [];
-  let localOffset = 0;
-  let centralSize = 0;
-
-  for (const file of files) {
-    const fileBytes = new Uint8Array(await file.blob.arrayBuffer());
-    const nameBytes = encoder.encode(file.name);
-    const crc32 = getCrc32(fileBytes);
-
-    const localHeader = createZipHeader(30);
-    localHeader.view.setUint32(0, 0x04034b50, true);
-    localHeader.view.setUint16(4, 20, true);
-    localHeader.view.setUint16(6, 0x0800, true);
-    localHeader.view.setUint16(8, 0, true);
-    localHeader.view.setUint16(10, dosTime, true);
-    localHeader.view.setUint16(12, dosDate, true);
-    localHeader.view.setUint32(14, crc32, true);
-    localHeader.view.setUint32(18, fileBytes.byteLength, true);
-    localHeader.view.setUint32(22, fileBytes.byteLength, true);
-    localHeader.view.setUint16(26, nameBytes.byteLength, true);
-    localHeader.view.setUint16(28, 0, true);
-    localParts.push(localHeader.bytes, nameBytes, fileBytes);
-
-    const centralHeader = createZipHeader(46);
-    centralHeader.view.setUint32(0, 0x02014b50, true);
-    centralHeader.view.setUint16(4, 20, true);
-    centralHeader.view.setUint16(6, 20, true);
-    centralHeader.view.setUint16(8, 0x0800, true);
-    centralHeader.view.setUint16(10, 0, true);
-    centralHeader.view.setUint16(12, dosTime, true);
-    centralHeader.view.setUint16(14, dosDate, true);
-    centralHeader.view.setUint32(16, crc32, true);
-    centralHeader.view.setUint32(20, fileBytes.byteLength, true);
-    centralHeader.view.setUint32(24, fileBytes.byteLength, true);
-    centralHeader.view.setUint16(28, nameBytes.byteLength, true);
-    centralHeader.view.setUint16(30, 0, true);
-    centralHeader.view.setUint16(32, 0, true);
-    centralHeader.view.setUint16(34, 0, true);
-    centralHeader.view.setUint16(36, 0, true);
-    centralHeader.view.setUint32(38, 0, true);
-    centralHeader.view.setUint32(42, localOffset, true);
-    centralParts.push(centralHeader.bytes, nameBytes);
-
-    localOffset += localHeader.bytes.byteLength + nameBytes.byteLength + fileBytes.byteLength;
-    centralSize += centralHeader.bytes.byteLength + nameBytes.byteLength;
-  }
-
-  const endHeader = createZipHeader(22);
-  endHeader.view.setUint32(0, 0x06054b50, true);
-  endHeader.view.setUint16(4, 0, true);
-  endHeader.view.setUint16(6, 0, true);
-  endHeader.view.setUint16(8, files.length, true);
-  endHeader.view.setUint16(10, files.length, true);
-  endHeader.view.setUint32(12, centralSize, true);
-  endHeader.view.setUint32(16, localOffset, true);
-  endHeader.view.setUint16(20, 0, true);
-
-  return new Blob([...localParts, ...centralParts, endHeader.bytes], { type: "application/zip" });
 }
 
 export async function renderPersonnelGraphic({
@@ -421,7 +314,7 @@ export async function exportPersonnelGraphics({ items, team, teamId }) {
     loadTagImages(),
   ]);
 
-  const renderedFiles = [];
+  const zipBuilder = exportItems.length > 1 ? new StoredZipBuilder() : null;
   for (const item of exportItems) {
     const canvas = await renderPersonnelGraphic({
       ...item,
@@ -433,16 +326,17 @@ export async function exportPersonnelGraphics({ items, team, teamId }) {
     if (exportItems.length === 1) {
       downloadCanvas(canvas, fileName);
     } else {
-      renderedFiles.push({
-        name: fileName,
-        blob: await canvasToPngBlob(canvas),
-      });
+      await zipBuilder.addFile(fileName, await canvasToPngBlob(canvas));
+      canvas.width = 1;
+      canvas.height = 1;
+      clearExportImageCache();
     }
   }
 
-  if (renderedFiles.length) {
-    downloadBlob(await createStoredZipBlob(renderedFiles), buildZipFileName(team));
+  if (zipBuilder) {
+    downloadBlob(zipBuilder.toBlob(), buildZipFileName(team));
   }
+  clearExportImageCache();
   return exportItems.length;
 }
 

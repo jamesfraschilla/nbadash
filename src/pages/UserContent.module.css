@@ -143,6 +143,38 @@
   gap: 12px;
 }
 
+.graphicsVault {
+  display: grid;
+  gap: 18px;
+}
+
+.graphicsArea {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--panel) 88%, var(--bg));
+}
+
+.graphicsAreaHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.graphicsAreaHeader h2 {
+  margin: 0;
+  font-size: 1.08rem;
+}
+
+.graphicsAreaHeader span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
 .list {
   display: grid;
   gap: 12px;

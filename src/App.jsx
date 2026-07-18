@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import Header from "./components/Header.jsx";
 import AuthGate from "./components/AuthGate.jsx";
 import LegacyNotesImportPrompt from "./components/LegacyNotesImportPrompt.jsx";
@@ -70,7 +70,7 @@ export default function App() {
     isAdmin,
     hasFeature,
   } = useAuth();
-  const canUseTools = hasFeature("tools");
+  const canUseTools = !accountsEnabled || hasFeature("tools");
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -281,6 +281,7 @@ export default function App() {
             <Route path="/g/:gameId/kpis" element={<Kpis />} />
             <Route path="/m/:gameId" element={<Minutes />} />
             <Route path="/draw" element={<Drawing />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>
       </main>

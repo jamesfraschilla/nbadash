@@ -14,6 +14,10 @@ import {
   fetchBrowserPlayerStatsFallback,
   fetchOfficialNbaPlayerStatsFallback,
 } from "./personnelStatsFallback.js";
+import {
+  getPersonnelStatsCoverage,
+  mergePersonnelStatsPayloads,
+} from "./personnelStatsResolution.js";
 import { supabase } from "./supabaseClient.js";
 import { currentSeasonString, formatDateInput, seasonBoundsForSeason } from "./utils.js";
 
@@ -1836,26 +1840,33 @@ export async function fetchNbaPlayerStats(options = {}) {
     (payload) => ({ kind, payload, error: null }),
     (error) => ({ kind, payload: null, error })
   );
-  const edgeOutcome = asOutcome("edge", edgeRequest);
-  const officialOutcome = asOutcome("official", officialFallbackRequest);
-  const first = await Promise.race([edgeOutcome, officialOutcome]);
-  const firstIsEdgeFallback = first.kind === "edge"
-    && String(first.payload?.source || "").includes("espn");
-  if (first.payload && !firstIsEdgeFallback) return first.payload;
-  const pendingPrimary = first.kind === "edge" ? officialOutcome : edgeOutcome;
-  if (first.kind === "edge") {
-    const officialResult = await pendingPrimary;
-    if (officialResult.payload) return officialResult.payload;
-    if (first.payload) return first.payload;
-    return fetchBrowserPlayerStatsFallback(safeSeason);
+  const primaryOutcomes = await Promise.all([
+    asOutcome("edge", edgeRequest),
+    asOutcome("official", officialFallbackRequest),
+  ]);
+  const payloadsByPriority = [
+    primaryOutcomes.find((outcome) => outcome.kind === "edge")?.payload,
+    primaryOutcomes.find((outcome) => outcome.kind === "official")?.payload,
+  ].filter(Boolean);
+  let merged = mergePersonnelStatsPayloads(payloadsByPriority, safeSeason);
+  const requestedCount = safePlayers.filter((player) => (
+    String(player?.personId || player?.fullName || "").trim()
+  )).length;
+  const coveredCount = getPersonnelStatsCoverage(merged, safePlayers);
+
+  if (!requestedCount || coveredCount < requestedCount) {
+    const browserOutcome = await asOutcome("browser", fetchBrowserPlayerStatsFallback(safeSeason));
+    if (browserOutcome.payload) {
+      payloadsByPriority.unshift(browserOutcome.payload);
+      merged = mergePersonnelStatsPayloads(payloadsByPriority, safeSeason);
+    } else if (!payloadsByPriority.length) {
+      throw browserOutcome.error
+        || primaryOutcomes.find((outcome) => outcome.error)?.error
+        || new Error("Unable to load NBA player stats.");
+    }
   }
 
-  const browserOutcome = asOutcome("browser", fetchBrowserPlayerStatsFallback(safeSeason));
-  const second = await Promise.race([pendingPrimary, browserOutcome]);
-  if (second.payload) return second.payload;
-  const third = await (second.kind === "browser" ? pendingPrimary : browserOutcome);
-  if (third.payload) return third.payload;
-  throw first.error || second.error || third.error || new Error("Unable to load NBA player stats.");
+  return merged;
 }
 
 export async function fetchCurrentGLeagueRosters() {

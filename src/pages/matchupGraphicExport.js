@@ -138,15 +138,28 @@ function loadImage(url) {
 
   const promise = new Promise((resolve) => {
     const image = new Image();
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      if (!value) loadedImageCache.delete(url);
+      resolve(value);
+    };
+    const timeoutId = setTimeout(() => finish(null), 12_000);
     image.crossOrigin = "anonymous";
     image.decoding = "async";
-    image.onload = () => resolve(image);
-    image.onerror = () => resolve(null);
+    image.onload = () => finish(image);
+    image.onerror = () => finish(null);
     image.src = url;
   });
 
   loadedImageCache.set(url, promise);
   return promise;
+}
+
+export function clearExportImageCache() {
+  loadedImageCache.clear();
 }
 
 export async function loadFirstImage(urls) {

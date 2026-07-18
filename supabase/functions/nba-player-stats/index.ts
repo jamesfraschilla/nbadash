@@ -40,7 +40,7 @@ function jsonResponse(
 function currentSeasonString(date = new Date()) {
   const month = date.getUTCMonth() + 1;
   const year = date.getUTCFullYear();
-  const startYear = month >= 10 ? year : year - 1;
+  const startYear = month >= 7 ? year : year - 1;
   return `${startYear}-${String(startYear + 1).slice(-2)}`;
 }
 
@@ -286,14 +286,17 @@ async function fetchEspnPlayerStats(season: string) {
       (firstPage.pagination as Record<string, unknown> | undefined)?.pages,
     ) || 1,
   );
-  const remainingPages = reportedPageCount > 1
-    ? await Promise.all(
+  const remainingResults = reportedPageCount > 1
+    ? await Promise.allSettled(
       Array.from(
         { length: reportedPageCount - 1 },
         (_, index) => fetchEspnPage(season, index + 2),
       ),
     )
     : [];
+  const remainingPages = remainingResults.flatMap((result) => (
+    result.status === "fulfilled" ? [result.value] : []
+  ));
   const definitions = Array.isArray(firstPage.categories)
     ? firstPage.categories
     : [];

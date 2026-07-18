@@ -2,6 +2,25 @@ const ESPN_PLAYER_STATS_URL =
   "https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/statistics/byathlete";
 const JINA_READER_BASE = "https://r.jina.ai/";
 
+async function mapSettledWithConcurrency(items, worker, concurrency = 4) {
+  const values = Array.isArray(items) ? items : [];
+  const results = Array(values.length);
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+    while (nextIndex < values.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      try {
+        results[index] = { status: "fulfilled", value: await worker(values[index], index) };
+      } catch (reason) {
+        results[index] = { status: "rejected", reason };
+      }
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
 export function buildEspnPlayerStatsUrl(season, page) {
   const startYear = Number(String(season || "").slice(0, 4));
   const url = new URL(ESPN_PLAYER_STATS_URL);
@@ -181,7 +200,7 @@ export async function fetchOfficialNbaPlayerStatsFallback({
     };
   }
 
-  const resolvedPlayers = await Promise.all(roster.map(async (player) => {
+  const playerResults = await mapSettledWithConcurrency(roster, async (player) => {
     const personId = String(player.personId).trim();
     const markdown = await requestText(
       buildNbaStatsPageUrl(`/stats/player/${personId}/traditional`, season)
@@ -191,9 +210,20 @@ export async function fetchOfficialNbaPlayerStatsFallback({
       throw new Error(`The NBA stats page for player ${personId} was not recognizable.`);
     }
     return stats;
-  }));
+  }, 4);
+  const resolvedPlayers = playerResults.flatMap((result) => (
+    result.status === "fulfilled" && result.value ? [result.value] : []
+  ));
+  const errors = playerResults.flatMap((result, index) => (
+    result.status === "rejected"
+      ? [{
+        personId: String(roster[index]?.personId || "").trim(),
+        message: result.reason instanceof Error ? result.reason.message : "unknown",
+      }]
+      : []
+  ));
   const playerMap = Object.fromEntries(
-    resolvedPlayers.filter(Boolean).map((player) => [player.personId, player])
+    resolvedPlayers.map((player) => [player.personId, player])
   );
   return {
     fetchedAt: new Date().toISOString(),
@@ -204,23 +234,38 @@ export async function fetchOfficialNbaPlayerStatsFallback({
     source: "nba-web-fallback",
     count: Object.keys(playerMap).length,
     players: playerMap,
+    partial: errors.length > 0,
+    errors,
   };
 }
 
 export async function fetchBrowserPlayerStatsFallback(season) {
-  const firstTwoPages = await Promise.all([
-    requestJson(buildEspnPlayerStatsUrl(season, 1)),
-    requestJson(buildEspnPlayerStatsUrl(season, 2)),
-  ]);
+  const firstPage = await requestJson(buildEspnPlayerStatsUrl(season, 1));
   const reportedPageCount = Math.max(
     1,
-    Number(firstTwoPages[0]?.pagination?.pages) || 1
+    Number(firstPage?.pagination?.pages) || 1
   );
-  const remainingPages = reportedPageCount > 2
-    ? await Promise.all(Array.from(
-      { length: reportedPageCount - 2 },
-      (_, index) => requestJson(buildEspnPlayerStatsUrl(season, index + 3))
-    ))
+  const remainingResults = reportedPageCount > 1
+    ? await mapSettledWithConcurrency(Array.from(
+      { length: reportedPageCount - 1 },
+      (_, index) => index + 2
+    ), (page) => requestJson(buildEspnPlayerStatsUrl(season, page)), 3)
     : [];
-  return normalizeEspnPlayerStatsPages([...firstTwoPages, ...remainingPages], season);
+  const remainingPages = remainingResults.flatMap((result) => (
+    result.status === "fulfilled" ? [result.value] : []
+  ));
+  const payload = normalizeEspnPlayerStatsPages([firstPage, ...remainingPages], season);
+  const errors = remainingResults.flatMap((result, index) => (
+    result.status === "rejected"
+      ? [{
+        page: index + 2,
+        message: result.reason instanceof Error ? result.reason.message : "unknown",
+      }]
+      : []
+  ));
+  return {
+    ...payload,
+    partial: errors.length > 0,
+    errors,
+  };
 }
