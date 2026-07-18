@@ -35,6 +35,14 @@ import DepthChartGraphicAdmin from "./DepthChartGraphicAdmin.jsx";
 import PersonnelGraphicAdmin from "./PersonnelGraphicAdmin.jsx";
 import VisualDrillGenerator from "./VisualDrillGenerator.jsx";
 import { requestCustomDashboardRequest } from "../customRequestsData.js";
+import {
+  buildMatchupGraphicLineupFromDraft,
+  buildMatchupGraphicLineupMap,
+  getDefaultMatchupGraphicTeamId,
+  getMatchupGraphicLineupKey,
+  listRemoteMatchupGraphicLineups,
+  saveRemoteMatchupGraphicLineups,
+} from "../matchupGraphicLineups.js";
 import styles from "./Tools.module.css";
 
 const EMPTY_PLAYER_IDS = Array(5).fill("");
@@ -93,15 +101,10 @@ function buildDefaultDraftForLeague(league, teamScopes) {
     ...buildEmptyDraft(),
     league: normalizedLeague,
   };
-
-  if (normalizedLeague === "nba" && scopes.has("washington")) {
-    nextDraft.leftTeamId = WIZARDS_TEAM_ID;
-    nextDraft.logoTeamId = WIZARDS_TEAM_ID;
-  }
-
-  if (normalizedLeague === "gleague" && scopes.has("capital_city")) {
-    nextDraft.leftTeamId = CAPITAL_CITY_TEAM_ID;
-    nextDraft.logoTeamId = CAPITAL_CITY_TEAM_ID;
+  const defaultTeamId = getDefaultMatchupGraphicTeamId(normalizedLeague, [...scopes]);
+  if (defaultTeamId) {
+    nextDraft.leftTeamId = defaultTeamId;
+    nextDraft.logoTeamId = defaultTeamId;
   }
 
   return nextDraft;
@@ -109,13 +112,7 @@ function buildDefaultDraftForLeague(league, teamScopes) {
 
 function buildDefaultDraftForProfile(profile) {
   const scopes = normalizeTeamScopes(profile?.team_scopes);
-  if (scopes.has("washington")) {
-    return buildDefaultDraftForLeague("nba", scopes);
-  }
-  if (scopes.has("capital_city")) {
-    return buildDefaultDraftForLeague("gleague", scopes);
-  }
-  return buildEmptyDraft();
+  return buildDefaultDraftForLeague("nba", scopes);
 }
 
 function buildDefaultScoutingDraftForProfile(profile) {
@@ -312,6 +309,46 @@ function resolveSelectedPlayers(playerIds, roster, customPlayers, teamId) {
   });
 }
 
+function draftSideHasPlayerEdits(draft, side) {
+  const playerIds = Array.isArray(draft?.[`${side}PlayerIds`]) ? draft[`${side}PlayerIds`] : [];
+  const customPlayers = Array.isArray(draft?.[`${side}CustomPlayers`]) ? draft[`${side}CustomPlayers`] : [];
+  return playerIds.some((value) => String(value || "").trim()) || customPlayers.some((player) => (
+    String(player?.jerseyNum || "").trim()
+    || String(player?.lastName || "").trim()
+    || String(player?.headshotDataUrl || "").trim()
+  ));
+}
+
+function applyTeamLineupToDraftSide(draft, side, lineup) {
+  if (!lineup) return draft;
+  return {
+    ...draft,
+    [`${side}PlayerIds`]: [...EMPTY_PLAYER_IDS].map((_, index) => (
+      String(lineup.playerIds?.[index] || "").trim()
+    )),
+    [`${side}CustomPlayers`]: hydrateCustomPlayers(lineup.customPlayers),
+  };
+}
+
+function mergeSharedLineupPlayersIntoRosterMap(rosterMap, lineupMap, league) {
+  const next = Object.fromEntries(
+    Object.entries(rosterMap || {}).map(([teamId, players]) => [teamId, [...(players || [])]])
+  );
+  Object.values(lineupMap || {}).forEach((lineup) => {
+    if (lineup?.league !== league || !lineup?.teamId) return;
+    const teamPlayers = next[lineup.teamId] || [];
+    const knownIds = new Set(teamPlayers.map((player) => String(player?.personId || "").trim()).filter(Boolean));
+    (lineup.players || []).forEach((player) => {
+      const personId = String(player?.personId || "").trim();
+      if (!personId || knownIds.has(personId)) return;
+      teamPlayers.push(player);
+      knownIds.add(personId);
+    });
+    next[lineup.teamId] = teamPlayers;
+  });
+  return next;
+}
+
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -487,6 +524,20 @@ export default function Tools() {
     staleTime: 6 * 60 * 60 * 1000,
     retry: 1,
   });
+  const {
+    data: sharedMatchupLineups = [],
+    error: sharedMatchupLineupsError,
+  } = useQuery({
+    queryKey: ["matchup-graphic-team-lineups"],
+    queryFn: listRemoteMatchupGraphicLineups,
+    enabled: canUseTools,
+    staleTime: 0,
+    retry: 1,
+  });
+  const sharedMatchupLineupMap = useMemo(
+    () => buildMatchupGraphicLineupMap(sharedMatchupLineups),
+    [sharedMatchupLineups]
+  );
 
   const nbaRosterMap = useMemo(() => {
     const remoteTeams = remoteNbaRostersPayload?.teams && typeof remoteNbaRostersPayload.teams === "object"
@@ -537,7 +588,11 @@ export default function Tools() {
     () => getLeagueTeam(scoutingDraft.teamId, scoutingLeague),
     [scoutingDraft.teamId, scoutingLeague]
   );
-  const rosterMap = league === "gleague" ? gLeagueRosterMap : nbaRosterMap;
+  const baseRosterMap = league === "gleague" ? gLeagueRosterMap : nbaRosterMap;
+  const rosterMap = useMemo(
+    () => mergeSharedLineupPlayersIntoRosterMap(baseRosterMap, sharedMatchupLineupMap, league),
+    [baseRosterMap, league, sharedMatchupLineupMap]
+  );
   const remoteRostersPayload = league === "gleague" ? remoteGLeagueRostersPayload : remoteNbaRostersPayload;
   const leftRoster = useMemo(() => rosterMap[String(draft.leftTeamId || "")] || [], [draft.leftTeamId, rosterMap]);
   const rightRoster = useMemo(() => rosterMap[String(draft.rightTeamId || "")] || [], [draft.rightTeamId, rosterMap]);
@@ -708,6 +763,20 @@ export default function Tools() {
   }, [defaultDraft, draftParam]);
 
   useEffect(() => {
+    if (draftParam || !sharedMatchupLineups.length) return;
+    setDraft((current) => {
+      let next = current;
+      ["left", "right"].forEach((side) => {
+        const teamId = String(next?.[`${side}TeamId`] || "").trim();
+        if (!teamId || draftSideHasPlayerEdits(next, side)) return;
+        const lineup = sharedMatchupLineupMap[getMatchupGraphicLineupKey(next.league, teamId)];
+        if (lineup) next = applyTeamLineupToDraftSide(next, side, lineup);
+      });
+      return next;
+    });
+  }, [draftParam, sharedMatchupLineupMap, sharedMatchupLineups.length]);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function loadPacket() {
@@ -772,12 +841,16 @@ export default function Tools() {
   }, [defaultLateGameSetup]);
 
   const handleTeamChange = (side, nextTeamId) => {
-    setDraft((current) => ({
-      ...current,
-      [`${side}TeamId`]: nextTeamId,
-      [`${side}PlayerIds`]: [...EMPTY_PLAYER_IDS],
-      [`${side}CustomPlayers`]: buildEmptyCustomPlayers(),
-    }));
+    setDraft((current) => {
+      const next = {
+        ...current,
+        [`${side}TeamId`]: nextTeamId,
+        [`${side}PlayerIds`]: [...EMPTY_PLAYER_IDS],
+        [`${side}CustomPlayers`]: buildEmptyCustomPlayers(),
+      };
+      const lineup = sharedMatchupLineupMap[getMatchupGraphicLineupKey(current.league, nextTeamId)];
+      return lineup ? applyTeamLineupToDraftSide(next, side, lineup) : next;
+    });
     setSaveStatus("");
   };
 
@@ -830,7 +903,9 @@ export default function Tools() {
 
   const handleLeagueChange = (nextLeague) => {
     const normalizedLeague = nextLeague === "gleague" ? "gleague" : "nba";
-    setDraft(buildDefaultDraftForLeague(normalizedLeague, profile?.team_scopes));
+    const next = buildDefaultDraftForLeague(normalizedLeague, profile?.team_scopes);
+    const lineup = sharedMatchupLineupMap[getMatchupGraphicLineupKey(normalizedLeague, next.leftTeamId)];
+    setDraft(lineup ? applyTeamLineupToDraftSide(next, "left", lineup) : next);
     setSaveStatus("");
   };
 
@@ -1082,6 +1157,10 @@ export default function Tools() {
       createdAt: timestamp,
       payload: draft,
     };
+    const sharedLineupsToSave = [
+      buildMatchupGraphicLineupFromDraft(draft, "left", leftRoster),
+      buildMatchupGraphicLineupFromDraft(draft, "right", rightRoster),
+    ].filter(Boolean);
 
     try {
       const savedRecord = accountsEnabled && user?.id
@@ -1091,6 +1170,14 @@ export default function Tools() {
         setSaveStatus("Unable to save this draft. Try deleting older browser data or sign in again.");
         return;
       }
+      let sharedLineupError = null;
+      try {
+        await saveRemoteMatchupGraphicLineups(sharedLineupsToSave);
+        await queryClient.invalidateQueries({ queryKey: ["matchup-graphic-team-lineups"] });
+      } catch (error) {
+        sharedLineupError = error;
+        console.error("Failed to save shared match-up player selections.", error);
+      }
       await queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] });
       setRecordId(savedRecord.id);
       const nextParams = new URLSearchParams(params);
@@ -1098,7 +1185,9 @@ export default function Tools() {
       nextParams.set("graphic", TOOL_TABS.MATCHUP);
       nextParams.set("draft", savedRecord.id);
       setParams(nextParams, { replace: true });
-      setSaveStatus(`Saved to My Vault as ${savedRecord.title}`);
+      setSaveStatus(sharedLineupError
+        ? `Saved to My Vault as ${savedRecord.title}, but the shared player selections could not be updated. Try saving again.`
+        : `Saved to My Vault as ${savedRecord.title}. Player selections are shared for the next user.`);
     } catch (error) {
       console.error("Failed to save match-up graphic draft.", error);
       setSaveStatus("Unable to save this draft to Supabase. It was not saved; try again.");
@@ -1334,6 +1423,11 @@ export default function Tools() {
           {!remoteRostersPayload?.teams && league === "gleague" ? (
             <p className={styles.statusNote}>
               Live G League rosters will appear here once the `gleague-rosters` Supabase function is deployed.
+            </p>
+          ) : null}
+          {sharedMatchupLineupsError ? (
+            <p className={styles.statusNote}>
+              Shared saved player selections are temporarily unavailable. New selections can still be saved to your draft.
             </p>
           ) : null}
 
