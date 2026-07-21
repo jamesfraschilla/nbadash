@@ -139,9 +139,12 @@ export function normalizeEspnPlayerStatsPages(pages, season) {
   };
 }
 
-async function requestJson(url, timeoutMs = 20000) {
+async function requestJson(url, timeoutMs = 20000, signal = null) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const abortFromParent = () => controller.abort(signal?.reason);
+  if (signal?.aborted) abortFromParent();
+  else signal?.addEventListener?.("abort", abortFromParent, { once: true });
   try {
     const response = await fetch(url, {
       headers: { Accept: "application/json" },
@@ -151,12 +154,16 @@ async function requestJson(url, timeoutMs = 20000) {
     return response.json();
   } finally {
     clearTimeout(timeoutId);
+    signal?.removeEventListener?.("abort", abortFromParent);
   }
 }
 
-async function requestText(url, timeoutMs = 15000) {
+async function requestText(url, timeoutMs = 15000, signal = null) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const abortFromParent = () => controller.abort(signal?.reason);
+  if (signal?.aborted) abortFromParent();
+  else signal?.addEventListener?.("abort", abortFromParent, { once: true });
   try {
     const response = await fetch(url, {
       headers: { Accept: "text/plain" },
@@ -166,6 +173,7 @@ async function requestText(url, timeoutMs = 15000) {
     return response.text();
   } finally {
     clearTimeout(timeoutId);
+    signal?.removeEventListener?.("abort", abortFromParent);
   }
 }
 
@@ -173,6 +181,7 @@ export async function fetchOfficialNbaPlayerStatsFallback({
   season,
   teamId,
   players,
+  signal,
 }) {
   const roster = (Array.isArray(players) ? players : [])
     .filter((player) => String(player?.personId || "").trim())
@@ -181,7 +190,11 @@ export async function fetchOfficialNbaPlayerStatsFallback({
     throw new Error("Team and roster are required for the NBA stats page fallback.");
   }
 
-  const teamPage = await requestText(buildNbaStatsPageUrl("/stats/players/traditional", season, teamId));
+  const teamPage = await requestText(
+    buildNbaStatsPageUrl("/stats/players/traditional", season, teamId),
+    15000,
+    signal
+  );
   const hasSeasonData = /^\|\s*\d+\s*\|\s*\[[^\]]+\]\(https:\/\/www\.nba\.com\/stats\/player\/\d+/m
     .test(teamPage);
   if (!hasSeasonData) {
@@ -203,7 +216,9 @@ export async function fetchOfficialNbaPlayerStatsFallback({
   const playerResults = await mapSettledWithConcurrency(roster, async (player) => {
     const personId = String(player.personId).trim();
     const markdown = await requestText(
-      buildNbaStatsPageUrl(`/stats/player/${personId}/traditional`, season)
+      buildNbaStatsPageUrl(`/stats/player/${personId}/traditional`, season),
+      15000,
+      signal
     );
     const stats = parseNbaPlayerStatsMarkdown(markdown, player, season);
     if (!stats && !/No data available/i.test(markdown)) {
@@ -239,8 +254,9 @@ export async function fetchOfficialNbaPlayerStatsFallback({
   };
 }
 
-export async function fetchBrowserPlayerStatsFallback(season) {
-  const firstPage = await requestJson(buildEspnPlayerStatsUrl(season, 1));
+export async function fetchBrowserPlayerStatsFallback(season, options = {}) {
+  const signal = options?.signal || null;
+  const firstPage = await requestJson(buildEspnPlayerStatsUrl(season, 1), 20000, signal);
   const reportedPageCount = Math.max(
     1,
     Number(firstPage?.pagination?.pages) || 1
@@ -249,7 +265,7 @@ export async function fetchBrowserPlayerStatsFallback(season) {
     ? await mapSettledWithConcurrency(Array.from(
       { length: reportedPageCount - 1 },
       (_, index) => index + 2
-    ), (page) => requestJson(buildEspnPlayerStatsUrl(season, page)), 3)
+    ), (page) => requestJson(buildEspnPlayerStatsUrl(season, page), 20000, signal), 3)
     : [];
   const remainingPages = remainingResults.flatMap((result) => (
     result.status === "fulfilled" ? [result.value] : []

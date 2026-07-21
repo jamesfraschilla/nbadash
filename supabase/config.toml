@@ -21,3 +21,6 @@ verify_jwt = true
 
 [functions.team-games]
 verify_jwt = false
+
+[functions.game-metadata]
+verify_jwt = true

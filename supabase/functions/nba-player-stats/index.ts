@@ -1,3 +1,5 @@
+import { normalizeFractionPercentage, toNullableNumber } from "./normalizers.ts";
+
 const NBA_PLAYER_STATS_URL =
   "https://stats.nba.com/stats/leaguedashplayerstats";
 const GLEAGUE_PLAYER_STATS_URL =
@@ -85,15 +87,6 @@ function mapRows(resultSet: Record<string, unknown> | undefined): StatsRow[] {
     );
 }
 
-function toNumber(value: unknown, fallback = 0) {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : fallback;
-}
-
-function normalizePercentage(value: unknown) {
-  return toNumber(value, 0) * 100;
-}
-
 function normalizeNbaPlayerRow(row: StatsRow) {
   const personId = String(row.PLAYER_ID || "").trim();
   if (!personId) return null;
@@ -103,16 +96,16 @@ function normalizeNbaPlayerRow(row: StatsRow) {
     fullName: String(row.PLAYER_NAME || "").trim(),
     teamId: String(row.TEAM_ID || "").trim(),
     teamAbbreviation: String(row.TEAM_ABBREVIATION || "").trim(),
-    gamesPlayed: toNumber(row.GP, 0),
-    pointsPerGame: toNumber(row.PTS, 0),
-    reboundsPerGame: toNumber(row.REB, 0),
-    threePointPercentage: normalizePercentage(row.FG3_PCT),
-    assistsPerGame: toNumber(row.AST, 0),
-    blocksPerGame: toNumber(row.BLK, 0),
-    stealsPerGame: toNumber(row.STL, 0),
-    freeThrowAttemptsPerGame: toNumber(row.FTA, 0),
-    fieldGoalAttemptsPerGame: toNumber(row.FGA, 0),
-    threePointAttemptsPerGame: toNumber(row.FG3A, 0),
+    gamesPlayed: toNullableNumber(row.GP),
+    pointsPerGame: toNullableNumber(row.PTS),
+    reboundsPerGame: toNullableNumber(row.REB),
+    threePointPercentage: normalizeFractionPercentage(row.FG3_PCT),
+    assistsPerGame: toNullableNumber(row.AST),
+    blocksPerGame: toNullableNumber(row.BLK),
+    stealsPerGame: toNullableNumber(row.STL),
+    freeThrowAttemptsPerGame: toNullableNumber(row.FTA),
+    fieldGoalAttemptsPerGame: toNullableNumber(row.FGA),
+    threePointAttemptsPerGame: toNullableNumber(row.FG3A),
   };
 }
 
@@ -250,19 +243,16 @@ function normalizeEspnAthlete(
     fullName,
     teamId: "",
     teamAbbreviation: String(athlete?.teamShortName || "").trim(),
-    gamesPlayed: toNumber(general.gamesPlayed, 0),
-    pointsPerGame: toNumber(offensive.avgPoints, 0),
-    reboundsPerGame: toNumber(general.avgRebounds, 0),
-    threePointPercentage: toNumber(offensive.threePointFieldGoalPct, 0),
-    assistsPerGame: toNumber(offensive.avgAssists, 0),
-    blocksPerGame: toNumber(defensive.avgBlocks, 0),
-    stealsPerGame: toNumber(defensive.avgSteals, 0),
-    freeThrowAttemptsPerGame: toNumber(offensive.avgFreeThrowsAttempted, 0),
-    fieldGoalAttemptsPerGame: toNumber(offensive.avgFieldGoalsAttempted, 0),
-    threePointAttemptsPerGame: toNumber(
-      offensive.avgThreePointFieldGoalsAttempted,
-      0,
-    ),
+    gamesPlayed: toNullableNumber(general.gamesPlayed),
+    pointsPerGame: toNullableNumber(offensive.avgPoints),
+    reboundsPerGame: toNullableNumber(general.avgRebounds),
+    threePointPercentage: toNullableNumber(offensive.threePointFieldGoalPct),
+    assistsPerGame: toNullableNumber(offensive.avgAssists),
+    blocksPerGame: toNullableNumber(defensive.avgBlocks),
+    stealsPerGame: toNullableNumber(defensive.avgSteals),
+    freeThrowAttemptsPerGame: toNullableNumber(offensive.avgFreeThrowsAttempted),
+    fieldGoalAttemptsPerGame: toNullableNumber(offensive.avgFieldGoalsAttempted),
+    threePointAttemptsPerGame: toNullableNumber(offensive.avgThreePointFieldGoalsAttempted),
   };
 }
 

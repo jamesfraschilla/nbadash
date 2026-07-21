@@ -15,10 +15,11 @@ import {
   fetchOfficialNbaPlayerStatsFallback,
 } from "./personnelStatsFallback.js";
 import {
-  getPersonnelStatsCoverage,
+  getMissingPersonnelStatsPlayers,
   mergePersonnelStatsPayloads,
 } from "./personnelStatsResolution.js";
 import { supabase } from "./supabaseClient.js";
+import { readLocalStorage, writeLocalStorage } from "./storage.js";
 import { currentSeasonString, formatDateInput, seasonBoundsForSeason } from "./utils.js";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
@@ -27,36 +28,38 @@ const SUMMER_LEAGUE_IDS = new Set(["13", "14", "15", "16"]);
 const SUMMER_LEAGUE_PAGE_CACHE = new Map();
 const SUMMER_LEAGUE_GAME_URL_CACHE = new Map();
 const NBA_TEAM_BY_TRICODE = new Map(NBA_TEAMS.map((team) => [team.tricode, team]));
-const SUPABASE_URL = import.meta?.env?.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta?.env?.VITE_SUPABASE_ANON_KEY;
+const apiEnv = import.meta.env || {};
+const SUPABASE_URL = apiEnv.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = apiEnv.VITE_SUPABASE_ANON_KEY;
 const SUPABASE_FUNCTIONS_BASE = SUPABASE_URL
   ? `${String(SUPABASE_URL).replace(/\/$/, "")}/functions/v1`
   : "";
-const APP_BASE_PATH = import.meta?.env?.BASE_URL || "/nbadash/";
+const APP_BASE_PATH = apiEnv.BASE_URL || "/nbadash/";
+const ROSTER_CACHE_PREFIX = "nba-dashboard:roster-feed:v1:";
 
 async function requestJson(url, options = {}) {
-  const { timeoutMs = 0 } = options;
+  const { timeoutMs = 0, signal: parentSignal = null, headers: optionHeaders, ...fetchOptions } = options;
   const headers = { Accept: "application/json" };
   if (SUPABASE_FUNCTIONS_BASE && String(url || "").startsWith(SUPABASE_FUNCTIONS_BASE)) {
     if (SUPABASE_ANON_KEY) {
       headers.apikey = SUPABASE_ANON_KEY;
-    }
-    const accessToken = await supabase?.auth?.getSession?.()
-      .then(({ data }) => data?.session?.access_token || "")
-      .catch(() => "");
-    if (accessToken) {
-      headers.Authorization = `Bearer ${accessToken}`;
+      headers.Authorization = `Bearer ${SUPABASE_ANON_KEY}`;
     }
   }
   const controller = timeoutMs > 0 ? new AbortController() : null;
+  const abortFromParent = () => controller?.abort(parentSignal?.reason);
+  if (controller && parentSignal?.aborted) abortFromParent();
+  else if (controller) parentSignal?.addEventListener?.("abort", abortFromParent, { once: true });
   const timeoutId = controller
     ? setTimeout(() => controller.abort(), timeoutMs)
     : null;
   const res = await fetch(url, {
-    headers,
-    signal: controller?.signal,
+    ...fetchOptions,
+    headers: { ...headers, ...(optionHeaders || {}) },
+    signal: controller?.signal || parentSignal || undefined,
   }).finally(() => {
     if (timeoutId) clearTimeout(timeoutId);
+    parentSignal?.removeEventListener?.("abort", abortFromParent);
   });
   if (!res.ok) {
     const error = new Error(`Request failed: ${res.status}`);
@@ -65,6 +68,48 @@ async function requestJson(url, options = {}) {
     throw error;
   }
   return res.json();
+}
+
+function readRosterFeedCache(league) {
+  const raw = readLocalStorage(`${ROSTER_CACHE_PREFIX}${league}`);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed?.teams && typeof parsed.teams === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function mergeAndCacheRosterFeed(league, payload) {
+  const cached = readRosterFeedCache(league);
+  const nextTeams = {
+    ...(cached?.teams || {}),
+    ...(payload?.teams && typeof payload.teams === "object" ? payload.teams : {}),
+  };
+  const nextPayload = {
+    ...(cached || {}),
+    ...(payload || {}),
+    teams: nextTeams,
+    cacheFallback: Boolean(payload?.cacheFallback),
+  };
+  writeLocalStorage(`${ROSTER_CACHE_PREFIX}${league}`, JSON.stringify(nextPayload));
+  return nextPayload;
+}
+
+function cachedRosterFeedOrThrow(league, error) {
+  const cached = readRosterFeedCache(league);
+  if (!cached) throw error;
+  return {
+    ...cached,
+    stale: true,
+    cacheFallback: true,
+    partial: true,
+    errors: [
+      ...(Array.isArray(cached.errors) ? cached.errors : []),
+      { error: error instanceof Error ? error.message : "Roster feed unavailable" },
+    ],
+  };
 }
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 2500) {
@@ -1802,11 +1847,20 @@ export function playerHeadshotUrl(personId, teamId = null, options = {}) {
   return playerHeadshotUrls(personId, teamId, options)[0] || null;
 }
 
-export async function fetchCurrentNbaRosters() {
+export async function fetchCurrentNbaRosters(options = {}) {
   if (!SUPABASE_FUNCTIONS_BASE) {
     throw new Error("Supabase functions are not configured.");
   }
-  return requestJson(`${SUPABASE_FUNCTIONS_BASE}/nba-rosters`);
+  try {
+    const payload = await requestJson(`${SUPABASE_FUNCTIONS_BASE}/nba-rosters`, {
+      timeoutMs: 15000,
+      signal: options?.signal,
+    });
+    return mergeAndCacheRosterFeed("nba", payload);
+  } catch (error) {
+    if (options?.signal?.aborted) throw options.signal.reason || error;
+    return cachedRosterFeedOrThrow("nba", error);
+  }
 }
 
 export async function fetchNbaPlayerStats(options = {}) {
@@ -1817,6 +1871,7 @@ export async function fetchNbaPlayerStats(options = {}) {
     : "";
   const safeSeason = typeof safeOptions.season === "string" ? safeOptions.season.trim() : "";
   const safePlayers = Array.isArray(safeOptions.players) ? safeOptions.players : [];
+  const signal = safeOptions.signal || null;
   if (!safeSeason) throw new Error("A stats season is required.");
 
   const edgeRequest = SUPABASE_FUNCTIONS_BASE
@@ -1826,7 +1881,7 @@ export async function fetchNbaPlayerStats(options = {}) {
       if (safeTeamId) url.searchParams.set("teamId", safeTeamId);
       url.searchParams.set("season", safeSeason);
       url.searchParams.set("league", safeLeague);
-      return requestJson(url.toString(), { timeoutMs: 15000 }).then((payload) => {
+      return requestJson(url.toString(), { timeoutMs: 15000, signal }).then((payload) => {
         if (payload?.season && payload.season !== safeSeason) {
           throw new Error(`Stats service returned ${payload.season} instead of ${safeSeason}.`);
         }
@@ -1850,47 +1905,82 @@ export async function fetchNbaPlayerStats(options = {}) {
     return mergePersonnelStatsPayloads([edgeOutcome.payload], safeSeason);
   }
 
-  const officialFallbackRequest = fetchOfficialNbaPlayerStatsFallback({
-    season: safeSeason,
-    teamId: safeTeamId,
-    players: safePlayers,
-  });
-  const primaryOutcomes = await Promise.all([
-    asOutcome("edge", edgeRequest),
-    asOutcome("official", officialFallbackRequest),
-  ]);
-  const payloadsByPriority = [
-    primaryOutcomes.find((outcome) => outcome.kind === "edge")?.payload,
-    primaryOutcomes.find((outcome) => outcome.kind === "official")?.payload,
-  ].filter(Boolean);
+  const edgeOutcome = await asOutcome("edge", edgeRequest);
+  if (signal?.aborted) throw signal.reason || new DOMException("Aborted", "AbortError");
+  const payloadsByPriority = edgeOutcome.payload ? [edgeOutcome.payload] : [];
   let merged = mergePersonnelStatsPayloads(payloadsByPriority, safeSeason);
   const requestedCount = safePlayers.filter((player) => (
     String(player?.personId || player?.fullName || "").trim()
   )).length;
-  const coveredCount = getPersonnelStatsCoverage(merged, safePlayers);
+  let missingPlayers = getMissingPersonnelStatsPlayers(merged, safePlayers);
 
-  if (!requestedCount || coveredCount < requestedCount) {
-    const browserOutcome = await asOutcome("browser", fetchBrowserPlayerStatsFallback(safeSeason));
+  if (requestedCount && missingPlayers.length && safeTeamId) {
+    const officialOutcome = await asOutcome("official", fetchOfficialNbaPlayerStatsFallback({
+      season: safeSeason,
+      teamId: safeTeamId,
+      players: missingPlayers,
+      signal,
+    }));
+    if (signal?.aborted) throw signal.reason || new DOMException("Aborted", "AbortError");
+    if (officialOutcome.payload) {
+      payloadsByPriority.unshift(officialOutcome.payload);
+      merged = mergePersonnelStatsPayloads(payloadsByPriority, safeSeason);
+      missingPlayers = getMissingPersonnelStatsPlayers(merged, safePlayers);
+    }
+  }
+
+  if (requestedCount && missingPlayers.length) {
+    const browserOutcome = await asOutcome("browser", fetchBrowserPlayerStatsFallback(safeSeason, { signal }));
+    if (signal?.aborted) throw signal.reason || new DOMException("Aborted", "AbortError");
     if (browserOutcome.payload) {
       payloadsByPriority.unshift(browserOutcome.payload);
       merged = mergePersonnelStatsPayloads(payloadsByPriority, safeSeason);
     } else if (!payloadsByPriority.length) {
       throw browserOutcome.error
-        || primaryOutcomes.find((outcome) => outcome.error)?.error
+        || edgeOutcome.error
         || new Error("Unable to load NBA player stats.");
     }
+  }
+
+  if (!payloadsByPriority.length) {
+    throw edgeOutcome.error || new Error("Unable to load NBA player stats.");
   }
 
   return merged;
 }
 
-export async function fetchCurrentGLeagueRosters() {
+export async function fetchCurrentGLeagueRosters(options = {}) {
   if (!SUPABASE_FUNCTIONS_BASE) {
     throw new Error("Supabase functions are not configured.");
   }
   const url = new URL(`${SUPABASE_FUNCTIONS_BASE}/gleague-rosters`);
   url.searchParams.set("apiVersion", "2");
-  return requestJson(url.toString());
+  try {
+    const payload = await requestJson(url.toString(), {
+      timeoutMs: 15000,
+      signal: options?.signal,
+    });
+    return mergeAndCacheRosterFeed("gleague", payload);
+  } catch (error) {
+    if (options?.signal?.aborted) throw options.signal.reason || error;
+    return cachedRosterFeedOrThrow("gleague", error);
+  }
+}
+
+export async function fetchGamesMetadataByIds(gameIds) {
+  const normalizedIds = [...new Set(
+    (Array.isArray(gameIds) ? gameIds : [])
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+  )];
+  if (!normalizedIds.length) return {};
+  if (!supabase) throw new Error("Supabase is not configured.");
+  const { data, error } = await supabase.functions.invoke("game-metadata", {
+    body: { gameIds: normalizedIds },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data?.games && typeof data.games === "object" ? data.games : {};
 }
 
 async function fetchTeamSeasonGamesFromFunction(teamId, season = currentSeasonString()) {

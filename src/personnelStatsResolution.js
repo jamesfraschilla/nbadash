@@ -13,6 +13,18 @@ function payloadPlayers(payload) {
   return Object.values(players).filter((player) => player && typeof player === "object");
 }
 
+export function getMissingPersonnelStatsPlayers(payload, requestedPlayers = []) {
+  const availablePlayers = payloadPlayers(payload);
+  const ids = new Set(availablePlayers.map((player) => String(player?.personId || "").trim()).filter(Boolean));
+  const names = new Set(availablePlayers.map((player) => normalizeName(player?.fullName)).filter(Boolean));
+  return (Array.isArray(requestedPlayers) ? requestedPlayers : [])
+    .filter((player) => String(player?.personId || player?.fullName || "").trim())
+    .filter((player) => (
+      !ids.has(String(player?.personId || "").trim())
+      && !names.has(normalizeName(player?.fullName))
+    ));
+}
+
 export function getPersonnelStatsCoverage(payload, requestedPlayers = []) {
   const availablePlayers = payloadPlayers(payload);
   const ids = new Set(availablePlayers.map((player) => String(player?.personId || "").trim()).filter(Boolean));

@@ -28,7 +28,7 @@ function createZipHeader(byteLength) {
 }
 
 export class StoredZipBuilder {
-  constructor(date = new Date()) {
+  constructor(date = new Date(), options = {}) {
     this.encoder = new TextEncoder();
     this.dateTime = getDosDateTime(date);
     this.localParts = [];
@@ -36,11 +36,15 @@ export class StoredZipBuilder {
     this.localOffset = 0;
     this.centralSize = 0;
     this.fileCount = 0;
+    this.maxBytes = Number(options.maxBytes) > 0 ? Number(options.maxBytes) : Number.POSITIVE_INFINITY;
   }
 
   async addFile(name, blob) {
     const fileBytes = new Uint8Array(await blob.arrayBuffer());
     const nameBytes = this.encoder.encode(String(name || "file"));
+    if (this.localOffset + fileBytes.byteLength > this.maxBytes) {
+      throw new Error("This ZIP is too large to assemble safely in browser memory.");
+    }
     const crc32 = getCrc32(fileBytes);
     const { dosDate, dosTime } = this.dateTime;
 
@@ -94,6 +98,99 @@ export class StoredZipBuilder {
     endHeader.view.setUint32(16, this.localOffset, true);
     endHeader.view.setUint16(20, 0, true);
     return new Blob([...this.localParts, ...this.centralParts, endHeader.bytes], { type: "application/zip" });
+  }
+}
+
+export class StreamingZipBuilder {
+  constructor(writable, date = new Date()) {
+    this.writable = writable;
+    this.encoder = new TextEncoder();
+    this.dateTime = getDosDateTime(date);
+    this.centralParts = [];
+    this.localOffset = 0;
+    this.centralSize = 0;
+    this.fileCount = 0;
+    this.closed = false;
+  }
+
+  async write(part) {
+    await this.writable.write(part);
+  }
+
+  async addFile(name, blob) {
+    if (this.closed) throw new Error("The ZIP stream is already closed.");
+    const fileBytes = new Uint8Array(await blob.arrayBuffer());
+    const nameBytes = this.encoder.encode(String(name || "file"));
+    const crc32 = getCrc32(fileBytes);
+    const { dosDate, dosTime } = this.dateTime;
+    const localHeader = createZipHeader(30);
+    localHeader.view.setUint32(0, 0x04034b50, true);
+    localHeader.view.setUint16(4, 20, true);
+    localHeader.view.setUint16(6, 0x0800, true);
+    localHeader.view.setUint16(8, 0, true);
+    localHeader.view.setUint16(10, dosTime, true);
+    localHeader.view.setUint16(12, dosDate, true);
+    localHeader.view.setUint32(14, crc32, true);
+    localHeader.view.setUint32(18, fileBytes.byteLength, true);
+    localHeader.view.setUint32(22, fileBytes.byteLength, true);
+    localHeader.view.setUint16(26, nameBytes.byteLength, true);
+    localHeader.view.setUint16(28, 0, true);
+
+    const centralHeader = createZipHeader(46);
+    centralHeader.view.setUint32(0, 0x02014b50, true);
+    centralHeader.view.setUint16(4, 20, true);
+    centralHeader.view.setUint16(6, 20, true);
+    centralHeader.view.setUint16(8, 0x0800, true);
+    centralHeader.view.setUint16(10, 0, true);
+    centralHeader.view.setUint16(12, dosTime, true);
+    centralHeader.view.setUint16(14, dosDate, true);
+    centralHeader.view.setUint32(16, crc32, true);
+    centralHeader.view.setUint32(20, fileBytes.byteLength, true);
+    centralHeader.view.setUint32(24, fileBytes.byteLength, true);
+    centralHeader.view.setUint16(28, nameBytes.byteLength, true);
+    centralHeader.view.setUint32(42, this.localOffset, true);
+    this.centralParts.push(centralHeader.bytes, nameBytes);
+
+    await this.write(localHeader.bytes);
+    await this.write(nameBytes);
+    await this.write(fileBytes);
+    this.localOffset += localHeader.bytes.byteLength + nameBytes.byteLength + fileBytes.byteLength;
+    this.centralSize += centralHeader.bytes.byteLength + nameBytes.byteLength;
+    this.fileCount += 1;
+  }
+
+  async close() {
+    if (this.closed) return;
+    for (const part of this.centralParts) await this.write(part);
+    const endHeader = createZipHeader(22);
+    endHeader.view.setUint32(0, 0x06054b50, true);
+    endHeader.view.setUint16(8, this.fileCount, true);
+    endHeader.view.setUint16(10, this.fileCount, true);
+    endHeader.view.setUint32(12, this.centralSize, true);
+    endHeader.view.setUint32(16, this.localOffset, true);
+    await this.write(endHeader.bytes);
+    this.closed = true;
+    await this.writable.close();
+  }
+
+  async abort(reason) {
+    if (this.closed) return;
+    this.closed = true;
+    await this.writable.abort?.(reason);
+  }
+}
+
+export async function createStreamingZipDownload(fileName) {
+  if (typeof window === "undefined" || typeof window.showSaveFilePicker !== "function") return null;
+  try {
+    const handle = await window.showSaveFilePicker({
+      suggestedName: String(fileName || "graphics.zip"),
+      types: [{ description: "ZIP archive", accept: { "application/zip": [".zip"] } }],
+    });
+    return new StreamingZipBuilder(await handle.createWritable());
+  } catch (error) {
+    if (error?.name === "AbortError") throw error;
+    return null;
   }
 }
 

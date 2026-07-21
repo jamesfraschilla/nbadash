@@ -825,7 +825,7 @@ export default function Admin() {
 
   const { data: remoteNbaRostersPayload } = useQuery({
     queryKey: ["admin-current-nba-rosters"],
-    queryFn: fetchCurrentNbaRosters,
+    queryFn: ({ signal }) => fetchCurrentNbaRosters({ signal }),
     staleTime: 6 * 60 * 60 * 1000,
     retry: 1,
     enabled: Boolean(user?.id),
@@ -833,7 +833,7 @@ export default function Admin() {
 
   const { data: remoteGLeagueRostersPayload } = useQuery({
     queryKey: ["admin-current-gleague-rosters"],
-    queryFn: fetchCurrentGLeagueRosters,
+    queryFn: ({ signal }) => fetchCurrentGLeagueRosters({ signal }),
     staleTime: 6 * 60 * 60 * 1000,
     retry: 1,
     enabled: Boolean(user?.id),

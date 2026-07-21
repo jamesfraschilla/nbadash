@@ -125,7 +125,7 @@ function getNumberLabel(slot) {
 }
 
 function buildHeadshotCandidates(slot) {
-  const customUrl = String(slot?.headshotDataUrl || "").trim();
+  const customUrl = String(slot?.headshotDataUrl || slot?.headshotUrl || "").trim();
   if (customUrl) return [customUrl];
   const personId = String(slot?.personId || "").trim();
   if (!personId) return [];

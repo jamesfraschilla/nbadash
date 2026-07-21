@@ -79,16 +79,16 @@ async function insertAuditLog(actorId, entityType, entityId, action, detail = {}
   });
 }
 
-async function createVersionRow(table, payload) {
+async function invokeAtomicRpc(name, args) {
   requireSupabase();
-  const { error } = await supabase.from(table).insert(payload);
-  if (error) throw error;
-}
-
-async function clearDrawingVersions(drawingId) {
-  requireSupabase();
-  const { error } = await supabase.from("user_drawing_versions").delete().eq("drawing_id", drawingId);
-  if (error) throw error;
+  const { data, error } = await supabase.rpc(name, args);
+  if (error) {
+    if (String(error.message || "").includes("Could not find the function")) {
+      throw new Error("The latest account-data Supabase migration has not been applied.");
+    }
+    throw error;
+  }
+  return data;
 }
 
 export async function fetchProfile(userId) {
@@ -273,16 +273,8 @@ export async function createNote(note, actorId) {
     created_at: createdAtIso,
     updated_at: createdAtIso,
   };
-  const { error } = await supabase.from("user_notes").insert(payload);
-  if (error) throw error;
-  await createVersionRow("user_note_versions", {
-    note_id: noteId,
-    version_number: 1,
-    snapshot: payload,
-    created_by: actorId,
-  });
-  await insertAuditLog(actorId, "note", noteId, "created", { gameId: payload.game_id });
-  return payload;
+  const saved = await invokeAtomicRpc("create_user_note_atomic", { p_note: payload });
+  return normalizeNoteRow(saved);
 }
 
 export async function importLegacyLocalNotes(actorId) {
@@ -370,68 +362,25 @@ export async function importLegacyLocalNotes(actorId) {
 
 export async function updateNoteRecord(noteId, updates, actorId) {
   requireSupabase();
-  const { data: existing, error: fetchError } = await supabase
-    .from("user_notes")
-    .select("*")
-    .eq("id", noteId)
-    .single();
-  if (fetchError) throw fetchError;
-
-  const { count } = await supabase
-    .from("user_note_versions")
-    .select("id", { count: "exact", head: true })
-    .eq("note_id", noteId);
-
-  await createVersionRow("user_note_versions", {
-    note_id: noteId,
-    version_number: Number(count || 0) + 1,
-    snapshot: existing,
-    created_by: actorId,
+  const payload = {};
+  if (updates.text !== undefined) payload.text = String(updates.text || "").trim();
+  if (updates.tags !== undefined) payload.tags = normalizeNoteTags(updates.tags);
+  if (updates.periodLabel !== undefined) payload.period_label = updates.periodLabel;
+  if (updates.minutes !== undefined) payload.minutes = updates.minutes;
+  if (updates.seconds !== undefined) payload.seconds = updates.seconds;
+  if (updates.sourceMeta !== undefined) payload.source_meta = normalizeNoteSourceMeta(updates.sourceMeta);
+  if (updates.sharingScope !== undefined) payload.sharing_scope = updates.sharingScope;
+  const saved = await invokeAtomicRpc("update_user_note_atomic", {
+    p_note_id: noteId,
+    p_updates: payload,
   });
-
-  const tags = updates.tags != null ? normalizeNoteTags(updates.tags) : normalizeNoteTags(existing.tags);
-  const payload = {
-    text: updates.text != null ? String(updates.text || "").trim() : existing.text,
-    tags,
-    period_label: updates.periodLabel !== undefined ? updates.periodLabel : existing.period_label,
-    minutes: updates.minutes !== undefined ? updates.minutes : existing.minutes,
-    seconds: updates.seconds !== undefined ? updates.seconds : existing.seconds,
-    source_meta: updates.sourceMeta !== undefined ? normalizeNoteSourceMeta(updates.sourceMeta) : (existing.source_meta || {}),
-    sharing_scope: hasPublicNoteTag(tags)
-      ? "shared"
-      : updates.sharingScope || existing.sharing_scope,
-  };
-
-  const { error } = await supabase
-    .from("user_notes")
-    .update(payload)
-    .eq("id", noteId);
-  if (error) throw error;
-  await insertAuditLog(actorId, "note", noteId, "updated", payload);
-  return normalizeNoteRow({ ...existing, ...payload, id: noteId });
+  return normalizeNoteRow(saved);
 }
 
 export async function deleteNoteRecord(noteId, actorId) {
   requireSupabase();
-  const { data: existing, error: fetchError } = await supabase
-    .from("user_notes")
-    .select("*")
-    .eq("id", noteId)
-    .single();
-  if (fetchError) throw fetchError;
-  const { count } = await supabase
-    .from("user_note_versions")
-    .select("id", { count: "exact", head: true })
-    .eq("note_id", noteId);
-  await createVersionRow("user_note_versions", {
-    note_id: noteId,
-    version_number: Number(count || 0) + 1,
-    snapshot: existing,
-    created_by: actorId,
-  });
-  const { error } = await supabase.from("user_notes").delete().eq("id", noteId);
-  if (error) throw error;
-  await insertAuditLog(actorId, "note", noteId, "deleted", { gameId: existing.game_id });
+  const deleted = await invokeAtomicRpc("delete_user_note_atomic", { p_note_id: noteId });
+  if (!deleted) throw new Error("Supabase did not confirm that the note was deleted.");
 }
 
 export async function listNoteVersions(noteId) {
@@ -458,24 +407,10 @@ export async function listNoteShares(noteId) {
 export async function updateNoteShares(noteId, userIds, actorId) {
   requireSupabase();
   const normalizedUserIds = normalizeTextArray(userIds);
-  const { error: deleteError } = await supabase.from("user_note_shares").delete().eq("note_id", noteId);
-  if (deleteError) throw deleteError;
-  if (normalizedUserIds.length) {
-    const { error: insertError } = await supabase.from("user_note_shares").insert(
-      normalizedUserIds.map((userId) => ({
-        note_id: noteId,
-        user_id: userId,
-        shared_by: actorId,
-      }))
-    );
-    if (insertError) throw insertError;
-  }
-  await updateNoteRecord(
-    noteId,
-    { sharingScope: normalizedUserIds.length ? "shared" : "private" },
-    actorId
-  );
-  await insertAuditLog(actorId, "note", noteId, "shared", { userIds: normalizedUserIds });
+  await invokeAtomicRpc("replace_user_note_shares_atomic", {
+    p_note_id: noteId,
+    p_user_ids: normalizedUserIds,
+  });
 }
 
 export async function listDrawings(gameId = null) {
@@ -516,50 +451,26 @@ export async function createDrawing(drawing, actorId) {
     created_at: createdAtIso,
     updated_at: createdAtIso,
   };
-  const { error } = await supabase.from("user_drawings").insert(payload);
-  if (error) throw error;
-  await clearDrawingVersions(drawingId);
-  await insertAuditLog(actorId, "drawing", drawingId, "created", { gameId: payload.game_id });
-  return payload;
+  return invokeAtomicRpc("create_user_drawing_atomic", { p_drawing: payload });
 }
 
 export async function updateDrawingRecord(drawingId, updates, actorId) {
   requireSupabase();
-  const { data: existing, error: fetchError } = await supabase
-    .from("user_drawings")
-    .select("*")
-    .eq("id", drawingId)
-    .single();
-  if (fetchError) throw fetchError;
-
-  const payload = {
-    title: updates.title != null ? String(updates.title || "").trim() || "Untitled" : existing.title,
-    court_mode: updates.courtMode === "full" ? "full" : (updates.courtMode || existing.court_mode),
-    strokes: Array.isArray(updates.strokes) ? updates.strokes : existing.strokes,
-    sharing_scope: updates.sharingScope || existing.sharing_scope,
-  };
-
-  const { error } = await supabase
-    .from("user_drawings")
-    .update(payload)
-    .eq("id", drawingId);
-  if (error) throw error;
-  await clearDrawingVersions(drawingId);
-  await insertAuditLog(actorId, "drawing", drawingId, "updated", { title: payload.title });
-  return { ...existing, ...payload, id: drawingId };
+  const payload = {};
+  if (updates.title !== undefined) payload.title = String(updates.title || "").trim() || "Untitled";
+  if (updates.courtMode !== undefined) payload.court_mode = updates.courtMode === "full" ? "full" : "half";
+  if (updates.strokes !== undefined) payload.strokes = Array.isArray(updates.strokes) ? updates.strokes : [];
+  if (updates.sharingScope !== undefined) payload.sharing_scope = updates.sharingScope;
+  return invokeAtomicRpc("update_user_drawing_atomic", {
+    p_drawing_id: drawingId,
+    p_updates: payload,
+  });
 }
 
 export async function deleteDrawingRecord(drawingId, actorId) {
   requireSupabase();
-  const { data: existing, error: fetchError } = await supabase
-    .from("user_drawings")
-    .select("*")
-    .eq("id", drawingId)
-    .single();
-  if (fetchError) throw fetchError;
-  const { error } = await supabase.from("user_drawings").delete().eq("id", drawingId);
-  if (error) throw error;
-  await insertAuditLog(actorId, "drawing", drawingId, "deleted", { title: existing.title });
+  const deleted = await invokeAtomicRpc("delete_user_drawing_atomic", { p_drawing_id: drawingId });
+  if (!deleted) throw new Error("Supabase did not confirm that the drawing was deleted.");
 }
 
 export async function listDrawingVersions(drawingId) {
@@ -586,22 +497,8 @@ export async function listDrawingShares(drawingId) {
 export async function updateDrawingShares(drawingId, userIds, actorId) {
   requireSupabase();
   const normalizedUserIds = normalizeTextArray(userIds);
-  const { error: deleteError } = await supabase.from("user_drawing_shares").delete().eq("drawing_id", drawingId);
-  if (deleteError) throw deleteError;
-  if (normalizedUserIds.length) {
-    const { error: insertError } = await supabase.from("user_drawing_shares").insert(
-      normalizedUserIds.map((userId) => ({
-        drawing_id: drawingId,
-        user_id: userId,
-        shared_by: actorId,
-      }))
-    );
-    if (insertError) throw insertError;
-  }
-  await updateDrawingRecord(
-    drawingId,
-    { sharingScope: normalizedUserIds.length ? "shared" : "private" },
-    actorId
-  );
-  await insertAuditLog(actorId, "drawing", drawingId, "shared", { userIds: normalizedUserIds });
+  await invokeAtomicRpc("replace_user_drawing_shares_atomic", {
+    p_drawing_id: drawingId,
+    p_user_ids: normalizedUserIds,
+  });
 }

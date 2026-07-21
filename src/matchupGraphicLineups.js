@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient.js";
+import { getGraphicHeadshotPublicUrl } from "./graphicHeadshotStorage.js";
 
 export const MATCHUP_GRAPHIC_LINEUP_SCOPE_TYPE = "matchup_graphic_team_lineup";
 export const MATCHUP_GRAPHIC_PLAYER_SLOTS = 5;
@@ -21,10 +22,22 @@ export function getDefaultMatchupGraphicTeamId(league, teamScopes = []) {
 }
 
 function normalizeCustomPlayer(value) {
+  const headshotStoragePath = String(value?.headshotStoragePath || "").trim();
   return {
     jerseyNum: String(value?.jerseyNum || value?.number || "").trim(),
     lastName: String(value?.lastName || value?.familyName || value?.fullName || "").trim(),
     headshotDataUrl: String(value?.headshotDataUrl || "").trim(),
+    headshotUrl: getGraphicHeadshotPublicUrl(headshotStoragePath) || String(value?.headshotUrl || "").trim(),
+    headshotStoragePath,
+  };
+}
+
+function serializeCustomPlayer(value) {
+  const normalized = normalizeCustomPlayer(value);
+  return {
+    jerseyNum: normalized.jerseyNum,
+    lastName: normalized.lastName,
+    headshotStoragePath: normalized.headshotStoragePath,
   };
 }
 
@@ -147,7 +160,7 @@ export async function saveRemoteMatchupGraphicLineups(lineups) {
       league: lineup.league,
       teamId: lineup.teamId,
       playerIds: lineup.playerIds,
-      customPlayers: lineup.customPlayers,
+      customPlayers: lineup.customPlayers.map(serializeCustomPlayer),
       players: lineup.players,
     },
   }));

@@ -55,13 +55,35 @@ function formatPlayerOption(player) {
   return jersey ? `#${jersey} ${name}` : name;
 }
 
-function formatSourceDate(value, league = "nba") {
+function hasConfirmedStatValues(stats) {
+  if (!stats || typeof stats !== "object") return false;
+  return [
+    "gamesPlayed",
+    "ppg",
+    "rpg",
+    "threePointPercentage",
+    "apg",
+    "bpg",
+    "spg",
+    "fta",
+    "fieldGoalAttemptsPerGame",
+    "threePointAttemptsPerGame",
+  ].some((key) => Number.isFinite(stats[key]));
+}
+
+function formatSourceDate(value, league = "nba", season = "", cacheFallback = false) {
   const date = new Date(value);
   if (!value || Number.isNaN(date.getTime())) {
     return league === "gleague"
-      ? "Live G League roster unavailable"
+      ? "Latest published G League roster unavailable"
       : "Live roster unavailable — using the local roster snapshot";
   }
+  if (league === "gleague") {
+    const seasonLabel = season ? ` (${season})` : "";
+    const cacheLabel = cacheFallback ? "cached " : "";
+    return `Latest published G League roster${seasonLabel} ${cacheLabel}updated ${date.toLocaleString()}`;
+  }
+  if (cacheFallback) return `Live roster unavailable — cached roster updated ${date.toLocaleString()}`;
   return `Live roster updated ${date.toLocaleString()}`;
 }
 
@@ -137,6 +159,7 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
   const rosterMap = rosterSources?.[league] || {};
   const rosterFetchedAt = rosterMetadata?.[league]?.fetchedAt;
   const rosterSeason = rosterMetadata?.[league]?.season;
+  const rosterCacheFallback = Boolean(rosterMetadata?.[league]?.cacheFallback);
   const currentStatsSeason = useMemo(() => getCurrentPersonnelSeason(), []);
   const previousStatsSeason = useMemo(
     () => getPreviousPersonnelSeason(currentStatsSeason),
@@ -165,11 +188,12 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
     error: statsError,
   } = useQuery({
     queryKey: ["personnel-player-stats", league, season, teamId, statsPlayerKey],
-    queryFn: () => fetchNbaPlayerStats({
+    queryFn: ({ signal }) => fetchNbaPlayerStats({
       league,
       season,
       teamId,
       players: statsPlayers,
+      signal,
     }),
     enabled: Boolean(teamId),
     staleTime: 6 * 60 * 60 * 1000,
@@ -664,7 +688,7 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
         </div>
         <div className={styles.sourceMeta}>
           <strong>{rosterSeason ? `Roster season ${rosterSeason}` : `${leagueLabel} roster`}</strong>
-          <span>{formatSourceDate(rosterFetchedAt, league)}</span>
+          <span>{formatSourceDate(rosterFetchedAt, league, rosterSeason, rosterCacheFallback)}</span>
           {statsPayload?.season ? (
             <span>Stats: {statsPayload.season} regular season{formatStatsSource(statsPayload.source)}</span>
           ) : null}
@@ -691,7 +715,11 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
 
           {draft.rows.map((row, index) => {
             const statCountValid = hasExactlyFourPersonnelStats(row);
-            const missingStats = Boolean(row.personId && statsReady && !statsById[row.personId]);
+            const missingStats = Boolean(
+              row.personId
+              && statsReady
+              && !hasConfirmedStatValues(statsById[row.personId])
+            );
             const selectedColor = PERSONNEL_THREE_POINT_COLOR_OPTIONS.find((option) => option.key === row.threePointColor)
               || PERSONNEL_THREE_POINT_COLOR_OPTIONS[0];
             return (

@@ -1,3 +1,5 @@
+import { readRosterSnapshot, writeRosterSnapshot } from "../_shared/rosterSnapshot.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -5,6 +7,8 @@ const corsHeaders = {
 };
 
 const COMMON_TEAM_ROSTER_URL = "https://stats.nba.com/stats/commonteamroster";
+const TEAM_REQUEST_TIMEOUT_MS = 8_000;
+const GLOBAL_REQUEST_DEADLINE_MS = 12_000;
 
 const NBA_TEAMS = [
   { teamId: "1610612737", teamCity: "Atlanta", teamName: "Hawks", teamAbbreviation: "ATL" },
@@ -105,26 +109,37 @@ function mapRows(resultSet: Record<string, unknown>) {
     }, {}));
 }
 
-async function fetchTeamRoster(team: TeamRecord, season: string) {
+async function fetchTeamRoster(team: TeamRecord, season: string, parentSignal: AbortSignal) {
   const url = new URL(COMMON_TEAM_ROSTER_URL);
   url.searchParams.set("LeagueID", "00");
   url.searchParams.set("Season", season);
   url.searchParams.set("TeamID", team.teamId);
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      Accept: "application/json, text/plain, */*",
-      "Accept-Language": "en-US,en;q=0.9",
-      Connection: "keep-alive",
-      Host: "stats.nba.com",
-      Origin: "https://www.nba.com",
-      Referer: "https://www.nba.com/",
-      "User-Agent": "Mozilla/5.0 (compatible; NBA Dashboard Roster Resolver)",
-      "x-nba-stats-origin": "stats",
-      "x-nba-stats-token": "true",
-    },
-    signal: AbortSignal.timeout(10_000),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort("team-timeout"), TEAM_REQUEST_TIMEOUT_MS);
+  const abortFromParent = () => controller.abort(parentSignal.reason || "global-deadline");
+  if (parentSignal.aborted) abortFromParent();
+  else parentSignal.addEventListener("abort", abortFromParent, { once: true });
+  let response: Response;
+  try {
+    response = await fetch(url.toString(), {
+      headers: {
+        Accept: "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9",
+        Connection: "keep-alive",
+        Host: "stats.nba.com",
+        Origin: "https://www.nba.com",
+        Referer: "https://www.nba.com/",
+        "User-Agent": "Mozilla/5.0 (compatible; NBA Dashboard Roster Resolver)",
+        "x-nba-stats-origin": "stats",
+        "x-nba-stats-token": "true",
+      },
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+    parentSignal.removeEventListener("abort", abortFromParent);
+  }
 
   if (!response.ok) {
     throw new Error(`Roster fetch failed (${response.status}) for ${team.teamAbbreviation}`);
@@ -133,6 +148,9 @@ async function fetchTeamRoster(team: TeamRecord, season: string) {
   const payload = await response.json();
   const rosterSet = findResultSet(payload, "CommonTeamRoster");
   const rosterRows = rosterSet ? mapRows(rosterSet) : [];
+  if (!rosterRows.length) {
+    throw new Error(`Roster feed returned no players for ${team.teamAbbreviation}`);
+  }
 
   return {
     teamId: team.teamId,
@@ -201,14 +219,29 @@ Deno.serve(async (req) => {
 
   try {
     const season = currentSeasonString();
-    const rosterResults = await mapSettledWithConcurrency(
-      NBA_TEAMS,
-      (team) => fetchTeamRoster(team, season),
-      6,
+    const snapshotPromise = readRosterSnapshot("nba");
+    const globalController = new AbortController();
+    const globalTimeoutId = setTimeout(
+      () => globalController.abort("global-deadline"),
+      GLOBAL_REQUEST_DEADLINE_MS,
     );
+    let rosterResults: PromiseSettledResult<Awaited<ReturnType<typeof fetchTeamRoster>>>[];
+    try {
+      rosterResults = await mapSettledWithConcurrency(
+        NBA_TEAMS,
+        (team) => fetchTeamRoster(team, season, globalController.signal),
+        6,
+      );
+    } finally {
+      clearTimeout(globalTimeoutId);
+    }
     const teamRosters = rosterResults
       .filter((result): result is PromiseFulfilledResult<Awaited<ReturnType<typeof fetchTeamRoster>>> => result.status === "fulfilled")
       .map((result) => result.value);
+    const snapshot = await snapshotPromise;
+    const snapshotTeams = snapshot?.teams && typeof snapshot.teams === "object"
+      ? snapshot.teams as Record<string, Awaited<ReturnType<typeof fetchTeamRoster>>>
+      : {};
     const errors = rosterResults.flatMap((result, index) => (
       result.status === "rejected"
         ? [{
@@ -218,20 +251,33 @@ Deno.serve(async (req) => {
         }]
         : []
     ));
-    const teams = teamRosters.reduce<Record<string, Awaited<ReturnType<typeof fetchTeamRoster>>>>((accumulator, team) => {
+    const liveTeams = teamRosters.reduce<Record<string, Awaited<ReturnType<typeof fetchTeamRoster>>>>((accumulator, team) => {
       accumulator[team.teamId] = team;
       return accumulator;
     }, {});
-
-    return responseWithHeaders(200, JSON.stringify({
-      fetchedAt: new Date().toISOString(),
-      season,
+    const teams = { ...snapshotTeams, ...liveTeams };
+    const cachedTeamIds = Object.keys(snapshotTeams).filter((teamId) => !liveTeams[teamId]);
+    const fetchedAt = teamRosters.length ? new Date().toISOString() : String(snapshot?.fetchedAt || new Date().toISOString());
+    const resolvedSeason = teamRosters.length ? season : String(snapshot?.season || season);
+    const responsePayload = {
+      fetchedAt,
+      requestedSeason: season,
+      season: resolvedSeason,
+      fallbackSeason: resolvedSeason !== season,
       teams,
-      partial: errors.length > 0,
+      partial: errors.length > 0 || cachedTeamIds.length > 0,
+      deadlineReached: globalController.signal.aborted,
+      cacheFallback: teamRosters.length === 0 && Object.keys(snapshotTeams).length > 0,
+      cachedTeamIds,
       errors,
-    }), {
+    };
+    if (teamRosters.length) {
+      await writeRosterSnapshot("nba", resolvedSeason, responsePayload);
+    }
+
+    return responseWithHeaders(200, JSON.stringify(responsePayload), {
       "Content-Type": "application/json",
-      "Cache-Control": errors.length
+      "Cache-Control": responsePayload.partial
         ? "public, max-age=60, s-maxage=60, stale-while-revalidate=300"
         : "public, max-age=21600, s-maxage=21600, stale-while-revalidate=86400",
     });

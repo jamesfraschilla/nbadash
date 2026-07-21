@@ -45,6 +45,7 @@ function normalizeRecord(record) {
     payload: record.payload && typeof record.payload === "object" ? record.payload : {},
     createdAt: String(record.createdAt || record.updatedAt || new Date().toISOString()),
     updatedAt: String(record.updatedAt || record.createdAt || new Date().toISOString()),
+    revision: Math.max(0, Number.isFinite(Number(record.revision)) ? Number(record.revision) : 0),
   };
 }
 
@@ -102,11 +103,13 @@ export function saveToolRecord(userId, record) {
       ...nextRecords[existingIndex],
       ...normalized,
       createdAt: nextRecords[existingIndex].createdAt || normalized.createdAt,
+      revision: Math.max(nextRecords[existingIndex].revision || 0, normalized.revision || 0),
     };
   } else {
     nextRecords.unshift(normalized);
   }
-  return writeToolVaultRecords(userId, nextRecords) ? normalized : null;
+  const saved = existingIndex >= 0 ? nextRecords[existingIndex] : normalized;
+  return writeToolVaultRecords(userId, nextRecords) ? saved : null;
 }
 
 export function deleteSavedToolRecord(userId, recordId) {
@@ -140,6 +143,7 @@ export async function listSavedToolRecordsRemote(userId) {
       payload: row.payload,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      revision: row.revision,
     }))
     .filter(Boolean);
   return replaceSavedToolRecords(userId, records);
@@ -163,6 +167,7 @@ export async function getSavedToolRecordRemote(userId, recordId) {
     payload: data.payload,
     createdAt: data.created_at,
     updatedAt: data.updated_at,
+    revision: data.revision,
   }) : null;
   if (record) saveToolRecord(userId, record);
   else deleteSavedToolRecord(userId, normalizedId);
@@ -174,21 +179,29 @@ export async function saveToolRecordRemote(userId, record) {
   await requireSupabase();
   const normalized = normalizeRecord(record);
   if (!normalized) return null;
+  const cached = getSavedToolRecord(userId, normalized.id);
+  const expectedRevision = Math.max(0, Number(normalized.revision || cached?.revision || 0));
   const payload = {
     id: normalized.id,
-    owner_id: userId,
     type: normalized.type || TOOL_RECORD_TYPES.MATCHUP_GRAPHIC,
     title: normalized.title,
     payload: normalized.payload,
     created_at: normalized.createdAt,
-    updated_at: normalized.updatedAt,
   };
   const { data, error } = await supabase
-    .from("user_tool_records")
-    .upsert(payload)
-    .select("*")
-    .single();
-  if (error) throw error;
+    .rpc("save_user_tool_record_atomic", {
+      p_record: payload,
+      p_expected_revision: expectedRevision,
+    });
+  if (error) {
+    if (error.code === "40001" || String(error.message || "").includes("TOOL_RECORD_CONFLICT")) {
+      throw new Error("This saved tool changed in another browser. Reload it before saving again.");
+    }
+    if (String(error.message || "").includes("Could not find the function")) {
+      throw new Error("The latest tool-vault Supabase migration has not been applied.");
+    }
+    throw error;
+  }
   const saved = normalizeRecord({
     id: data.id,
     type: data.type,
@@ -196,6 +209,7 @@ export async function saveToolRecordRemote(userId, record) {
     payload: data.payload,
     createdAt: data.created_at,
     updatedAt: data.updated_at,
+    revision: data.revision,
   });
   saveToolRecord(userId, saved);
   return saved;

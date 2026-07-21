@@ -107,3 +107,23 @@ test("a successful remote snapshot replaces stale local records", () => {
   assert.deepEqual(records.map((record) => record.id), ["remote-draft"]);
   assert.deepEqual(listSavedToolRecords("coach").map((record) => record.id), ["remote-draft"]);
 });
+
+test("local updates preserve creation time and the newest known revision", () => {
+  installMockLocalStorage();
+  saveToolRecord("coach", {
+    id: "versioned",
+    createdAt: "2026-07-01T12:00:00.000Z",
+    updatedAt: "2026-07-01T12:00:00.000Z",
+    revision: 3,
+    payload: { value: 1 },
+  });
+  const saved = saveToolRecord("coach", {
+    id: "versioned",
+    createdAt: "2026-07-21T12:00:00.000Z",
+    updatedAt: "2026-07-21T12:00:00.000Z",
+    revision: 2,
+    payload: { value: 2 },
+  });
+  assert.equal(saved.createdAt, "2026-07-01T12:00:00.000Z");
+  assert.equal(saved.revision, 3);
+});

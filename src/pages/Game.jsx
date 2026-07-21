@@ -743,7 +743,7 @@ export default function Game({ variant = "full" }) {
 
   const { data: currentNbaRostersPayload } = useQuery({
     queryKey: ["game-current-nba-rosters"],
-    queryFn: fetchCurrentNbaRosters,
+    queryFn: ({ signal }) => fetchCurrentNbaRosters({ signal }),
     enabled: !isSummerLeagueMatch && (awayLeague === "nba" || homeLeague === "nba"),
     staleTime: 6 * 60 * 60 * 1000,
     retry: 1,
@@ -751,7 +751,7 @@ export default function Game({ variant = "full" }) {
 
   const { data: currentGLeagueRostersPayload } = useQuery({
     queryKey: ["game-current-gleague-rosters"],
-    queryFn: fetchCurrentGLeagueRosters,
+    queryFn: ({ signal }) => fetchCurrentGLeagueRosters({ signal }),
     enabled: !isSummerLeagueMatch && (awayLeague === "gleague" || homeLeague === "gleague"),
     staleTime: 6 * 60 * 60 * 1000,
     retry: 1,

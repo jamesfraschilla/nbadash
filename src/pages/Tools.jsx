@@ -4,6 +4,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchCurrentGLeagueRosters, fetchCurrentNbaRosters, teamLogoUrl } from "../api.js";
 import { useAuth } from "../auth/useAuth.js";
 import {
+  deleteGraphicHeadshot,
+  getGraphicHeadshotPublicUrl,
+  uploadGraphicHeadshot,
+  uploadLegacyGraphicHeadshot,
+} from "../graphicHeadshotStorage.js";
+import {
   GLEAGUE_TEAMS,
   getLeagueTeam,
   getNbaTeamRoster,
@@ -79,6 +85,8 @@ function buildEmptyCustomPlayer() {
     jerseyNum: "",
     lastName: "",
     headshotDataUrl: "",
+    headshotUrl: "",
+    headshotStoragePath: "",
   };
 }
 
@@ -188,7 +196,7 @@ function isDraftBlank(draft) {
     !customPlayerValues.some((player) => (
       String(player?.jerseyNum || "").trim() ||
       String(player?.lastName || "").trim() ||
-      String(player?.headshotDataUrl || "").trim()
+      String(player?.headshotDataUrl || player?.headshotUrl || "").trim()
     ));
 }
 
@@ -209,12 +217,57 @@ function hydrateDraftPayload(payload, fallbackDraft) {
 function hydrateCustomPlayers(value) {
   return EMPTY_PLAYER_IDS.map((_, index) => {
     const player = Array.isArray(value) && value[index] && typeof value[index] === "object" ? value[index] : {};
+    const headshotStoragePath = String(player?.headshotStoragePath || "").trim();
     return {
       jerseyNum: String(player?.jerseyNum || player?.number || "").trim(),
       lastName: String(player?.lastName || player?.familyName || player?.fullName || "").trim(),
       headshotDataUrl: String(player?.headshotDataUrl || "").trim(),
+      headshotUrl: getGraphicHeadshotPublicUrl(headshotStoragePath) || String(player?.headshotUrl || "").trim(),
+      headshotStoragePath,
     };
   });
+}
+
+function serializeCustomPlayers(value) {
+  return hydrateCustomPlayers(value).map((player) => ({
+    jerseyNum: player.jerseyNum,
+    lastName: player.lastName,
+    headshotStoragePath: player.headshotStoragePath,
+  }));
+}
+
+function serializeMatchupDraft(draft) {
+  return {
+    ...draft,
+    leftCustomPlayers: serializeCustomPlayers(draft?.leftCustomPlayers),
+    rightCustomPlayers: serializeCustomPlayers(draft?.rightCustomPlayers),
+  };
+}
+
+async function migrateLegacyMatchupHeadshots(draft, userId) {
+  let nextDraft = { ...draft };
+  for (const side of ["left", "right"]) {
+    const key = `${side}CustomPlayers`;
+    const players = hydrateCustomPlayers(nextDraft[key]);
+    for (let index = 0; index < players.length; index += 1) {
+      const player = players[index];
+      if (!player.headshotDataUrl || player.headshotStoragePath) continue;
+      const uploaded = await uploadLegacyGraphicHeadshot({
+        userId,
+        dataUrl: player.headshotDataUrl,
+        toolType: "matchup",
+        slotKey: `${draft.league}-${side}-${index}`,
+      });
+      players[index] = {
+        ...player,
+        headshotDataUrl: "",
+        headshotUrl: uploaded.publicUrl,
+        headshotStoragePath: uploaded.storagePath,
+      };
+    }
+    nextDraft = { ...nextDraft, [key]: players };
+  }
+  return nextDraft;
 }
 
 function teamDisplayCode(team) {
@@ -295,6 +348,7 @@ function buildCustomMatchupPlayer(customPlayer, index, teamId) {
     jerseyNum: String(customPlayer?.jerseyNum || "").trim(),
     teamId: String(teamId || "").trim(),
     headshotDataUrl: String(customPlayer?.headshotDataUrl || "").trim(),
+    headshotUrl: String(customPlayer?.headshotUrl || "").trim(),
   };
 }
 
@@ -316,6 +370,7 @@ function draftSideHasPlayerEdits(draft, side) {
     String(player?.jerseyNum || "").trim()
     || String(player?.lastName || "").trim()
     || String(player?.headshotDataUrl || "").trim()
+    || String(player?.headshotUrl || "").trim()
   ));
 }
 
@@ -347,15 +402,6 @@ function mergeSharedLineupPlayersIntoRosterMap(rosterMap, lineupMap, league) {
     next[lineup.teamId] = teamPlayers;
   });
   return next;
-}
-
-function readFileAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(reader.error || new Error("Unable to read file."));
-    reader.readAsDataURL(file);
-  });
 }
 
 function buildStrategyToolTeam(team) {
@@ -510,17 +556,32 @@ export default function Tools() {
   const activeGraphic = [TOOL_TABS.MATCHUP, TOOL_TABS.PERSONNEL, TOOL_TABS.DEPTH_CHART].includes(rawGraphic)
     ? rawGraphic
     : legacyGraphicTab || TOOL_TABS.MATCHUP;
+  const graphicsNeedBothLeagues = activeTab === TOOL_TABS.GRAPHICS
+    && [TOOL_TABS.PERSONNEL, TOOL_TABS.DEPTH_CHART].includes(activeGraphic);
+  const needsNbaRosters = canUseTools && (
+    graphicsNeedBothLeagues
+    || (activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.MATCHUP && draft.league !== "gleague")
+    || (activeTab === TOOL_TABS.SCOUTING && scoutingDraft.league !== "gleague")
+  );
+  const needsGLeagueRosters = canUseTools && (
+    graphicsNeedBothLeagues
+    || (activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.MATCHUP && draft.league === "gleague")
+    || (activeTab === TOOL_TABS.SCOUTING && scoutingDraft.league === "gleague")
+  );
+  const needsSharedMatchupLineups = canUseTools
+    && activeTab === TOOL_TABS.GRAPHICS
+    && activeGraphic === TOOL_TABS.MATCHUP;
   const { data: remoteNbaRostersPayload } = useQuery({
     queryKey: ["tools-current-nba-rosters"],
-    queryFn: fetchCurrentNbaRosters,
-    enabled: canUseTools,
+    queryFn: ({ signal }) => fetchCurrentNbaRosters({ signal }),
+    enabled: needsNbaRosters,
     staleTime: 6 * 60 * 60 * 1000,
     retry: 1,
   });
   const { data: remoteGLeagueRostersPayload } = useQuery({
     queryKey: ["tools-current-gleague-rosters"],
-    queryFn: fetchCurrentGLeagueRosters,
-    enabled: canUseTools,
+    queryFn: ({ signal }) => fetchCurrentGLeagueRosters({ signal }),
+    enabled: needsGLeagueRosters,
     staleTime: 6 * 60 * 60 * 1000,
     retry: 1,
   });
@@ -530,7 +591,7 @@ export default function Tools() {
   } = useQuery({
     queryKey: ["matchup-graphic-team-lineups"],
     queryFn: listRemoteMatchupGraphicLineups,
-    enabled: canUseTools,
+    enabled: needsSharedMatchupLineups,
     staleTime: 0,
     retry: 1,
   });
@@ -884,17 +945,35 @@ export default function Tools() {
   };
 
   const handleCustomHeadshotChange = async (side, index, file) => {
+    const currentPlayer = hydrateCustomPlayers(draft[`${side}CustomPlayers`])[index];
     if (!file) {
-      handleCustomPlayerChange(side, index, { headshotDataUrl: "" });
-      return;
-    }
-    if (file.type && file.type !== "image/png") {
-      setSaveStatus("Use a PNG headshot.");
+      try {
+        await deleteGraphicHeadshot(user?.id, currentPlayer?.headshotStoragePath);
+      } catch (error) {
+        setSaveStatus(error?.message || "Unable to remove the previous headshot.");
+        return;
+      }
+      handleCustomPlayerChange(side, index, {
+        headshotDataUrl: "",
+        headshotUrl: "",
+        headshotStoragePath: "",
+      });
       return;
     }
     try {
-      const dataUrl = await readFileAsDataUrl(file);
-      handleCustomPlayerChange(side, index, { headshotDataUrl: dataUrl });
+      setSaveStatus("Uploading headshot...");
+      const uploaded = await uploadGraphicHeadshot({
+        userId: user?.id,
+        file,
+        toolType: "matchup",
+        slotKey: `${draft.league}-${side}-${index}`,
+        previousPath: currentPlayer?.headshotStoragePath,
+      });
+      handleCustomPlayerChange(side, index, {
+        headshotDataUrl: "",
+        headshotUrl: uploaded.publicUrl,
+        headshotStoragePath: uploaded.storagePath,
+      });
       setSaveStatus("");
     } catch (error) {
       setSaveStatus(error?.message || "Unable to load headshot.");
@@ -1149,20 +1228,22 @@ export default function Tools() {
     setBusyAction("save");
     const id = recordId || crypto.randomUUID();
     const timestamp = new Date().toISOString();
-    const record = {
-      id,
-      type: "matchup_graphic",
-      title: buildDraftTitle(draft),
-      updatedAt: timestamp,
-      createdAt: timestamp,
-      payload: draft,
-    };
-    const sharedLineupsToSave = [
-      buildMatchupGraphicLineupFromDraft(draft, "left", leftRoster),
-      buildMatchupGraphicLineupFromDraft(draft, "right", rightRoster),
-    ].filter(Boolean);
 
     try {
+      const saveDraft = await migrateLegacyMatchupHeadshots(draft, user?.id);
+      setDraft(saveDraft);
+      const record = {
+        id,
+        type: "matchup_graphic",
+        title: buildDraftTitle(saveDraft),
+        updatedAt: timestamp,
+        createdAt: timestamp,
+        payload: serializeMatchupDraft(saveDraft),
+      };
+      const sharedLineupsToSave = [
+        buildMatchupGraphicLineupFromDraft(saveDraft, "left", leftRoster),
+        buildMatchupGraphicLineupFromDraft(saveDraft, "right", rightRoster),
+      ].filter(Boolean);
       const savedRecord = accountsEnabled && user?.id
         ? await saveToolRecordRemote(user.id, record)
         : saveToolRecord(vaultUserId, record);
@@ -1190,7 +1271,7 @@ export default function Tools() {
         : `Saved to My Vault as ${savedRecord.title}. Player selections are shared for the next user.`);
     } catch (error) {
       console.error("Failed to save match-up graphic draft.", error);
-      setSaveStatus("Unable to save this draft to Supabase. It was not saved; try again.");
+      setSaveStatus(error?.message || "Unable to save this draft to Supabase. It was not saved; try again.");
     } finally {
       setBusyAction("");
     }
@@ -1538,10 +1619,12 @@ export default function Tools() {
               nba: {
                 fetchedAt: remoteNbaRostersPayload?.fetchedAt,
                 season: remoteNbaRostersPayload?.season,
+                cacheFallback: remoteNbaRostersPayload?.cacheFallback,
               },
               gleague: {
                 fetchedAt: remoteGLeagueRostersPayload?.fetchedAt,
                 season: remoteGLeagueRostersPayload?.season,
+                cacheFallback: remoteGLeagueRostersPayload?.cacheFallback,
               },
             }}
           />

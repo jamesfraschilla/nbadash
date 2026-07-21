@@ -8,3 +8,5 @@ dist
 supabase/.temp/
 .Rhistory
 field-inventory-*.txt
+test-results/
+playwright-report/

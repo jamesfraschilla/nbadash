@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  getMissingPersonnelStatsPlayers,
   getPersonnelStatsCoverage,
   mergePersonnelStatsPayloads,
 } from "./personnelStatsResolution.js";
@@ -18,6 +19,19 @@ test("stats coverage matches requested players by official ID or normalized name
     },
   };
   assert.equal(getPersonnelStatsCoverage(payload, roster), 2);
+});
+
+test("missing stats players excludes ID and normalized-name matches", () => {
+  const payload = {
+    players: {
+      "1": { personId: "1", fullName: "Alpha Player" },
+      fallback: { personId: "fallback", fullName: "Beta Player" },
+    },
+  };
+  assert.deepEqual(
+    getMissingPersonnelStatsPlayers(payload, [...roster, { personId: "3", fullName: "Gamma Player" }]),
+    [{ personId: "3", fullName: "Gamma Player" }]
+  );
 });
 
 test("stats payload merge prefers later authoritative records and removes name duplicates", () => {

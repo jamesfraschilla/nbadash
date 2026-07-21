@@ -1,3 +1,5 @@
+import { readRosterSnapshot, writeRosterSnapshot } from "../_shared/rosterSnapshot.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -5,6 +7,8 @@ const corsHeaders = {
 };
 
 const GLEAGUE_PLAYER_INDEX_URL = "https://stats.gleague.nba.com/stats/playerindex";
+const SEASON_REQUEST_TIMEOUT_MS = 8_000;
+const GLOBAL_REQUEST_DEADLINE_MS = 12_000;
 
 function responseWithHeaders(status: number, body: BodyInit | null, extraHeaders: HeadersInit = {}) {
   return new Response(body, {
@@ -58,22 +62,33 @@ type GLeagueTeam = {
   }>;
 };
 
-async function fetchRosterSeason(season: string) {
+async function fetchRosterSeason(season: string, parentSignal: AbortSignal) {
   const url = new URL(GLEAGUE_PLAYER_INDEX_URL);
   url.searchParams.set("LeagueID", "20");
   url.searchParams.set("Season", season);
   url.searchParams.set("SeasonType", "Regular Season");
   url.searchParams.set("Active", "1");
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (compatible; NBA Dashboard G League Roster Resolver)",
-      Accept: "application/json",
-      Referer: "https://stats.gleague.nba.com/players/",
-      Origin: "https://stats.gleague.nba.com",
-    },
-    signal: AbortSignal.timeout(15_000),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort("season-timeout"), SEASON_REQUEST_TIMEOUT_MS);
+  const abortFromParent = () => controller.abort(parentSignal.reason || "global-deadline");
+  if (parentSignal.aborted) abortFromParent();
+  else parentSignal.addEventListener("abort", abortFromParent, { once: true });
+  let response: Response;
+  try {
+    response = await fetch(url.toString(), {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; NBA Dashboard G League Roster Resolver)",
+        Accept: "application/json",
+        Referer: "https://stats.gleague.nba.com/players/",
+        Origin: "https://stats.gleague.nba.com",
+      },
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+    parentSignal.removeEventListener("abort", abortFromParent);
+  }
 
   if (!response.ok) {
     throw new Error(`Roster fetch failed (${response.status}) for ${season}`);
@@ -139,27 +154,63 @@ Deno.serve(async (req) => {
   const requestedSeason = buildCurrentSeasonLabel();
   const seasons = [requestedSeason, previousSeasonLabel(requestedSeason)];
   const errors: string[] = [];
+  const snapshotPromise = readRosterSnapshot("gleague");
+  const globalController = new AbortController();
+  const deadlineId = setTimeout(
+    () => globalController.abort("global-deadline"),
+    GLOBAL_REQUEST_DEADLINE_MS,
+  );
 
   try {
     for (const season of seasons) {
       try {
-        const result = await fetchRosterSeason(season);
+        const result = await fetchRosterSeason(season, globalController.signal);
         const playerCount = Object.values(result.teams).reduce((count, team) => count + team.players.length, 0);
         if (!playerCount) continue;
-
-        return responseWithHeaders(200, JSON.stringify({
+        const snapshot = await snapshotPromise;
+        const snapshotTeams = snapshot?.teams && typeof snapshot.teams === "object"
+          ? snapshot.teams as Record<string, GLeagueTeam>
+          : {};
+        const teams = { ...snapshotTeams, ...result.teams };
+        const cachedTeamIds = Object.keys(snapshotTeams).filter((teamId) => !result.teams[teamId]);
+        const payload = {
           fetchedAt: new Date().toISOString(),
           requestedSeason,
           season,
           fallbackSeason: season !== requestedSeason,
-          teams: result.teams,
-        }), {
+          teams,
+          cacheFallback: false,
+          partial: cachedTeamIds.length > 0,
+          cachedTeamIds,
+        };
+        await writeRosterSnapshot("gleague", season, payload);
+        return responseWithHeaders(200, JSON.stringify(payload), {
           "Content-Type": "application/json",
-          "Cache-Control": "public, max-age=21600, s-maxage=21600, stale-while-revalidate=86400",
+          "Cache-Control": payload.partial
+            ? "public, max-age=60, s-maxage=60, stale-while-revalidate=300"
+            : "public, max-age=21600, s-maxage=21600, stale-while-revalidate=86400",
         });
       } catch (error) {
         errors.push(error instanceof Error ? error.message : "unknown");
       }
+    }
+
+    const snapshot = await snapshotPromise;
+    const snapshotTeams = snapshot?.teams && typeof snapshot.teams === "object" ? snapshot.teams : null;
+    if (snapshotTeams && Object.keys(snapshotTeams).length) {
+      const season = String(snapshot?.season || previousSeasonLabel(requestedSeason));
+      return responseWithHeaders(200, JSON.stringify({
+        ...snapshot,
+        requestedSeason,
+        season,
+        fallbackSeason: season !== requestedSeason,
+        cacheFallback: true,
+        stale: true,
+        errors,
+      }), {
+        "Content-Type": "application/json",
+        "Cache-Control": "public, max-age=60, s-maxage=60, stale-while-revalidate=300",
+      });
     }
 
     return jsonResponse(502, {
@@ -173,5 +224,7 @@ Deno.serve(async (req) => {
       detail: error instanceof Error ? error.message : "unknown",
       source: GLEAGUE_PLAYER_INDEX_URL,
     });
+  } finally {
+    clearTimeout(deadlineId);
   }
 });

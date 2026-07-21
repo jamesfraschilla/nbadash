@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createStoredZipBlob } from "./storedZip.js";
+import { createStoredZipBlob, StoredZipBuilder, StreamingZipBuilder } from "./storedZip.js";
 
 function readStoredEntries(bytes) {
   const decoder = new TextDecoder();
@@ -32,4 +32,32 @@ test("stored ZIP contains every exported file in one valid archive", async () =>
     { name: "one.png", content: "first" },
     { name: "two.png", content: "second" },
   ]);
+});
+
+test("streaming ZIP writes file bytes without retaining local file parts", async () => {
+  const chunks = [];
+  const writer = {
+    async write(value) { chunks.push(new Uint8Array(value)); },
+    async close() {},
+  };
+  const zip = new StreamingZipBuilder(writer);
+  await zip.addFile("one.png", new Blob(["first"]));
+  await zip.addFile("two.png", new Blob(["second"]));
+  await zip.close();
+  const bytes = new Uint8Array(chunks.reduce((size, chunk) => size + chunk.length, 0));
+  let offset = 0;
+  chunks.forEach((chunk) => {
+    bytes.set(chunk, offset);
+    offset += chunk.length;
+  });
+  assert.deepEqual(readStoredEntries(bytes), [
+    { name: "one.png", content: "first" },
+    { name: "two.png", content: "second" },
+  ]);
+  assert.equal("localParts" in zip, false);
+});
+
+test("in-memory ZIP refuses archives beyond its configured limit", async () => {
+  const zip = new StoredZipBuilder(new Date(), { maxBytes: 3 });
+  await assert.rejects(() => zip.addFile("large.png", new Blob(["1234"])), /too large/);
 });

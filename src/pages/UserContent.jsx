@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { deleteDrawingRecord, deleteNoteRecord, listOwnedDrawings, listOwnedNotes } from "../accountData.js";
+import { fetchGamesMetadataByIds } from "../api.js";
 import { useAuth } from "../auth/useAuth.js";
 import { getLeagueTeam } from "../data/nbaTeams.js";
-import { gameQueryOptions } from "../queries.js";
 import {
   deleteSavedToolRecord,
   deleteSavedToolRecordRemote,
@@ -218,18 +218,18 @@ export default function UserContent() {
   const { data: notes = [], isLoading: loadingNotes } = useQuery({
     queryKey: ["owned-notes", user?.id],
     queryFn: () => listOwnedNotes(user.id),
-    enabled: Boolean(user?.id),
+    enabled: Boolean(user?.id && tab === "notes"),
   });
 
   const { data: drawings = [], isLoading: loadingDrawings } = useQuery({
     queryKey: ["owned-drawings", user?.id],
     queryFn: () => listOwnedDrawings(user.id),
-    enabled: Boolean(user?.id),
+    enabled: Boolean(user?.id && tab === "drawings"),
   });
 
   const { data: savedTools = [] } = useQuery({
     queryKey: ["owned-tools", vaultUserId],
-    enabled: Boolean(vaultUserId && canUseTools),
+    enabled: Boolean(vaultUserId && canUseTools && ["graphics", "tools", "late-game"].includes(tab)),
     queryFn: async () => {
       if (!vaultUserId || !canUseTools) return [];
       if (!accountsEnabled || !user?.id) return listSavedToolRecords(vaultUserId);
@@ -245,29 +245,27 @@ export default function UserContent() {
   const uniqueGameIds = useMemo(() => (
     Array.from(
       new Set(
-        [...notes, ...drawings]
+        (tab === "notes" ? notes : tab === "drawings" ? drawings : [])
           .map((item) => String(item?.game_id || "").trim())
           .filter(Boolean)
       )
     )
-  ), [drawings, notes]);
+  ), [drawings, notes, tab]);
 
-  const gameQueries = useQueries({
-    queries: uniqueGameIds.map((gameId) => gameQueryOptions(gameId, {
-      staleTime: 5 * 60 * 1000,
-    })),
+  const { data: gamesById = {} } = useQuery({
+    queryKey: ["vault-game-metadata", uniqueGameIds],
+    queryFn: () => fetchGamesMetadataByIds(uniqueGameIds),
+    enabled: Boolean(user?.id && uniqueGameIds.length && ["notes", "drawings"].includes(tab)),
+    staleTime: 5 * 60 * 1000,
   });
 
   const gameMetaById = useMemo(() => {
     const next = new Map();
-    uniqueGameIds.forEach((gameId, index) => {
-      const query = gameQueries[index];
-      if (query?.data) {
-        next.set(gameId, buildGameMeta(query.data));
-      }
+    uniqueGameIds.forEach((gameId) => {
+      if (gamesById?.[gameId]) next.set(gameId, buildGameMeta(gamesById[gameId]));
     });
     return next;
-  }, [gameQueries, uniqueGameIds]);
+  }, [gamesById, uniqueGameIds]);
 
   const opponentOptions = useMemo(() => {
     const map = new Map();

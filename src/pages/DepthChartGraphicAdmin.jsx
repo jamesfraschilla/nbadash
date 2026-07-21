@@ -2,6 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../auth/useAuth.js";
+import {
+  deleteGraphicHeadshot,
+  getGraphicHeadshotPublicUrl,
+  uploadGraphicHeadshot,
+  uploadLegacyGraphicHeadshot,
+} from "../graphicHeadshotStorage.js";
 import { GLEAGUE_TEAMS, NBA_TEAMS } from "../data/nbaTeams.js";
 import {
   deleteSavedToolRecord,
@@ -38,6 +44,8 @@ function buildSlot(id, position, group) {
     customNumber: "",
     customLastName: "",
     customHeadshotDataUrl: "",
+    customHeadshotUrl: "",
+    customHeadshotStoragePath: "",
   };
 }
 
@@ -54,14 +62,51 @@ function hydrateDepthChartSlots(value) {
   const byId = new Map(incomingSlots.map((slot) => [String(slot?.id || "").trim(), slot]));
   return buildEmptySlots().map((emptySlot) => {
     const savedSlot = byId.get(emptySlot.id) || {};
+    const customHeadshotStoragePath = String(savedSlot?.customHeadshotStoragePath || "").trim();
     return {
       ...emptySlot,
       selection: String(savedSlot?.selection || "").trim(),
       customNumber: String(savedSlot?.customNumber || "").trim(),
       customLastName: String(savedSlot?.customLastName || "").trim(),
       customHeadshotDataUrl: String(savedSlot?.customHeadshotDataUrl || "").trim(),
+      customHeadshotUrl: getGraphicHeadshotPublicUrl(customHeadshotStoragePath)
+        || String(savedSlot?.customHeadshotUrl || "").trim(),
+      customHeadshotStoragePath,
     };
   });
+}
+
+function serializeDepthChartSlots(value) {
+  return hydrateDepthChartSlots(value).map((slot) => ({
+    id: slot.id,
+    position: slot.position,
+    group: slot.group,
+    selection: slot.selection,
+    customNumber: slot.customNumber,
+    customLastName: slot.customLastName,
+    customHeadshotStoragePath: slot.customHeadshotStoragePath,
+  }));
+}
+
+async function migrateLegacyDepthChartHeadshots(value, { userId, league, teamId }) {
+  const nextSlots = hydrateDepthChartSlots(value);
+  for (let index = 0; index < nextSlots.length; index += 1) {
+    const slot = nextSlots[index];
+    if (!slot.customHeadshotDataUrl || slot.customHeadshotStoragePath) continue;
+    const uploaded = await uploadLegacyGraphicHeadshot({
+      userId,
+      dataUrl: slot.customHeadshotDataUrl,
+      toolType: "depth-chart",
+      slotKey: `${league}-${teamId || "team"}-${slot.id}`,
+    });
+    nextSlots[index] = {
+      ...slot,
+      customHeadshotDataUrl: "",
+      customHeadshotUrl: uploaded.publicUrl,
+      customHeadshotStoragePath: uploaded.storagePath,
+    };
+  }
+  return nextSlots;
 }
 
 function hydrateDepthChartPayload(payload) {
@@ -110,15 +155,6 @@ function parseLastNameLabel(fullName) {
   }
   const lastName = parts[parts.length - 1] || "";
   return lastName && !isNameSuffix(lastName) ? [lastName, ...suffixes].join(" ") : "";
-}
-
-function readFileAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(reader.error || new Error("Unable to read file."));
-    reader.readAsDataURL(file);
-  });
 }
 
 function getTeamFileLabel(team) {
@@ -211,6 +247,7 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
   const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
   const previewCanvasRef = useRef(null);
+  const previewRenderIdRef = useRef(0);
   const [league, setLeague] = useState("nba");
   const [teamId, setTeamId] = useState("");
   const [slots, setSlots] = useState(() => buildEmptySlots());
@@ -253,24 +290,38 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
       lastName: isCustom ? slot.customLastName : getPlayerLastName(player),
       fullName: player?.fullName || "",
       headshotDataUrl: isCustom && slot.group === "starter" ? slot.customHeadshotDataUrl : "",
+      headshotUrl: isCustom && slot.group === "starter" ? slot.customHeadshotUrl : "",
     };
   }), [rosterById, slots, teamId]);
 
   const hasSelectedPlayer = exportSlots.some((slot) => String(slot.lastName || "").trim());
 
   useEffect(() => {
-    let active = true;
     const canvas = previewCanvasRef.current;
     if (!canvas) return undefined;
+    const renderId = previewRenderIdRef.current + 1;
+    previewRenderIdRef.current = renderId;
+    const renderCanvas = document.createElement("canvas");
 
-    renderDepthChartGraphic(canvas, { slots: exportSlots })
-      .then(() => undefined)
+    renderDepthChartGraphic(renderCanvas, { slots: exportSlots })
+      .then(() => {
+        if (previewRenderIdRef.current !== renderId || !previewCanvasRef.current) return;
+        canvas.width = renderCanvas.width;
+        canvas.height = renderCanvas.height;
+        const context = canvas.getContext("2d");
+        context?.clearRect(0, 0, canvas.width, canvas.height);
+        context?.drawImage(renderCanvas, 0, 0);
+        renderCanvas.width = 1;
+        renderCanvas.height = 1;
+      })
       .catch((error) => {
-        if (active) setStatus(error?.message || "Unable to render preview.");
+        if (previewRenderIdRef.current === renderId) {
+          setStatus(error?.message || "Unable to render preview.");
+        }
       });
 
     return () => {
-      active = false;
+      if (previewRenderIdRef.current === renderId) previewRenderIdRef.current += 1;
     };
   }, [exportSlots]);
 
@@ -317,10 +368,10 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
     };
   }, [accountsEnabled, depthChartParam, user?.id, vaultUserId]);
 
-  const buildSavedPayload = () => ({
+  const buildSavedPayload = (sourceSlots = slots) => ({
     league,
     teamId,
-    slots,
+    slots: serializeDepthChartSlots(sourceSlots),
   });
 
   const updateSlot = (slotId, patch) => {
@@ -355,17 +406,35 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
   };
 
   const handleHeadshotChange = async (slotId, file) => {
+    const currentSlot = slots.find((slot) => slot.id === slotId);
     if (!file) {
-      updateSlot(slotId, { customHeadshotDataUrl: "" });
-      return;
-    }
-    if (file.type && file.type !== "image/png") {
-      setStatus("Use a transparent PNG headshot.");
+      try {
+        await deleteGraphicHeadshot(user?.id, currentSlot?.customHeadshotStoragePath);
+      } catch (error) {
+        setStatus(error?.message || "Unable to remove the previous headshot.");
+        return;
+      }
+      updateSlot(slotId, {
+        customHeadshotDataUrl: "",
+        customHeadshotUrl: "",
+        customHeadshotStoragePath: "",
+      });
       return;
     }
     try {
-      const dataUrl = await readFileAsDataUrl(file);
-      updateSlot(slotId, { customHeadshotDataUrl: dataUrl });
+      setStatus("Uploading headshot...");
+      const uploaded = await uploadGraphicHeadshot({
+        userId: user?.id,
+        file,
+        toolType: "depth-chart",
+        slotKey: `${league}-${teamId || "team"}-${slotId}`,
+        previousPath: currentSlot?.customHeadshotStoragePath,
+      });
+      updateSlot(slotId, {
+        customHeadshotDataUrl: "",
+        customHeadshotUrl: uploaded.publicUrl,
+        customHeadshotStoragePath: uploaded.storagePath,
+      });
       setStatus("");
     } catch (error) {
       setStatus(error?.message || "Unable to load headshot.");
@@ -401,16 +470,22 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
     setBusyAction("save");
     const id = recordId || crypto.randomUUID();
     const timestamp = new Date().toISOString();
-    const record = {
-      id,
-      type: TOOL_RECORD_TYPES.DEPTH_CHART_GRAPHIC,
-      title: buildDepthChartTitle({ selectedTeam, league }),
-      updatedAt: timestamp,
-      createdAt: timestamp,
-      payload: buildSavedPayload(),
-    };
 
     try {
+      const saveSlots = await migrateLegacyDepthChartHeadshots(slots, {
+        userId: user?.id,
+        league,
+        teamId,
+      });
+      setSlots(saveSlots);
+      const record = {
+        id,
+        type: TOOL_RECORD_TYPES.DEPTH_CHART_GRAPHIC,
+        title: buildDepthChartTitle({ selectedTeam, league }),
+        updatedAt: timestamp,
+        createdAt: timestamp,
+        payload: buildSavedPayload(saveSlots),
+      };
       const savedRecord = accountsEnabled && user?.id
         ? await saveToolRecordRemote(user.id, record)
         : saveToolRecord(vaultUserId, record);
@@ -428,7 +503,7 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
       setStatus(`Saved to My Vault as ${savedRecord.title}`);
     } catch (error) {
       console.error("Failed to save depth chart draft.", error);
-      setStatus("Unable to save this depth chart to Supabase. It was not saved; try again.");
+      setStatus(error?.message || "Unable to save this depth chart to Supabase. It was not saved; try again.");
     } finally {
       setBusyAction("");
     }

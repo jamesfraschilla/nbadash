@@ -27,7 +27,7 @@ import {
   loadFirstImage,
   makeCanvas,
 } from "./matchupGraphicExport.js";
-import { StoredZipBuilder } from "../storedZip.js";
+import { createStreamingZipDownload, StoredZipBuilder } from "../storedZip.js";
 
 const STAT_LABELS = {
   ppg: "PPG",
@@ -309,36 +309,45 @@ export async function exportPersonnelGraphics({ items, team, teamId, league = "n
   const exportItems = Array.isArray(items) ? items.filter((item) => item?.player) : [];
   if (!exportItems.length) return 0;
 
+  const zipFileName = buildZipFileName(team);
+  const streamingZip = exportItems.length > 1 ? await createStreamingZipDownload(zipFileName) : null;
   await ensureMatchupExportFonts();
   const [logoImage, tagImages] = await Promise.all([
     loadFirstImage(teamId ? [teamLogoUrl(teamId, league)] : []),
     loadTagImages(),
   ]);
 
-  const zipBuilder = exportItems.length > 1 ? new StoredZipBuilder() : null;
-  for (const item of exportItems) {
-    const canvas = await renderPersonnelGraphic({
-      ...item,
-      teamId,
-      league,
-      logoImage,
-      tagImages,
-    });
-    const fileName = buildFileName(item.player, team);
-    if (exportItems.length === 1) {
-      downloadCanvas(canvas, fileName);
-    } else {
-      await zipBuilder.addFile(fileName, await canvasToPngBlob(canvas));
-      canvas.width = 1;
-      canvas.height = 1;
-      clearExportImageCache();
+  const zipBuilder = exportItems.length > 1
+    ? (streamingZip || new StoredZipBuilder(new Date(), { maxBytes: 96 * 1024 * 1024 }))
+    : null;
+  try {
+    for (const item of exportItems) {
+      const canvas = await renderPersonnelGraphic({
+        ...item,
+        teamId,
+        league,
+        logoImage,
+        tagImages,
+      });
+      const fileName = buildFileName(item.player, team);
+      if (exportItems.length === 1) {
+        downloadCanvas(canvas, fileName);
+      } else {
+        await zipBuilder.addFile(fileName, await canvasToPngBlob(canvas));
+        canvas.width = 1;
+        canvas.height = 1;
+        clearExportImageCache();
+      }
     }
-  }
 
-  if (zipBuilder) {
-    downloadBlob(zipBuilder.toBlob(), buildZipFileName(team));
+    if (streamingZip) await streamingZip.close();
+    else if (zipBuilder) downloadBlob(zipBuilder.toBlob(), zipFileName);
+  } catch (error) {
+    await streamingZip?.abort(error).catch(() => undefined);
+    throw error;
+  } finally {
+    clearExportImageCache();
   }
-  clearExportImageCache();
   return exportItems.length;
 }
 

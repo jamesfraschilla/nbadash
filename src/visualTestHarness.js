@@ -1,0 +1,120 @@
+import { fetchNbaPlayerStats } from "./api.js";
+import { exportPersonnelGraphics, renderPersonnelGraphic } from "./pages/personnelGraphicExport.js";
+import {
+  clearPersonnelStatOverridesForSeason,
+  createPersonnelDraft,
+  populatePersonnelDraftFromRoster,
+} from "./personnelGraphic.js";
+import { createSerialTaskQueue } from "./serialTaskQueue.js";
+import { saveToolRecordRemote } from "./toolVault.js";
+
+const player = {
+  personId: "",
+  jerseyNum: "27",
+  fullName: "Alex Riley",
+  familyName: "Riley",
+};
+const stats = {
+  pointsPerGame: 10.3,
+  reboundsPerGame: 2.9,
+  threePointPercentage: 31.6,
+  assistsPerGame: 2,
+  fieldGoalAttemptsPerGame: 8.2,
+  threePointAttemptsPerGame: 3.2,
+};
+const selectedStats = ["ppg", "rpg", "threePointPercentage", "apg"];
+
+function makeDeterministicHeadshot() {
+  const canvas = document.createElement("canvas");
+  canvas.width = 600;
+  canvas.height = 500;
+  const context = canvas.getContext("2d");
+  context.fillStyle = "#c41e3a";
+  context.fillRect(120, 260, 360, 240);
+  context.fillStyle = "#8b5a3c";
+  context.beginPath();
+  context.arc(300, 170, 105, 0, Math.PI * 2);
+  context.fill();
+  context.fillStyle = "#171717";
+  context.beginPath();
+  context.arc(300, 145, 108, Math.PI, Math.PI * 2);
+  context.fill();
+  return canvas;
+}
+
+window.renderPersonnelGolden = async () => {
+  const canvas = await renderPersonnelGraphic({
+    player,
+    stats,
+    selectedStats,
+    tags: [],
+    threePointColor: "dark_green",
+    teamId: "",
+    logoImage: null,
+    tagImages: {},
+    headshotImage: makeDeterministicHeadshot(),
+  });
+  canvas.id = "personnel-golden";
+  document.querySelector("#root").replaceChildren(canvas);
+};
+
+window.exportPersonnelGoldenZip = () => exportPersonnelGraphics({
+  team: { tricode: "TST", fullName: "Test Team" },
+  teamId: "",
+  items: [
+    { player, stats, selectedStats, tags: [], threePointColor: "dark_green" },
+    {
+      player: { ...player, jerseyNum: "5", familyName: "Sample", fullName: "Jamie Sample" },
+      stats: { ...stats, pointsPerGame: 12.1 },
+      selectedStats,
+      tags: [],
+      threePointColor: "bright_green",
+    },
+  ],
+});
+
+window.fetchPersonnelStatsForTest = (options) => fetchNbaPlayerStats(options);
+
+window.runPersonnelStateRegression = () => {
+  const draft = populatePersonnelDraftFromRoster(
+    createPersonnelDraft({ league: "gleague", teamId: "1612709928", season: "2025-26" }),
+    [{ personId: "g-1", teamId: "1612709928", fullName: "G League Player" }],
+    { league: "gleague", teamId: "1612709928" }
+  );
+  draft.rows[0].statOverrides = { ppg: "14.2" };
+  const changed = clearPersonnelStatOverridesForSeason(draft, "2026-27");
+  return {
+    league: changed.league,
+    teamId: changed.teamId,
+    season: changed.season,
+    personId: changed.rows[0].personId,
+    statOverrides: changed.rows[0].statOverrides,
+  };
+};
+
+window.runAutosaveOrderRegression = async () => {
+  const queue = createSerialTaskQueue();
+  const values = [];
+  queue.run(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    values.push("first");
+  });
+  queue.run(async () => values.push("second"));
+  await queue.wait();
+  return values;
+};
+
+window.runToolConflictRegression = async () => {
+  try {
+    await saveToolRecordRemote("00000000-0000-0000-0000-000000000001", {
+      id: "00000000-0000-0000-0000-000000000002",
+      type: "personnel_graphic",
+      title: "Conflict test",
+      payload: {},
+      revision: 1,
+    });
+    return "no conflict";
+  } catch (error) {
+    return error?.message || String(error);
+  }
+};
