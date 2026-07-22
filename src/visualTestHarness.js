@@ -56,6 +56,9 @@ window.renderPersonnelGolden = async () => {
   });
   canvas.id = "personnel-golden";
   document.querySelector("#root").replaceChildren(canvas);
+  await new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  });
 };
 
 window.exportPersonnelGoldenZip = () => exportPersonnelGraphics({
