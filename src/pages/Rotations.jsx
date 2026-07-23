@@ -2630,25 +2630,14 @@ export default function Rotations() {
       pdfWindow.document.title = "Generating Rotations PDF...";
       pdfWindow.document.body.innerHTML = "<p style=\"font-family: sans-serif; padding: 16px;\">Generating PDF...</p>";
     }
-    const [{ default: fontkit }, { PDFDocument, rgb }] = await Promise.all([
-      import("@pdf-lib/fontkit"),
-      import("pdf-lib"),
-    ]);
+    const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
     const pdfColors = buildPdfColors(rgb);
-    const fontUrl = new URL("../assets/fonts/DINalt.ttf", import.meta.url).href;
     const logoUrl = new URL("../assets/WWizards_Primary_Icon.png", import.meta.url).href;
-    const [fontResponse, logoResponse] = await Promise.all([
-      fetch(fontUrl),
-      fetch(logoUrl),
-    ]);
-    const [fontBytes, logoBytes] = await Promise.all([
-      fontResponse.arrayBuffer(),
-      logoResponse.arrayBuffer(),
-    ]);
+    const logoResponse = await fetch(logoUrl);
+    const logoBytes = await logoResponse.arrayBuffer();
 
     const pdfDoc = await PDFDocument.create();
-    pdfDoc.registerFontkit(fontkit);
-    const pdfFont = await pdfDoc.embedFont(fontBytes, { subset: true });
+    const pdfFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const logoImage = await pdfDoc.embedPng(logoBytes);
 
     const pageOne = pdfDoc.addPage([612, 792]);

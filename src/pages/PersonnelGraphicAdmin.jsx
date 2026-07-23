@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import fireTagUrl from "../assets/personnel/fire.png";
@@ -62,6 +62,7 @@ function StatColumnHeader({
   selectionBlocked,
   dragging,
   dropTarget,
+  cellId,
   onToggleAll,
   onDragStart,
   onDragOver,
@@ -80,25 +81,17 @@ function StatColumnHeader({
     <div
       className={`${styles.statHeader} ${dragging ? styles.statHeaderDragging : ""} ${dropTarget ? styles.statHeaderDropTarget : ""}`}
       role="columnheader"
+      draggable
+      tabIndex={0}
+      aria-label={`Drag to reorder ${option.label} column`}
+      aria-grabbed={dragging}
+      title={`Drag to reorder ${option.label}`}
+      data-personnel-stat-cell-id={cellId}
+      onDragStart={(event) => onDragStart(event, option.key)}
       onDragOver={(event) => onDragOver(event, option.key)}
       onDrop={(event) => onDrop(event, option.key)}
+      onDragEnd={onDragEnd}
     >
-      <div className={styles.statHeaderTop}>
-        <span>{option.label}</span>
-        <span
-          className={styles.dragHandle}
-          draggable
-          role="button"
-          tabIndex={0}
-          aria-label={`Drag to reorder ${option.label} column`}
-          aria-grabbed={dragging}
-          title={`Drag to reorder ${option.label}`}
-          onDragStart={(event) => onDragStart(event, option.key)}
-          onDragEnd={onDragEnd}
-        >
-          ↔
-        </span>
-      </div>
       <label
         className={styles.headerStatCheckbox}
         title={allSelected
@@ -106,6 +99,10 @@ function StatColumnHeader({
           : selectionBlocked
             ? `Unselect another stat column before selecting ${option.label} for every player`
             : `Select ${option.label} for every player`}
+        draggable={false}
+        onMouseDown={(event) => event.stopPropagation()}
+        onPointerDown={(event) => event.stopPropagation()}
+        onDragStart={(event) => event.stopPropagation()}
       >
         <input
           ref={checkboxRef}
@@ -117,8 +114,8 @@ function StatColumnHeader({
             ? `Unselect ${option.label} for all players`
             : `Select ${option.label} for all players`}
         />
-        <span>{allSelected ? "All" : partiallySelected ? "Some" : "All"}</span>
       </label>
+      <span className={styles.statHeaderLabel}>{option.label}</span>
     </div>
   );
 }
@@ -218,8 +215,12 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
   const [dialog, setDialog] = useState(null);
   const [draggedStatKey, setDraggedStatKey] = useState("");
   const [dragOverStatKey, setDragOverStatKey] = useState("");
+  const [dragOverPlacement, setDragOverPlacement] = useState("before");
   const recordIdRef = useRef("");
   const draftRef = useRef(draft);
+  const tableRef = useRef(null);
+  const statLayoutRectsRef = useRef(new Map());
+  const previousVisualStatOrderKeyRef = useRef("");
   const autoSaveTimerRef = useRef(null);
   const autoSaveRunRef = useRef(0);
   const autoSavePendingDraftRef = useRef(null);
@@ -290,11 +291,17 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
     [draft]
   );
   const populatedRows = useMemo(() => draft.rows.filter((row) => row.personId), [draft.rows]);
+  const visualStatOrder = useMemo(() => (
+    draggedStatKey && dragOverStatKey
+      ? reorderPersonnelStatColumns(draft.statOrder, draggedStatKey, dragOverStatKey, dragOverPlacement)
+      : draft.statOrder
+  ), [draft.statOrder, dragOverPlacement, dragOverStatKey, draggedStatKey]);
+  const visualStatOrderKey = visualStatOrder.join("|");
   const orderedStatOptions = useMemo(() => (
-    draft.statOrder
+    visualStatOrder
       .map((key) => PERSONNEL_STAT_OPTIONS_BY_KEY[key])
       .filter(Boolean)
-  ), [draft.statOrder]);
+  ), [visualStatOrder]);
   const statSelectionCounts = useMemo(() => Object.fromEntries(
     PERSONNEL_STAT_OPTIONS.map((option) => [
       option.key,
@@ -317,6 +324,36 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
   useEffect(() => {
     draftRef.current = draft;
   }, [draft]);
+
+  useLayoutEffect(() => {
+    const root = tableRef.current;
+    if (!root) return;
+    const shouldAnimate = Boolean(
+      previousVisualStatOrderKeyRef.current
+      && previousVisualStatOrderKeyRef.current !== visualStatOrderKey
+    );
+    const nextRects = new Map();
+    root.querySelectorAll("[data-personnel-stat-cell-id]").forEach((element) => {
+      const cellId = element.getAttribute("data-personnel-stat-cell-id");
+      if (!cellId) return;
+      const rect = element.getBoundingClientRect();
+      nextRects.set(cellId, rect);
+      const previousRect = statLayoutRectsRef.current.get(cellId);
+      if (!shouldAnimate || !previousRect || typeof element.animate !== "function") return;
+      const deltaX = previousRect.left - rect.left;
+      const deltaY = previousRect.top - rect.top;
+      if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) return;
+      element.animate([
+        { transform: `translate(${deltaX}px, ${deltaY}px)` },
+        { transform: "translate(0, 0)" },
+      ], {
+        duration: 190,
+        easing: "cubic-bezier(0.2, 0, 0, 1)",
+      });
+    });
+    statLayoutRectsRef.current = nextRects;
+    previousVisualStatOrderKeyRef.current = visualStatOrderKey;
+  }, [draft.rows, visualStatOrderKey]);
 
   useEffect(() => {
     recordIdRef.current = recordId;
@@ -657,7 +694,10 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
   const handleStatDragOver = (event, statKey) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const nextPlacement = event.clientX >= bounds.left + (bounds.width / 2) ? "after" : "before";
     if (statKey !== dragOverStatKey) setDragOverStatKey(statKey);
+    if (nextPlacement !== dragOverPlacement) setDragOverPlacement(nextPlacement);
   };
 
   const handleStatDrop = (event, targetKey) => {
@@ -674,6 +714,7 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
     const orderChanged = nextOrder.some((key, index) => key !== draftRef.current.statOrder[index]);
     setDraggedStatKey("");
     setDragOverStatKey("");
+    setDragOverPlacement("before");
     if (!orderChanged) return;
 
     const nextDraft = {
@@ -695,6 +736,7 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
   const handleStatDragEnd = () => {
     setDraggedStatKey("");
     setDragOverStatKey("");
+    setDragOverPlacement("before");
   };
 
   const handleToggleTag = (index, tagKey) => {
@@ -878,7 +920,7 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
       ) : null}
 
       <div className={styles.tableShell}>
-        <div className={styles.table} role="table" aria-label="Personnel graphic player settings">
+        <div ref={tableRef} className={styles.table} role="table" aria-label="Personnel graphic player settings">
           <div className={styles.headerRow} role="row">
             <span aria-label="Include">Use</span>
             <span>Player</span>
@@ -893,6 +935,7 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
                 ))}
                 dragging={draggedStatKey === option.key}
                 dropTarget={Boolean(draggedStatKey && dragOverStatKey === option.key)}
+                cellId={`header-${option.key}`}
                 onToggleAll={handleToggleAllStatColumn}
                 onDragStart={handleStatDragStart}
                 onDragOver={handleStatDragOver}
@@ -956,7 +999,11 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
                   const checked = row.selectedStats.includes(option.key);
                   const atMaximum = row.selectedStats.length >= 4;
                   return (
-                    <div key={option.key} className={styles.statToggle}>
+                    <div
+                      key={option.key}
+                      className={`${styles.statToggle} ${draggedStatKey === option.key ? styles.statColumnDragging : ""} ${draggedStatKey && dragOverStatKey === option.key ? styles.statColumnDropTarget : ""}`}
+                      data-personnel-stat-cell-id={`${row.id}-${option.key}`}
+                    >
                       <label className={styles.statCheckbox}>
                         <input
                           type="checkbox"

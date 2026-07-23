@@ -171,17 +171,32 @@
 .statHeader {
   align-self: stretch;
   display: grid;
+  grid-template-rows: 20px 1fr;
   align-content: center;
-  justify-items: center;
-  gap: 4px;
+  justify-items: stretch;
+  gap: 3px;
   min-width: 0;
-  padding: 3px 2px;
+  padding: 3px 2px 4px;
   border-radius: var(--radius-sm);
-  transition: background 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: background 140ms ease, box-shadow 140ms ease, opacity 140ms ease, transform 180ms ease;
+  will-change: transform, opacity;
+}
+
+.statHeader:active {
+  cursor: grabbing;
+}
+
+.statHeader:focus-visible {
+  outline: 2px solid var(--highlight-text);
+  outline-offset: 2px;
 }
 
 .statHeaderDragging {
-  opacity: 0.48;
+  background: var(--row-hover);
+  opacity: 0.42;
 }
 
 .statHeaderDropTarget {
@@ -189,43 +204,30 @@
   box-shadow: inset 0 0 0 1px var(--border-strong);
 }
 
-.statHeaderTop,
 .headerStatCheckbox {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-}
-
-.statHeaderTop {
-  gap: 5px;
-}
-
-.dragHandle {
-  color: var(--muted);
-  cursor: grab;
-  font-size: 0.95rem;
-  letter-spacing: 0;
-  line-height: 1;
-  user-select: none;
-}
-
-.dragHandle:active {
-  cursor: grabbing;
-}
-
-.dragHandle:focus-visible {
-  outline: 2px solid var(--highlight-text);
-  outline-offset: 2px;
-}
-
-.headerStatCheckbox {
-  gap: 4px;
+  align-self: start;
+  justify-self: start;
+  min-width: 18px;
+  min-height: 18px;
+  margin-left: 0;
   color: var(--muted);
   cursor: pointer;
   font-size: 0.62rem;
   font-weight: 700;
   letter-spacing: 0;
   text-transform: none;
+}
+
+.statHeaderLabel {
+  align-self: start;
+  justify-self: center;
+  width: 100%;
+  cursor: grab;
+  line-height: 1.15;
+  text-align: center;
 }
 
 .headerStatCheckbox input {
@@ -293,10 +295,23 @@
 
 .statToggle {
   gap: 6px;
+  border-radius: var(--radius-sm);
+  transition: background 140ms ease, box-shadow 140ms ease, opacity 140ms ease, transform 180ms ease;
+  will-change: transform, opacity;
 }
 
 .statCheckbox {
   flex: 0 0 auto;
+}
+
+.statColumnDragging {
+  background: var(--row-hover);
+  opacity: 0.42;
+}
+
+.statColumnDropTarget {
+  background: var(--row-hover);
+  box-shadow: inset 0 0 0 1px var(--border);
 }
 
 .rowToggle input,
