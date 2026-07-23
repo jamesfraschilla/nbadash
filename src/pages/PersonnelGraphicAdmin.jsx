@@ -11,6 +11,7 @@ import Dialog from "../components/ui/Dialog.jsx";
 import { GLEAGUE_TEAMS, NBA_TEAMS, getLeagueTeam } from "../data/nbaTeams.js";
 import {
   DEFAULT_PERSONNEL_STAT_KEYS,
+  PERSONNEL_CUSTOM_STAT_KEY,
   PERSONNEL_SLOT_COUNT,
   PERSONNEL_STAT_OPTIONS,
   PERSONNEL_TAG_OPTIONS,
@@ -25,6 +26,7 @@ import {
   hasExactlyFourPersonnelStats,
   hydratePersonnelDraft,
   mergePersonnelStatOverrides,
+  normalizePersonnelCustomStatLabel,
   normalizePersonnelStatsMap,
   orderPersonnelSelectedStats,
   populatePersonnelDraftFromRoster,
@@ -194,7 +196,10 @@ function formatSupabaseSaveError(error) {
 function buildExportItems(rows, rosterById, statsById, statOrder) {
   return rows.map((row) => ({
     player: rosterById[row.personId] || row,
-    stats: mergePersonnelStatOverrides(statsById[row.personId] || {}, row.statOverrides),
+    stats: {
+      ...mergePersonnelStatOverrides(statsById[row.personId] || {}, row.statOverrides),
+      customStatLabel: row.customStatLabel,
+    },
     selectedStats: orderPersonnelSelectedStats(row.selectedStats, statOrder),
     tags: row.tags,
     threePointColor: row.threePointColor,
@@ -627,6 +632,13 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
         ...(row.statOverrides || {}),
         [statKey]: value,
       },
+    }));
+  };
+
+  const handleCustomStatLabelChange = (index, value) => {
+    updateRow(index, (row) => ({
+      ...row,
+      customStatLabel: normalizePersonnelCustomStatLabel(value),
     }));
   };
 
@@ -1080,10 +1092,12 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
                 {orderedStatOptions.map((option) => {
                   const checked = row.selectedStats.includes(option.key);
                   const atMaximum = row.selectedStats.length >= 4;
+                  const isCustomStat = option.key === PERSONNEL_CUSTOM_STAT_KEY;
+                  const playerLabel = rosterById[row.personId]?.fullName || row.fullName || `slot ${index + 1}`;
                   return (
                     <div
                       key={option.key}
-                      className={`${styles.statToggle} ${draggedStatKey === option.key ? styles.statColumnDragging : ""} ${draggedStatKey && dragOverStatKey === option.key ? styles.statColumnDropTarget : ""}`}
+                      className={`${styles.statToggle} ${isCustomStat ? styles.customStatToggle : ""} ${draggedStatKey === option.key ? styles.statColumnDragging : ""} ${draggedStatKey && dragOverStatKey === option.key ? styles.statColumnDropTarget : ""}`}
                       data-personnel-stat-cell-id={`${row.id}-${option.key}`}
                     >
                       <label className={styles.statCheckbox}>
@@ -1092,18 +1106,43 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
                           checked={checked}
                           disabled={!row.personId || (!checked && atMaximum)}
                           onChange={() => updateRow(index, (currentRow) => togglePersonnelRowStat(currentRow, option.key))}
+                          aria-label={isCustomStat ? `Custom stat for ${playerLabel}` : undefined}
                         />
-                        <span>{option.label}</span>
+                        {isCustomStat ? null : <span>{option.label}</span>}
                       </label>
-                      <input
-                        type="text"
-                        className={styles.statValueInput}
-                        value={getRowStatInputValue(row, option.key)}
-                        disabled={!row.personId}
-                        inputMode="decimal"
-                        onChange={(event) => handleStatOverrideChange(index, option.key, event.target.value)}
-                        aria-label={`${option.label} value for ${rosterById[row.personId]?.fullName || row.fullName || `slot ${index + 1}`}`}
-                      />
+                      {isCustomStat ? (
+                        <div className={styles.customStatInputs}>
+                          <input
+                            type="text"
+                            className={`${styles.statValueInput} ${styles.customStatLabelInput}`}
+                            value={row.customStatLabel || ""}
+                            disabled={!row.personId}
+                            placeholder="ABBR"
+                            onChange={(event) => handleCustomStatLabelChange(index, event.target.value)}
+                            aria-label={`Custom stat abbreviation for ${playerLabel}`}
+                          />
+                          <input
+                            type="text"
+                            className={`${styles.statValueInput} ${styles.customStatValueInput}`}
+                            value={getRowStatInputValue(row, option.key)}
+                            disabled={!row.personId}
+                            inputMode="decimal"
+                            placeholder="#"
+                            onChange={(event) => handleStatOverrideChange(index, option.key, event.target.value)}
+                            aria-label={`Custom stat value for ${playerLabel}`}
+                          />
+                        </div>
+                      ) : (
+                        <input
+                          type="text"
+                          className={styles.statValueInput}
+                          value={getRowStatInputValue(row, option.key)}
+                          disabled={!row.personId}
+                          inputMode="decimal"
+                          onChange={(event) => handleStatOverrideChange(index, option.key, event.target.value)}
+                          aria-label={`${option.label} value for ${playerLabel}`}
+                        />
+                      )}
                     </div>
                   );
                 })}

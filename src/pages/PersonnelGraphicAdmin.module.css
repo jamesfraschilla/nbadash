@@ -141,14 +141,14 @@
 }
 
 .table {
-  min-width: 1480px;
+  min-width: 1680px;
 }
 
 .headerRow,
 .playerRow,
 .bulkRow {
   display: grid;
-  grid-template-columns: 34px minmax(210px, 1.2fr) repeat(7, minmax(108px, 0.52fr)) 92px 68px;
+  grid-template-columns: 34px minmax(210px, 1.2fr) repeat(8, minmax(118px, 0.52fr)) 92px 68px;
   gap: 6px;
   align-items: center;
   padding: 7px 10px;
@@ -318,6 +318,10 @@
   will-change: transform, opacity;
 }
 
+.customStatToggle {
+  gap: 5px;
+}
+
 .statCheckbox {
   flex: 0 0 auto;
 }
@@ -359,6 +363,22 @@
 .statValueInput:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.customStatInputs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.customStatLabelInput {
+  width: 46px;
+  text-transform: uppercase;
+}
+
+.customStatValueInput {
+  width: 50px;
 }
 
 .playerCell {

@@ -4,7 +4,9 @@ import drivesRightTagUrl from "../assets/personnel/drives-right.png";
 import drivesLeftTagUrl from "../assets/personnel/drives-left.png";
 import { teamLogoUrl } from "../api.js";
 import {
+  PERSONNEL_CUSTOM_STAT_KEY,
   PERSONNEL_THREE_POINT_COLOR_OPTIONS,
+  normalizePersonnelCustomStatLabel,
   calculateThreePointAttemptRatio,
   formatPersonnelStatValue,
 } from "../personnelGraphic.js";
@@ -37,6 +39,7 @@ const STAT_LABELS = {
   bpg: "BPG",
   spg: "SPG",
   fta: "FTA",
+  [PERSONNEL_CUSTOM_STAT_KEY]: "CUSTOM",
 };
 
 const THREE_POINT_COLORS = Object.fromEntries(
@@ -114,6 +117,13 @@ function drawUnderlinedCenteredText(context, text, x, y, width, options) {
   return finalSize;
 }
 
+function getStatLabel(stats, statKey) {
+  if (statKey === PERSONNEL_CUSTOM_STAT_KEY) {
+    return normalizePersonnelCustomStatLabel(stats?.customStatLabel) || STAT_LABELS[PERSONNEL_CUSTOM_STAT_KEY];
+  }
+  return STAT_LABELS[statKey] || String(statKey || "").toUpperCase();
+}
+
 function drawStatsBox(context, stats, selectedStats) {
   const { x, y, width, height } = PERSONNEL_LAYOUT.statsBox;
   const typography = PERSONNEL_LAYOUT.stats;
@@ -126,7 +136,7 @@ function drawStatsBox(context, stats, selectedStats) {
 
   selectedStats.slice(0, 4).forEach((statKey, index) => {
     const slotX = x + (slotWidth * index);
-    const label = STAT_LABELS[statKey] || String(statKey || "").toUpperCase();
+    const label = getStatLabel(stats, statKey);
     drawUnderlinedCenteredText(context, label, slotX, y + typography.labelInsetY, slotWidth, {
       size: typography.labelSize,
       minSize: typography.labelMinSize,

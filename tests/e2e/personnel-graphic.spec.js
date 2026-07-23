@@ -95,8 +95,8 @@ test("personnel stat columns default, bulk-toggle, and drag in export order", as
 
   await page.goto("http://127.0.0.1:4174/nbadash/#/tools?tab=graphics&graphic=personnel");
   const headers = page.locator('[role="columnheader"]');
-  await expect(headers).toHaveCount(7);
-  for (const [index, label] of ["PPG", "3P%", "RPG", "APG", "BPG", "SPG", "FTA"].entries()) {
+  await expect(headers).toHaveCount(8);
+  for (const [index, label] of ["PPG", "3P%", "RPG", "APG", "BPG", "SPG", "FTA", "Custom"].entries()) {
     await expect(headers.nth(index)).toContainText(label);
   }
   await expect.poll(() => getPersonnelStatOrder(page)).toEqual([
@@ -107,6 +107,7 @@ test("personnel stat columns default, bulk-toggle, and drag in export order", as
     "bpg",
     "spg",
     "fta",
+    "custom",
   ]);
 
   await page.getByLabel("NBA Team").selectOption("1610612764");
@@ -117,6 +118,13 @@ test("personnel stat columns default, bulk-toggle, and drag in export order", as
   await page.getByLabel("Select BPG for all players").click();
   await expect(page.getByLabel("BPG", { exact: true }).nth(0)).toBeChecked();
   await expect(page.getByLabel("BPG", { exact: true }).nth(1)).toBeChecked();
+  await page.getByLabel("BPG", { exact: true }).nth(0).click();
+  await page.getByLabel("Custom stat abbreviation for Alpha Player").fill("MIN");
+  await page.getByLabel("Custom stat value for Alpha Player").fill("28.4");
+  await page.getByLabel("Custom stat for Alpha Player").check();
+  await expect(page.getByLabel("Custom stat abbreviation for Alpha Player")).toHaveValue("MIN");
+  await expect(page.getByLabel("Custom stat value for Alpha Player")).toHaveValue("28.4");
+  await expect(page.getByLabel("Custom stat for Alpha Player")).toBeChecked();
 
   await dragPersonnelStatColumn(page, "fta", "ppg", "before");
   await expect.poll(() => getPersonnelStatOrder(page)).toEqual([
@@ -127,6 +135,7 @@ test("personnel stat columns default, bulk-toggle, and drag in export order", as
     "apg",
     "bpg",
     "spg",
+    "custom",
   ]);
 
   await dragPersonnelStatColumn(page, "fta", "spg", "after");
@@ -138,6 +147,7 @@ test("personnel stat columns default, bulk-toggle, and drag in export order", as
     "bpg",
     "spg",
     "fta",
+    "custom",
   ]);
 });
 

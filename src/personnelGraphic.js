@@ -1,5 +1,7 @@
 export const PERSONNEL_SLOT_COUNT = 18;
 
+export const PERSONNEL_CUSTOM_STAT_KEY = "custom";
+
 export const PERSONNEL_STAT_OPTIONS = Object.freeze([
   Object.freeze({ key: "ppg", label: "PPG" }),
   Object.freeze({ key: "threePointPercentage", label: "3P%" }),
@@ -8,6 +10,7 @@ export const PERSONNEL_STAT_OPTIONS = Object.freeze([
   Object.freeze({ key: "bpg", label: "BPG" }),
   Object.freeze({ key: "spg", label: "SPG" }),
   Object.freeze({ key: "fta", label: "FTA" }),
+  Object.freeze({ key: PERSONNEL_CUSTOM_STAT_KEY, label: "Custom" }),
 ]);
 
 export const DEFAULT_PERSONNEL_STAT_ORDER = Object.freeze(
@@ -106,6 +109,8 @@ const STAT_KEY_ALIASES = new Map([
   ["fta", "fta"],
   ["freethrowattempts", "fta"],
   ["freethrowattemptspergame", "fta"],
+  ["custom", PERSONNEL_CUSTOM_STAT_KEY],
+  ["customstat", PERSONNEL_CUSTOM_STAT_KEY],
 ]);
 
 const TAG_KEY_ALIASES = new Map([
@@ -143,6 +148,13 @@ function normalizeLookupKey(value) {
 
 function normalizeString(value) {
   return String(value ?? "").trim();
+}
+
+export function normalizePersonnelCustomStatLabel(value) {
+  return normalizeString(value)
+    .toUpperCase()
+    .replace(/[^A-Z0-9%/+-]/g, "")
+    .slice(0, 8);
 }
 
 function normalizePlayerId(value) {
@@ -248,6 +260,12 @@ export function createPersonnelRow(index = 0, overrides = {}) {
   const personId = normalizePlayerId(firstPresentValue(source, ["personId", "playerId", "PLAYER_ID"]));
   const selectedStats = firstPresentValue(source, ["selectedStats", "stats", "statKeys"]);
   const statOverrides = firstPresentValue(source, ["statOverrides", "manualStats", "statValues"]);
+  const customStatLabel = firstPresentValue(source, [
+    "customStatLabel",
+    "customLabel",
+    "customStatAbbreviation",
+    "customAbbreviation",
+  ]);
   const tags = firstPresentValue(source, ["tags", "tagKeys"]);
   const enabled = firstPresentValue(source, ["enabled", "selected", "included"]);
   const threePointColor = firstPresentValue(source, [
@@ -272,6 +290,7 @@ export function createPersonnelRow(index = 0, overrides = {}) {
     jerseyNum: normalizeString(firstPresentValue(source, ["jerseyNum", "jerseyNumber", "number", "NUM"])),
     selectedStats: normalizeSelectedStats(selectedStats, selectedStats === undefined),
     statOverrides: normalizeStatOverrides(statOverrides),
+    customStatLabel: normalizePersonnelCustomStatLabel(customStatLabel),
     tags: normalizeTags(tags),
     threePointColor: normalizeThreePointColor(threePointColor),
     threePointColorEdited: normalizeBoolean(threePointColorEdited, threePointColor !== undefined),
@@ -338,6 +357,7 @@ export function populatePersonnelDraftFromRoster(draft, roster, options = {}) {
         enabled: row.enabled,
         selectedStats: row.selectedStats,
         statOverrides: row.statOverrides,
+        customStatLabel: row.customStatLabel,
         tags: row.tags,
         threePointColor: row.threePointColor,
         threePointColorEdited: row.threePointColorEdited,
@@ -473,6 +493,14 @@ function normalizePercentage(value) {
 
 export function formatPersonnelStatValue(stats, statKey) {
   const key = normalizeStatKey(statKey);
+  if (key === PERSONNEL_CUSTOM_STAT_KEY) {
+    return normalizeString(firstPresentValue(stats, [
+      PERSONNEL_CUSTOM_STAT_KEY,
+      "customStatValue",
+      "customValue",
+    ]));
+  }
+
   const aliasesByKey = {
     ppg: ["ppg", "pointsPerGame", "points", "PTS"],
     rpg: ["rpg", "reboundsPerGame", "rebounds", "REB"],
@@ -506,7 +534,7 @@ export function clearPersonnelStatOverridesForSeason(draft, season) {
   return {
     ...hydrated,
     season: normalizePersonnelSeason(season, hydrated.season),
-    rows: hydrated.rows.map((row) => ({ ...row, statOverrides: {} })),
+    rows: hydrated.rows.map((row) => ({ ...row, statOverrides: {}, customStatLabel: "" })),
   };
 }
 

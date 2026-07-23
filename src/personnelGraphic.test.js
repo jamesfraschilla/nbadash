@@ -34,10 +34,10 @@ import {
 test("constants expose the requested slots, stats, tags, and 3P colors", () => {
   assert.equal(PERSONNEL_SLOT_COUNT, 18);
   assert.deepEqual(PERSONNEL_STAT_OPTIONS.map(({ label }) => label), [
-    "PPG", "3P%", "RPG", "APG", "BPG", "SPG", "FTA",
+    "PPG", "3P%", "RPG", "APG", "BPG", "SPG", "FTA", "Custom",
   ]);
   assert.deepEqual(DEFAULT_PERSONNEL_STAT_ORDER, [
-    "ppg", "threePointPercentage", "rpg", "apg", "bpg", "spg", "fta",
+    "ppg", "threePointPercentage", "rpg", "apg", "bpg", "spg", "fta", "custom",
   ]);
   assert.deepEqual(DEFAULT_PERSONNEL_STAT_KEYS, ["ppg", "threePointPercentage", "rpg", "apg"]);
   assert.deepEqual(PERSONNEL_TAG_OPTIONS.map(({ key }) => key), [
@@ -82,7 +82,7 @@ test("createPersonnelDraft produces 18 independent rows with the exact draft sha
   assert.equal(draft.rows.length, 18);
   assert.deepEqual(Object.keys(draft.rows[0]), [
     "id", "enabled", "personId", "teamId", "fullName", "firstName", "familyName", "jerseyNum",
-    "selectedStats", "statOverrides", "tags", "threePointColor", "threePointColorEdited",
+    "selectedStats", "statOverrides", "customStatLabel", "tags", "threePointColor", "threePointColorEdited",
   ]);
   assert.deepEqual(draft.rows[0], {
     id: "personnel-slot-1",
@@ -95,6 +95,7 @@ test("createPersonnelDraft produces 18 independent rows with the exact draft sha
     jerseyNum: "",
     selectedStats: ["ppg", "threePointPercentage", "rpg", "apg"],
     statOverrides: {},
+    customStatLabel: "",
     tags: [],
     threePointColor: "bright_green",
     threePointColorEdited: false,
@@ -129,19 +130,22 @@ test("personnel drafts preserve G League selection through hydration and roster 
 test("changing personnel seasons clears every manual stat override", () => {
   const draft = createPersonnelDraft({ season: "2026-27" });
   draft.rows[0].statOverrides = { ppg: "20.1" };
+  draft.rows[0].customStatLabel = "MIN";
   draft.rows[1].statOverrides = { rpg: "7.2" };
   const changed = clearPersonnelStatOverridesForSeason(draft, "2025-26");
   assert.equal(changed.season, "2025-26");
   assert.deepEqual(changed.rows[0].statOverrides, {});
+  assert.equal(changed.rows[0].customStatLabel, "");
   assert.deepEqual(changed.rows[1].statOverrides, {});
 });
 
-test("createPersonnelRow and hydration sanitize aliases while preserving 0 through 7 selections", () => {
+test("createPersonnelRow and hydration sanitize aliases while preserving 0 through 8 selections", () => {
   assert.deepEqual(createPersonnelRow({
     personId: 22,
     selected: "false",
-    selectedStats: ["PTS", "REB", "3P%", "AST", "BLK", "STL", "FTA", "AST", "bogus"],
-    statOverrides: { PTS: 12.25, "3P%": "41.8", bogus: "9" },
+    selectedStats: ["PTS", "REB", "3P%", "AST", "BLK", "STL", "FTA", "CUSTOM", "AST", "bogus"],
+    statOverrides: { PTS: 12.25, "3P%": "41.8", CUSTOM: "11/22", bogus: "9" },
+    customAbbreviation: "rim fg%",
     tags: ["hot", "Drives Right", "fire", "unknown"],
     threeColor: "Dark Green",
   }), {
@@ -153,8 +157,9 @@ test("createPersonnelRow and hydration sanitize aliases while preserving 0 throu
     firstName: "",
     familyName: "",
     jerseyNum: "",
-    selectedStats: ["ppg", "rpg", "threePointPercentage", "apg", "bpg", "spg", "fta"],
-    statOverrides: { ppg: "12.25", threePointPercentage: "41.8" },
+    selectedStats: ["ppg", "rpg", "threePointPercentage", "apg", "bpg", "spg", "fta", "custom"],
+    statOverrides: { ppg: "12.25", threePointPercentage: "41.8", custom: "11/22" },
+    customStatLabel: "RIMFG%",
     tags: ["fire", "drives_right"],
     threePointColor: "dark_green",
     threePointColorEdited: true,
@@ -221,6 +226,7 @@ test("populatePersonnelDraftFromRoster preserves configuration by player across 
         enabled: false,
         selectedStats: ["ppg", "rpg", "bpg"],
         statOverrides: { ppg: "14.2", spg: "" },
+        customStatLabel: "MIN",
         tags: ["fire", "drives_left"],
         threePointColor: "red",
       },
@@ -246,6 +252,7 @@ test("populatePersonnelDraftFromRoster preserves configuration by player across 
   assert.equal(populated.rows[1].enabled, false);
   assert.deepEqual(populated.rows[1].selectedStats, ["ppg", "rpg", "bpg"]);
   assert.deepEqual(populated.rows[1].statOverrides, { ppg: "14.2", spg: "" });
+  assert.equal(populated.rows[1].customStatLabel, "MIN");
   assert.deepEqual(populated.rows[1].tags, ["fire", "drives_left"]);
   assert.equal(populated.rows[1].threePointColor, "red");
   assert.equal(populated.rows[2].enabled, true);
@@ -275,7 +282,7 @@ test("toggle helpers allow unchecking and prevent selecting a fifth stat", () =>
 
 test("stat column order is normalized, draggable, and controls export order", () => {
   assert.deepEqual(normalizePersonnelStatOrder(["AST", "PPG", "AST", "bogus"]), [
-    "apg", "ppg", "threePointPercentage", "rpg", "bpg", "spg", "fta",
+    "apg", "ppg", "threePointPercentage", "rpg", "bpg", "spg", "fta", "custom",
   ]);
   const reordered = reorderPersonnelStatColumns(
     DEFAULT_PERSONNEL_STAT_ORDER,
@@ -284,7 +291,7 @@ test("stat column order is normalized, draggable, and controls export order", ()
     "before"
   );
   assert.deepEqual(reordered, [
-    "rpg", "ppg", "threePointPercentage", "apg", "bpg", "spg", "fta",
+    "rpg", "ppg", "threePointPercentage", "apg", "bpg", "spg", "fta", "custom",
   ]);
   assert.deepEqual(
     orderPersonnelSelectedStats(
@@ -349,13 +356,15 @@ test("stat formatting leaves missing values blank while preserving legitimate ze
   assert.equal(formatPersonnelStatValue({ ppg: "" }, "PPG"), "");
   assert.equal(formatPersonnelStatValue({ ppg: 0 }, "PPG"), "0.0");
   assert.equal(formatPersonnelStatValue({ FG3_PCT: 0.4 }, "3P%"), "40.0");
+  assert.equal(formatPersonnelStatValue({ custom: "11/22" }, "Custom"), "11/22");
   assert.deepEqual(mergePersonnelStatOverrides(
     { ppg: 10.25, rpg: 4.5, threePointPercentage: 38.2 },
-    { PTS: "12.4", "3P%": "", notAStat: "9" }
+    { PTS: "12.4", "3P%": "", CUSTOM: "11/22", notAStat: "9" }
   ), {
     ppg: "12.4",
     rpg: 4.5,
     threePointPercentage: "",
+    custom: "11/22",
   });
   assert.equal(formatPersonnelStatValue(
     mergePersonnelStatOverrides({ ppg: 10.25 }, { ppg: "12.4" }),
