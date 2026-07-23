@@ -2,16 +2,20 @@ export const PERSONNEL_SLOT_COUNT = 18;
 
 export const PERSONNEL_STAT_OPTIONS = Object.freeze([
   Object.freeze({ key: "ppg", label: "PPG" }),
-  Object.freeze({ key: "rpg", label: "RPG" }),
   Object.freeze({ key: "threePointPercentage", label: "3P%" }),
+  Object.freeze({ key: "rpg", label: "RPG" }),
   Object.freeze({ key: "apg", label: "APG" }),
   Object.freeze({ key: "bpg", label: "BPG" }),
   Object.freeze({ key: "spg", label: "SPG" }),
   Object.freeze({ key: "fta", label: "FTA" }),
 ]);
 
+export const DEFAULT_PERSONNEL_STAT_ORDER = Object.freeze(
+  PERSONNEL_STAT_OPTIONS.map((option) => option.key)
+);
+
 export const DEFAULT_PERSONNEL_STAT_KEYS = Object.freeze(
-  PERSONNEL_STAT_OPTIONS.slice(0, 4).map((option) => option.key)
+  DEFAULT_PERSONNEL_STAT_ORDER.slice(0, 4)
 );
 
 export const PERSONNEL_TAG_OPTIONS = Object.freeze([
@@ -193,6 +197,34 @@ function normalizeSelectedStats(value, useDefaults = true) {
   return normalizeUniqueList(value, normalizeStatKey);
 }
 
+export function normalizePersonnelStatOrder(value) {
+  const suppliedOrder = normalizeUniqueList(value, normalizeStatKey);
+  const suppliedKeys = new Set(suppliedOrder);
+  return [
+    ...suppliedOrder,
+    ...DEFAULT_PERSONNEL_STAT_ORDER.filter((key) => !suppliedKeys.has(key)),
+  ];
+}
+
+export function reorderPersonnelStatColumns(statOrder, draggedKey, targetKey, placement = "before") {
+  const currentOrder = normalizePersonnelStatOrder(statOrder);
+  const sourceKey = normalizeStatKey(draggedKey);
+  const destinationKey = normalizeStatKey(targetKey);
+  if (!sourceKey || !destinationKey || sourceKey === destinationKey) return currentOrder;
+
+  const reordered = currentOrder.filter((key) => key !== sourceKey);
+  const destinationIndex = reordered.indexOf(destinationKey);
+  if (destinationIndex < 0) return currentOrder;
+  const insertionIndex = destinationIndex + (placement === "after" ? 1 : 0);
+  reordered.splice(insertionIndex, 0, sourceKey);
+  return reordered;
+}
+
+export function orderPersonnelSelectedStats(selectedStats, statOrder) {
+  const selectedKeys = new Set(normalizeSelectedStats(selectedStats, false));
+  return normalizePersonnelStatOrder(statOrder).filter((key) => selectedKeys.has(key));
+}
+
 function normalizeTags(value) {
   return normalizeUniqueList(value, normalizeTagKey);
 }
@@ -253,6 +285,11 @@ export function createPersonnelDraft(options = {}) {
     league: normalizePersonnelLeague(safeOptions.league),
     teamId: normalizePlayerId(safeOptions.teamId),
     season: normalizePersonnelSeason(safeOptions.season),
+    statOrder: normalizePersonnelStatOrder(firstPresentValue(safeOptions, [
+      "statOrder",
+      "statColumns",
+      "columnOrder",
+    ])),
     rows: Array.from(
       { length: PERSONNEL_SLOT_COUNT },
       (_, index) => createPersonnelRow(index, incomingRows[index])
@@ -269,6 +306,7 @@ export function hydratePersonnelDraft(payload) {
     league: source.league,
     teamId: normalizePlayerId(source.teamId),
     season: source.season,
+    statOrder: firstPresentValue(source, ["statOrder", "statColumns", "columnOrder"]),
     rows: Array.isArray(source) ? source : source.rows,
   });
 }
@@ -326,6 +364,7 @@ export function populatePersonnelDraftFromRoster(draft, roster, options = {}) {
     league: normalizePersonnelLeague(optionLeague || currentDraft.league),
     teamId,
     season: normalizePersonnelSeason(optionSeason, currentDraft.season),
+    statOrder: normalizePersonnelStatOrder(currentDraft.statOrder),
     rows: Array.from({ length: PERSONNEL_SLOT_COUNT }, (_, index) => {
       const player = rosterPlayers[index];
       if (!player) return createPersonnelRow(index);

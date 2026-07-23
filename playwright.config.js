@@ -18,7 +18,7 @@ export default defineConfig({
     deviceScaleFactor: 1,
   },
   webServer: {
-    command: "npm run dev -- --host 127.0.0.1 --port 4174",
+    command: "VITE_ENABLE_ACCOUNTS=false npm run dev -- --host 127.0.0.1 --port 4174",
     url: "http://127.0.0.1:4174/nbadash/visual-test.html",
     reuseExistingServer: false,
     timeout: 120_000,

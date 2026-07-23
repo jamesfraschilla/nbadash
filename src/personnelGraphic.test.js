@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   DEFAULT_PERSONNEL_STAT_KEYS,
+  DEFAULT_PERSONNEL_STAT_ORDER,
   DEFAULT_PERSONNEL_THREE_POINT_COLOR,
   PERSONNEL_SLOT_COUNT,
   PERSONNEL_STAT_OPTIONS,
@@ -20,8 +21,11 @@ import {
   mergePersonnelStatOverrides,
   normalizePersonnelPlayerStats,
   normalizePersonnelSeason,
+  normalizePersonnelStatOrder,
   normalizePersonnelStatsMap,
+  orderPersonnelSelectedStats,
   populatePersonnelDraftFromRoster,
+  reorderPersonnelStatColumns,
   togglePersonnelRowStat,
   togglePersonnelStat,
   validatePersonnelDraftForExport,
@@ -30,9 +34,12 @@ import {
 test("constants expose the requested slots, stats, tags, and 3P colors", () => {
   assert.equal(PERSONNEL_SLOT_COUNT, 18);
   assert.deepEqual(PERSONNEL_STAT_OPTIONS.map(({ label }) => label), [
-    "PPG", "RPG", "3P%", "APG", "BPG", "SPG", "FTA",
+    "PPG", "3P%", "RPG", "APG", "BPG", "SPG", "FTA",
   ]);
-  assert.deepEqual(DEFAULT_PERSONNEL_STAT_KEYS, ["ppg", "rpg", "threePointPercentage", "apg"]);
+  assert.deepEqual(DEFAULT_PERSONNEL_STAT_ORDER, [
+    "ppg", "threePointPercentage", "rpg", "apg", "bpg", "spg", "fta",
+  ]);
+  assert.deepEqual(DEFAULT_PERSONNEL_STAT_KEYS, ["ppg", "threePointPercentage", "rpg", "apg"]);
   assert.deepEqual(PERSONNEL_TAG_OPTIONS.map(({ key }) => key), [
     "fire", "cold", "drives_right", "drives_left",
   ]);
@@ -68,9 +75,10 @@ test("default 3P colors are selected from the player's 3FG percentage", () => {
 test("createPersonnelDraft produces 18 independent rows with the exact draft shape", () => {
   const draft = createPersonnelDraft({ teamId: 1610612764, season: "2025-26" });
 
-  assert.deepEqual(Object.keys(draft), ["league", "teamId", "season", "rows"]);
+  assert.deepEqual(Object.keys(draft), ["league", "teamId", "season", "statOrder", "rows"]);
   assert.equal(draft.teamId, "1610612764");
   assert.equal(draft.season, "2025-26");
+  assert.deepEqual(draft.statOrder, DEFAULT_PERSONNEL_STAT_ORDER);
   assert.equal(draft.rows.length, 18);
   assert.deepEqual(Object.keys(draft.rows[0]), [
     "id", "enabled", "personId", "teamId", "fullName", "firstName", "familyName", "jerseyNum",
@@ -85,7 +93,7 @@ test("createPersonnelDraft produces 18 independent rows with the exact draft sha
     firstName: "",
     familyName: "",
     jerseyNum: "",
-    selectedStats: ["ppg", "rpg", "threePointPercentage", "apg"],
+    selectedStats: ["ppg", "threePointPercentage", "rpg", "apg"],
     statOverrides: {},
     tags: [],
     threePointColor: "bright_green",
@@ -99,7 +107,12 @@ test("createPersonnelDraft produces 18 independent rows with the exact draft sha
 });
 
 test("personnel drafts preserve G League selection through hydration and roster population", () => {
-  const draft = createPersonnelDraft({ league: "gleague", teamId: "1612709928", season: "2025-26" });
+  const draft = createPersonnelDraft({
+    league: "gleague",
+    teamId: "1612709928",
+    season: "2025-26",
+    statOrder: ["apg", "ppg", "rpg"],
+  });
   const populated = populatePersonnelDraftFromRoster(draft, [{
     personId: "1",
     teamId: "1612709928",
@@ -110,6 +123,7 @@ test("personnel drafts preserve G League selection through hydration and roster 
   assert.equal(hydratePersonnelDraft(draft).league, "gleague");
   assert.equal(populated.league, "gleague");
   assert.equal(populated.rows[0].fullName, "G League Player");
+  assert.deepEqual(populated.statOrder.slice(0, 3), ["apg", "ppg", "rpg"]);
 });
 
 test("changing personnel seasons clears every manual stat override", () => {
@@ -249,12 +263,36 @@ test("toggle helpers allow unchecking and prevent selecting a fifth stat", () =>
 
   const overLimit = ["ppg", "rpg", "threePointPercentage", "apg", "bpg"];
   assert.deepEqual(togglePersonnelStat(overLimit, "SPG"), overLimit);
-  assert.deepEqual(togglePersonnelStat(overLimit, "BPG"), DEFAULT_PERSONNEL_STAT_KEYS);
+  assert.deepEqual(togglePersonnelStat(overLimit, "BPG"), [
+    "ppg", "rpg", "threePointPercentage", "apg",
+  ]);
 
   const row = togglePersonnelRowStat({ personId: "1", selectedStats: filled }, "APG");
   assert.equal(row.personId, "1");
   assert.deepEqual(row.selectedStats, ["ppg", "threePointPercentage", "bpg"]);
-  assert.deepEqual(DEFAULT_PERSONNEL_STAT_KEYS, ["ppg", "rpg", "threePointPercentage", "apg"]);
+  assert.deepEqual(DEFAULT_PERSONNEL_STAT_KEYS, ["ppg", "threePointPercentage", "rpg", "apg"]);
+});
+
+test("stat column order is normalized, draggable, and controls export order", () => {
+  assert.deepEqual(normalizePersonnelStatOrder(["AST", "PPG", "AST", "bogus"]), [
+    "apg", "ppg", "threePointPercentage", "rpg", "bpg", "spg", "fta",
+  ]);
+  const reordered = reorderPersonnelStatColumns(
+    DEFAULT_PERSONNEL_STAT_ORDER,
+    "RPG",
+    "PPG",
+    "before"
+  );
+  assert.deepEqual(reordered, [
+    "rpg", "ppg", "threePointPercentage", "apg", "bpg", "spg", "fta",
+  ]);
+  assert.deepEqual(
+    orderPersonnelSelectedStats(
+      ["ppg", "rpg", "threePointPercentage", "apg"],
+      ["apg", "rpg", "ppg", "threePointPercentage"]
+    ),
+    ["apg", "rpg", "ppg", "threePointPercentage"]
+  );
 });
 
 test("validation requires exactly four stats on every populated target", () => {

@@ -26,7 +26,9 @@ import {
   hydratePersonnelDraft,
   mergePersonnelStatOverrides,
   normalizePersonnelStatsMap,
+  orderPersonnelSelectedStats,
   populatePersonnelDraftFromRoster,
+  reorderPersonnelStatColumns,
   togglePersonnelRowStat,
   validatePersonnelDraftForExport,
 } from "../personnelGraphic.js";
@@ -48,6 +50,78 @@ const TAG_IMAGE_URLS = {
   drives_right: drivesRightTagUrl,
   drives_left: drivesLeftTagUrl,
 };
+
+const PERSONNEL_STAT_OPTIONS_BY_KEY = Object.freeze(Object.fromEntries(
+  PERSONNEL_STAT_OPTIONS.map((option) => [option.key, option])
+));
+
+function StatColumnHeader({
+  option,
+  selectedCount,
+  populatedCount,
+  selectionBlocked,
+  dragging,
+  dropTarget,
+  onToggleAll,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
+}) {
+  const checkboxRef = useRef(null);
+  const allSelected = populatedCount > 0 && selectedCount === populatedCount;
+  const partiallySelected = selectedCount > 0 && selectedCount < populatedCount;
+
+  useEffect(() => {
+    if (checkboxRef.current) checkboxRef.current.indeterminate = partiallySelected;
+  }, [partiallySelected]);
+
+  return (
+    <div
+      className={`${styles.statHeader} ${dragging ? styles.statHeaderDragging : ""} ${dropTarget ? styles.statHeaderDropTarget : ""}`}
+      role="columnheader"
+      onDragOver={(event) => onDragOver(event, option.key)}
+      onDrop={(event) => onDrop(event, option.key)}
+    >
+      <div className={styles.statHeaderTop}>
+        <span>{option.label}</span>
+        <span
+          className={styles.dragHandle}
+          draggable
+          role="button"
+          tabIndex={0}
+          aria-label={`Drag to reorder ${option.label} column`}
+          aria-grabbed={dragging}
+          title={`Drag to reorder ${option.label}`}
+          onDragStart={(event) => onDragStart(event, option.key)}
+          onDragEnd={onDragEnd}
+        >
+          ↔
+        </span>
+      </div>
+      <label
+        className={styles.headerStatCheckbox}
+        title={allSelected
+          ? `Unselect ${option.label} for every player`
+          : selectionBlocked
+            ? `Unselect another stat column before selecting ${option.label} for every player`
+            : `Select ${option.label} for every player`}
+      >
+        <input
+          ref={checkboxRef}
+          type="checkbox"
+          checked={allSelected}
+          disabled={!populatedCount}
+          onChange={() => onToggleAll(option.key)}
+          aria-label={allSelected
+            ? `Unselect ${option.label} for all players`
+            : `Select ${option.label} for all players`}
+        />
+        <span>{allSelected ? "All" : partiallySelected ? "Some" : "All"}</span>
+      </label>
+    </div>
+  );
+}
 
 function formatPlayerOption(player) {
   const jersey = String(player?.jerseyNum || "").trim();
@@ -122,11 +196,11 @@ function formatSupabaseSaveError(error) {
     : "Unable to save this draft to Supabase. Sign in again and try once more.";
 }
 
-function buildExportItems(rows, rosterById, statsById) {
+function buildExportItems(rows, rosterById, statsById, statOrder) {
   return rows.map((row) => ({
     player: rosterById[row.personId] || row,
     stats: mergePersonnelStatOverrides(statsById[row.personId] || {}, row.statOverrides),
-    selectedStats: row.selectedStats,
+    selectedStats: orderPersonnelSelectedStats(row.selectedStats, statOrder),
     tags: row.tags,
     threePointColor: row.threePointColor,
   }));
@@ -142,6 +216,8 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
   const [status, setStatus] = useState("");
   const [autoSaveStatus, setAutoSaveStatus] = useState("");
   const [dialog, setDialog] = useState(null);
+  const [draggedStatKey, setDraggedStatKey] = useState("");
+  const [dragOverStatKey, setDragOverStatKey] = useState("");
   const recordIdRef = useRef("");
   const draftRef = useRef(draft);
   const autoSaveTimerRef = useRef(null);
@@ -214,6 +290,17 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
     [draft]
   );
   const populatedRows = useMemo(() => draft.rows.filter((row) => row.personId), [draft.rows]);
+  const orderedStatOptions = useMemo(() => (
+    draft.statOrder
+      .map((key) => PERSONNEL_STAT_OPTIONS_BY_KEY[key])
+      .filter(Boolean)
+  ), [draft.statOrder]);
+  const statSelectionCounts = useMemo(() => Object.fromEntries(
+    PERSONNEL_STAT_OPTIONS.map((option) => [
+      option.key,
+      populatedRows.filter((row) => row.selectedStats.includes(option.key)).length,
+    ])
+  ), [populatedRows]);
   const allPopulatedRowsEnabled = populatedRows.length > 0 && populatedRows.every((row) => row.enabled);
   const exportMode = allPopulatedRowsEnabled ? "all" : "selected";
   const exportValidation = exportMode === "all" ? allValidation : selectedValidation;
@@ -523,6 +610,93 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
     setStatus("");
   };
 
+  const handleToggleAllStatColumn = (statKey) => {
+    const currentDraft = draftRef.current;
+    const currentRows = currentDraft.rows.filter((row) => row.personId);
+    if (!currentRows.length) return;
+    const allSelected = currentRows.every((row) => row.selectedStats.includes(statKey));
+    const shouldSelect = !allSelected;
+    const blockedRows = shouldSelect
+      ? currentRows.filter((row) => (
+        !row.selectedStats.includes(statKey) && row.selectedStats.length >= 4
+      ))
+      : [];
+    const optionLabel = PERSONNEL_STAT_OPTIONS_BY_KEY[statKey]?.label || statKey;
+
+    if (blockedRows.length) {
+      setStatus(`Unselect another stat column before selecting ${optionLabel} for all players.`);
+      return;
+    }
+
+    const nextDraft = {
+      ...currentDraft,
+      rows: currentDraft.rows.map((row) => {
+        if (!row.personId) return row;
+        const selectedStats = row.selectedStats.includes(statKey)
+          ? (shouldSelect ? row.selectedStats : row.selectedStats.filter((key) => key !== statKey))
+          : (shouldSelect ? [...row.selectedStats, statKey] : row.selectedStats);
+        return {
+          ...row,
+          selectedStats: orderPersonnelSelectedStats(selectedStats, currentDraft.statOrder),
+        };
+      }),
+    };
+    draftRef.current = nextDraft;
+    setDraft(nextDraft);
+    if (autoSavePendingDraftRef.current) autoSavePendingDraftRef.current = nextDraft;
+    setStatus(`${shouldSelect ? "Selected" : "Unselected"} ${optionLabel} for all populated players.`);
+  };
+
+  const handleStatDragStart = (event, statKey) => {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", statKey);
+    setDraggedStatKey(statKey);
+    setDragOverStatKey("");
+  };
+
+  const handleStatDragOver = (event, statKey) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    if (statKey !== dragOverStatKey) setDragOverStatKey(statKey);
+  };
+
+  const handleStatDrop = (event, targetKey) => {
+    event.preventDefault();
+    const sourceKey = draggedStatKey || event.dataTransfer.getData("text/plain");
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const placement = event.clientX >= bounds.left + (bounds.width / 2) ? "after" : "before";
+    const nextOrder = reorderPersonnelStatColumns(
+      draftRef.current.statOrder,
+      sourceKey,
+      targetKey,
+      placement
+    );
+    const orderChanged = nextOrder.some((key, index) => key !== draftRef.current.statOrder[index]);
+    setDraggedStatKey("");
+    setDragOverStatKey("");
+    if (!orderChanged) return;
+
+    const nextDraft = {
+      ...draftRef.current,
+      statOrder: nextOrder,
+      rows: draftRef.current.rows.map((row) => ({
+        ...row,
+        selectedStats: orderPersonnelSelectedStats(row.selectedStats, nextOrder),
+      })),
+    };
+    draftRef.current = nextDraft;
+    setDraft(nextDraft);
+    if (autoSavePendingDraftRef.current) autoSavePendingDraftRef.current = nextDraft;
+    const sourceLabel = PERSONNEL_STAT_OPTIONS_BY_KEY[sourceKey]?.label || sourceKey;
+    const targetLabel = PERSONNEL_STAT_OPTIONS_BY_KEY[targetKey]?.label || targetKey;
+    setStatus(`Moved ${sourceLabel} ${placement} ${targetLabel}. Save to keep this column order.`);
+  };
+
+  const handleStatDragEnd = () => {
+    setDraggedStatKey("");
+    setDragOverStatKey("");
+  };
+
   const handleToggleTag = (index, tagKey) => {
     updateRow(index, (row) => ({
       ...row,
@@ -619,7 +793,7 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
     setStatus(`Rendering ${validation.rows.length} personnel graphic${validation.rows.length === 1 ? "" : "s"}...`);
     try {
       const exportedCount = await exportPersonnelGraphics({
-        items: buildExportItems(validation.rows, rosterById, statsById),
+        items: buildExportItems(validation.rows, rosterById, statsById, draftRef.current.statOrder),
         team: selectedTeam,
         teamId,
         league,
@@ -708,7 +882,24 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
           <div className={styles.headerRow} role="row">
             <span aria-label="Include">Use</span>
             <span>Player</span>
-            {PERSONNEL_STAT_OPTIONS.map((option) => <span key={option.key}>{option.label}</span>)}
+            {orderedStatOptions.map((option) => (
+              <StatColumnHeader
+                key={option.key}
+                option={option}
+                selectedCount={statSelectionCounts[option.key] || 0}
+                populatedCount={populatedRows.length}
+                selectionBlocked={populatedRows.some((row) => (
+                  !row.selectedStats.includes(option.key) && row.selectedStats.length >= 4
+                ))}
+                dragging={draggedStatKey === option.key}
+                dropTarget={Boolean(draggedStatKey && dragOverStatKey === option.key)}
+                onToggleAll={handleToggleAllStatColumn}
+                onDragStart={handleStatDragStart}
+                onDragOver={handleStatDragOver}
+                onDrop={handleStatDrop}
+                onDragEnd={handleStatDragEnd}
+              />
+            ))}
             <span>Tags</span>
             <span>3P Color</span>
           </div>
@@ -761,7 +952,7 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
                     {missingStats ? <span className={styles.missingStats}>No {season} stats available</span> : null}
                   </div>
                 </div>
-                {PERSONNEL_STAT_OPTIONS.map((option) => {
+                {orderedStatOptions.map((option) => {
                   const checked = row.selectedStats.includes(option.key);
                   const atMaximum = row.selectedStats.length >= 4;
                   return (

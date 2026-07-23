@@ -26,6 +26,71 @@ test("personnel export matches the approved rendered image", async ({ page }) =>
   await expect(page.locator("#personnel-golden")).toHaveScreenshot("personnel-golden.png");
 });
 
+test("personnel stat columns default, bulk-toggle, and drag in export order", async ({ page }) => {
+  await page.route("**/functions/v1/nba-rosters", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      headers: { "Access-Control-Allow-Origin": "*" },
+      body: JSON.stringify({
+        season: "2026-27",
+        fetchedAt: "2026-07-23T12:00:00.000Z",
+        teams: {
+          "1610612764": {
+            teamId: "1610612764",
+            teamAbbreviation: "WAS",
+            players: [
+              { personId: "1", fullName: "Alpha Player", familyName: "Player", jerseyNum: "1", teamId: "1610612764" },
+              { personId: "2", fullName: "Beta Player", familyName: "Player", jerseyNum: "2", teamId: "1610612764" },
+            ],
+          },
+        },
+      }),
+    });
+  });
+  await page.route("**/functions/v1/gleague-rosters", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      headers: { "Access-Control-Allow-Origin": "*" },
+      body: JSON.stringify({ season: "2025-26", teams: {} }),
+    });
+  });
+  await page.route("**/functions/v1/nba-player-stats**", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      headers: { "Access-Control-Allow-Origin": "*" },
+      body: JSON.stringify({
+        season: "2026-27",
+        source: "nba",
+        players: {
+          "1": { personId: "1", fullName: "Alpha Player", ppg: 10, threePointPercentage: 35, rpg: 4, apg: 3 },
+          "2": { personId: "2", fullName: "Beta Player", ppg: 12, threePointPercentage: 38, rpg: 5, apg: 2 },
+        },
+      }),
+    });
+  });
+
+  await page.goto("http://127.0.0.1:4174/nbadash/#/tools?tab=graphics&graphic=personnel");
+  const headers = page.locator('[role="columnheader"]');
+  await expect(headers).toHaveCount(7);
+  for (const [index, label] of ["PPG", "3P%", "RPG", "APG", "BPG", "SPG", "FTA"].entries()) {
+    await expect(headers.nth(index)).toContainText(label);
+  }
+
+  await page.getByLabel("NBA Team").selectOption("1610612764");
+  await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
+  await page.getByLabel("Unselect APG for all players").click();
+  await expect(page.getByLabel("APG", { exact: true }).nth(0)).not.toBeChecked();
+  await expect(page.getByLabel("APG", { exact: true }).nth(1)).not.toBeChecked();
+  await page.getByLabel("Select BPG for all players").click();
+  await expect(page.getByLabel("BPG", { exact: true }).nth(0)).toBeChecked();
+  await expect(page.getByLabel("BPG", { exact: true }).nth(1)).toBeChecked();
+
+  await page.getByLabel("Drag to reorder RPG column").dragTo(headers.nth(0));
+  await expect(headers.nth(0)).toContainText("RPG");
+  await expect(headers.nth(1)).toContainText("PPG");
+  await expect(headers.nth(2)).toContainText("3P%");
+});
+
 test("multiple personnel exports download once as a ZIP", async ({ page }) => {
   await page.evaluate(() => { delete window.showSaveFilePicker; });
   const downloadPromise = page.waitForEvent("download");

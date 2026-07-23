@@ -22,9 +22,9 @@ const stats = {
   fieldGoalAttemptsPerGame: 8.2,
   threePointAttemptsPerGame: 3.2,
 };
-const selectedStats = ["ppg", "rpg", "threePointPercentage", "apg"];
+const selectedStats = ["ppg", "threePointPercentage", "rpg", "apg"];
 
-function makeDeterministicHeadshot() {
+async function makeDeterministicHeadshot() {
   const canvas = document.createElement("canvas");
   canvas.width = 600;
   canvas.height = 500;
@@ -39,7 +39,7 @@ function makeDeterministicHeadshot() {
   context.beginPath();
   context.arc(300, 145, 108, Math.PI, Math.PI * 2);
   context.fill();
-  return canvas;
+  return createImageBitmap(canvas);
 }
 
 window.renderPersonnelGolden = async () => {
@@ -52,8 +52,9 @@ window.renderPersonnelGolden = async () => {
     teamId: "",
     logoImage: null,
     tagImages: {},
-    headshotImage: makeDeterministicHeadshot(),
+    headshotImage: await makeDeterministicHeadshot(),
   });
+  canvas.toDataURL("image/png");
   canvas.id = "personnel-golden";
   document.querySelector("#root").replaceChildren(canvas);
   await new Promise((resolve) => {
