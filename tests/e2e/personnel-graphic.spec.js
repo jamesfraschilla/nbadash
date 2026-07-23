@@ -17,6 +17,30 @@ async function readStoredZipNames(download) {
   return names;
 }
 
+async function getPersonnelStatOrder(page) {
+  return page.$$eval("[data-personnel-stat-header-key]", (elements) => (
+    elements.map((element) => element.getAttribute("data-personnel-stat-header-key"))
+  ));
+}
+
+async function dragPersonnelStatColumn(page, sourceKey, targetKey, placement = "before") {
+  const sourceBox = await page.locator(`[data-personnel-stat-header-key="${sourceKey}"]`).boundingBox();
+  const targetBox = await page.locator(`[data-personnel-stat-header-key="${targetKey}"]`).boundingBox();
+  if (!sourceBox || !targetBox) throw new Error(`Unable to drag ${sourceKey} to ${targetKey}`);
+
+  const sourceX = sourceBox.x + sourceBox.width / 2;
+  const sourceY = sourceBox.y + sourceBox.height / 2;
+  const targetX = placement === "before" ? targetBox.x + 2 : targetBox.x + targetBox.width - 2;
+  const targetY = targetBox.y + targetBox.height / 2;
+
+  await page.mouse.move(sourceX, sourceY);
+  await page.mouse.down();
+  await page.mouse.move(sourceX + 12, sourceY, { steps: 2 });
+  await page.mouse.move(targetX, targetY, { steps: 18 });
+  await page.mouse.up();
+  await page.waitForTimeout(250);
+}
+
 test.beforeEach(async ({ page }) => {
   await page.goto("visual-test.html");
 });
@@ -75,6 +99,15 @@ test("personnel stat columns default, bulk-toggle, and drag in export order", as
   for (const [index, label] of ["PPG", "3P%", "RPG", "APG", "BPG", "SPG", "FTA"].entries()) {
     await expect(headers.nth(index)).toContainText(label);
   }
+  await expect.poll(() => getPersonnelStatOrder(page)).toEqual([
+    "ppg",
+    "threePointPercentage",
+    "rpg",
+    "apg",
+    "bpg",
+    "spg",
+    "fta",
+  ]);
 
   await page.getByLabel("NBA Team").selectOption("1610612764");
   await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
@@ -85,10 +118,27 @@ test("personnel stat columns default, bulk-toggle, and drag in export order", as
   await expect(page.getByLabel("BPG", { exact: true }).nth(0)).toBeChecked();
   await expect(page.getByLabel("BPG", { exact: true }).nth(1)).toBeChecked();
 
-  await page.getByLabel("Drag to reorder RPG column").dragTo(headers.nth(0));
-  await expect(headers.nth(0)).toContainText("RPG");
-  await expect(headers.nth(1)).toContainText("PPG");
-  await expect(headers.nth(2)).toContainText("3P%");
+  await dragPersonnelStatColumn(page, "fta", "ppg", "before");
+  await expect.poll(() => getPersonnelStatOrder(page)).toEqual([
+    "fta",
+    "ppg",
+    "threePointPercentage",
+    "rpg",
+    "apg",
+    "bpg",
+    "spg",
+  ]);
+
+  await dragPersonnelStatColumn(page, "fta", "spg", "after");
+  await expect.poll(() => getPersonnelStatOrder(page)).toEqual([
+    "ppg",
+    "threePointPercentage",
+    "rpg",
+    "apg",
+    "bpg",
+    "spg",
+    "fta",
+  ]);
 });
 
 test("multiple personnel exports download once as a ZIP", async ({ page }) => {

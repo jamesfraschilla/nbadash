@@ -55,6 +55,8 @@ const PERSONNEL_STAT_OPTIONS_BY_KEY = Object.freeze(Object.fromEntries(
   PERSONNEL_STAT_OPTIONS.map((option) => [option.key, option])
 ));
 
+const STAT_COLUMN_DRAG_THRESHOLD_PX = 6;
+
 function StatColumnHeader({
   option,
   selectedCount,
@@ -216,6 +218,7 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
   const recordIdRef = useRef("");
   const draftRef = useRef(draft);
   const tableRef = useRef(null);
+  const statDragActiveRef = useRef(false);
   const dragOverStatKeyRef = useRef("");
   const dragOverPlacementRef = useRef("before");
   const statLayoutRectsRef = useRef(new Map());
@@ -290,17 +293,12 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
     [draft]
   );
   const populatedRows = useMemo(() => draft.rows.filter((row) => row.personId), [draft.rows]);
-  const visualStatOrder = useMemo(() => (
-    draggedStatKey && dragOverStatKey
-      ? reorderPersonnelStatColumns(draft.statOrder, draggedStatKey, dragOverStatKey, dragOverPlacement)
-      : draft.statOrder
-  ), [draft.statOrder, dragOverPlacement, dragOverStatKey, draggedStatKey]);
-  const visualStatOrderKey = visualStatOrder.join("|");
+  const visualStatOrderKey = draft.statOrder.join("|");
   const orderedStatOptions = useMemo(() => (
-    visualStatOrder
+    draft.statOrder
       .map((key) => PERSONNEL_STAT_OPTIONS_BY_KEY[key])
       .filter(Boolean)
-  ), [visualStatOrder]);
+  ), [draft.statOrder]);
   const statSelectionCounts = useMemo(() => Object.fromEntries(
     PERSONNEL_STAT_OPTIONS.map((option) => [
       option.key,
@@ -715,6 +713,7 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
   }, []);
 
   const clearStatDrag = useCallback(() => {
+    statDragActiveRef.current = false;
     dragOverStatKeyRef.current = "";
     dragOverPlacementRef.current = "before";
     setStatDragState(null);
@@ -755,20 +754,25 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
     if (event.button !== 0 || !PERSONNEL_STAT_OPTIONS_BY_KEY[statKey]) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
-    const target = getStatDropTarget(event.clientX) || { targetKey: statKey, placement: "before" };
-    dragOverStatKeyRef.current = target.targetKey;
-    dragOverPlacementRef.current = target.placement;
+    statDragActiveRef.current = false;
+    dragOverStatKeyRef.current = "";
+    dragOverPlacementRef.current = "before";
     setStatDragState({
       pointerId: event.pointerId,
       sourceKey: statKey,
+      originX: event.clientX,
+      originY: event.clientY,
     });
-    setDraggedStatKey(statKey);
-    setDragOverStatKey(target.targetKey);
-    setDragOverPlacement(target.placement);
-  }, [getStatDropTarget]);
+  }, []);
 
   useEffect(() => {
     if (!statDragState) return undefined;
+
+    const beginActiveDrag = () => {
+      if (statDragActiveRef.current) return;
+      statDragActiveRef.current = true;
+      setDraggedStatKey(statDragState.sourceKey);
+    };
 
     const updateDropTarget = (clientX) => {
       const target = getStatDropTarget(clientX);
@@ -782,17 +786,25 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
     const handlePointerMove = (event) => {
       if (event.pointerId !== statDragState.pointerId) return;
       event.preventDefault();
+      if (!statDragActiveRef.current) {
+        const deltaX = event.clientX - statDragState.originX;
+        const deltaY = event.clientY - statDragState.originY;
+        if (Math.hypot(deltaX, deltaY) < STAT_COLUMN_DRAG_THRESHOLD_PX) return;
+        beginActiveDrag();
+      }
       updateDropTarget(event.clientX);
     };
 
     const handlePointerUp = (event) => {
       if (event.pointerId !== statDragState.pointerId) return;
       event.preventDefault();
-      const target = {
-        targetKey: dragOverStatKeyRef.current || statDragState.sourceKey,
-        placement: dragOverPlacementRef.current || "before",
-      };
-      commitStatColumnOrder(statDragState.sourceKey, target.targetKey, target.placement);
+      if (statDragActiveRef.current) {
+        const target = {
+          targetKey: dragOverStatKeyRef.current || statDragState.sourceKey,
+          placement: dragOverPlacementRef.current || "before",
+        };
+        commitStatColumnOrder(statDragState.sourceKey, target.targetKey, target.placement);
+      }
       clearStatDrag();
     };
 
