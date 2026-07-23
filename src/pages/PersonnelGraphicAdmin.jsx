@@ -62,12 +62,10 @@ function StatColumnHeader({
   selectionBlocked,
   dragging,
   dropTarget,
+  dropPlacement,
   cellId,
   onToggleAll,
-  onDragStart,
-  onDragOver,
-  onDrop,
-  onDragEnd,
+  onPointerDown,
 }) {
   const checkboxRef = useRef(null);
   const allSelected = populatedCount > 0 && selectedCount === populatedCount;
@@ -81,17 +79,16 @@ function StatColumnHeader({
     <div
       className={`${styles.statHeader} ${dragging ? styles.statHeaderDragging : ""} ${dropTarget ? styles.statHeaderDropTarget : ""}`}
       role="columnheader"
-      draggable
       tabIndex={0}
       aria-label={`Drag to reorder ${option.label} column`}
       aria-grabbed={dragging}
       title={`Drag to reorder ${option.label}`}
       data-personnel-stat-cell-id={cellId}
-      onDragStart={(event) => onDragStart(event, option.key)}
-      onDragOver={(event) => onDragOver(event, option.key)}
-      onDrop={(event) => onDrop(event, option.key)}
-      onDragEnd={onDragEnd}
+      data-personnel-stat-header-key={option.key}
+      data-drop-placement={dropTarget ? dropPlacement : undefined}
+      onPointerDown={(event) => onPointerDown(event, option.key)}
     >
+      <span className={styles.statHeaderLabel}>{option.label}</span>
       <label
         className={styles.headerStatCheckbox}
         title={allSelected
@@ -115,7 +112,6 @@ function StatColumnHeader({
             : `Select ${option.label} for all players`}
         />
       </label>
-      <span className={styles.statHeaderLabel}>{option.label}</span>
     </div>
   );
 }
@@ -216,9 +212,12 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
   const [draggedStatKey, setDraggedStatKey] = useState("");
   const [dragOverStatKey, setDragOverStatKey] = useState("");
   const [dragOverPlacement, setDragOverPlacement] = useState("before");
+  const [statDragState, setStatDragState] = useState(null);
   const recordIdRef = useRef("");
   const draftRef = useRef(draft);
   const tableRef = useRef(null);
+  const dragOverStatKeyRef = useRef("");
+  const dragOverPlacementRef = useRef("before");
   const statLayoutRectsRef = useRef(new Map());
   const previousVisualStatOrderKeyRef = useRef("");
   const autoSaveTimerRef = useRef(null);
@@ -684,43 +683,61 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
     setStatus(`${shouldSelect ? "Selected" : "Unselected"} ${optionLabel} for all populated players.`);
   };
 
-  const handleStatDragStart = (event, statKey) => {
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plain", statKey);
-    setDraggedStatKey(statKey);
+  const getStatDropTarget = useCallback((clientX) => {
+    const root = tableRef.current;
+    if (!root) return null;
+    const cells = Array.from(root.querySelectorAll("[data-personnel-stat-header-key]"))
+      .map((element) => ({
+        key: element.getAttribute("data-personnel-stat-header-key"),
+        rect: element.getBoundingClientRect(),
+      }))
+      .filter(({ key, rect }) => key && rect.width > 0)
+      .sort((a, b) => a.rect.left - b.rect.left);
+    if (!cells.length) return null;
+
+    const hoveredCell = cells.find(({ rect }) => clientX >= rect.left && clientX <= rect.right);
+    if (hoveredCell) {
+      return {
+        targetKey: hoveredCell.key,
+        placement: clientX >= hoveredCell.rect.left + (hoveredCell.rect.width / 2) ? "after" : "before",
+      };
+    }
+
+    const firstCell = cells[0];
+    const lastCell = cells[cells.length - 1];
+    if (clientX < firstCell.rect.left) return { targetKey: firstCell.key, placement: "before" };
+    if (clientX > lastCell.rect.right) return { targetKey: lastCell.key, placement: "after" };
+
+    const nextCell = cells.find(({ rect }) => clientX < rect.left + (rect.width / 2));
+    return nextCell
+      ? { targetKey: nextCell.key, placement: "before" }
+      : { targetKey: lastCell.key, placement: "after" };
+  }, []);
+
+  const clearStatDrag = useCallback(() => {
+    dragOverStatKeyRef.current = "";
+    dragOverPlacementRef.current = "before";
+    setStatDragState(null);
+    setDraggedStatKey("");
     setDragOverStatKey("");
-  };
+    setDragOverPlacement("before");
+  }, []);
 
-  const handleStatDragOver = (event, statKey) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const nextPlacement = event.clientX >= bounds.left + (bounds.width / 2) ? "after" : "before";
-    if (statKey !== dragOverStatKey) setDragOverStatKey(statKey);
-    if (nextPlacement !== dragOverPlacement) setDragOverPlacement(nextPlacement);
-  };
-
-  const handleStatDrop = (event, targetKey) => {
-    event.preventDefault();
-    const sourceKey = draggedStatKey || event.dataTransfer.getData("text/plain");
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const placement = event.clientX >= bounds.left + (bounds.width / 2) ? "after" : "before";
+  const commitStatColumnOrder = useCallback((sourceKey, targetKey, placement) => {
+    const currentDraft = draftRef.current;
     const nextOrder = reorderPersonnelStatColumns(
-      draftRef.current.statOrder,
+      currentDraft.statOrder,
       sourceKey,
       targetKey,
       placement
     );
-    const orderChanged = nextOrder.some((key, index) => key !== draftRef.current.statOrder[index]);
-    setDraggedStatKey("");
-    setDragOverStatKey("");
-    setDragOverPlacement("before");
-    if (!orderChanged) return;
+    const orderChanged = nextOrder.some((key, index) => key !== currentDraft.statOrder[index]);
+    if (!orderChanged) return false;
 
     const nextDraft = {
-      ...draftRef.current,
+      ...currentDraft,
       statOrder: nextOrder,
-      rows: draftRef.current.rows.map((row) => ({
+      rows: currentDraft.rows.map((row) => ({
         ...row,
         selectedStats: orderPersonnelSelectedStats(row.selectedStats, nextOrder),
       })),
@@ -731,13 +748,68 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
     const sourceLabel = PERSONNEL_STAT_OPTIONS_BY_KEY[sourceKey]?.label || sourceKey;
     const targetLabel = PERSONNEL_STAT_OPTIONS_BY_KEY[targetKey]?.label || targetKey;
     setStatus(`Moved ${sourceLabel} ${placement} ${targetLabel}. Save to keep this column order.`);
-  };
+    return true;
+  }, []);
 
-  const handleStatDragEnd = () => {
-    setDraggedStatKey("");
-    setDragOverStatKey("");
-    setDragOverPlacement("before");
-  };
+  const handleStatPointerDown = useCallback((event, statKey) => {
+    if (event.button !== 0 || !PERSONNEL_STAT_OPTIONS_BY_KEY[statKey]) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const target = getStatDropTarget(event.clientX) || { targetKey: statKey, placement: "before" };
+    dragOverStatKeyRef.current = target.targetKey;
+    dragOverPlacementRef.current = target.placement;
+    setStatDragState({
+      pointerId: event.pointerId,
+      sourceKey: statKey,
+    });
+    setDraggedStatKey(statKey);
+    setDragOverStatKey(target.targetKey);
+    setDragOverPlacement(target.placement);
+  }, [getStatDropTarget]);
+
+  useEffect(() => {
+    if (!statDragState) return undefined;
+
+    const updateDropTarget = (clientX) => {
+      const target = getStatDropTarget(clientX);
+      if (!target) return;
+      dragOverStatKeyRef.current = target.targetKey;
+      dragOverPlacementRef.current = target.placement;
+      setDragOverStatKey((current) => (current === target.targetKey ? current : target.targetKey));
+      setDragOverPlacement((current) => (current === target.placement ? current : target.placement));
+    };
+
+    const handlePointerMove = (event) => {
+      if (event.pointerId !== statDragState.pointerId) return;
+      event.preventDefault();
+      updateDropTarget(event.clientX);
+    };
+
+    const handlePointerUp = (event) => {
+      if (event.pointerId !== statDragState.pointerId) return;
+      event.preventDefault();
+      const target = {
+        targetKey: dragOverStatKeyRef.current || statDragState.sourceKey,
+        placement: dragOverPlacementRef.current || "before",
+      };
+      commitStatColumnOrder(statDragState.sourceKey, target.targetKey, target.placement);
+      clearStatDrag();
+    };
+
+    const handlePointerCancel = (event) => {
+      if (event.pointerId !== statDragState.pointerId) return;
+      clearStatDrag();
+    };
+
+    window.addEventListener("pointermove", handlePointerMove, { passive: false });
+    window.addEventListener("pointerup", handlePointerUp, { passive: false });
+    window.addEventListener("pointercancel", handlePointerCancel);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerCancel);
+    };
+  }, [clearStatDrag, commitStatColumnOrder, getStatDropTarget, statDragState]);
 
   const handleToggleTag = (index, tagKey) => {
     updateRow(index, (row) => ({
@@ -935,12 +1007,10 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
                 ))}
                 dragging={draggedStatKey === option.key}
                 dropTarget={Boolean(draggedStatKey && dragOverStatKey === option.key)}
+                dropPlacement={dragOverPlacement}
                 cellId={`header-${option.key}`}
                 onToggleAll={handleToggleAllStatColumn}
-                onDragStart={handleStatDragStart}
-                onDragOver={handleStatDragOver}
-                onDrop={handleStatDrop}
-                onDragEnd={handleStatDragEnd}
+                onPointerDown={handleStatPointerDown}
               />
             ))}
             <span>Tags</span>
