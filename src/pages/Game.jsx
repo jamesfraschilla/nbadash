@@ -1,8 +1,8 @@
 import { Link, useSearchParams, useParams } from "react-router-dom";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createNote } from "../accountData.js";
-import { requestGameAnalysis } from "../analysisData.js";
+import { listCachedGameAnalyses, requestGameAnalysis } from "../analysisData.js";
 import {
   fetchCurrentGLeagueRosters,
   fetchCurrentNbaRosters,
@@ -26,6 +26,7 @@ import {
 import {
   applyAnalysisSegmentShortcut,
   analysisPeriodLabel,
+  buildCompletedAnalysisSegments,
   buildAnalysisMinuteOptions,
   buildAnalysisPeriodOptions,
   buildAnalysisSegmentOptions,
@@ -496,6 +497,7 @@ const compareActionsByChronology = (a, b) => {
 export default function Game({ variant = "full" }) {
   const { gameId } = useParams();
   const { user, canUseMatchUps, accountsEnabled } = useAuth();
+  const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
   const dateParam = params.get("d");
   const analysisRecordParam = String(params.get("analysis") || "").trim();
@@ -544,6 +546,8 @@ export default function Game({ variant = "full" }) {
   const [analysisSaveStatus, setAnalysisSaveStatus] = useState("");
   const [analysisSaving, setAnalysisSaving] = useState(false);
   const [analysisForm, setAnalysisForm] = useState(() => buildInitialAnalysisForm(null, false));
+  const analysisRequestRef = useRef({ id: 0, controller: null });
+  const analysisAutoCacheRef = useRef(new Set());
   const [strategyVantageTeamId, setStrategyVantageTeamId] = useState("");
   const [strategyFeedback, setStrategyFeedback] = useState(() => buildDefaultStrategyFeedback());
   const [strategyOverrides, setStrategyOverrides] = useState(() => buildDefaultStrategyOverrides());
@@ -812,6 +816,38 @@ export default function Game({ variant = "full" }) {
     : !hasAnalysisData
       ? "Analysis is available once play-by-play data is available."
       : "";
+  const completedAnalysisSegments = useMemo(
+    () => (hasAnalysisData ? buildCompletedAnalysisSegments(game, isLive) : []),
+    [game, hasAnalysisData, isLive]
+  );
+  const cachedAnalysisSegmentsQueryKey = useMemo(
+    () => ["game-analysis-segments", gameId || ""],
+    [gameId]
+  );
+  const {
+    data: cachedAnalysisSegments = [],
+    refetch: refetchCachedAnalysisSegments,
+  } = useQuery({
+    queryKey: cachedAnalysisSegmentsQueryKey,
+    queryFn: ({ signal }) => listCachedGameAnalyses(gameId, { signal, timeoutMs: 12_000 }),
+    enabled: Boolean(gameId) && hasAnalysisData,
+    staleTime: 15_000,
+    refetchOnWindowFocus: false,
+    refetchInterval: () => (isLive ? 60_000 : false),
+  });
+  const preparedAnalysisSegments = useMemo(() => {
+    const byKey = new Map(
+      cachedAnalysisSegments
+        .filter((record) => record?.analysisResult)
+        .map((record) => [String(record.segmentKey || "").trim(), record])
+    );
+    return completedAnalysisSegments
+      .map((segmentRecord) => ({
+        ...segmentRecord,
+        cachedRecord: byKey.get(segmentRecord.key) || null,
+      }))
+      .filter((segmentRecord) => segmentRecord.cachedRecord);
+  }, [cachedAnalysisSegments, completedAnalysisSegments]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1224,7 +1260,31 @@ export default function Game({ variant = "full" }) {
     setAnalysisResult(null);
     setAnalysisUniformOpen(false);
     setAnalysisSaveStatus("");
+    refetchCachedAnalysisSegments();
     setAnalysisModalOpen(true);
+  };
+
+  const openPreparedAnalysisSegment = (segmentRecord) => {
+    const cachedRecord = segmentRecord?.cachedRecord;
+    const result = cachedRecord?.analysisResult;
+    if (!result) return;
+    if (segmentRecord?.form) {
+      setAnalysisForm(segmentRecord.form);
+    }
+    setAnalysisError("");
+    setAnalysisResult({
+      ...result,
+      cached: true,
+      cache: result.cache || {
+        segmentKey: cachedRecord.segmentKey,
+        segmentLabel: cachedRecord.segmentLabel,
+        generatedAt: cachedRecord.generatedAt,
+        updatedAt: cachedRecord.updatedAt,
+        dataSignature: cachedRecord.dataSignature,
+      },
+    });
+    setAnalysisUniformOpen(false);
+    setAnalysisSaveStatus(`Loaded shared ${cachedRecord.segmentLabel || segmentRecord.label} analysis.`);
   };
 
   const openAddNoteForAction = (action) => {
@@ -1241,6 +1301,7 @@ export default function Game({ variant = "full" }) {
   };
 
   const closeAnalysisModal = () => {
+    analysisRequestRef.current.controller?.abort();
     setAnalysisModalOpen(false);
     setAnalysisLoading(false);
     setAnalysisError("");
@@ -1294,6 +1355,18 @@ export default function Game({ variant = "full" }) {
   const minSecondOptions = buildAnalysisSecondOptions(analysisForm.minPeriod, analysisForm.minMinutes, game);
   const maxMinuteOptions = buildAnalysisMinuteOptions(analysisForm.maxPeriod, game);
   const maxSecondOptions = buildAnalysisSecondOptions(analysisForm.maxPeriod, analysisForm.maxMinutes, game);
+  const buildAnalysisRequestRange = (validation) => {
+    const { minPoint, maxPoint } = validation;
+    const toClock = (point) => `${point.minutes}:${String(point.seconds).padStart(2, "0")}`;
+    return {
+      minPeriod: minPoint.period,
+      minClock: toClock(minPoint),
+      minLabel: formatAnalysisPoint(minPoint, { game, boundary: "start" }),
+      maxPeriod: maxPoint.period,
+      maxClock: toClock(maxPoint),
+      maxLabel: formatAnalysisPoint(maxPoint, { game, boundary: "end" }),
+    };
+  };
 
   const generateAnalysis = async () => {
     if (!gameId || analysisLoading) return;
@@ -1302,34 +1375,89 @@ export default function Game({ variant = "full" }) {
       return;
     }
 
-    const { minPoint, maxPoint } = analysisValidation;
-    const toClock = (point) => `${point.minutes}:${String(point.seconds).padStart(2, "0")}`;
+    analysisRequestRef.current.controller?.abort();
+    const requestId = analysisRequestRef.current.id + 1;
+    const controller = new AbortController();
+    analysisRequestRef.current = { id: requestId, controller };
 
     try {
       setAnalysisLoading(true);
       setAnalysisError("");
       const result = await requestGameAnalysis({
         gameId,
-        game,
-        minutesData,
-        range: {
-          minPeriod: minPoint.period,
-          minClock: toClock(minPoint),
-          minLabel: formatAnalysisPoint(minPoint, { game, boundary: "start" }),
-          maxPeriod: maxPoint.period,
-          maxClock: toClock(maxPoint),
-          maxLabel: formatAnalysisPoint(maxPoint, { game, boundary: "end" }),
-        },
+        range: buildAnalysisRequestRange(analysisValidation),
+        signal: controller.signal,
       });
+      if (analysisRequestRef.current.id !== requestId) return;
       setAnalysisResult(result);
       setAnalysisUniformOpen(false);
       setAnalysisSaveStatus("");
     } catch (error) {
+      if (error?.name === "AbortError" || error?.name === "TimeoutError") return;
+      if (analysisRequestRef.current.id !== requestId) return;
       setAnalysisError(error?.message || "Unable to generate analysis.");
     } finally {
-      setAnalysisLoading(false);
+      if (analysisRequestRef.current.id === requestId) {
+        analysisRequestRef.current.controller = null;
+        setAnalysisLoading(false);
+      }
     }
   };
+
+  useEffect(() => {
+    if (!gameId || !game || !hasAnalysisData || !completedAnalysisSegments.length) return undefined;
+    const cachedSegmentKeys = new Set(
+      cachedAnalysisSegments
+        .map((segmentRecord) => String(segmentRecord?.segmentKey || "").trim())
+        .filter(Boolean)
+    );
+    let cancelled = false;
+
+    const prewarmCompletedSegments = async () => {
+      for (const segmentRecord of completedAnalysisSegments) {
+        if (cancelled) return;
+        if (cachedSegmentKeys.has(segmentRecord.key)) continue;
+
+        const validation = validateAnalysisForm(segmentRecord.form, game, isLive);
+        if (validation.error) continue;
+
+        const localCacheKey = `${gameId}:${segmentRecord.key}:${validation.rangeLabel}`;
+        if (analysisAutoCacheRef.current.has(localCacheKey)) continue;
+        analysisAutoCacheRef.current.add(localCacheKey);
+
+        try {
+          await requestGameAnalysis({
+            gameId,
+            range: buildAnalysisRequestRange(validation),
+            cache: {
+              segmentKey: segmentRecord.key,
+              segmentLabel: segmentRecord.label,
+            },
+            timeoutMs: 60_000,
+          });
+          if (!cancelled) {
+            queryClient.invalidateQueries({ queryKey: cachedAnalysisSegmentsQueryKey });
+          }
+        } catch (error) {
+          console.warn("Unable to pre-generate shared segment analysis.", error);
+        }
+      }
+    };
+
+    prewarmCompletedSegments();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    cachedAnalysisSegments,
+    cachedAnalysisSegmentsQueryKey,
+    completedAnalysisSegments,
+    game,
+    gameId,
+    hasAnalysisData,
+    isLive,
+    queryClient,
+  ]);
 
   const saveAnalysisToVault = async () => {
     if (!user?.id || !analysisResult || analysisSaving || !gameId) return;
@@ -3082,11 +3210,33 @@ export default function Game({ variant = "full" }) {
             <div className={styles.analysisWorkspace}>
               <section className={styles.analysisPane}>
                 <div className={styles.analysisPaneHeader}>
-                  <div className={styles.analysisPaneTitle}>Segment Recap</div>
+                  <div className={styles.analysisPaneTitle}>Game Analysis</div>
+                </div>
+
+                <div className={styles.analysisPreparedPanel}>
+                  <div className={styles.analysisPreparedTitle}>Prepared Segments</div>
+                  {preparedAnalysisSegments.length ? (
+                    <div className={styles.analysisPreparedList}>
+                      {preparedAnalysisSegments.map((segmentRecord) => (
+                        <button
+                          key={segmentRecord.key}
+                          type="button"
+                          className={styles.analysisPreparedButton}
+                          onClick={() => openPreparedAnalysisSegment(segmentRecord)}
+                        >
+                          {segmentRecord.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className={styles.analysisPreparedEmpty}>
+                      Completed segments will appear here after their shared analysis is prepared.
+                    </div>
+                  )}
                 </div>
 
                 <div className={styles.noteTimeRow}>
-                  <div className={styles.noteTimeLabel}>Min time</div>
+                  <div className={styles.noteTimeLabel}>Start</div>
                   <div className={styles.noteTimeControls}>
                     <select
                       className={styles.noteSelect}
@@ -3128,7 +3278,7 @@ export default function Game({ variant = "full" }) {
                 </div>
 
                 <div className={styles.noteTimeRow}>
-                  <div className={styles.noteTimeLabel}>Max time</div>
+                  <div className={styles.noteTimeLabel}>End</div>
                   <div className={styles.noteTimeControls}>
                     <select
                       className={styles.noteSelect}
@@ -3178,7 +3328,7 @@ export default function Game({ variant = "full" }) {
                 </div>
 
                 <div className={styles.noteTimeRow}>
-                  <div className={styles.noteTimeLabel}>Segment shortcut</div>
+                  <div className={styles.noteTimeLabel}>Quick Range</div>
                   <div className={styles.noteTimeControls}>
                     <select
                       className={styles.noteSelect}
@@ -3205,6 +3355,16 @@ export default function Game({ variant = "full" }) {
 
                 {analysisResult ? (
                   <div className={styles.analysisResult}>
+                    {Array.isArray(analysisResult.dataWarnings) && analysisResult.dataWarnings.length ? (
+                      <div className={styles.analysisWarningBox}>
+                        <div className={styles.analysisWarningTitle}>Data Notes</div>
+                        <ul className={styles.analysisWarningList}>
+                          {analysisResult.dataWarnings.map((warning) => (
+                            <li key={warning}>{warning}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
                     {analysisResult.headline ? (
                       <div className={styles.analysisHeadline}>{analysisResult.headline}</div>
                     ) : null}

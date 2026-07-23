@@ -1,6 +1,49 @@
+import { createClient } from "npm:@supabase/supabase-js@2";
+
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 const DEFAULT_OPENAI_MODEL = Deno.env.get("OPENAI_ANALYSIS_MODEL") || "gpt-4.1-mini";
+const CACHE_TABLE = "game_analysis_segments";
+const ANALYSIS_RESPONSE_SCHEMA = {
+  name: "game_analysis_response",
+  strict: true,
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      headline: {
+        type: "string",
+      },
+      summary: {
+        type: "string",
+      },
+      sections: {
+        type: "array",
+        minItems: 1,
+        maxItems: 3,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            title: {
+              type: "string",
+            },
+            items: {
+              type: "array",
+              minItems: 1,
+              maxItems: 2,
+              items: {
+                type: "string",
+              },
+            },
+          },
+          required: ["title", "items"],
+        },
+      },
+    },
+    required: ["headline", "summary", "sections"],
+  },
+};
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,6 +57,18 @@ function jsonResponse(status: number, payload: Record<string, unknown>) {
     headers: {
       ...corsHeaders,
       "Content-Type": "application/json",
+    },
+  });
+}
+
+function createAdminClient() {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  if (!supabaseUrl || !serviceRoleKey) return null;
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
     },
   });
 }
@@ -176,6 +231,126 @@ async function requestJson(url: string) {
   return response.json();
 }
 
+async function stableDigest(value: unknown) {
+  const encoded = new TextEncoder().encode(JSON.stringify(value));
+  const hashBuffer = await crypto.subtle.digest("SHA-256", encoded);
+  return [...new Uint8Array(hashBuffer)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function normalizeCacheRequest(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  const segmentKey = String(row.segmentKey || "").trim();
+  if (!/^[a-z0-9-]{1,40}$/i.test(segmentKey)) return null;
+  return {
+    segmentKey,
+    segmentLabel: String(row.segmentLabel || segmentKey).trim() || segmentKey,
+  };
+}
+
+async function listCachedSegments(gameId: string) {
+  const supabase = createAdminClient();
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from(CACHE_TABLE)
+    .select("game_id,segment_key,segment_label,range_label,result,data_signature,source,generated_at,updated_at")
+    .eq("game_id", gameId)
+    .order("generated_at", { ascending: true });
+
+  if (error) {
+    console.error("Unable to list cached game analyses.", error);
+    return [];
+  }
+
+  return (Array.isArray(data) ? data : []).map((row) => ({
+    gameId: row.game_id,
+    segmentKey: row.segment_key,
+    segmentLabel: row.segment_label,
+    rangeLabel: row.range_label,
+    analysisResult: row.result,
+    dataSignature: row.data_signature,
+    source: row.source,
+    generatedAt: row.generated_at,
+    updatedAt: row.updated_at,
+  }));
+}
+
+async function readCachedSegment(gameId: string, segmentKey: string, dataSignature: string) {
+  const supabase = createAdminClient();
+  if (!supabase) return null;
+
+  const { data, error } = await supabase
+    .from(CACHE_TABLE)
+    .select("game_id,segment_key,segment_label,range_label,result,data_signature,source,generated_at,updated_at")
+    .eq("game_id", gameId)
+    .eq("segment_key", segmentKey)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Unable to read cached game analysis.", error);
+    return null;
+  }
+  if (!data || data.data_signature !== dataSignature || !data.result) return null;
+
+  return {
+    ...data.result,
+    cached: true,
+    cache: {
+      segmentKey: data.segment_key,
+      segmentLabel: data.segment_label,
+      generatedAt: data.generated_at,
+      updatedAt: data.updated_at,
+      dataSignature: data.data_signature,
+    },
+  };
+}
+
+async function writeCachedSegment({
+  gameId,
+  segmentKey,
+  segmentLabel,
+  rangeLabel,
+  dataSignature,
+  result,
+}: {
+  gameId: string;
+  segmentKey: string;
+  segmentLabel: string;
+  rangeLabel: string;
+  dataSignature: string;
+  result: Record<string, unknown>;
+}) {
+  const supabase = createAdminClient();
+  if (!supabase) return null;
+
+  const { data, error } = await supabase
+    .from(CACHE_TABLE)
+    .upsert({
+      game_id: gameId,
+      segment_key: segmentKey,
+      segment_label: segmentLabel,
+      range_label: rangeLabel,
+      data_signature: dataSignature,
+      result,
+      source: String(result.source || "unknown"),
+      generated_at: new Date().toISOString(),
+    }, {
+      onConflict: "game_id,segment_key",
+    })
+    .select("game_id,segment_key,segment_label,range_label,result,data_signature,source,generated_at,updated_at")
+    .single();
+
+  if (error) {
+    console.error("Unable to write cached game analysis.", error);
+    return null;
+  }
+
+  return data;
+}
+
 function actionChronologyValue(action: Record<string, unknown>, regulationMinutes = 12) {
   const period = safeNumber(action.period, 0);
   const elapsed = pointToElapsedSeconds(period, action.clock, regulationMinutes);
@@ -261,8 +436,12 @@ function normalizeQualifiers(value: unknown) {
 }
 
 function percentage(made: number, attempted: number) {
-  if (!attempted) return 0;
+  if (!attempted) return null;
   return Number(((made / attempted) * 100).toFixed(1));
+}
+
+function formatPercentage(value: unknown) {
+  return value == null ? "N/A" : `${value}%`;
 }
 
 function buildTeamActionTotals(teamId: string) {
@@ -951,12 +1130,11 @@ function buildLateSwingInsight(
 
   const team = teamLookup[bestCandidate.teamId];
   const opponent = teamLookup[bestCandidate.opponentId];
-  const finishText = bestCandidate.finalMargin < 0
-    ? `were outscored by ${Math.abs(bestCandidate.finalMargin)} over the rest of the span`
-    : bestCandidate.finalMargin === 0
-      ? "played the rest of the span even"
-      : `won the rest of the span by ${bestCandidate.finalMargin}`;
   const title = bestCandidate.type === "collapse" ? "Late Collapse" : "Late Comeback";
+  const closingRunText = `${scoringTeamPoints}-${otherTeamPoints}`;
+  const finalText = bestCandidate.finalMargin === 0
+    ? "ending the selected span tied"
+    : `${bestCandidate.finalMargin > 0 ? "finishing the selected span ahead" : "finishing the selected span down"} by ${Math.abs(bestCandidate.finalMargin)}`;
 
   return {
     title,
@@ -974,12 +1152,12 @@ function buildLateSwingInsight(
     },
     items: bestCandidate.type === "collapse"
       ? [
-        `${teamLabel(team)} led by ${bestCandidate.peakLead} at ${bestCandidate.peakLabel} but ${finishText}.`,
-        `${teamLabel(opponent)} closed regulation on a ${scoringTeamPoints}-${otherTeamPoints} run from that point.`,
+        `${teamLabel(team)} led by ${bestCandidate.peakLead} at ${bestCandidate.peakLabel}, but ${teamLabel(opponent)} closed on a ${closingRunText} run from that point.`,
+        `${teamLabel(team)} went from leading by ${bestCandidate.peakLead} to ${finalText}.`,
       ]
       : [
-        `${teamLabel(opponent)} erased a ${bestCandidate.peakLead}-point deficit after ${bestCandidate.peakLabel} and ${finishText}.`,
-        `${teamLabel(opponent)} closed regulation on a ${scoringTeamPoints}-${otherTeamPoints} run from that point.`,
+        `${teamLabel(team)} erased a ${bestCandidate.peakLead}-point deficit after ${bestCandidate.peakLabel} by closing on a ${closingRunText} run.`,
+        `${teamLabel(team)} went from down ${bestCandidate.peakLead} to ${finalText}.`,
       ],
   };
 }
@@ -1139,6 +1317,55 @@ function describeLineupString(players: string) {
   return players;
 }
 
+function buildDataQualityWarnings({
+  rangeActions,
+  scoringEvents,
+  minutesData,
+  homeTeamId,
+  awayTeamId,
+  rangeDurationSeconds,
+}: {
+  rangeActions: Array<Record<string, unknown>>;
+  scoringEvents: Array<Record<string, unknown>>;
+  minutesData: Record<string, unknown> | null;
+  homeTeamId: string;
+  awayTeamId: string;
+  rangeDurationSeconds: number;
+}) {
+  const warnings = [];
+  const shotActions = rangeActions.filter((action) => ["2pt", "3pt"].includes(String(action.actionType || "").toLowerCase()));
+  const qualifiedShots = shotActions.filter((action) => normalizeQualifiers(action.qualifiers).length > 0);
+  const hasLineupData = Array.isArray(minutesData?.periods) && minutesData.periods.length > 0;
+
+  if (!homeTeamId || !awayTeamId) {
+    warnings.push("Team identifiers are incomplete, so team attribution may be limited.");
+  }
+  if (!rangeActions.length) {
+    warnings.push("No play-by-play actions were found in this selected range.");
+  }
+  if (!scoringEvents.length) {
+    warnings.push("No scoring events were found in this selected range.");
+  }
+  if (!hasLineupData) {
+    warnings.push("Lineup/minutes data is unavailable, so lineup notes may be omitted.");
+  }
+  if (shotActions.length > 0 && qualifiedShots.length === 0) {
+    warnings.push("Shot-location and context tags are unavailable in this range, so paint/transition/second-chance notes may be limited.");
+  }
+  if (rangeDurationSeconds <= 60) {
+    warnings.push("This is a short range, so small-sample swings may be noisy.");
+  }
+
+  return {
+    warnings,
+    actionCount: rangeActions.length,
+    scoringEventCount: scoringEvents.length,
+    shotActionCount: shotActions.length,
+    qualifiedShotCount: qualifiedShots.length,
+    hasLineupData,
+  };
+}
+
 function leaderInfo(features: ReturnType<typeof buildFeaturePayload>) {
   const { home, away } = features.teams;
   const homeMargin = safeNumber(features.score.margin.home, 0);
@@ -1204,6 +1431,7 @@ function buildFeaturePayload(
   const awayPoints = endScore.away - startScore.away;
   const homeMargin = homePoints - awayPoints;
   const awayMargin = -homeMargin;
+  const rangeDurationSeconds = rangeEndElapsed - rangeStartElapsed;
   const scoreTimeline = buildScoreTimeline(scoringEvents, rangeStartElapsed, startScore, homeTeamId, awayTeamId, regulationMinutes);
 
   const totals = aggregateRangeStats(rangeActions, scoringEvents, homeTeamId, awayTeamId);
@@ -1242,12 +1470,20 @@ function buildFeaturePayload(
     homePoints,
     awayPoints,
   );
+  const dataQuality = buildDataQualityWarnings({
+    rangeActions,
+    scoringEvents,
+    minutesData,
+    homeTeamId,
+    awayTeamId,
+    rangeDurationSeconds,
+  });
 
   return {
     range: {
       startLabel: formatPointLabel(minPeriod, minClock, regulationMinutes, "start"),
       endLabel: formatPointLabel(maxPeriod, maxClock, regulationMinutes, "end"),
-      duration: formatSecondsClock(rangeEndElapsed - rangeStartElapsed),
+      duration: formatSecondsClock(rangeDurationSeconds),
       isLive: safeNumber(game.gameStatus, 0) === 2,
     },
     score: {
@@ -1301,6 +1537,7 @@ function buildFeaturePayload(
     momentumBursts,
     lateSwing,
     lineupNotes: lineupInsights.lineupNotes,
+    dataQuality,
   };
 }
 
@@ -1311,8 +1548,11 @@ function buildInsightSignals(features: ReturnType<typeof buildFeaturePayload>) {
     {
       key: "shape",
       title: "Game Flow",
-      strength: safeNumber(features.gameFlow?.strength, 0),
-      items: Array.isArray(features.gameFlow?.items) ? features.gameFlow.items : [],
+      strength: Math.max(safeNumber(features.gameFlow?.strength, 0), margin * 0.7),
+      items: [
+        `${leader.tricode} won the stretch ${leaderPointsLabel(features)} over ${features.range.duration}; the score moved from ${features.score.start.away}-${features.score.start.home} to ${features.score.end.away}-${features.score.end.home}.`,
+        ...(Array.isArray(features.gameFlow?.items) ? features.gameFlow.items : []),
+      ],
     },
     {
       key: "burst",
@@ -1369,9 +1609,9 @@ function buildInsightSignals(features: ReturnType<typeof buildFeaturePayload>) {
     {
       key: "shooting",
       title: "Shooting",
-      strength: Math.abs(home.shooting.fgPct - away.shooting.fgPct) + (margin * 0.5),
+      strength: Math.abs(safeNumber(home.shooting.fgPct, 0) - safeNumber(away.shooting.fgPct, 0)) + (margin * 0.5),
       items: [
-        `${home.tricode} shot ${home.totals.fieldGoalsMade}/${home.totals.fieldGoalsAttempted} (${home.shooting.fgPct}%) versus ${away.tricode} at ${away.totals.fieldGoalsMade}/${away.totals.fieldGoalsAttempted} (${away.shooting.fgPct}%).`,
+        `${home.tricode} shot ${home.totals.fieldGoalsMade}/${home.totals.fieldGoalsAttempted} (${formatPercentage(home.shooting.fgPct)}) versus ${away.tricode} at ${away.totals.fieldGoalsMade}/${away.totals.fieldGoalsAttempted} (${formatPercentage(away.shooting.fgPct)}).`,
         `${home.tricode} from three: ${home.totals.threePointersMade}/${home.totals.threePointersAttempted}; ${away.tricode}: ${away.totals.threePointersMade}/${away.totals.threePointersAttempted}.`,
       ],
     },
@@ -1393,15 +1633,6 @@ function buildInsightSignals(features: ReturnType<typeof buildFeaturePayload>) {
       strength: Math.abs(home.totals.freeThrowsAttempted - away.totals.freeThrowsAttempted),
       items: [
         `${home.tricode} free throws: ${home.totals.freeThrowsMade}/${home.totals.freeThrowsAttempted}. ${away.tricode}: ${away.totals.freeThrowsMade}/${away.totals.freeThrowsAttempted}.`,
-      ],
-    },
-    {
-      key: "gameFlow",
-      title: "Game Flow",
-      strength: margin * 0.7,
-      items: [
-        `${leader.tricode} won the stretch ${leaderPointsLabel(features)} and pushed the score from ${features.score.start.away}-${features.score.start.home} to ${features.score.end.away}-${features.score.end.home}.`,
-        `${leader.tricode} controlled this window by ${margin} point${margin === 1 ? "" : "s"} over ${features.range.duration}.`,
       ],
     },
   ];
@@ -1453,8 +1684,10 @@ function sanitizeTurnoverLanguage(value: unknown, features: ReturnType<typeof bu
   const turnoverClause = turnoverText.replace(/\.$/, "");
   const teamSubject = String.raw`(?:the\s+)?(?:[A-Z]{2,4}|[A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){0,3})`;
   return text
-    .replace(new RegExp(String.raw`\b${teamSubject}\s+forced\s+fewer\s+turnovers\s*(?:\([^)]*\))?`, "gi"), turnoverClause)
-    .replace(new RegExp(String.raw`\b${teamSubject}\s+won\s+turnovers\s*[-+]?\d*(?:\s*\([^)]*\))?`, "gi"), turnoverClause);
+    .replace(new RegExp(String.raw`\b${teamSubject}\s+forced\s+fewer\s+turnovers\s*(?:\([^)]*\))?`, "gi"), `${turnoverClause} `)
+    .replace(new RegExp(String.raw`\b${teamSubject}\s+won\s+turnovers\s*[-+]?\d*(?:\s*\([^)]*\))?`, "gi"), `${turnoverClause} `)
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .trim();
 }
 
 function buildTemplateSections(features: ReturnType<typeof buildFeaturePayload>) {
@@ -1528,7 +1761,7 @@ function buildStatOutliers(features: ReturnType<typeof buildFeaturePayload>) {
     notes.push(...features.playerNotes.slice(0, 2));
   }
 
-  notes.push(`${home.tricode} shot ${home.totals.fieldGoalsMade}/${home.totals.fieldGoalsAttempted} (${home.shooting.fgPct}%) versus ${away.tricode} at ${away.totals.fieldGoalsMade}/${away.totals.fieldGoalsAttempted} (${away.shooting.fgPct}%).`);
+  notes.push(`${home.tricode} shot ${home.totals.fieldGoalsMade}/${home.totals.fieldGoalsAttempted} (${formatPercentage(home.shooting.fgPct)}) versus ${away.tricode} at ${away.totals.fieldGoalsMade}/${away.totals.fieldGoalsAttempted} (${formatPercentage(away.shooting.fgPct)}).`);
   notes.push(`${home.tricode} rim scoring was ${home.totals.rimFieldGoalsMade}/${home.totals.rimFieldGoalsAttempted}; ${away.tricode} was ${away.totals.rimFieldGoalsMade}/${away.totals.rimFieldGoalsAttempted}.`);
   notes.push(`${home.tricode} from three: ${home.totals.threePointersMade}/${home.totals.threePointersAttempted}; ${away.tricode}: ${away.totals.threePointersMade}/${away.totals.threePointersAttempted}.`);
 
@@ -1566,6 +1799,36 @@ function buildTemplateAnalysis(features: ReturnType<typeof buildFeaturePayload>)
     swingFactors,
     lineupNotes: features.lineupNotes,
     statOutliers,
+  };
+}
+
+function buildAnalysisDataSignatureInput(features: ReturnType<typeof buildFeaturePayload>) {
+  return {
+    range: features.range,
+    score: features.score,
+    teams: features.teams,
+    playerNotes: features.playerNotes,
+    gameFlow: features.gameFlow,
+    momentumBursts: features.momentumBursts,
+    lateSwing: features.lateSwing,
+    lineupNotes: features.lineupNotes,
+    dataQuality: features.dataQuality,
+  };
+}
+
+function attachResponseMetadata(
+  analysis: Record<string, unknown>,
+  templateAnalysis: ReturnType<typeof buildTemplateAnalysis>,
+  features: ReturnType<typeof buildFeaturePayload>,
+  extra: Record<string, unknown> = {},
+) {
+  return {
+    ...analysis,
+    uniformDetails: templateAnalysis.uniformDetails,
+    rangeLabel: `${features.range.startLabel} to ${features.range.endLabel}`,
+    dataWarnings: Array.isArray(features.dataQuality?.warnings) ? features.dataQuality.warnings : [],
+    dataQuality: features.dataQuality,
+    ...extra,
   };
 }
 
@@ -1632,9 +1895,10 @@ async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayloa
     },
     body: JSON.stringify({
       model: DEFAULT_OPENAI_MODEL,
-      temperature: 0.2,
+      temperature: 0,
       response_format: {
-        type: "json_object",
+        type: "json_schema",
+        json_schema: ANALYSIS_RESPONSE_SCHEMA,
       },
       messages: [
         {
@@ -1686,7 +1950,7 @@ async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayloa
   };
 }
 
-Deno.serve(async (req) => {
+export async function handleRequest(req: Request) {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -1697,14 +1961,23 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
+    const operation = String(body?.operation || "").trim();
     const gameId = String(body?.gameId || "").trim();
     let game = body?.game && typeof body.game === "object" ? body.game as Record<string, unknown> : null;
     let minutesData = body?.minutesData && typeof body.minutesData === "object" ? body.minutesData as Record<string, unknown> : null;
     const range = typeof body?.range === "object" && body.range ? body.range : {};
+    const cacheRequest = normalizeCacheRequest(body?.cache);
 
     if (!/^\d{10}$/.test(gameId)) {
       return jsonResponse(400, { error: "A valid game ID is required." });
     }
+
+    if (operation === "list-cached-segments") {
+      return jsonResponse(200, {
+        segments: await listCachedSegments(gameId),
+      });
+    }
+
     if (!game) {
       game = await requestJson(`${API_BASE}/games/${gameId}`);
     }
@@ -1714,6 +1987,14 @@ Deno.serve(async (req) => {
 
     const features = buildFeaturePayload(game, minutesData, range);
     const templateAnalysis = buildTemplateAnalysis(features);
+    const dataSignature = await stableDigest(buildAnalysisDataSignatureInput(features));
+
+    if (cacheRequest) {
+      const cached = await readCachedSegment(gameId, cacheRequest.segmentKey, dataSignature);
+      if (cached) {
+        return jsonResponse(200, cached);
+      }
+    }
 
     let analysis = templateAnalysis;
     try {
@@ -1725,14 +2006,58 @@ Deno.serve(async (req) => {
       // Keep the deterministic template response when AI is unavailable.
     }
 
+    const responsePayload: Record<string, unknown> = attachResponseMetadata(
+      analysis as Record<string, unknown>,
+      templateAnalysis,
+      features,
+      {
+        cached: false,
+        dataSignature,
+      },
+    );
+
+    if (cacheRequest) {
+      const savedCache = await writeCachedSegment({
+        gameId,
+        segmentKey: cacheRequest.segmentKey,
+        segmentLabel: cacheRequest.segmentLabel,
+        rangeLabel: String(responsePayload.rangeLabel || ""),
+        dataSignature,
+        result: responsePayload,
+      });
+      if (savedCache) {
+        responsePayload.cache = {
+          segmentKey: savedCache.segment_key,
+          segmentLabel: savedCache.segment_label,
+          generatedAt: savedCache.generated_at,
+          updatedAt: savedCache.updated_at,
+          dataSignature: savedCache.data_signature,
+        };
+      }
+    }
+
     return jsonResponse(200, {
-      ...analysis,
-      uniformDetails: templateAnalysis.uniformDetails,
-      rangeLabel: `${features.range.startLabel} to ${features.range.endLabel}`,
+      ...responsePayload,
     });
   } catch (error) {
     return jsonResponse(500, {
       error: error instanceof Error ? error.message : "Unable to generate analysis.",
     });
   }
-});
+}
+
+export const __test__ = {
+  aggregateRangeStats,
+  buildFeaturePayload,
+  buildInsightSignals,
+  buildLateSwingInsight,
+  buildTemplateAnalysis,
+  formatPercentage,
+  handleRequest,
+  percentage,
+  sanitizeTurnoverLanguage,
+};
+
+if (import.meta.main) {
+  Deno.serve(handleRequest);
+}

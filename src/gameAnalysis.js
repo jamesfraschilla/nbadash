@@ -37,7 +37,7 @@ function normalizeBoundaryPoint(point, game = null, boundary = "instant") {
   };
 }
 
-const ANALYSIS_SEGMENT_PRESETS = [
+export const ANALYSIS_SEGMENT_PRESETS = [
   { value: "all", label: "All Segments", minPeriod: 1, minMinutes: 12, minSeconds: 0, maxPeriod: 4, maxMinutes: 0, maxSeconds: 0 },
   { value: "q1", label: "Q1", minPeriod: 1, minMinutes: 12, minSeconds: 0, maxPeriod: 1, maxMinutes: 0, maxSeconds: 0 },
   { value: "q2", label: "Q2", minPeriod: 2, minMinutes: 12, minSeconds: 0, maxPeriod: 2, maxMinutes: 0, maxSeconds: 0 },
@@ -248,6 +248,36 @@ export function applyAnalysisSegmentShortcut(shortcut, game, isLive) {
     maxMinutes: String(clampedMaxPoint.minutes),
     maxSeconds: String(clampedMaxPoint.seconds).padStart(2, "0"),
   };
+}
+
+export function buildAnalysisSegmentForm(segment, game, isLive) {
+  if (!segment) return buildInitialAnalysisForm(game, isLive);
+  return applyAnalysisSegmentShortcut(segment.value, game, isLive);
+}
+
+export function buildCompletedAnalysisSegments(game, isLive) {
+  if (!game) return [];
+  const currentPoint = buildCurrentAnalysisPoint(game, isLive);
+  const currentElapsed = analysisPointToElapsedSeconds(currentPoint, game);
+  const finalStatus = Number(game?.gameStatus || 0) === 3;
+
+  return ANALYSIS_SEGMENT_PRESETS
+    .map((segment) => {
+      const segmentMaxPoint = normalizeAnalysisPoint({
+        period: segment.maxPeriod,
+        minutes: segment.maxMinutes,
+        seconds: segment.maxSeconds,
+      }, game);
+      const segmentEndElapsed = analysisPointToElapsedSeconds(segmentMaxPoint, game);
+      const isComplete = finalStatus || segmentEndElapsed <= currentElapsed;
+      if (!isComplete) return null;
+      return {
+        key: segment.value,
+        label: segment.label,
+        form: buildAnalysisSegmentForm(segment, game, false),
+      };
+    })
+    .filter(Boolean);
 }
 
 export function normalizeAnalysisForm(form, game, isLive) {

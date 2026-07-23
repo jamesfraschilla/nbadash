@@ -315,6 +315,50 @@ html[data-theme="dark"] .pbpWheel {
   gap: 6px;
 }
 
+.analysisPreparedPanel {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+}
+
+.analysisPreparedTitle {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.analysisPreparedList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.analysisPreparedButton {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: var(--panel-strong);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.analysisPreparedButton:hover {
+  border-color: var(--border-strong);
+  background: var(--button-hover);
+}
+
+.analysisPreparedEmpty {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .analysisPaneActions {
   display: flex;
   justify-content: flex-end;
@@ -537,6 +581,30 @@ html[data-theme="dark"] .pbpWheel {
   border: 1px solid var(--danger-border);
   color: var(--danger-text);
   font-size: 13px;
+}
+
+.analysisWarningBox {
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--warning-text) 50%, var(--border));
+  background: color-mix(in srgb, var(--warning-bg) 35%, var(--surface-muted));
+  color: var(--text);
+}
+
+.analysisWarningTitle {
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--warning-text);
+}
+
+.analysisWarningList {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .analysisResult {

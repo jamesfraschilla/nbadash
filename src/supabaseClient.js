@@ -122,3 +122,8 @@ export const supabase = supabaseUrl && supabaseAnonKey
     },
   })
   : null;
+
+export const supabaseFunctionConfig = {
+  url: supabaseUrl || "",
+  anonKey: supabaseAnonKey || "",
+};

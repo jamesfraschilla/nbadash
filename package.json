@@ -12,7 +12,7 @@
     "lint": "eslint .",
     "assets:upload-referees": "node scripts/upload-referee-full-assets.mjs",
     "test": "node --test \"src/**/*.test.js\"",
-    "test:edge": "npx -y deno test --config supabase/deno.json supabase/functions/**/*.test.ts",
+    "test:edge": "npx -y deno test --allow-env --config supabase/deno.json supabase/functions/**/*.test.ts",
     "test:e2e": "playwright test",
     "verify": "npm run lint && npm test && npm run test:edge && npm run typecheck && npm run test:e2e && npm run build && npm audit --audit-level=high",
     "preview": "vite preview"
