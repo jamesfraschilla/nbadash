@@ -48,6 +48,10 @@ import {
 import { buildFreshnessSummary } from "../dataFreshness.js";
 import { recordClientError } from "../errorDiagnostics.js";
 import {
+  buildGameLiveStateShadowKey,
+  upsertGameLiveStateShadow,
+} from "../gameLiveStateData.js";
+import {
   getGamePollingInterval,
   isCapitalCityTeam,
   isGameDayPollingGame,
@@ -562,6 +566,7 @@ export default function Game({ variant = "full" }) {
   const [strategyHistoryLoading, setStrategyHistoryLoading] = useState(false);
   const [strategyHistoryStatus, setStrategyHistoryStatus] = useState("");
   const [freshnessNowMs, setFreshnessNowMs] = useState(() => Date.now());
+  const gameLiveStateShadowRef = useRef({ key: "", controller: null, errorKeys: new Set() });
   const strategyHistorySaveRef = useRef("");
   const isAtc = variant === "atc";
   const showExtras = !isAtc;
@@ -739,6 +744,54 @@ export default function Game({ variant = "full" }) {
     const intervalId = window.setInterval(() => setFreshnessNowMs(Date.now()), 1000);
     return () => window.clearInterval(intervalId);
   }, [shouldRefreshFreshnessClock]);
+
+  useEffect(() => () => {
+    gameLiveStateShadowRef.current.controller?.abort();
+  }, []);
+
+  useEffect(() => {
+    if (!gameId || !game) return undefined;
+    const shadowKey = buildGameLiveStateShadowKey(game, minutesData);
+    if (!shadowKey || gameLiveStateShadowRef.current.key === shadowKey) return undefined;
+
+    const previous = gameLiveStateShadowRef.current;
+    previous.controller?.abort();
+    const controller = new AbortController();
+    gameLiveStateShadowRef.current = {
+      key: shadowKey,
+      controller,
+      errorKeys: previous.errorKeys || new Set(),
+    };
+
+    let cancelled = false;
+    upsertGameLiveStateShadow({
+      gameId,
+      game,
+      minutesData,
+      signal: controller.signal,
+      timeoutMs: 12_000,
+    }).catch((error) => {
+      if (cancelled || error?.name === "AbortError" || error?.name === "TimeoutError") return;
+      const errorKey = `${gameId}:${error?.message || "unknown"}`;
+      const errorKeys = gameLiveStateShadowRef.current.errorKeys || new Set();
+      if (errorKeys.has(errorKey)) return;
+      errorKeys.add(errorKey);
+      recordClientError({
+        source: "game-live-state-shadow",
+        message: error?.message || "Unable to update game state cache.",
+        route: window.location.hash || window.location.pathname || "",
+        userAgent: window.navigator?.userAgent || "",
+      });
+    }).finally(() => {
+      if (!cancelled && gameLiveStateShadowRef.current.controller === controller) {
+        gameLiveStateShadowRef.current.controller = null;
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [game, gameId, minutesData]);
 
   const awayTeamScope = getPregameTeamScopeForTeam(game?.awayTeam, game);
   const homeTeamScope = getPregameTeamScopeForTeam(game?.homeTeam, game);

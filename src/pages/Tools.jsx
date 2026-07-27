@@ -592,7 +592,8 @@ export default function Tools() {
     queryKey: ["matchup-graphic-team-lineups"],
     queryFn: listRemoteMatchupGraphicLineups,
     enabled: needsSharedMatchupLineups,
-    staleTime: 0,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
     retry: 1,
   });
   const sharedMatchupLineupMap = useMemo(
@@ -782,8 +783,8 @@ export default function Tools() {
       if (!draftParam || !vaultUserId) {
         if (cancelled) return;
         setRecordId("");
-        setDraft(defaultDraft);
-        setSaveStatus("");
+        setDraft((current) => (isDraftBlank(current) ? defaultDraft : current));
+        setSaveStatus((current) => (String(current || "").startsWith("Loaded ") ? "" : current));
         return;
       }
 

@@ -24,3 +24,6 @@ verify_jwt = false
 
 [functions.game-metadata]
 verify_jwt = true
+
+[functions.game-live-state]
+verify_jwt = true
