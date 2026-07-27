@@ -220,19 +220,13 @@ function ProfileCard({ profile, actorId, onSave }) {
 
   return (
     <div className={styles.profileCard}>
-      <div className={styles.profileHeader}>
-        <div>
+      <div className={styles.profileMainRow}>
+        <div className={styles.profileIdentity}>
           <div className={styles.profileName}>{profile.display_name || profile.email}</div>
           <div className={styles.profileEmail}>{profile.email}</div>
         </div>
-        <div className={styles.profileMeta}>
-          <span>Last login: {formatTimestamp(profile.last_login_at)}</span>
-          <span>Created: {formatTimestamp(profile.created_at)}</span>
-        </div>
-      </div>
 
-      <div className={styles.profileGrid}>
-        <label className={styles.field}>
+        <label className={`${styles.field} ${styles.profileSelectField}`}>
           <span>Role</span>
           <select value={draftRole} onChange={(event) => setDraftRole(event.target.value)}>
             {ACCOUNT_ROLES.map((role) => (
@@ -241,7 +235,7 @@ function ProfileCard({ profile, actorId, onSave }) {
           </select>
         </label>
 
-        <label className={styles.field}>
+        <label className={`${styles.field} ${styles.profileSelectField}`}>
           <span>Status</span>
           <select value={draftStatus} onChange={(event) => setDraftStatus(event.target.value)}>
             <option value="active">active</option>
@@ -249,44 +243,49 @@ function ProfileCard({ profile, actorId, onSave }) {
             <option value="archived">archived</option>
           </select>
         </label>
-      </div>
 
-      <div className={styles.scopeGroup}>
-        <div className={styles.scopeLabel}>Team scopes</div>
-        <div className={styles.scopeOptions}>
-          {ACCOUNT_TEAM_SCOPES.map((scope) => (
-            <label key={scope.value} className={styles.scopeOption}>
-              <input
-                type="checkbox"
-                checked={draftScopes.includes(scope.value)}
-                onChange={() => toggleScope(scope.value)}
-              />
-              <span>{scope.label}</span>
-            </label>
-          ))}
+        <div className={styles.profileMeta}>
+          <span>Last login: {formatTimestamp(profile.last_login_at)}</span>
+          <span>Created: {formatTimestamp(profile.created_at)}</span>
         </div>
-      </div>
 
-      <div className={styles.scopeGroup}>
-        <div className={styles.scopeLabel}>Feature access</div>
-        <div className={styles.scopeOptions}>
-          {ACCOUNT_FEATURE_FLAGS.map((feature) => (
-            <label key={feature.key} className={styles.scopeOption}>
-              <input
-                type="checkbox"
-                checked={draftFeatureFlags.includes(feature.key)}
-                onChange={() => toggleFeatureFlag(feature.key)}
-              />
-              <span>{feature.label}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      <div className={styles.profileActions}>
-        <button type="button" className={styles.saveButton} disabled={saving} onClick={handleSave}>
+        <button type="button" className={`${styles.saveButton} ${styles.profileSaveButton}`} disabled={saving} onClick={handleSave}>
           {saving ? "Saving..." : "Save User"}
         </button>
+      </div>
+
+      <div className={styles.profileAccessRow}>
+        <div className={styles.profileAccessGroup}>
+          <div className={styles.scopeLabel}>Teams</div>
+          <div className={styles.scopeOptions}>
+            {ACCOUNT_TEAM_SCOPES.map((scope) => (
+              <label key={scope.value} className={styles.scopeOption}>
+                <input
+                  type="checkbox"
+                  checked={draftScopes.includes(scope.value)}
+                  onChange={() => toggleScope(scope.value)}
+                />
+                <span>{scope.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className={styles.profileAccessGroup}>
+          <div className={styles.scopeLabel}>Features</div>
+          <div className={styles.scopeOptions}>
+            {ACCOUNT_FEATURE_FLAGS.map((feature) => (
+              <label key={feature.key} className={styles.scopeOption}>
+                <input
+                  type="checkbox"
+                  checked={draftFeatureFlags.includes(feature.key)}
+                  onChange={() => toggleFeatureFlag(feature.key)}
+                />
+                <span>{feature.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

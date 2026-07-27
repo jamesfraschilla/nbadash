@@ -344,7 +344,78 @@
 
 .profileCard {
   display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.profileMainRow {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.2fr) minmax(110px, 0.38fr) minmax(120px, 0.42fr) minmax(220px, 0.7fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.profileIdentity {
+  min-width: 0;
+  align-self: center;
+}
+
+.profileName,
+.profileEmail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profileSelectField {
+  gap: 4px;
+  min-width: 0;
+}
+
+.profileSelectField span {
+  font-size: 0.76rem;
+}
+
+.profileSelectField select {
+  padding: 8px 10px;
+  min-height: 40px;
+}
+
+.profileAccessRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.55fr);
   gap: 14px;
+  align-items: center;
+}
+
+.profileAccessGroup {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.profileAccessGroup .scopeLabel {
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.profileAccessGroup .scopeOptions {
+  gap: 6px;
+  min-width: 0;
+}
+
+.profileAccessGroup .scopeOption {
+  padding: 6px 10px;
+  font-size: 0.86rem;
+  line-height: 1.1;
+}
+
+.profileSaveButton {
+  align-self: end;
+  min-height: 40px;
+  white-space: nowrap;
 }
 
 .healthCard {
@@ -472,8 +543,34 @@
 
 .profileMeta {
   display: grid;
-  gap: 4px;
+  gap: 2px;
   text-align: right;
+  align-self: center;
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+
+.profileMeta span {
+  white-space: nowrap;
+}
+
+@media (max-width: 1180px) {
+  .profileMainRow {
+    grid-template-columns: minmax(0, 1fr) minmax(110px, 0.35fr) minmax(120px, 0.35fr) auto;
+  }
+
+  .profileMeta {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    text-align: left;
+  }
+
+  .profileAccessRow {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
 }
 
 @media (max-width: 768px) {
@@ -499,6 +596,16 @@
 
   .profileMeta {
     text-align: left;
+  }
+
+  .profileMainRow {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .profileAccessGroup {
+    grid-template-columns: 1fr;
+    gap: 6px;
   }
 
   .rosterGridHeader,
