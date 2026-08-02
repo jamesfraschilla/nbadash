@@ -5,21 +5,15 @@
 
 .workflowShell {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.72fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
   align-items: start;
 }
 
-.settingsColumn,
-.previewColumn {
+.settingsColumn {
   display: grid;
   gap: 14px;
   min-width: 0;
-}
-
-.previewColumn {
-  position: sticky;
-  top: 16px;
 }
 
 .setupFlow {
@@ -30,7 +24,6 @@
 }
 
 .intro,
-.previewHeader,
 .favoriteHeading {
   display: flex;
   align-items: center;
@@ -41,7 +34,6 @@
 .intro h2,
 .intro p,
 .setupCard h3,
-.previewHeader h3,
 .favoriteHeading h3 {
   margin: 0;
 }
@@ -68,7 +60,6 @@
 }
 
 .startButton,
-.previewRefresh,
 .saveButton,
 .uploadButton {
   min-height: 42px;
@@ -82,12 +73,23 @@
   white-space: nowrap;
 }
 
+.startButton {
+  border-color: #15803d;
+  background: #16a34a;
+  color: #ffffff;
+}
+
 .startButton:disabled,
-.previewRefresh:disabled,
 .saveButton:disabled,
 .uploadButtonDisabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.drillEntryBar,
+.bottomActionBar {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .setupGrid {
@@ -104,8 +106,7 @@
   align-items: start;
 }
 
-.setupCard,
-.previewCard {
+.setupCard {
   position: relative;
   display: grid;
   gap: 16px;
@@ -375,40 +376,10 @@
   cursor: pointer;
 }
 
-.previewCard {
-  gap: 12px;
-}
-
-.previewActions {
-  display: grid;
-  grid-template-columns: minmax(120px, 0.8fr) minmax(170px, 1fr);
-  gap: 10px;
-}
-
-.previewActions .startButton,
-.previewActions .previewRefresh {
-  width: 100%;
-}
-
-.previewFrame {
-  overflow: hidden;
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: #000000;
-}
-
 .graphic {
   position: absolute;
   inset: 0;
   overflow: hidden;
-}
-
-.previewFrame .graphic {
-  position: relative;
-  width: 100%;
-  height: 100%;
 }
 
 .components {
@@ -524,14 +495,6 @@
 }
 
 @media (max-width: 900px) {
-  .workflowShell {
-    grid-template-columns: 1fr;
-  }
-
-  .previewColumn {
-    position: static;
-  }
-
   .setupFlow {
     grid-template-columns: 1fr;
   }
@@ -554,10 +517,14 @@
   }
 
   .favoriteGrid,
-  .previewActions,
   .rangeGrid,
   .shapeOptions {
     grid-template-columns: 1fr;
+  }
+
+  .drillEntryBar .startButton,
+  .bottomActionBar .startButton {
+    width: 100%;
   }
 
   .digit {

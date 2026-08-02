@@ -544,6 +544,10 @@ export default function VisualDrillGenerator() {
 
       <div className={styles.workflowShell}>
         <div className={styles.settingsColumn}>
+          <div className={styles.drillEntryBar}>
+            <button type="button" className={styles.startButton} onClick={enterDrillMode} disabled={!canGenerate}>Enter Drill Mode</button>
+          </div>
+
           <section className={`${styles.setupCard} ${styles.favoriteCard}`}>
             <div className={styles.favoriteHeading}>
               <div>
@@ -687,20 +691,11 @@ export default function VisualDrillGenerator() {
               ) : null}
             </div>
           ) : null}
-        </div>
 
-        <aside className={styles.previewColumn}>
-          <section className={styles.previewCard}>
-            <div className={styles.previewHeader}>
-              <div><span className={styles.eyebrow}>Live preview</span><h3>Next graphic</h3></div>
-            </div>
-            <div className={styles.previewFrame}><Graphic graphic={graphic} /></div>
-            <div className={styles.previewActions}>
-              <button type="button" className={styles.previewRefresh} onClick={generate} disabled={!canGenerate}>↻ Refresh</button>
-              <button type="button" className={styles.startButton} onClick={enterDrillMode} disabled={!canGenerate}>Start Drill Mode</button>
-            </div>
-          </section>
-        </aside>
+          <div className={styles.bottomActionBar}>
+            <button type="button" className={styles.startButton} onClick={enterDrillMode} disabled={!canGenerate}>Enter Drill Mode</button>
+          </div>
+        </div>
       </div>
 
       <div ref={drillRef} className={`${styles.drillMode} ${drillMode ? styles.drillModeOpen : ""}`} aria-hidden={!drillMode}>
