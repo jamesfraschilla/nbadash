@@ -3,6 +3,32 @@
   gap: 20px;
 }
 
+.workflowShell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.72fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.settingsColumn,
+.previewColumn {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.previewColumn {
+  position: sticky;
+  top: 16px;
+}
+
+.setupFlow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(260px, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
 .intro,
 .previewHeader,
 .favoriteHeading {
@@ -23,6 +49,12 @@
 .intro p {
   margin-top: 6px;
   color: var(--muted);
+}
+
+.accountNote {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
 }
 
 .eyebrow,
@@ -92,7 +124,7 @@
 
 .favoriteGrid {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
   gap: 12px;
   align-items: end;
 }
@@ -100,6 +132,8 @@
 .favoriteActions {
   display: flex;
   gap: 8px;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
 }
 
 .textButton {
@@ -108,6 +142,11 @@
   color: var(--highlight-text);
   font-weight: 800;
   cursor: pointer;
+}
+
+.textButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .deleteButton {
@@ -216,6 +255,11 @@
   height: 18px;
   flex: 0 0 auto;
   accent-color: var(--button-primary-bg);
+}
+
+.checkOptionDisabled {
+  opacity: 0.56;
+  cursor: not-allowed;
 }
 
 .toggleOption span {
@@ -333,6 +377,17 @@
 
 .previewCard {
   gap: 12px;
+}
+
+.previewActions {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.8fr) minmax(170px, 1fr);
+  gap: 10px;
+}
+
+.previewActions .startButton,
+.previewActions .previewRefresh {
+  width: 100%;
 }
 
 .previewFrame {
@@ -469,6 +524,18 @@
 }
 
 @media (max-width: 900px) {
+  .workflowShell {
+    grid-template-columns: 1fr;
+  }
+
+  .previewColumn {
+    position: static;
+  }
+
+  .setupFlow {
+    grid-template-columns: 1fr;
+  }
+
   .favoriteGrid {
     grid-template-columns: 1fr 1fr;
   }
@@ -487,6 +554,7 @@
   }
 
   .favoriteGrid,
+  .previewActions,
   .rangeGrid,
   .shapeOptions {
     grid-template-columns: 1fr;
