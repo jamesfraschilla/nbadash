@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   fetchCurrentGLeagueRosters,
@@ -1303,6 +1303,16 @@ export default function Tools({ section = "tools" }) {
     );
   }
 
+  if (!isGraphicsRoute && (rawTab === TOOL_TABS.GRAPHICS || legacyGraphicTab)) {
+    const nextParams = new URLSearchParams(params);
+    nextParams.delete("tab");
+    if (!nextParams.get("graphic")) {
+      nextParams.set("graphic", legacyGraphicTab || activeGraphic);
+    }
+    const search = nextParams.toString();
+    return <Navigate to={`/graphics${search ? `?${search}` : ""}`} replace />;
+  }
+
   const handleRequestTableSort = (table, column) => {
     setCustomTableSort((current) => (
       current.table === table && current.column === column
@@ -1712,6 +1722,8 @@ export default function Tools({ section = "tools" }) {
             rightPlayers={selectedRightPlayers}
             logoTeamId={draft.logoTeamId}
             isReady={exportReady}
+            previewWidth={960}
+            previewHeight={540}
           />
 
           {saveStatus ? (

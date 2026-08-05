@@ -355,7 +355,14 @@ export function ensureMatchupExportFonts() {
   return exportFontsPromise;
 }
 
-export async function renderMatchupGraphicCanvas({ league = "nba", leftPlayers, rightPlayers, logoTeamId }) {
+export async function renderMatchupGraphicCanvas({
+  league = "nba",
+  leftPlayers,
+  rightPlayers,
+  logoTeamId,
+  width = EXPORT_WIDTH,
+  height = EXPORT_HEIGHT,
+}) {
   await ensureMatchupExportFonts();
   if (document.fonts?.ready) {
     await document.fonts.ready;
@@ -367,7 +374,12 @@ export async function renderMatchupGraphicCanvas({ league = "nba", leftPlayers, 
     loadImage(logoTeamId ? buildProxyUrl(teamLogoUrl(logoTeamId, league)) : null),
   ]);
 
-  const { canvas, context } = makeCanvas(EXPORT_WIDTH, EXPORT_HEIGHT, BLACK);
+  const outputWidth = Math.max(1, Math.round(Number(width) || EXPORT_WIDTH));
+  const outputHeight = Math.max(1, Math.round(Number(height) || EXPORT_HEIGHT));
+  const { canvas, context } = makeCanvas(outputWidth, outputHeight, BLACK);
+  if (outputWidth !== EXPORT_WIDTH || outputHeight !== EXPORT_HEIGHT) {
+    context.scale(outputWidth / EXPORT_WIDTH, outputHeight / EXPORT_HEIGHT);
+  }
   drawBackdrop(context);
   drawHeader(context);
   drawLogo(context, logoImage);

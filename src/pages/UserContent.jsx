@@ -245,6 +245,8 @@ function SavedMatchupGraphicPreview({ toolRecord, nbaRosterMap, gLeagueRosterMap
       logoTeamId={payload.logoTeamId}
       isReady={isReady}
       unavailableMessage="Preview unavailable until this saved draft has both teams, ten players, and a logo."
+      previewWidth={640}
+      previewHeight={360}
       lazy
     />
   );
@@ -267,6 +269,7 @@ function SavedGraphicArea({ title, records, deletingKey, onDelete, renderPreview
                 <div className={styles.cardHeader}>
                   <div className={styles.cardTitleGroup}>
                     <div className={styles.cardTitle}>{toolRecord.title || "Untitled"}</div>
+                    {!renderPreview ? <div className={styles.cardMeta}>{presentation.meta}</div> : null}
                   </div>
                   <div className={styles.cardActions}>
                     <Link className={styles.cardLink} to={presentation.link}>Open Graphic</Link>
@@ -280,7 +283,7 @@ function SavedGraphicArea({ title, records, deletingKey, onDelete, renderPreview
                     </button>
                   </div>
                 </div>
-                {renderPreview ? renderPreview(toolRecord) : null}
+                {renderPreview ? renderPreview(toolRecord) : <div className={styles.cardBody}>{presentation.body}</div>}
                 <div className={styles.cardFooter}>Updated {formatTimestamp(toolRecord.updatedAt)}</div>
               </article>
             );
@@ -349,22 +352,6 @@ export default function UserContent() {
         return listSavedToolRecords(vaultUserId);
       }
     },
-  });
-
-  const { data: remoteNbaRostersPayload } = useQuery({
-    queryKey: ["vault-current-nba-rosters"],
-    queryFn: ({ signal }) => fetchCurrentNbaRosters({ signal }),
-    enabled: Boolean(vaultUserId && canUseTools && tab === "graphics" && activeGraphicTab === "matchup"),
-    staleTime: 6 * 60 * 60 * 1000,
-    refetchOnWindowFocus: false,
-  });
-
-  const { data: remoteGLeagueRostersPayload } = useQuery({
-    queryKey: ["vault-current-gleague-rosters"],
-    queryFn: ({ signal }) => fetchCurrentGLeagueRosters({ signal }),
-    enabled: Boolean(vaultUserId && canUseTools && tab === "graphics" && activeGraphicTab === "matchup"),
-    staleTime: 6 * 60 * 60 * 1000,
-    refetchOnWindowFocus: false,
   });
 
   const uniqueGameIds = useMemo(() => (
@@ -458,6 +445,37 @@ export default function UserContent() {
     () => savedTools.filter((record) => record.type === TOOL_RECORD_TYPES.MATCHUP_GRAPHIC),
     [savedTools]
   );
+  const matchupPreviewLeagueNeeds = useMemo(() => {
+    const needs = { nba: false, gleague: false };
+    matchupToolRecords.forEach((record) => {
+      const league = String(record?.payload?.league || "nba").trim() === "gleague" ? "gleague" : "nba";
+      needs[league] = true;
+    });
+    return needs;
+  }, [matchupToolRecords]);
+  const shouldLoadMatchupPreviewRosters = Boolean(
+    vaultUserId &&
+    canUseTools &&
+    tab === "graphics" &&
+    activeGraphicTab === "matchup" &&
+    matchupToolRecords.length
+  );
+
+  const { data: remoteNbaRostersPayload } = useQuery({
+    queryKey: ["vault-current-nba-rosters"],
+    queryFn: ({ signal }) => fetchCurrentNbaRosters({ signal }),
+    enabled: shouldLoadMatchupPreviewRosters && matchupPreviewLeagueNeeds.nba,
+    staleTime: 6 * 60 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
+  const { data: remoteGLeagueRostersPayload } = useQuery({
+    queryKey: ["vault-current-gleague-rosters"],
+    queryFn: ({ signal }) => fetchCurrentGLeagueRosters({ signal }),
+    enabled: shouldLoadMatchupPreviewRosters && matchupPreviewLeagueNeeds.gleague,
+    staleTime: 6 * 60 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
   const vaultNbaRosterMap = useMemo(
     () => buildRosterMapFromPayload(remoteNbaRostersPayload, NBA_TEAMS, getNbaTeamRoster),
     [remoteNbaRostersPayload]

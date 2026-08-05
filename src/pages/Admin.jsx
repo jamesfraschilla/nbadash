@@ -800,6 +800,7 @@ function MatchupProfileCard({
 export default function Admin() {
   const { user, session, profile } = useAuth();
   const queryClient = useQueryClient();
+  const canUseAdmin = profile?.role === "admin";
   const [activeSection, setActiveSection] = useState("accounts");
   const [inviteForm, setInviteForm] = useState({
     email: "",
@@ -813,13 +814,13 @@ export default function Admin() {
   const { data: profiles = [], isLoading: loadingProfiles } = useQuery({
     queryKey: ["visible-profiles"],
     queryFn: fetchVisibleProfiles,
-    enabled: Boolean(user?.id),
+    enabled: Boolean(user?.id && canUseAdmin),
   });
 
   const { data: invites = [], isLoading: loadingInvites } = useQuery({
     queryKey: ["account-invites"],
     queryFn: fetchPendingInvites,
-    enabled: Boolean(user?.id),
+    enabled: Boolean(user?.id && canUseAdmin),
   });
 
   const { data: remoteNbaRostersPayload } = useQuery({
@@ -827,7 +828,7 @@ export default function Admin() {
     queryFn: ({ signal }) => fetchCurrentNbaRosters({ signal }),
     staleTime: 6 * 60 * 60 * 1000,
     retry: 1,
-    enabled: Boolean(user?.id),
+    enabled: Boolean(user?.id && canUseAdmin),
   });
 
   const { data: remoteGLeagueRostersPayload } = useQuery({
@@ -835,13 +836,13 @@ export default function Admin() {
     queryFn: ({ signal }) => fetchCurrentGLeagueRosters({ signal }),
     staleTime: 6 * 60 * 60 * 1000,
     retry: 1,
-    enabled: Boolean(user?.id),
+    enabled: Boolean(user?.id && canUseAdmin),
   });
 
   const { data: savedMatchupProfiles = [] } = useQuery({
     queryKey: ["matchup-player-profiles"],
     queryFn: listMatchupProfiles,
-    enabled: Boolean(user?.id),
+    enabled: Boolean(user?.id && canUseAdmin),
   });
 
   const saveProfileMutation = useMutation({
@@ -919,7 +920,7 @@ export default function Admin() {
   const sortedInvites = useMemo(() => invites, [invites]);
   const activeSectionConfig = ADMIN_SECTIONS.find((section) => section.key === activeSection) || ADMIN_SECTIONS[0];
 
-  if (profile?.role !== "admin") {
+  if (!canUseAdmin) {
     return (
       <div className={styles.page}>
         <div className={styles.noticeCard}>Admin access is required to view this page.</div>

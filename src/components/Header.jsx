@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { getGamesListPollingInterval } from "../gamePolling.js";
 import { useGamesByDate } from "../queries.js";
 import { formatDateInputInTimeZone, formatDateLabel, parseDateInput } from "../utils.js";
@@ -8,6 +8,7 @@ import styles from "./Header.module.css";
 
 export default function Header({ theme, onToggleTheme, onSignOut, profile, isAdmin, canUseTools }) {
   const [params, setParams] = useSearchParams();
+  const location = useLocation();
   const inputRef = useRef(null);
   const menuRef = useRef(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -17,10 +18,15 @@ export default function Header({ theme, onToggleTheme, onSignOut, profile, isAdm
   const dateInput = dateParam || formatDateInputInTimeZone(new Date(), "America/New_York");
   const date = parseDateInput(dateInput);
   const dateLabel = formatDateLabel(date);
+  const shouldLivePollGames = location.pathname === "/"
+    || location.pathname.startsWith("/g/")
+    || location.pathname.startsWith("/m/");
 
   const { data: games = [], isLoading, isFetching } = useGamesByDate(dateInput, {
-    refetchInterval: (query) => getGamesListPollingInterval(query.state.data),
-    refetchIntervalInBackground: true,
+    refetchInterval: shouldLivePollGames
+      ? (query) => getGamesListPollingInterval(query.state.data)
+      : false,
+    refetchIntervalInBackground: shouldLivePollGames,
   });
 
   const orderedGames = useMemo(() => {

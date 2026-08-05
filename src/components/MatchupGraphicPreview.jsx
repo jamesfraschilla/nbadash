@@ -1,9 +1,44 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  EXPORT_HEIGHT,
-  EXPORT_WIDTH,
   renderMatchupGraphicCanvas,
 } from "../pages/matchupGraphicExport.js";
+
+const DEFAULT_PREVIEW_WIDTH = 960;
+const DEFAULT_PREVIEW_HEIGHT = 540;
+const MAX_CONCURRENT_PREVIEW_RENDERS = 2;
+let activePreviewRenders = 0;
+const previewRenderQueue = [];
+
+function drainPreviewRenderQueue() {
+  while (activePreviewRenders < MAX_CONCURRENT_PREVIEW_RENDERS && previewRenderQueue.length) {
+    const next = previewRenderQueue.shift();
+    next();
+  }
+}
+
+function enqueuePreviewRender(task) {
+  let cancelled = false;
+  const run = () => {
+    if (cancelled) {
+      drainPreviewRenderQueue();
+      return;
+    }
+    activePreviewRenders += 1;
+    task().finally(() => {
+      activePreviewRenders = Math.max(0, activePreviewRenders - 1);
+      drainPreviewRenderQueue();
+    });
+  };
+
+  previewRenderQueue.push(run);
+  drainPreviewRenderQueue();
+
+  return () => {
+    cancelled = true;
+    const index = previewRenderQueue.indexOf(run);
+    if (index >= 0) previewRenderQueue.splice(index, 1);
+  };
+}
 
 export default function MatchupGraphicPreview({
   className,
@@ -16,6 +51,8 @@ export default function MatchupGraphicPreview({
   isReady,
   unavailableMessage = "Preview appears after both teams, ten players, and a logo are selected.",
   lazy = false,
+  previewWidth = DEFAULT_PREVIEW_WIDTH,
+  previewHeight = DEFAULT_PREVIEW_HEIGHT,
 }) {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
@@ -60,33 +97,42 @@ export default function MatchupGraphicPreview({
 
     let cancelled = false;
     setStatus("Rendering preview...");
-    renderMatchupGraphicCanvas({
+    const cancelQueuedRender = enqueuePreviewRender(() => renderMatchupGraphicCanvas({
       league,
       leftPlayers,
       rightPlayers,
       logoTeamId,
+      width: canvas.width,
+      height: canvas.height,
     }).then((previewCanvas) => {
-      if (cancelled) return;
+      if (cancelled) {
+        previewCanvas.width = 1;
+        previewCanvas.height = 1;
+        return;
+      }
       context.clearRect(0, 0, canvas.width, canvas.height);
       context.drawImage(previewCanvas, 0, 0, canvas.width, canvas.height);
+      previewCanvas.width = 1;
+      previewCanvas.height = 1;
       setStatus("");
     }).catch((error) => {
       console.error("Failed to render match-up preview.", error);
       if (!cancelled) setStatus("Preview unavailable.");
-    });
+    }));
 
     return () => {
       cancelled = true;
+      cancelQueuedRender();
     };
-  }, [isReady, isVisible, league, leftPlayers, logoTeamId, rightPlayers, unavailableMessage]);
+  }, [isReady, isVisible, league, leftPlayers, logoTeamId, previewHeight, previewWidth, rightPlayers, unavailableMessage]);
 
   return (
     <div className={className} ref={containerRef}>
       <canvas
         ref={canvasRef}
         className={canvasClassName}
-        width={EXPORT_WIDTH}
-        height={EXPORT_HEIGHT}
+        width={previewWidth}
+        height={previewHeight}
         aria-label="Match-up graphic preview"
       />
       {status ? <div className={statusClassName}>{status}</div> : null}
