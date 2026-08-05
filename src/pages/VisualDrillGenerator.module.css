@@ -12,16 +12,9 @@
 
 .settingsColumn {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(360px, 1.1fr);
   gap: 16px;
-  min-width: 0;
-}
-
-.primaryColumn,
-.secondaryColumn {
-  display: grid;
-  align-content: start;
-  gap: 16px;
+  width: min(100%, 980px);
+  justify-self: center;
   min-width: 0;
 }
 
@@ -76,6 +69,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 14px;
+  width: min(100%, 980px);
+  justify-self: center;
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -141,7 +136,18 @@
 .drillEntryBar,
 .bottomActionBar {
   display: flex;
+  align-items: center;
+  gap: 14px;
   justify-content: flex-end;
+}
+
+.bottomActionBar {
+  justify-content: space-between;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
 }
 
 .setupGrid {
@@ -609,6 +615,11 @@
 
   .runActions > button {
     flex: 1 1 150px;
+  }
+
+  .bottomActionBar {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 

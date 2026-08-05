@@ -565,54 +565,55 @@ export default function VisualDrillGenerator() {
 
       <div className={styles.workflowShell}>
         <div className={styles.settingsColumn}>
-          <div className={styles.primaryColumn}>
-            <section className={styles.groupPanel}>
-              <div className={styles.groupHeading}>
-                <span className={styles.eyebrow}>Basics</span>
-                <h3>Canvas and spaces</h3>
-              </div>
-              <div className={styles.twoUp}>
-                <section className={styles.setupCard}>
-                  <h4>Background</h4>
-                  <ColorPalette label="Possible colors" count={config.backgroundColorCount} colors={config.backgroundColors} onCountChange={(count) => updatePaletteCount("backgroundColorCount", "backgroundColors", count)} onColorChange={(index, color) => updatePaletteColor("backgroundColors", index, color)} />
-                </section>
-
-                <section className={styles.setupCard}>
-                  <h4>Spaces / columns</h4>
-                  <RangeSelect minimum={config.minimumSpaces} maximum={config.maximumSpaces} lowerBound={0} upperBound={5} onChange={(minimumSpaces, maximumSpaces) => updateConfig({ minimumSpaces, maximumSpaces })} />
-                  <p className={styles.hint}>Each refresh chooses a number within this range.</p>
-                </section>
-              </div>
-            </section>
-
-            <section className={styles.groupPanel}>
-              <div className={styles.groupHeading}>
-                <span className={styles.eyebrow}>Components</span>
-                <h3>What can appear</h3>
-              </div>
-              <div className={styles.componentChecks}>
-                <label className={`${styles.checkOption} ${config.maximumSpaces === 0 ? styles.checkOptionDisabled : ""}`}><input type="checkbox" checked={config.useDigits} disabled={config.maximumSpaces === 0} onChange={(event) => updateConfig({ useDigits: event.target.checked })} /><span>Digits</span></label>
-                <label className={`${styles.checkOption} ${config.maximumSpaces === 0 ? styles.checkOptionDisabled : ""}`}><input type="checkbox" checked={config.useShapes} disabled={config.maximumSpaces === 0} onChange={(event) => updateConfig({ useShapes: event.target.checked })} /><span>Shapes / Symbols</span></label>
-                <label className={`${styles.checkOption} ${config.maximumSpaces === 0 ? styles.checkOptionDisabled : ""}`}><input type="checkbox" checked={config.useImages} disabled={config.maximumSpaces === 0} onChange={(event) => updateConfig({ useImages: event.target.checked })} /><span>Images</span></label>
-              </div>
-              {config.maximumSpaces === 0 ? <p className={styles.hint}>Background-only mode.</p> : validationMessage ? <p className={styles.validation}>{validationMessage}</p> : <p className={styles.hint}>Current mix: {componentSummary}</p>}
+          <section className={styles.groupPanel}>
+            <div className={styles.groupHeading}>
+              <span className={styles.eyebrow}>Basics</span>
+              <h3>Canvas and spaces</h3>
+            </div>
+            <div className={styles.twoUp}>
               <section className={styles.setupCard}>
-                <h4>Self timer</h4>
-                <label className={styles.toggleOption}><input type="checkbox" checked={config.selfTimerEnabled} onChange={(event) => updateConfig({ selfTimerEnabled: event.target.checked })} /><span><strong>Automatically refresh</strong><small>Runs during Drill Mode</small></span></label>
-                {config.selfTimerEnabled ? <RangeSelect minimum={config.minimumInterval} maximum={config.maximumInterval} lowerBound={1} upperBound={20} unit="second" onChange={(minimumInterval, maximumInterval) => updateConfig({ minimumInterval, maximumInterval })} /> : null}
-                <p className={styles.hint}>{config.selfTimerEnabled ? "Each refresh uses a random interval in this range." : "Manual refresh remains available."}</p>
+                <h4>Background</h4>
+                <ColorPalette label="Possible colors" count={config.backgroundColorCount} colors={config.backgroundColors} onCountChange={(count) => updatePaletteCount("backgroundColorCount", "backgroundColors", count)} onColorChange={(index, color) => updatePaletteColor("backgroundColors", index, color)} />
               </section>
-            </section>
-          </div>
 
-          <div className={styles.secondaryColumn}>
-            {config.maximumSpaces > 0 && (config.useDigits || config.useShapes) ? (
-              <section className={styles.groupPanel}>
-                <div className={styles.groupHeading}>
-                  <span className={styles.eyebrow}>Colors</span>
-                  <h3>Digits and shapes</h3>
-                </div>
-                <div className={styles.colorOptionsGrid}>
+              <section className={styles.setupCard}>
+                <h4>Spaces / columns</h4>
+                <RangeSelect minimum={config.minimumSpaces} maximum={config.maximumSpaces} lowerBound={0} upperBound={5} onChange={(minimumSpaces, maximumSpaces) => updateConfig({ minimumSpaces, maximumSpaces })} />
+                <p className={styles.hint}>Each refresh chooses a number within this range.</p>
+              </section>
+            </div>
+          </section>
+
+          <section className={styles.groupPanel}>
+            <div className={styles.groupHeading}>
+              <span className={styles.eyebrow}>Components</span>
+              <h3>What can appear</h3>
+            </div>
+            <div className={styles.componentChecks}>
+              <label className={`${styles.checkOption} ${config.maximumSpaces === 0 ? styles.checkOptionDisabled : ""}`}><input type="checkbox" checked={config.useDigits} disabled={config.maximumSpaces === 0} onChange={(event) => updateConfig({ useDigits: event.target.checked })} /><span>Digits</span></label>
+              <label className={`${styles.checkOption} ${config.maximumSpaces === 0 ? styles.checkOptionDisabled : ""}`}><input type="checkbox" checked={config.useShapes} disabled={config.maximumSpaces === 0} onChange={(event) => updateConfig({ useShapes: event.target.checked })} /><span>Shapes / Symbols</span></label>
+              <label className={`${styles.checkOption} ${config.maximumSpaces === 0 ? styles.checkOptionDisabled : ""}`}><input type="checkbox" checked={config.useImages} disabled={config.maximumSpaces === 0} onChange={(event) => updateConfig({ useImages: event.target.checked })} /><span>Images</span></label>
+            </div>
+            {config.maximumSpaces === 0 ? <p className={styles.hint}>Background-only mode.</p> : validationMessage ? <p className={styles.validation}>{validationMessage}</p> : <p className={styles.hint}>Current mix: {componentSummary}</p>}
+          </section>
+
+          <section className={styles.groupPanel}>
+            <div className={styles.groupHeading}>
+              <span className={styles.eyebrow}>Timer</span>
+              <h3>Self timer</h3>
+            </div>
+            <label className={styles.toggleOption}><input type="checkbox" checked={config.selfTimerEnabled} onChange={(event) => updateConfig({ selfTimerEnabled: event.target.checked })} /><span><strong>Automatically refresh</strong><small>Runs during Drill Mode</small></span></label>
+            {config.selfTimerEnabled ? <RangeSelect minimum={config.minimumInterval} maximum={config.maximumInterval} lowerBound={1} upperBound={20} unit="second" onChange={(minimumInterval, maximumInterval) => updateConfig({ minimumInterval, maximumInterval })} /> : null}
+            <p className={styles.hint}>{config.selfTimerEnabled ? "Each refresh uses a random interval in this range." : "Manual refresh remains available."}</p>
+          </section>
+
+          {config.maximumSpaces > 0 && (config.useDigits || config.useShapes) ? (
+            <section className={styles.groupPanel}>
+              <div className={styles.groupHeading}>
+                <span className={styles.eyebrow}>Colors</span>
+                <h3>Digits and shapes</h3>
+              </div>
+              <div className={styles.colorOptionsGrid}>
               {config.useDigits ? (
                 <section className={styles.setupCard}>
                   <h4>Digit options</h4>
@@ -635,90 +636,103 @@ export default function VisualDrillGenerator() {
                   <ColorPalette label="Possible shape colors" count={config.shapeColorCount} colors={config.shapeColors} onCountChange={(count) => updatePaletteCount("shapeColorCount", "shapeColors", count)} onColorChange={(index, color) => updatePaletteColor("shapeColors", index, color)} />
                 </section>
               ) : null}
-                </div>
-              </section>
-            ) : null}
-
-            {config.maximumSpaces > 0 && config.useImages ? (
-                <section className={`${styles.setupCard} ${styles.imageCard}`}>
-                  <h4>Image options</h4>
-                  <label className={`${styles.uploadButton} ${!user?.id || imageBusy ? styles.uploadButtonDisabled : ""}`}>
-                    <input type="file" accept="image/png,image/jpeg,image/webp" multiple disabled={!user?.id || imageBusy} onChange={(event) => {
-                      handleImageUpload(event.target.files);
-                      event.target.value = "";
-                    }} />
-                    {imageBusy ? "Uploading…" : "+ Upload Images"}
-                  </label>
-                  {!user?.id ? <p className={styles.hint}>Sign in to upload persistent images to Supabase.</p> : null}
-                  {imageStatus ? <p className={styles.status}>{imageStatus}</p> : null}
-                  {imageLibrary.length ? (
-                    <div className={styles.imageGrid}>
-                      {imageLibrary.map((image) => {
-                        const selected = config.images.some((entry) => entry.path === image.path);
-                        return (
-                          <article className={`${styles.imageTile} ${selected ? styles.imageTileSelected : ""}`} key={image.path}>
-                            <label>
-                              <input type="checkbox" checked={selected} onChange={(event) => toggleImageSelection(image, event.target.checked)} />
-                              <img src={image.url} alt="" />
-                              <span title={image.name}>{image.name}</span>
-                            </label>
-                            <button type="button" onClick={() => handleImageDelete(image)} disabled={imageBusy} aria-label={`Delete ${image.name}`}>×</button>
-                          </article>
-                        );
-                      })}
-                    </div>
-                  ) : <p className={styles.emptyState}>No uploaded images yet.</p>}
-                </section>
-              ) : null}
-
-            <details className={`${styles.groupPanel} ${styles.favoritePanel}`}>
-              <summary className={styles.favoriteSummary}>
-                <span>
-                  <span className={styles.eyebrow}>Favorites</span>
-                  <strong>Saved settings</strong>
-                </span>
-                <span className={styles.summaryMeta}>{favorites.length}</span>
-              </summary>
-              <p className={styles.accountNote}>{favoriteStorageNote}</p>
-              <div className={styles.favoriteGrid}>
-                <label className={styles.field}>
-                  <span className={styles.fieldLabel}>Load favorite</span>
-                  <select
-                    className={styles.select}
-                    value={favoriteId}
-                    onChange={(event) => handleFavoriteSelection(event.target.value)}
-                    disabled={accountsEnabled && !user?.id}
-                  >
-                    <option value="">Select saved settings</option>
-                    {favorites.map((favorite) => <option key={favorite.id} value={favorite.id}>{favorite.title}</option>)}
-                  </select>
-                </label>
-                <label className={styles.field}>
-                  <span className={styles.fieldLabel}>Favorite name</span>
-                  <input
-                    className={styles.select}
-                    value={favoriteName}
-                    maxLength={80}
-                    onChange={(event) => setFavoriteName(event.target.value)}
-                    placeholder="Warm-up set"
-                    disabled={accountsEnabled && !user?.id}
-                  />
-                </label>
-                <div className={styles.favoriteActions}>
-                  <button
-                    type="button"
-                    className={styles.textButton}
-                    onClick={handleNewFavorite}
-                    disabled={favoriteBusy || (accountsEnabled && !user?.id)}
-                  >
-                    New Favorite
-                  </button>
-                  {favoriteId ? <button type="button" className={styles.deleteButton} onClick={handleDeleteFavorite} disabled={favoriteBusy}>Delete</button> : null}
-                  <button type="button" className={styles.saveButton} onClick={handleSaveFavorite} disabled={favoriteSaveDisabled}>{favoriteBusy ? "Saving…" : favoriteId ? "Update Favorite" : "Save Favorite"}</button>
-                </div>
               </div>
-              {favoriteStatus ? <p className={styles.status}>{favoriteStatus}</p> : null}
-            </details>
+            </section>
+          ) : null}
+
+          {config.maximumSpaces > 0 && config.useImages ? (
+            <section className={`${styles.groupPanel} ${styles.imageCard}`}>
+              <div className={styles.groupHeading}>
+                <span className={styles.eyebrow}>Images</span>
+                <h3>Image options</h3>
+              </div>
+              <label className={`${styles.uploadButton} ${!user?.id || imageBusy ? styles.uploadButtonDisabled : ""}`}>
+                <input type="file" accept="image/png,image/jpeg,image/webp" multiple disabled={!user?.id || imageBusy} onChange={(event) => {
+                  handleImageUpload(event.target.files);
+                  event.target.value = "";
+                }} />
+                {imageBusy ? "Uploading…" : "+ Upload Images"}
+              </label>
+              {!user?.id ? <p className={styles.hint}>Sign in to upload persistent images to Supabase.</p> : null}
+              {imageStatus ? <p className={styles.status}>{imageStatus}</p> : null}
+              {imageLibrary.length ? (
+                <div className={styles.imageGrid}>
+                  {imageLibrary.map((image) => {
+                    const selected = config.images.some((entry) => entry.path === image.path);
+                    return (
+                      <article className={`${styles.imageTile} ${selected ? styles.imageTileSelected : ""}`} key={image.path}>
+                        <label>
+                          <input type="checkbox" checked={selected} onChange={(event) => toggleImageSelection(image, event.target.checked)} />
+                          <img src={image.url} alt="" />
+                          <span title={image.name}>{image.name}</span>
+                        </label>
+                        <button type="button" onClick={() => handleImageDelete(image)} disabled={imageBusy} aria-label={`Delete ${image.name}`}>×</button>
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : <p className={styles.emptyState}>No uploaded images yet.</p>}
+            </section>
+          ) : null}
+
+          <details className={`${styles.groupPanel} ${styles.favoritePanel}`}>
+            <summary className={styles.favoriteSummary}>
+              <span>
+                <span className={styles.eyebrow}>Favorites</span>
+                <strong>Saved settings</strong>
+              </span>
+              <span className={styles.summaryMeta}>{favorites.length}</span>
+            </summary>
+            <p className={styles.accountNote}>{favoriteStorageNote}</p>
+            <div className={styles.favoriteGrid}>
+              <label className={styles.field}>
+                <span className={styles.fieldLabel}>Load favorite</span>
+                <select
+                  className={styles.select}
+                  value={favoriteId}
+                  onChange={(event) => handleFavoriteSelection(event.target.value)}
+                  disabled={accountsEnabled && !user?.id}
+                >
+                  <option value="">Select saved settings</option>
+                  {favorites.map((favorite) => <option key={favorite.id} value={favorite.id}>{favorite.title}</option>)}
+                </select>
+              </label>
+              <label className={styles.field}>
+                <span className={styles.fieldLabel}>Favorite name</span>
+                <input
+                  className={styles.select}
+                  value={favoriteName}
+                  maxLength={80}
+                  onChange={(event) => setFavoriteName(event.target.value)}
+                  placeholder="Warm-up set"
+                  disabled={accountsEnabled && !user?.id}
+                />
+              </label>
+              <div className={styles.favoriteActions}>
+                <button
+                  type="button"
+                  className={styles.textButton}
+                  onClick={handleNewFavorite}
+                  disabled={favoriteBusy || (accountsEnabled && !user?.id)}
+                >
+                  New Favorite
+                </button>
+                {favoriteId ? <button type="button" className={styles.deleteButton} onClick={handleDeleteFavorite} disabled={favoriteBusy}>Delete</button> : null}
+                <button type="button" className={styles.saveButton} onClick={handleSaveFavorite} disabled={favoriteSaveDisabled}>{favoriteBusy ? "Saving…" : favoriteId ? "Update Favorite" : "Save Favorite"}</button>
+              </div>
+            </div>
+            {favoriteStatus ? <p className={styles.status}>{favoriteStatus}</p> : null}
+          </details>
+
+          <div className={styles.bottomActionBar}>
+            <div className={styles.runSummary}>
+              <span className={styles.eyebrow}>Ready</span>
+              <strong>{componentSummary || "Background only"}</strong>
+            </div>
+            <div className={styles.runActions}>
+              <button type="button" className={styles.secondaryButton} onClick={generate} disabled={!canGenerate}>Refresh</button>
+              <button type="button" className={styles.startButton} onClick={enterDrillMode} disabled={!canGenerate}>Enter Drill Mode</button>
+            </div>
           </div>
         </div>
       </div>
