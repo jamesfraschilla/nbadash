@@ -20,6 +20,7 @@ import {
   getNbaTeamRoster,
   NBA_TEAMS,
 } from "../data/nbaTeams.js";
+import { useGamesByDate } from "../queries.js";
 import {
   deleteSavedToolRecord,
   deleteSavedToolRecordRemote,
@@ -55,6 +56,8 @@ import {
   saveRemoteMatchupGraphicLineups,
 } from "../matchupGraphicLineups.js";
 import { buildMatchupDefaultLineupMap } from "../matchupDefaultLineups.js";
+import { findWashingtonOpponentTeamId } from "../matchupGameDefaults.js";
+import { formatDateInputInTimeZone } from "../utils.js";
 import styles from "./Tools.module.css";
 
 const EMPTY_PLAYER_IDS = Array(5).fill("");
@@ -550,6 +553,7 @@ export default function Tools() {
   const vaultUserId = user?.id || (!accountsEnabled ? "guest" : "");
   const draftParam = String(params.get("draft") || "").trim();
   const packetParam = String(params.get("packet") || "").trim();
+  const dateInput = String(params.get("d") || "").trim() || formatDateInputInTimeZone(new Date(), "America/New_York");
   const rawTab = String(params.get("tab") || "").trim();
   const rawGraphic = String(params.get("graphic") || "").trim();
   const activeTab = rawTab === TOOL_TABS.LATE_GAME
@@ -588,6 +592,17 @@ export default function Tools() {
       ? [...new Set([draft.leftTeamId, draft.rightTeamId].map((value) => String(value || "").trim()).filter(Boolean))]
       : []
   ), [draft.leftTeamId, draft.rightTeamId, draftLeague]);
+  const needsWizardsOpponentDefault = needsSharedMatchupLineups && draftLeague === "nba" && !draftParam;
+  const { data: selectedDateGames = [] } = useGamesByDate(dateInput, {
+    enabled: needsWizardsOpponentDefault,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+  const nbaTeamIds = useMemo(() => new Set(NBA_TEAMS.map((team) => team.teamId)), []);
+  const wizardsOpponentTeamId = useMemo(
+    () => findWashingtonOpponentTeamId(selectedDateGames, nbaTeamIds),
+    [nbaTeamIds, selectedDateGames]
+  );
   const { data: remoteNbaRostersPayload } = useQuery({
     queryKey: ["tools-current-nba-rosters"],
     queryFn: ({ signal }) => fetchCurrentNbaRosters({ signal }),
@@ -855,6 +870,31 @@ export default function Tools() {
     if (draftParam) return;
     setDraft((current) => (isDraftBlank(current) ? defaultDraft : current));
   }, [defaultDraft, draftParam]);
+
+  useEffect(() => {
+    if (draftParam || !wizardsOpponentTeamId) return;
+    setDraft((current) => {
+      if (current.league !== "nba") return current;
+      if (String(current.leftTeamId || "").trim() !== WIZARDS_TEAM_ID) return current;
+      if (String(current.rightTeamId || "").trim()) return current;
+      if (draftSideHasPlayerEdits(current, "right")) return current;
+
+      let next = {
+        ...current,
+        rightTeamId: wizardsOpponentTeamId,
+        rightPlayerIds: [...EMPTY_PLAYER_IDS],
+        rightCustomPlayers: buildEmptyCustomPlayers(),
+      };
+      const lineup = getPreferredTeamLineup(
+        "nba",
+        wizardsOpponentTeamId,
+        sharedMatchupLineupMap,
+        nbaMatchupDefaultLineupMap
+      );
+      if (lineup) next = applyTeamLineupToDraftSide(next, "right", lineup);
+      return next;
+    });
+  }, [draftParam, nbaMatchupDefaultLineupMap, sharedMatchupLineupMap, wizardsOpponentTeamId]);
 
   useEffect(() => {
     if (draftParam) return;
