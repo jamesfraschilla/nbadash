@@ -1863,6 +1863,24 @@ export async function fetchCurrentNbaRosters(options = {}) {
   }
 }
 
+export async function fetchNbaMatchupDefaults(options = {}) {
+  if (!SUPABASE_FUNCTIONS_BASE) {
+    throw new Error("Supabase functions are not configured.");
+  }
+  const safeTeamIds = [...new Set(
+    (Array.isArray(options?.teamIds) ? options.teamIds : [])
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+  )];
+  if (!safeTeamIds.length) return { teams: {}, errors: [] };
+  const url = new URL(`${SUPABASE_FUNCTIONS_BASE}/nba-matchup-defaults`);
+  url.searchParams.set("teamIds", safeTeamIds.join(","));
+  return requestJson(url.toString(), {
+    timeoutMs: 15000,
+    signal: options?.signal,
+  });
+}
+
 export async function fetchNbaPlayerStats(options = {}) {
   const safeOptions = options && typeof options === "object" ? options : { teamId: options };
   const safeLeague = safeOptions.league === "gleague" ? "gleague" : "nba";
