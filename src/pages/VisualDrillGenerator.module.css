@@ -12,15 +12,17 @@
 
 .settingsColumn {
   display: grid;
-  gap: 14px;
+  grid-template-columns: minmax(0, 0.9fr) minmax(360px, 1.1fr);
+  gap: 16px;
   min-width: 0;
 }
 
-.setupFlow {
+.primaryColumn,
+.secondaryColumn {
   display: grid;
-  grid-template-columns: repeat(2, minmax(260px, 1fr));
-  gap: 14px;
-  align-items: start;
+  align-content: start;
+  gap: 16px;
+  min-width: 0;
 }
 
 .intro,
@@ -31,10 +33,17 @@
   gap: 18px;
 }
 
+.groupHeading {
+  display: grid;
+  gap: 2px;
+}
+
 .intro h2,
 .intro p,
 .setupCard h3,
-.favoriteHeading h3 {
+.setupCard h4,
+.favoriteHeading h3,
+.groupHeading h3 {
   margin: 0;
 }
 
@@ -59,9 +68,46 @@
   text-transform: uppercase;
 }
 
+.runBar {
+  position: sticky;
+  top: 72px;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: var(--shadow-panel);
+  backdrop-filter: blur(12px);
+}
+
+.runSummary {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.runSummary strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .startButton,
 .saveButton,
-.uploadButton {
+.uploadButton,
+.secondaryButton {
   min-height: 42px;
   padding: 0 18px;
   border: 1px solid var(--button-primary-bg);
@@ -71,6 +117,12 @@
   font-weight: 800;
   cursor: pointer;
   white-space: nowrap;
+}
+
+.secondaryButton {
+  border-color: var(--border);
+  background: var(--button-bg);
+  color: var(--text);
 }
 
 .startButton {
@@ -99,22 +151,32 @@
   align-items: start;
 }
 
-.subfilterGrid {
+.twoUp,
+.colorOptionsGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
   align-items: start;
 }
 
+.groupPanel,
 .setupCard {
   position: relative;
   display: grid;
   gap: 16px;
-  padding: 18px;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--shadow-panel);
+}
+
+.groupPanel {
+  padding: 18px;
+}
+
+.setupCard {
+  padding: 16px;
+  box-shadow: none;
 }
 
 .favoriteCard {
@@ -125,7 +187,7 @@
 
 .favoriteGrid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  grid-template-columns: 1fr;
   gap: 12px;
   align-items: end;
 }
@@ -133,8 +195,41 @@
 .favoriteActions {
   display: flex;
   gap: 8px;
-  grid-column: 1 / -1;
   justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.favoritePanel {
+  gap: 12px;
+}
+
+.favoriteSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.favoriteSummary::-webkit-details-marker {
+  display: none;
+}
+
+.favoriteSummary strong {
+  display: block;
+}
+
+.summaryMeta {
+  display: grid;
+  min-width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
 }
 
 .textButton {
@@ -233,7 +328,7 @@
 }
 
 .componentChecks {
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .checkOption,
@@ -495,23 +590,32 @@
 }
 
 @media (max-width: 900px) {
-  .setupFlow {
+  .settingsColumn,
+  .twoUp,
+  .colorOptionsGrid,
+  .componentChecks {
     grid-template-columns: 1fr;
   }
 
-  .favoriteGrid {
-    grid-template-columns: 1fr 1fr;
+  .runBar {
+    position: static;
+    align-items: stretch;
+    flex-direction: column;
   }
 
-  .favoriteActions {
-    grid-column: 1 / -1;
-    justify-content: flex-end;
+  .runActions {
+    justify-content: stretch;
+  }
+
+  .runActions > button {
+    flex: 1 1 150px;
   }
 }
 
 @media (max-width: 560px) {
   .intro,
-  .favoriteHeading {
+  .favoriteHeading,
+  .groupHeading {
     align-items: stretch;
     flex-direction: column;
   }
@@ -522,8 +626,7 @@
     grid-template-columns: 1fr;
   }
 
-  .drillEntryBar .startButton,
-  .bottomActionBar .startButton {
+  .runActions > button {
     width: 100%;
   }
 

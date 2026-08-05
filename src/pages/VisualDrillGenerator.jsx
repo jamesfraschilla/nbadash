@@ -36,7 +36,7 @@ const DEFAULT_CONFIG = {
   minimumDigit: 0,
   maximumDigit: 9,
   digitColorCount: 3,
-  digitColors: ["#106df3", "#00e600", "#ffd400"],
+  digitColors: ["#ff1010", "#00e600", "#106df3"],
   shapes: [...DRILL_SHAPES],
   shapeColorCount: 3,
   shapeColors: ["#ff1010", "#00e600", "#106df3"],
@@ -532,6 +532,15 @@ export default function VisualDrillGenerator() {
     }
   };
 
+  const handleResetDefaults = () => {
+    const nextConfig = normalizeConfig(DEFAULT_CONFIG);
+    setFavoriteId("");
+    setFavoriteName("");
+    setFavoriteStatus("");
+    setConfig(nextConfig);
+    setGraphic(generateVisualDrill(nextConfig));
+  };
+
   return (
     <div className={styles.builder}>
       <div className={styles.intro}>
@@ -542,100 +551,71 @@ export default function VisualDrillGenerator() {
         </div>
       </div>
 
+      <div className={styles.runBar}>
+        <div className={styles.runSummary}>
+          <span className={styles.eyebrow}>Drill controls</span>
+          <strong>{componentSummary || "Background only"}</strong>
+        </div>
+        <div className={styles.runActions}>
+          <button type="button" className={styles.secondaryButton} onClick={generate} disabled={!canGenerate}>Refresh</button>
+          <button type="button" className={styles.secondaryButton} onClick={handleResetDefaults}>Reset Defaults</button>
+          <button type="button" className={styles.startButton} onClick={enterDrillMode} disabled={!canGenerate}>Enter Drill Mode</button>
+        </div>
+      </div>
+
       <div className={styles.workflowShell}>
         <div className={styles.settingsColumn}>
-          <div className={styles.drillEntryBar}>
-            <button type="button" className={styles.startButton} onClick={enterDrillMode} disabled={!canGenerate}>Enter Drill Mode</button>
-          </div>
-
-          <section className={`${styles.setupCard} ${styles.favoriteCard}`}>
-            <div className={styles.favoriteHeading}>
-              <div>
-                <span className={styles.eyebrow}>Favorites</span>
-                <h3>Saved settings</h3>
-                <p className={styles.accountNote}>{favoriteStorageNote}</p>
+          <div className={styles.primaryColumn}>
+            <section className={styles.groupPanel}>
+              <div className={styles.groupHeading}>
+                <span className={styles.eyebrow}>Basics</span>
+                <h3>Canvas and spaces</h3>
               </div>
-              <button
-                type="button"
-                className={styles.textButton}
-                onClick={handleNewFavorite}
-                disabled={favoriteBusy || (accountsEnabled && !user?.id)}
-              >
-                + New favorite
-              </button>
-            </div>
-            <div className={styles.favoriteGrid}>
-              <label className={styles.field}>
-                <span className={styles.fieldLabel}>Load favorite</span>
-                <select
-                  className={styles.select}
-                  value={favoriteId}
-                  onChange={(event) => handleFavoriteSelection(event.target.value)}
-                  disabled={accountsEnabled && !user?.id}
-                >
-                  <option value="">Select saved settings</option>
-                  {favorites.map((favorite) => <option key={favorite.id} value={favorite.id}>{favorite.title}</option>)}
-                </select>
-              </label>
-              <label className={styles.field}>
-                <span className={styles.fieldLabel}>Favorite name</span>
-                <input
-                  className={styles.select}
-                  value={favoriteName}
-                  maxLength={80}
-                  onChange={(event) => setFavoriteName(event.target.value)}
-                  placeholder="Warm-up set"
-                  disabled={accountsEnabled && !user?.id}
-                />
-              </label>
-              <div className={styles.favoriteActions}>
-                {favoriteId ? <button type="button" className={styles.deleteButton} onClick={handleDeleteFavorite} disabled={favoriteBusy}>Delete</button> : null}
-                <button type="button" className={styles.saveButton} onClick={handleSaveFavorite} disabled={favoriteSaveDisabled}>{favoriteBusy ? "Saving…" : favoriteId ? "Update Favorite" : "Save Favorite"}</button>
-              </div>
-            </div>
-            {favoriteStatus ? <p className={styles.status}>{favoriteStatus}</p> : null}
-          </section>
+              <div className={styles.twoUp}>
+                <section className={styles.setupCard}>
+                  <h4>Background</h4>
+                  <ColorPalette label="Possible colors" count={config.backgroundColorCount} colors={config.backgroundColors} onCountChange={(count) => updatePaletteCount("backgroundColorCount", "backgroundColors", count)} onColorChange={(index, color) => updatePaletteColor("backgroundColors", index, color)} />
+                </section>
 
-          <div className={styles.setupFlow}>
-            <section className={styles.setupCard}>
-              <div className={styles.stepNumber}>01</div>
-              <h3>Background</h3>
-              <ColorPalette label="Possible colors" count={config.backgroundColorCount} colors={config.backgroundColors} onCountChange={(count) => updatePaletteCount("backgroundColorCount", "backgroundColors", count)} onColorChange={(index, color) => updatePaletteColor("backgroundColors", index, color)} />
+                <section className={styles.setupCard}>
+                  <h4>Spaces / columns</h4>
+                  <RangeSelect minimum={config.minimumSpaces} maximum={config.maximumSpaces} lowerBound={0} upperBound={5} onChange={(minimumSpaces, maximumSpaces) => updateConfig({ minimumSpaces, maximumSpaces })} />
+                  <p className={styles.hint}>Each refresh chooses a number within this range.</p>
+                </section>
+              </div>
             </section>
 
-            <section className={styles.setupCard}>
-              <div className={styles.stepNumber}>02</div>
-              <h3>Spaces / columns</h3>
-              <RangeSelect minimum={config.minimumSpaces} maximum={config.maximumSpaces} lowerBound={0} upperBound={5} onChange={(minimumSpaces, maximumSpaces) => updateConfig({ minimumSpaces, maximumSpaces })} />
-              <p className={styles.hint}>Each refresh chooses a number within this range.</p>
-            </section>
-
-            <section className={styles.setupCard}>
-              <div className={styles.stepNumber}>03</div>
-              <h3>Components</h3>
+            <section className={styles.groupPanel}>
+              <div className={styles.groupHeading}>
+                <span className={styles.eyebrow}>Components</span>
+                <h3>What can appear</h3>
+              </div>
               <div className={styles.componentChecks}>
                 <label className={`${styles.checkOption} ${config.maximumSpaces === 0 ? styles.checkOptionDisabled : ""}`}><input type="checkbox" checked={config.useDigits} disabled={config.maximumSpaces === 0} onChange={(event) => updateConfig({ useDigits: event.target.checked })} /><span>Digits</span></label>
                 <label className={`${styles.checkOption} ${config.maximumSpaces === 0 ? styles.checkOptionDisabled : ""}`}><input type="checkbox" checked={config.useShapes} disabled={config.maximumSpaces === 0} onChange={(event) => updateConfig({ useShapes: event.target.checked })} /><span>Shapes / Symbols</span></label>
                 <label className={`${styles.checkOption} ${config.maximumSpaces === 0 ? styles.checkOptionDisabled : ""}`}><input type="checkbox" checked={config.useImages} disabled={config.maximumSpaces === 0} onChange={(event) => updateConfig({ useImages: event.target.checked })} /><span>Images</span></label>
               </div>
               {config.maximumSpaces === 0 ? <p className={styles.hint}>Background-only mode.</p> : validationMessage ? <p className={styles.validation}>{validationMessage}</p> : <p className={styles.hint}>Current mix: {componentSummary}</p>}
-            </section>
-
-            <section className={styles.setupCard}>
-              <div className={styles.stepNumber}>04</div>
-              <h3>Self timer</h3>
-              <label className={styles.toggleOption}><input type="checkbox" checked={config.selfTimerEnabled} onChange={(event) => updateConfig({ selfTimerEnabled: event.target.checked })} /><span><strong>Automatically refresh</strong><small>Runs during Drill Mode</small></span></label>
-              {config.selfTimerEnabled ? <RangeSelect minimum={config.minimumInterval} maximum={config.maximumInterval} lowerBound={1} upperBound={20} unit="second" onChange={(minimumInterval, maximumInterval) => updateConfig({ minimumInterval, maximumInterval })} /> : null}
-              <p className={styles.hint}>{config.selfTimerEnabled ? "Each refresh uses a random interval in this range." : "Manual refresh remains available."}</p>
+              <section className={styles.setupCard}>
+                <h4>Self timer</h4>
+                <label className={styles.toggleOption}><input type="checkbox" checked={config.selfTimerEnabled} onChange={(event) => updateConfig({ selfTimerEnabled: event.target.checked })} /><span><strong>Automatically refresh</strong><small>Runs during Drill Mode</small></span></label>
+                {config.selfTimerEnabled ? <RangeSelect minimum={config.minimumInterval} maximum={config.maximumInterval} lowerBound={1} upperBound={20} unit="second" onChange={(minimumInterval, maximumInterval) => updateConfig({ minimumInterval, maximumInterval })} /> : null}
+                <p className={styles.hint}>{config.selfTimerEnabled ? "Each refresh uses a random interval in this range." : "Manual refresh remains available."}</p>
+              </section>
             </section>
           </div>
 
-          {config.maximumSpaces > 0 && (config.useDigits || config.useShapes || config.useImages) ? (
-            <div className={styles.subfilterGrid}>
+          <div className={styles.secondaryColumn}>
+            {config.maximumSpaces > 0 && (config.useDigits || config.useShapes) ? (
+              <section className={styles.groupPanel}>
+                <div className={styles.groupHeading}>
+                  <span className={styles.eyebrow}>Colors</span>
+                  <h3>Digits and shapes</h3>
+                </div>
+                <div className={styles.colorOptionsGrid}>
               {config.useDigits ? (
                 <section className={styles.setupCard}>
-                  <div className={styles.stepNumber}>D</div>
-                  <h3>Digit options</h3>
+                  <h4>Digit options</h4>
                   <RangeSelect minimum={config.minimumDigit} maximum={config.maximumDigit} lowerBound={0} upperBound={9} onChange={(minimumDigit, maximumDigit) => updateConfig({ minimumDigit, maximumDigit })} />
                   <ColorPalette label="Possible digit colors" count={config.digitColorCount} colors={config.digitColors} onCountChange={(count) => updatePaletteCount("digitColorCount", "digitColors", count)} onColorChange={(index, color) => updatePaletteColor("digitColors", index, color)} />
                 </section>
@@ -643,8 +623,7 @@ export default function VisualDrillGenerator() {
 
               {config.useShapes ? (
                 <section className={styles.setupCard}>
-                  <div className={styles.stepNumber}>S</div>
-                  <h3>Shape / symbol options</h3>
+                  <h4>Shape / symbol options</h4>
                   <div className={styles.shapeOptions}>
                     {DRILL_SHAPES.map((shape) => (
                       <label className={styles.checkOption} key={shape}><input type="checkbox" checked={config.shapes.includes(shape)} onChange={(event) => {
@@ -656,11 +635,13 @@ export default function VisualDrillGenerator() {
                   <ColorPalette label="Possible shape colors" count={config.shapeColorCount} colors={config.shapeColors} onCountChange={(count) => updatePaletteCount("shapeColorCount", "shapeColors", count)} onColorChange={(index, color) => updatePaletteColor("shapeColors", index, color)} />
                 </section>
               ) : null}
+                </div>
+              </section>
+            ) : null}
 
-              {config.useImages ? (
+            {config.maximumSpaces > 0 && config.useImages ? (
                 <section className={`${styles.setupCard} ${styles.imageCard}`}>
-                  <div className={styles.stepNumber}>I</div>
-                  <h3>Image options</h3>
+                  <h4>Image options</h4>
                   <label className={`${styles.uploadButton} ${!user?.id || imageBusy ? styles.uploadButtonDisabled : ""}`}>
                     <input type="file" accept="image/png,image/jpeg,image/webp" multiple disabled={!user?.id || imageBusy} onChange={(event) => {
                       handleImageUpload(event.target.files);
@@ -689,11 +670,55 @@ export default function VisualDrillGenerator() {
                   ) : <p className={styles.emptyState}>No uploaded images yet.</p>}
                 </section>
               ) : null}
-            </div>
-          ) : null}
 
-          <div className={styles.bottomActionBar}>
-            <button type="button" className={styles.startButton} onClick={enterDrillMode} disabled={!canGenerate}>Enter Drill Mode</button>
+            <details className={`${styles.groupPanel} ${styles.favoritePanel}`}>
+              <summary className={styles.favoriteSummary}>
+                <span>
+                  <span className={styles.eyebrow}>Favorites</span>
+                  <strong>Saved settings</strong>
+                </span>
+                <span className={styles.summaryMeta}>{favorites.length}</span>
+              </summary>
+              <p className={styles.accountNote}>{favoriteStorageNote}</p>
+              <div className={styles.favoriteGrid}>
+                <label className={styles.field}>
+                  <span className={styles.fieldLabel}>Load favorite</span>
+                  <select
+                    className={styles.select}
+                    value={favoriteId}
+                    onChange={(event) => handleFavoriteSelection(event.target.value)}
+                    disabled={accountsEnabled && !user?.id}
+                  >
+                    <option value="">Select saved settings</option>
+                    {favorites.map((favorite) => <option key={favorite.id} value={favorite.id}>{favorite.title}</option>)}
+                  </select>
+                </label>
+                <label className={styles.field}>
+                  <span className={styles.fieldLabel}>Favorite name</span>
+                  <input
+                    className={styles.select}
+                    value={favoriteName}
+                    maxLength={80}
+                    onChange={(event) => setFavoriteName(event.target.value)}
+                    placeholder="Warm-up set"
+                    disabled={accountsEnabled && !user?.id}
+                  />
+                </label>
+                <div className={styles.favoriteActions}>
+                  <button
+                    type="button"
+                    className={styles.textButton}
+                    onClick={handleNewFavorite}
+                    disabled={favoriteBusy || (accountsEnabled && !user?.id)}
+                  >
+                    New Favorite
+                  </button>
+                  {favoriteId ? <button type="button" className={styles.deleteButton} onClick={handleDeleteFavorite} disabled={favoriteBusy}>Delete</button> : null}
+                  <button type="button" className={styles.saveButton} onClick={handleSaveFavorite} disabled={favoriteSaveDisabled}>{favoriteBusy ? "Saving…" : favoriteId ? "Update Favorite" : "Save Favorite"}</button>
+                </div>
+              </div>
+              {favoriteStatus ? <p className={styles.status}>{favoriteStatus}</p> : null}
+            </details>
           </div>
         </div>
       </div>
