@@ -84,8 +84,8 @@ export default function Header({ theme, onToggleTheme, onSignOut, profile, isAdm
 
         <Link to="/" className={styles.logoLink}>
           <div className={styles.logo}>
-            <div>Live</div>
-            <div className={styles.logoLine2}>Stats</div>
+            <div>NBA</div>
+            <div className={styles.logoLine2}>Dash</div>
           </div>
         </Link>
         {profile ? (
