@@ -290,6 +290,27 @@
   letter-spacing: 0.2px;
 }
 
+.titleInput {
+  width: min(380px, 100%);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--input-bg);
+  color: var(--input-text);
+  font-family: "DINalt", sans-serif;
+  font-size: clamp(28px, 4.2vw, 50px);
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 4px 8px;
+}
+
+.vaultStatus {
+  width: min(var(--table-max-width), 100%);
+  margin: -2px auto 8px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: right;
+}
+
 .sheetSection {
   width: min(var(--table-max-width), 100%);
   margin: 8px auto 0;

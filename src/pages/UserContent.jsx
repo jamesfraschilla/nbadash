@@ -29,6 +29,7 @@ const DEFAULT_NOTE_TAG_OPTIONS = [
 
 const GRAPHIC_VAULT_TABS = [
   { key: "matchup", label: "Match-Up", title: "Match-Up Graphics" },
+  { key: "court-time", label: "Court Time", title: "Court Time Graphics" },
   { key: "personnel", label: "Personnel", title: "Personnel Graphics" },
   { key: "depth-chart", label: "Depth Chart", title: "Depth Chart Graphics" },
 ];
@@ -120,6 +121,15 @@ function buildGameMeta(game) {
 }
 
 function getSavedGraphicPresentation(toolRecord) {
+  if (toolRecord.type === TOOL_RECORD_TYPES.PREGAME_COURT_TIME_GRAPHIC) {
+    const opponentLine = String(toolRecord.payload?.opponentLine || "").trim();
+    const slotCount = Array.isArray(toolRecord.payload?.slots) ? toolRecord.payload.slots.length : 0;
+    return {
+      meta: "Court Time Graphic · Saved draft",
+      body: `${opponentLine || "Court Time graphic"}${slotCount ? ` · ${slotCount} slots` : ""}`,
+      link: `/graphics?graphic=court-time&courtTime=${encodeURIComponent(toolRecord.id)}`,
+    };
+  }
   if (toolRecord.type === TOOL_RECORD_TYPES.PERSONNEL_GRAPHIC) {
     const league = toolRecord.payload?.league === "gleague" ? "gleague" : "nba";
     const team = getLeagueTeam(toolRecord.payload?.teamId, league);
@@ -308,6 +318,8 @@ export default function UserContent() {
     ? "drawings"
     : rawTab === "graphics" && canUseTools
       ? "graphics"
+    : rawTab === "rotations" && canUseTools
+      ? "rotations"
     : rawTab === "late-game" && canUseTools && canUseAdminTools
       ? "late-game"
       : rawTab === "tools" && canUseTools
@@ -341,7 +353,7 @@ export default function UserContent() {
 
   const { data: savedTools = [] } = useQuery({
     queryKey: ["owned-tools", vaultUserId],
-    enabled: Boolean(vaultUserId && canUseTools && ["graphics", "tools", "late-game"].includes(tab)),
+    enabled: Boolean(vaultUserId && canUseTools && ["graphics", "rotations", "tools", "late-game"].includes(tab)),
     queryFn: async () => {
       if (!vaultUserId || !canUseTools) return [];
       if (!accountsEnabled || !user?.id) return listSavedToolRecords(vaultUserId);
@@ -488,8 +500,16 @@ export default function UserContent() {
     () => savedTools.filter((record) => record.type === TOOL_RECORD_TYPES.PERSONNEL_GRAPHIC),
     [savedTools]
   );
+  const courtTimeToolRecords = useMemo(
+    () => savedTools.filter((record) => record.type === TOOL_RECORD_TYPES.PREGAME_COURT_TIME_GRAPHIC),
+    [savedTools]
+  );
   const depthChartToolRecords = useMemo(
     () => savedTools.filter((record) => record.type === TOOL_RECORD_TYPES.DEPTH_CHART_GRAPHIC),
+    [savedTools]
+  );
+  const rotationToolRecords = useMemo(
+    () => savedTools.filter((record) => record.type === TOOL_RECORD_TYPES.ROTATIONS_TOOL),
     [savedTools]
   );
   const analysisToolRecords = useMemo(
@@ -657,6 +677,15 @@ export default function UserContent() {
             Graphics
           </button>
         ) : null}
+        {canUseTools ? (
+          <button
+            type="button"
+            className={`${styles.tabButton} ${tab === "rotations" ? styles.tabButtonActive : ""}`}
+            onClick={() => setTab("rotations")}
+          >
+            Rotations
+          </button>
+        ) : null}
         <button
           type="button"
           className={`${styles.tabButton} ${tab === "notes" ? styles.tabButtonActive : ""}`}
@@ -691,7 +720,7 @@ export default function UserContent() {
         ) : null}
       </div>
 
-      {tab === "graphics" || tab === "tools" || tab === "late-game" ? null : (
+      {tab === "graphics" || tab === "rotations" || tab === "tools" || tab === "late-game" ? null : (
         <section className={styles.filterPanel}>
         <div className={styles.filterGrid}>
           <label className={styles.filterField}>
@@ -890,7 +919,14 @@ export default function UserContent() {
               </button>
             ))}
           </div>
-          {activeGraphicTab === "personnel" ? (
+          {activeGraphicTab === "court-time" ? (
+            <SavedGraphicArea
+              title="Court Time Graphics"
+              records={courtTimeToolRecords}
+              deletingKey={deletingKey}
+              onDelete={handleDeleteTool}
+            />
+          ) : activeGraphicTab === "personnel" ? (
             <SavedGraphicArea
               title="Personnel Graphics"
               records={personnelToolRecords}
@@ -918,6 +954,52 @@ export default function UserContent() {
                 />
               )}
             />
+          )}
+        </section>
+      ) : tab === "rotations" ? (
+        <section className={styles.section}>
+          {toolVaultStatus ? <div className={styles.toolToolbarStatus}>{toolVaultStatus}</div> : null}
+          {rotationToolRecords.length === 0 ? (
+            <div className={styles.emptyState}>You have not saved any rotations yet.</div>
+          ) : (
+            <div className={styles.list}>
+              {rotationToolRecords.map((toolRecord) => {
+                const isDeleting = deletingKey === `tool:${toolRecord.id}`;
+                const payload = toolRecord.payload && typeof toolRecord.payload === "object" ? toolRecord.payload : {};
+                const opponentLine = String(payload.opponentLine || "").trim();
+                const versionCount = Array.isArray(payload.gameState?.versions) ? payload.gameState.versions.length : 0;
+                const lineupCount = Array.isArray(payload.savedLineups) ? payload.savedLineups.length : 0;
+                return (
+                  <article key={toolRecord.id} className={styles.card}>
+                    <div className={styles.cardHeader}>
+                      <div className={styles.cardTitleGroup}>
+                        <div className={styles.cardTitle}>{toolRecord.title || "Untitled"}</div>
+                        <div className={styles.cardMeta}>Rotations · Saved draft</div>
+                      </div>
+                      <div className={styles.cardActions}>
+                        <Link className={styles.cardLink} to={`/tools?tab=rotations&rotation=${encodeURIComponent(toolRecord.id)}`}>
+                          Open Tool
+                        </Link>
+                        <button
+                          type="button"
+                          className={styles.deleteButton}
+                          onClick={() => handleDeleteTool(toolRecord)}
+                          disabled={isDeleting}
+                        >
+                          {isDeleting ? "Deleting..." : "Delete"}
+                        </button>
+                      </div>
+                    </div>
+                    <div className={styles.cardBody}>
+                      {opponentLine || "Saved rotations draft."}
+                      {versionCount ? ` · ${versionCount} version${versionCount === 1 ? "" : "s"}` : ""}
+                      {lineupCount ? ` · ${lineupCount} saved lineup${lineupCount === 1 ? "" : "s"}` : ""}
+                    </div>
+                    <div className={styles.cardFooter}>Updated {formatTimestamp(toolRecord.updatedAt)}</div>
+                  </article>
+                );
+              })}
+            </div>
           )}
         </section>
       ) : tab === "tools" ? (

@@ -1,6 +1,7 @@
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "../auth/useAuth.js";
 import { useGame } from "../queries.js";
 import {
   fetchRemotePregamePlayers,
@@ -15,6 +16,13 @@ import {
 } from "../pregamePlayers.js";
 import { readLocalStorage, writeLocalStorage } from "../storage.js";
 import { supabase } from "../supabaseClient.js";
+import {
+  getSavedToolRecord,
+  getSavedToolRecordRemote,
+  saveToolRecord,
+  saveToolRecordRemote,
+  TOOL_RECORD_TYPES,
+} from "../toolVault.js";
 import styles from "./Rotations.module.css";
 
 const GAME_STORAGE_PREFIX = "rotations:game:v1:";
@@ -38,6 +46,14 @@ const LONG_PRESS_DURATION_MS = 700;
 const TOUCH_FILL_MOVE_TOLERANCE_PX = 16;
 const DEPTH_OUT_PRESS_DURATION_MS = 1000;
 const DEPTH_PRESS_RELEASE_LOCK_MS = 120;
+const STANDALONE_ROTATIONS_GAME_ID = "standalone-rotations";
+const STANDALONE_ROTATIONS_GAME = {
+  gameId: STANDALONE_ROTATIONS_GAME_ID,
+  gameTimeUTC: new Date().toISOString(),
+  gameEt: new Date().toISOString(),
+  homeTeam: { teamId: "1610612764", teamTricode: "WAS", teamCity: "Washington", teamName: "Wizards" },
+  awayTeam: { teamId: "0", teamTricode: "OPP", teamCity: "Opponent", teamName: "" },
+};
 const DEFAULT_VERSION_OPTIONS = {
   hideNamesOnDuplicateRows: false,
 };
@@ -1487,11 +1503,16 @@ function buildRotationsPdfHtml({
   `;
 }
 
-export default function Rotations() {
+export default function Rotations({ standalone = false }) {
+  const { accountsEnabled, user } = useAuth();
+  const queryClient = useQueryClient();
   const { gameId } = useParams();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const dateParam = params.get("d");
-  const backUrl = dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`;
+  const rotationParam = String(params.get("rotation") || "").trim();
+  const effectiveGameId = standalone ? `${STANDALONE_ROTATIONS_GAME_ID}:${rotationParam || "draft"}` : gameId;
+  const vaultUserId = user?.id || (!accountsEnabled ? "guest" : "");
+  const backUrl = standalone ? "/tools?tab=rotations" : (dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`);
 
   const [players, setPlayers] = useState(createDefaultPlayers());
   const [playerNameDrafts, setPlayerNameDrafts] = useState(() => buildPlayerNameDrafts(createDefaultPlayers()));
@@ -1522,6 +1543,10 @@ export default function Rotations() {
   const [isTouchFillActive, setIsTouchFillActive] = useState(false);
   const [undoDepth, setUndoDepth] = useState(0);
   const [syncError, setSyncError] = useState("");
+  const [standaloneOpponentLine, setStandaloneOpponentLine] = useState("VS OPPONENT");
+  const [standaloneRecordId, setStandaloneRecordId] = useState("");
+  const [vaultStatus, setVaultStatus] = useState("");
+  const [vaultSaving, setVaultSaving] = useState(false);
   const [collapsed, setCollapsed] = useState({
     restrictions: false,
     depth: false,
@@ -1588,16 +1613,21 @@ export default function Rotations() {
   });
   const [touchPreview, setTouchPreview] = useState(null);
 
-  const { data: game, isLoading, error } = useGame(gameId, {
+  const { data: fetchedGame, isLoading, error } = useGame(gameId, {
     dateStr: dateParam,
+    enabled: !standalone && Boolean(gameId),
   });
+  const game = standalone ? STANDALONE_ROTATIONS_GAME : fetchedGame;
   const periodMinuteCount = getRotationPeriodMinuteCount(game);
   const minuteLabels = useMemo(() => buildMinuteLabels(periodMinuteCount), [periodMinuteCount]);
   const totalPerQuarter = getTotalPerQuarter(minuteLabels);
 
-  const monitoredTeam = useMemo(() => getRotationsScopeForGame(game), [game]);
+  const monitoredTeam = useMemo(
+    () => (standalone ? TEAM_ROTATIONS_CONFIG.washington : getRotationsScopeForGame(game)),
+    [game, standalone]
+  );
   const monitoredTeamScope = monitoredTeam?.key || null;
-  const rotationsAvailable = Boolean(monitoredTeamScope);
+  const rotationsAvailable = standalone || Boolean(monitoredTeamScope);
   const trackedApiPlayers = useMemo(
     () => getTeamBoxScorePlayers(game, monitoredTeamScope),
     [game, monitoredTeamScope]
@@ -1630,7 +1660,7 @@ export default function Rotations() {
   const { data: remoteGameState, isFetched: remoteGameFetched } = useQuery({
     queryKey: ["rotations-game-remote", gameId, monitoredTeamScope, periodMinuteCount],
     queryFn: () => fetchRemoteGameState(gameId, monitoredTeamScope, periodMinuteCount),
-    enabled: Boolean(supabase && gameId && monitoredTeamScope),
+    enabled: Boolean(!standalone && supabase && gameId && monitoredTeamScope),
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
@@ -1655,7 +1685,7 @@ export default function Rotations() {
 
   const shouldInheritFutureTemplate = (state) => {
     const sourceGameId = Number(depthTemplateSourceGameIdRef.current || 0);
-    const currentGameNumeric = Number(gameId || 0);
+    const currentGameNumeric = Number(effectiveGameId || 0);
     if (!sourceGameId || !currentGameNumeric || currentGameNumeric <= sourceGameId) return false;
     return Boolean(getVersionById(state, FINAL_VERSION_ID, monitoredTeamScope || "washington", periodMinuteCount)?.inheritDepthTemplate);
   };
@@ -1703,7 +1733,7 @@ export default function Rotations() {
     setNewPlayerDraft({ name: "", display: "", personId: "" });
     setCreateVersionOpen(false);
     setDeleteVersionTarget(null);
-  }, [gameId, monitoredTeamScope]);
+  }, [effectiveGameId, monitoredTeamScope]);
 
   useEffect(() => {
     if (!versionMenuOpen) return undefined;
@@ -1726,8 +1756,82 @@ export default function Rotations() {
   }, [savedLineupMenu]);
 
   useEffect(() => {
-    if (!gameId || typeof window === "undefined") return;
-    const raw = readLocalStorage(sectionStateStorageKey(gameId));
+    if (!standalone) return undefined;
+    let cancelled = false;
+
+    async function loadStandaloneRecord() {
+      if (!rotationParam || !vaultUserId) {
+        setStandaloneRecordId("");
+        setVaultStatus("");
+        return;
+      }
+
+      let savedRecord = null;
+      try {
+        savedRecord = accountsEnabled && user?.id
+          ? await getSavedToolRecordRemote(user.id, rotationParam)
+          : getSavedToolRecord(vaultUserId, rotationParam);
+      } catch (loadError) {
+        console.error("Failed to load rotations from My Vault.", loadError);
+        savedRecord = getSavedToolRecord(vaultUserId, rotationParam);
+      }
+
+      if (cancelled) return;
+      if (!savedRecord?.payload || savedRecord.type !== TOOL_RECORD_TYPES.ROTATIONS_TOOL) {
+        setStandaloneRecordId("");
+        setVaultStatus("Unable to load that Rotations draft.");
+        return;
+      }
+
+      const teamScope = String(savedRecord.payload.teamScope || monitoredTeamScope || "washington");
+      const savedPeriodMinutes = Number(savedRecord.payload.periodMinutes || periodMinuteCount);
+      const nextPlayers = normalizePlayers(savedRecord.payload.players, teamScope);
+      const nextSavedLineups = normalizeSavedLineups(savedRecord.payload.savedLineups);
+      const nextDepthTemplate = normalizeDepthChart(savedRecord.payload.depthTemplate, teamScope);
+      const nextGameState = normalizeGameState(savedRecord.payload.gameState, teamScope, savedPeriodMinutes);
+
+      setStandaloneRecordId(savedRecord.id);
+      setStandaloneOpponentLine(String(savedRecord.payload.opponentLine || "VS OPPONENT").trim() || "VS OPPONENT");
+      setPlayers(nextPlayers);
+      setSavedLineups(nextSavedLineups);
+      setDepthTemplate(nextDepthTemplate);
+      setGameState(nextGameState);
+      playersUpdatedAtRef.current = Date.now();
+      savedLineupsUpdatedAtRef.current = Date.now();
+      depthTemplateUpdatedAtRef.current = Date.now();
+      gameUpdatedAtRef.current = Date.now();
+      playersStateKeyRef.current = playersStateKey(nextPlayers);
+      savedLineupsStateKeyRef.current = savedLineupsStateKey(nextSavedLineups);
+      depthTemplateStateKeyRef.current = depthChartStateKey(nextDepthTemplate);
+      gameStateKeyRef.current = gameStateKey(nextGameState);
+      skipPlayersSaveRef.current = true;
+      skipSavedLineupsSaveRef.current = true;
+      skipDepthTemplateSaveRef.current = true;
+      skipGameSaveRef.current = true;
+      setPlayersHydrated(true);
+      setSavedLineupsHydrated(true);
+      setDepthTemplateHydrated(true);
+      setGameHydrated(true);
+      setVaultStatus(`Loaded ${savedRecord.title || "Rotations draft"}.`);
+    }
+
+    loadStandaloneRecord();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    accountsEnabled,
+    monitoredTeamScope,
+    periodMinuteCount,
+    rotationParam,
+    standalone,
+    user?.id,
+    vaultUserId,
+  ]);
+
+  useEffect(() => {
+    if (!effectiveGameId || typeof window === "undefined") return;
+    const raw = readLocalStorage(sectionStateStorageKey(effectiveGameId));
     const parsed = safeParseJson(raw, null);
     if (!parsed || typeof parsed !== "object") return;
     setCollapsed((current) => ({
@@ -1739,12 +1843,12 @@ export default function Rotations() {
       q3: Boolean(parsed.q3),
       q4: Boolean(parsed.q4),
     }));
-  }, [gameId]);
+  }, [effectiveGameId]);
 
   useEffect(() => {
-    if (!gameId || typeof window === "undefined") return;
-    writeLocalStorage(sectionStateStorageKey(gameId), JSON.stringify(collapsed));
-  }, [collapsed, gameId]);
+    if (!effectiveGameId || typeof window === "undefined") return;
+    writeLocalStorage(sectionStateStorageKey(effectiveGameId), JSON.stringify(collapsed));
+  }, [collapsed, effectiveGameId]);
 
   useEffect(() => {
     if (playersHydrated) return;
@@ -1878,17 +1982,17 @@ export default function Rotations() {
   }, [depthTemplateHydrated, remoteDepthTemplate, remoteDepthFetched, monitoredTeamScope]);
 
   useEffect(() => {
-    if (gameHydrated || !gameId) return;
-    if (supabase && !remoteGameFetched) return;
+    if (gameHydrated || !effectiveGameId) return;
+    if (!standalone && supabase && !remoteGameFetched) return;
     if (!depthTemplateHydrated) return;
 
     if (!monitoredTeamScope) return;
     const defaults = createDefaultGameState(monitoredTeamScope, periodMinuteCount);
     defaults.versions[0].depthChart = normalizeDepthChart(depthTemplate, monitoredTeamScope);
-    const localPayload = loadGamePayload(gameId);
+    const localPayload = loadGamePayload(effectiveGameId);
     const localUpdatedAt = Number(localPayload?.updatedAt || 0);
     const remoteUpdatedAt = Number(remoteGameState?.updatedAt || 0);
-    if (remoteGameState?.state && remoteUpdatedAt >= localUpdatedAt) {
+    if (!standalone && remoteGameState?.state && remoteUpdatedAt >= localUpdatedAt) {
       const incomingState = applyInheritedTemplate(normalizeGameState(remoteGameState.state, monitoredTeamScope, periodMinuteCount));
       setGameState(incomingState);
       gameUpdatedAtRef.current = remoteUpdatedAt;
@@ -1908,15 +2012,15 @@ export default function Rotations() {
     }
 
     setGameHydrated(true);
-  }, [gameHydrated, gameId, remoteGameState, remoteGameFetched, depthTemplateHydrated, depthTemplate, monitoredTeamScope]);
+  }, [gameHydrated, effectiveGameId, standalone, remoteGameState, remoteGameFetched, depthTemplateHydrated, depthTemplate, monitoredTeamScope]);
 
   useEffect(() => {
-    if (!gameHydrated || !gameId || !depthTemplateHydrated || !monitoredTeamScope) return;
+    if (!gameHydrated || !effectiveGameId || !depthTemplateHydrated || !monitoredTeamScope) return;
     setGameState((current) => {
       const next = applyInheritedTemplate(current);
       return next === current ? current : next;
     });
-  }, [gameHydrated, gameId, depthTemplateHydrated, depthTemplate, monitoredTeamScope]);
+  }, [gameHydrated, effectiveGameId, depthTemplateHydrated, depthTemplate, monitoredTeamScope]);
 
   useEffect(() => {
     if (!monitoredTeamScope) return;
@@ -1926,6 +2030,7 @@ export default function Rotations() {
       skipPlayersSaveRef.current = false;
       return;
     }
+    if (standalone) return;
 
     const timeoutId = window.setTimeout(() => {
       const updatedAt = Date.now();
@@ -1940,7 +2045,7 @@ export default function Rotations() {
     }, 250);
 
     return () => window.clearTimeout(timeoutId);
-  }, [players, playersHydrated, monitoredTeamScope]);
+  }, [players, playersHydrated, monitoredTeamScope, standalone]);
 
   useEffect(() => {
     playersStateKeyRef.current = playersStateKey(players);
@@ -1952,9 +2057,11 @@ export default function Rotations() {
 
     if (skipSavedLineupsSaveRef.current) {
       skipSavedLineupsSaveRef.current = false;
+      if (standalone) return;
       persistSavedLineups(monitoredTeamScope, savedLineups, savedLineupsUpdatedAtRef.current || Date.now());
       return;
     }
+    if (standalone) return;
 
     const updatedAt = Date.now();
     savedLineupsUpdatedAtRef.current = updatedAt;
@@ -1965,7 +2072,7 @@ export default function Rotations() {
         console.error("Failed to save rotations lineups", saveError);
         setSyncError(saveError?.message || "Unable to sync saved lineups.");
       });
-  }, [savedLineups, savedLineupsHydrated, monitoredTeamScope]);
+  }, [savedLineups, savedLineupsHydrated, monitoredTeamScope, standalone]);
 
   useEffect(() => {
     savedLineupsStateKeyRef.current = savedLineupsStateKey(savedLineups);
@@ -2007,6 +2114,7 @@ export default function Rotations() {
 
     if (skipDepthTemplateSaveRef.current) {
       skipDepthTemplateSaveRef.current = false;
+      if (standalone) return;
       persistDepthTemplate(
         monitoredTeamScope,
         depthTemplate,
@@ -2015,6 +2123,7 @@ export default function Rotations() {
       );
       return;
     }
+    if (standalone) return;
 
     const updatedAt = Date.now();
     depthTemplateUpdatedAtRef.current = updatedAt;
@@ -2025,7 +2134,7 @@ export default function Rotations() {
         console.error("Failed to save rotations depth template", saveError);
         setSyncError(saveError?.message || "Unable to sync depth chart template.");
       });
-  }, [depthTemplate, depthTemplateHydrated, monitoredTeamScope]);
+  }, [depthTemplate, depthTemplateHydrated, monitoredTeamScope, standalone]);
 
   useEffect(() => {
     depthTemplateStateKeyRef.current = depthChartStateKey(depthTemplate);
@@ -2033,25 +2142,26 @@ export default function Rotations() {
 
   useEffect(() => {
     if (!monitoredTeamScope) return;
-    if (!gameHydrated || !gameId) return;
+    if (!gameHydrated || !effectiveGameId) return;
 
     const state = gameState;
     if (skipGameSaveRef.current) {
       skipGameSaveRef.current = false;
-      persistGameState(gameId, state, gameUpdatedAtRef.current || Date.now());
+      persistGameState(effectiveGameId, state, gameUpdatedAtRef.current || Date.now());
       return;
     }
 
     const updatedAt = Date.now();
     gameUpdatedAtRef.current = updatedAt;
-    persistGameState(gameId, state, updatedAt);
-    saveRemoteGameState(gameId, state, updatedAt)
+    persistGameState(effectiveGameId, state, updatedAt);
+    if (standalone) return;
+    saveRemoteGameState(effectiveGameId, state, updatedAt)
       .then(() => setSyncError(""))
       .catch((saveError) => {
         console.error("Failed to save rotations game state", saveError);
         setSyncError(saveError?.message || "Unable to sync rotations state.");
       });
-  }, [gameState, gameHydrated, gameId, monitoredTeamScope]);
+  }, [gameState, gameHydrated, effectiveGameId, monitoredTeamScope, standalone]);
 
   useEffect(() => {
     gameStateKeyRef.current = gameStateKey(gameState);
@@ -2068,9 +2178,9 @@ export default function Rotations() {
   }, [depthTemplateHydrated, remoteDepthTemplate]);
 
   useEffect(() => {
-    if (!gameHydrated || !gameId || !remoteGameState?.state) return;
+    if (standalone || !gameHydrated || !effectiveGameId || !remoteGameState?.state) return;
     applyRemoteGameState(remoteGameState);
-  }, [gameHydrated, gameId, remoteGameState]);
+  }, [gameHydrated, effectiveGameId, remoteGameState, standalone]);
 
   const playerOptions = useMemo(() => {
     const unique = new Set();
@@ -2123,7 +2233,10 @@ export default function Rotations() {
   }, [lineups]);
 
   const allQuarterTotal = quarterTotals[1] + quarterTotals[2] + quarterTotals[3] + quarterTotals[4];
-  const opponentLine = useMemo(() => buildOpponentLine(game, monitoredTeam), [game, monitoredTeam]);
+  const opponentLine = useMemo(
+    () => (standalone ? standaloneOpponentLine : buildOpponentLine(game, monitoredTeam)),
+    [game, monitoredTeam, standalone, standaloneOpponentLine]
+  );
   const exportHeaderLine = useMemo(
     () => `${monitoredTeam?.label || "WASHINGTON"} ${opponentLine}`,
     [monitoredTeam, opponentLine]
@@ -2386,7 +2499,7 @@ export default function Rotations() {
         rIndex !== rowIndex ? row : row.map((cell, cIndex) => (cIndex === columnIndex ? normalizeDepthChartCell(value) : cell))
       ));
       if (activeVersionId === FINAL_VERSION_ID) {
-        depthTemplateSourceGameIdRef.current = String(gameId || "");
+        depthTemplateSourceGameIdRef.current = String(effectiveGameId || "");
         setDepthTemplate(next);
       }
       return {
@@ -2401,7 +2514,7 @@ export default function Rotations() {
     const emptyDepthChart = [0, 1, 2].map(() => POSITION_COLUMNS.map(() => ""));
     updateActiveVersion((currentVersion) => {
       if (activeVersionId === FINAL_VERSION_ID) {
-        depthTemplateSourceGameIdRef.current = String(gameId || "");
+        depthTemplateSourceGameIdRef.current = String(effectiveGameId || "");
         setDepthTemplate(emptyDepthChart);
       }
       return {
@@ -2415,13 +2528,17 @@ export default function Rotations() {
   const backUpDepthChartNow = () => {
     if (!monitoredTeamScope) return;
     const nextDepthChart = normalizeDepthChart(depthChart, monitoredTeamScope);
-    const sourceGameId = String(gameId || "");
+    const sourceGameId = String(effectiveGameId || "");
     const updatedAt = Date.now();
     depthTemplateSourceGameIdRef.current = sourceGameId;
     depthTemplateUpdatedAtRef.current = updatedAt;
     depthTemplateStateKeyRef.current = depthChartStateKey(nextDepthChart);
     skipDepthTemplateSaveRef.current = true;
     persistDepthTemplate(monitoredTeamScope, nextDepthChart, updatedAt, sourceGameId);
+    if (standalone) {
+      setDepthTemplate(nextDepthChart);
+      return;
+    }
     saveRemoteDepthTemplate(monitoredTeamScope, nextDepthChart, updatedAt, sourceGameId)
       .then(() => setSyncError(""))
       .catch((saveError) => {
@@ -2682,6 +2799,50 @@ export default function Rotations() {
     window.setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
   };
 
+  const handleSaveToVault = async () => {
+    if (!standalone || !vaultUserId || vaultSaving) return;
+    setVaultSaving(true);
+    setVaultStatus("Saving to My Vault...");
+    const id = standaloneRecordId || crypto.randomUUID();
+    const title = `${exportHeaderLine || "Rotations"} Rotations`;
+    const record = {
+      id,
+      type: TOOL_RECORD_TYPES.ROTATIONS_TOOL,
+      title,
+      payload: {
+        opponentLine,
+        teamScope: monitoredTeamScope || "washington",
+        periodMinutes: periodMinuteCount,
+        players,
+        savedLineups,
+        depthTemplate,
+        gameState,
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      revision: 0,
+    };
+
+    try {
+      const savedRecord = accountsEnabled && user?.id
+        ? await saveToolRecordRemote(user.id, record)
+        : saveToolRecord(vaultUserId, record);
+      if (!savedRecord) throw new Error("Rotations draft was not saved.");
+      setStandaloneRecordId(savedRecord.id);
+      await queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] });
+      const nextParams = new URLSearchParams(params);
+      nextParams.set("tab", "rotations");
+      nextParams.set("rotation", savedRecord.id);
+      setParams(nextParams, { replace: true });
+      setVaultStatus(`Saved to My Vault as ${savedRecord.title}.`);
+    } catch (saveError) {
+      console.error("Failed to save rotations draft.", saveError);
+      setVaultStatus(saveError?.message || "Unable to save this Rotations draft.");
+    } finally {
+      setVaultSaving(false);
+    }
+  };
+
   const toggleSection = (key) => {
     setCollapsed((current) => ({ ...current, [key]: !current[key] }));
   };
@@ -2820,7 +2981,7 @@ export default function Rotations() {
     gameUpdatedAtRef.current = remoteUpdatedAt;
     gameStateKeyRef.current = incomingKey;
     skipGameSaveRef.current = true;
-    persistGameState(gameId, incomingState, remoteUpdatedAt);
+    persistGameState(effectiveGameId, incomingState, remoteUpdatedAt);
   };
 
   useEffect(() => {
@@ -2871,7 +3032,7 @@ export default function Rotations() {
   }, []);
 
   useEffect(() => {
-    if (!supabase || !gameId || !monitoredTeamScope) return undefined;
+    if (standalone || !supabase || !gameId || !monitoredTeamScope) return undefined;
     const channel = supabase
       .channel(`rotations-${monitoredTeamScope}-${gameId}`)
       .on(
@@ -2934,7 +3095,7 @@ export default function Rotations() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [gameId, monitoredTeamScope]);
+  }, [gameId, monitoredTeamScope, standalone]);
 
   const getRowValues = (quarter, minuteIndex) => (lineups[quarter]?.[minuteIndex] || []);
 
@@ -2950,11 +3111,11 @@ export default function Rotations() {
     return null;
   };
 
-  if (isLoading) {
+  if (!standalone && isLoading) {
     return <div className={styles.stateMessage}>Loading rotations...</div>;
   }
 
-  if (error || !game) {
+  if (!standalone && (error || !game)) {
     return <div className={styles.stateMessage}>Unable to load rotations.</div>;
   }
 
@@ -2975,6 +3136,21 @@ export default function Rotations() {
         <Link className={styles.backButton} to={backUrl}>Back</Link>
         <div className={styles.controlsColumn}>
           <div className={styles.topRowActions}>
+            {standalone ? (
+              <>
+                <Link className={styles.secondaryButton} to="/me?tab=rotations">
+                  My Vault
+                </Link>
+                <button
+                  type="button"
+                  className={styles.secondaryButton}
+                  onClick={handleSaveToVault}
+                  disabled={vaultSaving}
+                >
+                  {vaultSaving ? "Saving..." : "Save"}
+                </button>
+              </>
+            ) : null}
             <button
               type="button"
               className={styles.secondaryButton}
@@ -3065,6 +3241,10 @@ export default function Rotations() {
         <div className={styles.stateMessage} style={{ marginBottom: 12 }}>
           Sync issue: {syncError}
         </div>
+      ) : null}
+
+      {standalone && vaultStatus ? (
+        <div className={styles.vaultStatus}>{vaultStatus}</div>
       ) : null}
 
       {resetModalOpen && (
@@ -3285,7 +3465,19 @@ export default function Rotations() {
       )}
 
       <header className={styles.header}>
-        <h1 className={styles.title}>{opponentLine}</h1>
+        {standalone ? (
+          <input
+            className={styles.titleInput}
+            value={standaloneOpponentLine}
+            onChange={(event) => {
+              setStandaloneOpponentLine(event.target.value);
+              setVaultStatus("");
+            }}
+            aria-label="Opponent line"
+          />
+        ) : (
+          <h1 className={styles.title}>{opponentLine}</h1>
+        )}
       </header>
 
       <section className={styles.sheetSection}>
@@ -3471,13 +3663,15 @@ export default function Rotations() {
           <button type="button" className={styles.sectionHeaderButton} onClick={() => toggleSection("depth")}>
             Depth Chart
           </button>
-          <button
-            type="button"
-            className={styles.sectionHeaderAction}
-            onClick={backUpDepthChartNow}
-          >
-            Sync
-          </button>
+          {!standalone ? (
+            <button
+              type="button"
+              className={styles.sectionHeaderAction}
+              onClick={backUpDepthChartNow}
+            >
+              Sync
+            </button>
+          ) : null}
           <button
             type="button"
             className={styles.sectionHeaderAction}

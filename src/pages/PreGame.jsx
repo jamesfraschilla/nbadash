@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { useGame } from "../queries.js";
+import { useAuth } from "../auth/useAuth.js";
 import {
   fetchRemotePregamePlayers,
   getTeamBoxScorePlayers,
@@ -20,12 +21,27 @@ import { supabase } from "../supabaseClient.js";
 import { readLocalStorage, writeLocalStorage } from "../storage.js";
 import wizardsLogoUrl from "../assets/WWizards_Primary_Icon.png";
 import dinFontUrl from "../assets/fonts/DIN.ttf";
+import {
+  getSavedToolRecord,
+  getSavedToolRecordRemote,
+  saveToolRecord,
+  saveToolRecordRemote,
+  TOOL_RECORD_TYPES,
+} from "../toolVault.js";
 import styles from "./PreGame.module.css";
 
 const SLOT_STORAGE_PREFIX = "pregame:slots:v1:";
 const SLOT_TEMPLATE_KEY = "pregame:slot-template:v1";
 const PREGAME_GLOBAL_TEMPLATE_GAME_ID = "9999999902";
 const PREGAME_ACTION_PAYLOAD = 900000001;
+const STANDALONE_PREGAME_GAME_ID = "standalone-pregame-court-time";
+const STANDALONE_PREGAME_GAME = {
+  gameId: STANDALONE_PREGAME_GAME_ID,
+  gameTimeUTC: new Date().toISOString(),
+  gameEt: new Date().toISOString(),
+  homeTeam: { teamId: "1610612764", teamTricode: "WAS", teamCity: "Washington", teamName: "Wizards" },
+  awayTeam: { teamId: "0", teamTricode: "OPP", teamCity: "Opponent", teamName: "" },
+};
 const TEAM_TIME_ZONES = {
   ATL: "America/New_York",
   BKN: "America/New_York",
@@ -603,15 +619,22 @@ function buildHeaderLine(game) {
   return trackedIsAway ? `@ ${opponentLabel}` : `vs ${opponentLabel}`;
 }
 
-export default function PreGame() {
+export default function PreGame({ standalone = false }) {
+  const { accountsEnabled, user } = useAuth();
+  const queryClient = useQueryClient();
   const { gameId } = useParams();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const dateParam = params.get("d");
-  const backUrl = dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`;
+  const courtTimeParam = String(params.get("courtTime") || "").trim();
+  const effectiveGameId = standalone ? `${STANDALONE_PREGAME_GAME_ID}:${courtTimeParam || "draft"}` : gameId;
+  const vaultUserId = user?.id || (!accountsEnabled ? "guest" : "");
+  const backUrl = standalone ? "/graphics?graphic=court-time" : (dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`);
 
-  const { data: game, isLoading, error } = useGame(gameId, {
+  const { data: fetchedGame, isLoading, error } = useGame(gameId, {
     dateStr: dateParam,
+    enabled: !standalone && Boolean(gameId),
   });
+  const game = standalone ? STANDALONE_PREGAME_GAME : fetchedGame;
 
   const [players, setPlayers] = useState([]);
   const [slots, setSlots] = useState([]);
@@ -627,11 +650,15 @@ export default function PreGame() {
   const [playersHydrated, setPlayersHydrated] = useState(false);
   const [slotsHydrated, setSlotsHydrated] = useState(false);
   const [syncError, setSyncError] = useState("");
+  const [standaloneOpponentLine, setStandaloneOpponentLine] = useState("vs OPPONENT");
+  const [standaloneRecordId, setStandaloneRecordId] = useState("");
+  const [vaultStatus, setVaultStatus] = useState("");
+  const [vaultSaving, setVaultSaving] = useState(false);
   const playersUpdatedAtRef = useRef(0);
   const slotsUpdatedAtRef = useRef(0);
   const templateUpdatedAtRef = useRef(0);
 
-  const trackedTeamScope = useMemo(() => getPregameTeamScope(game), [game]);
+  const trackedTeamScope = useMemo(() => (standalone ? "washington" : getPregameTeamScope(game)), [game, standalone]);
 
   const { data: remotePlayers, isFetched: remotePlayersFetched } = useQuery({
     queryKey: ["pregame-players-remote", trackedTeamScope],
@@ -644,7 +671,7 @@ export default function PreGame() {
   const { data: remoteSchedule, isFetched: remoteScheduleFetched } = useQuery({
     queryKey: ["pregame-schedule-remote", gameId],
     queryFn: () => fetchRemoteSchedule(gameId),
-    enabled: Boolean(supabase && gameId),
+    enabled: Boolean(!standalone && supabase && gameId),
     staleTime: 10_000,
     refetchInterval: 10_000,
   });
@@ -652,7 +679,7 @@ export default function PreGame() {
   const { data: remoteTemplate, isFetched: remoteTemplateFetched } = useQuery({
     queryKey: ["pregame-template-remote"],
     queryFn: fetchRemoteTemplate,
-    enabled: Boolean(supabase),
+    enabled: Boolean(!standalone && supabase),
     staleTime: 10_000,
     refetchInterval: 10_000,
   });
@@ -660,7 +687,7 @@ export default function PreGame() {
   const washingtonGame = useMemo(() => (
     isWashingtonTeam(game?.homeTeam) || isWashingtonTeam(game?.awayTeam)
   ), [game]);
-  const supportedTeamGame = Boolean(trackedTeamScope);
+  const supportedTeamGame = standalone || Boolean(trackedTeamScope);
   const trackedApiPlayers = useMemo(
     () => getTeamBoxScorePlayers(game, trackedTeamScope),
     [game, trackedTeamScope]
@@ -669,7 +696,54 @@ export default function PreGame() {
   useEffect(() => {
     setPlayersHydrated(false);
     setSlotsHydrated(false);
-  }, [gameId, trackedTeamScope]);
+  }, [effectiveGameId, trackedTeamScope]);
+
+  useEffect(() => {
+    if (!standalone) return undefined;
+    let cancelled = false;
+
+    async function loadStandaloneRecord() {
+      if (!courtTimeParam || !vaultUserId) {
+        setStandaloneRecordId("");
+        setVaultStatus("");
+        return;
+      }
+
+      let savedRecord = null;
+      try {
+        savedRecord = accountsEnabled && user?.id
+          ? await getSavedToolRecordRemote(user.id, courtTimeParam)
+          : getSavedToolRecord(vaultUserId, courtTimeParam);
+      } catch (loadError) {
+        console.error("Failed to load court time graphic from My Vault.", loadError);
+        savedRecord = getSavedToolRecord(vaultUserId, courtTimeParam);
+      }
+
+      if (cancelled) return;
+      if (!savedRecord?.payload || savedRecord.type !== TOOL_RECORD_TYPES.PREGAME_COURT_TIME_GRAPHIC) {
+        setStandaloneRecordId("");
+        setVaultStatus("Unable to load that Court Time graphic.");
+        return;
+      }
+
+      setStandaloneRecordId(savedRecord.id);
+      setStandaloneOpponentLine(String(savedRecord.payload.opponentLine || "vs OPPONENT").trim() || "vs OPPONENT");
+      if (Array.isArray(savedRecord.payload.players)) {
+        setPlayers(savedRecord.payload.players);
+        setPlayersHydrated(true);
+      }
+      if (Array.isArray(savedRecord.payload.slots)) {
+        setSlots(normalizeSlots(savedRecord.payload.slots));
+        setSlotsHydrated(true);
+      }
+      setVaultStatus(`Loaded ${savedRecord.title || "Court Time graphic"}.`);
+    }
+
+    loadStandaloneRecord();
+    return () => {
+      cancelled = true;
+    };
+  }, [accountsEnabled, courtTimeParam, standalone, user?.id, vaultUserId]);
 
   useEffect(() => {
     if (playersHydrated) return;
@@ -690,10 +764,10 @@ export default function PreGame() {
 
   useEffect(() => {
     if (slotsHydrated) return;
-    if (!gameId || !game) return;
-    if (supabase && (!remoteScheduleFetched || !remoteTemplateFetched)) return;
+    if (!effectiveGameId || !game) return;
+    if (!standalone && supabase && (!remoteScheduleFetched || !remoteTemplateFetched)) return;
 
-    const localSchedulePayload = loadSlotsPayload(gameId);
+    const localSchedulePayload = loadSlotsPayload(effectiveGameId);
     const localScheduleUpdatedAt = Number(localSchedulePayload?.updatedAt || 0);
     const remoteScheduleUpdatedAt = Number(remoteSchedule?.updatedAt || 0);
     const localTemplatePayload = loadTemplatePayload();
@@ -753,8 +827,9 @@ export default function PreGame() {
     }
     setSlotsHydrated(true);
   }, [
-    gameId,
+    effectiveGameId,
     game,
+    standalone,
     remoteSchedule,
     remoteTemplate,
     slotsHydrated,
@@ -764,6 +839,7 @@ export default function PreGame() {
 
   useEffect(() => {
     if (!playersHydrated || !trackedTeamScope) return;
+    if (standalone) return;
     const updatedAt = Date.now();
     playersUpdatedAtRef.current = updatedAt;
     persistPregamePlayers(trackedTeamScope, players, updatedAt);
@@ -773,17 +849,18 @@ export default function PreGame() {
         console.error("Failed to save pregame players", saveError);
         setSyncError(saveError?.message || "Unable to sync player changes.");
       });
-  }, [players, playersHydrated, trackedTeamScope]);
+  }, [players, playersHydrated, trackedTeamScope, standalone]);
 
   useEffect(() => {
-    if (!slotsHydrated || !gameId || !slots.length) return;
+    if (!slotsHydrated || !effectiveGameId || !slots.length) return;
     const updatedAt = Date.now();
     slotsUpdatedAtRef.current = updatedAt;
     templateUpdatedAtRef.current = updatedAt;
-    persistSlots(gameId, slots, updatedAt);
-    persistSlotTemplate(slots, updatedAt);
+    persistSlots(effectiveGameId, slots, updatedAt);
+    if (!standalone) persistSlotTemplate(slots, updatedAt);
+    if (standalone) return;
     Promise.all([
-      saveRemoteSchedule(gameId, slots, updatedAt),
+      saveRemoteSchedule(effectiveGameId, slots, updatedAt),
       saveRemoteTemplate(slots, updatedAt),
     ])
       .then(() => setSyncError(""))
@@ -795,7 +872,7 @@ export default function PreGame() {
         console.error("Failed to save pregame schedule/template", saveError);
         setSyncError(saveError?.message || "Unable to sync pre-game schedule changes.");
       });
-  }, [gameId, slots, slotsHydrated]);
+  }, [effectiveGameId, slots, slotsHydrated, standalone]);
 
   useEffect(() => {
     if (!playersHydrated || !trackedTeamScope) return;
@@ -812,17 +889,20 @@ export default function PreGame() {
   }, [playersHydrated, trackedTeamScope, trackedApiPlayers]);
 
   useEffect(() => {
-    if (!slotsHydrated || !gameId || !remoteSchedule?.slots?.length) return;
+    if (standalone || !slotsHydrated || !effectiveGameId || !remoteSchedule?.slots?.length) return;
     const remoteUpdatedAt = Number(remoteSchedule?.updatedAt || 0);
     if (!remoteUpdatedAt || remoteUpdatedAt <= slotsUpdatedAtRef.current) return;
     setSlots(remoteSchedule.slots);
     slotsUpdatedAtRef.current = remoteUpdatedAt;
-    persistSlots(gameId, remoteSchedule.slots, remoteUpdatedAt);
-  }, [slotsHydrated, gameId, remoteSchedule]);
+    persistSlots(effectiveGameId, remoteSchedule.slots, remoteUpdatedAt);
+  }, [slotsHydrated, effectiveGameId, remoteSchedule, standalone]);
 
   const sortedPlayers = useMemo(() => sortPlayersByLastName(players), [players]);
   const playerById = useMemo(() => new Map(sortedPlayers.map((player) => [player.id, player])), [sortedPlayers]);
-  const headerLineTwo = useMemo(() => buildHeaderLine(game), [game]);
+  const headerLineTwo = useMemo(
+    () => (standalone ? standaloneOpponentLine : buildHeaderLine(game)),
+    [game, standalone, standaloneOpponentLine]
+  );
   const tableTypeScale = useMemo(() => {
     const slotCount = Math.max(1, slots.length || 1);
     if (slotCount >= 12) return { time: "26px", player: "21px", lineGap: "3px" };
@@ -907,7 +987,7 @@ export default function PreGame() {
     const portraitCanvas = drawPortraitExport(slots, playerById, headerLineTwo, logoImage, themeMode, portraitScale);
 
     if (formatKey === "portrait") {
-      downloadCanvas(portraitCanvas, `pregame-${gameId}-portrait.png`);
+      downloadCanvas(portraitCanvas, `pregame-${effectiveGameId || "court-time"}-portrait.png`);
       setExportOpen(false);
       return;
     }
@@ -921,7 +1001,7 @@ export default function PreGame() {
         themeMode,
         landscapeScale
       );
-      downloadCanvas(landscapeCanvas, `pregame-${gameId}-landscape.png`);
+      downloadCanvas(landscapeCanvas, `pregame-${effectiveGameId || "court-time"}-landscape.png`);
       setExportOpen(false);
       return;
     }
@@ -935,8 +1015,48 @@ export default function PreGame() {
     const drawX = wasSpec.boxX + ((wasSpec.boxWidth - fitted.width) / 2);
     const drawY = wasSpec.boxY + ((wasSpec.boxHeight - fitted.height) / 2);
     context.drawImage(portraitCanvas, drawX, drawY, fitted.width, fitted.height);
-    downloadCanvas(canvas, `pregame-${gameId}-was.png`);
+    downloadCanvas(canvas, `pregame-${effectiveGameId || "court-time"}-was.png`);
     setExportOpen(false);
+  };
+
+  const handleSaveToVault = async () => {
+    if (!standalone || !vaultUserId || vaultSaving) return;
+    setVaultSaving(true);
+    setVaultStatus("Saving to My Vault...");
+    const id = standaloneRecordId || crypto.randomUUID();
+    const title = `${headerLineTwo || "Court Time"} Court Time`;
+    const record = {
+      id,
+      type: TOOL_RECORD_TYPES.PREGAME_COURT_TIME_GRAPHIC,
+      title,
+      payload: {
+        opponentLine: headerLineTwo,
+        players,
+        slots,
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      revision: 0,
+    };
+
+    try {
+      const savedRecord = accountsEnabled && user?.id
+        ? await saveToolRecordRemote(user.id, record)
+        : saveToolRecord(vaultUserId, record);
+      if (!savedRecord) throw new Error("Court Time graphic was not saved.");
+      setStandaloneRecordId(savedRecord.id);
+      await queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] });
+      const nextParams = new URLSearchParams(params);
+      nextParams.set("graphic", "court-time");
+      nextParams.set("courtTime", savedRecord.id);
+      setParams(nextParams, { replace: true });
+      setVaultStatus(`Saved to My Vault as ${savedRecord.title}.`);
+    } catch (saveError) {
+      console.error("Failed to save court time graphic.", saveError);
+      setVaultStatus(saveError?.message || "Unable to save this Court Time graphic.");
+    } finally {
+      setVaultSaving(false);
+    }
   };
 
   if (isLoading) {
@@ -972,7 +1092,19 @@ export default function PreGame() {
 
       <header className={styles.header}>
         <h1 className={styles.title}>PRE-GAME COURT TIME</h1>
-        <div className={styles.subtitle}>{headerLineTwo}</div>
+        {standalone ? (
+          <input
+            className={styles.subtitleInput}
+            value={standaloneOpponentLine}
+            onChange={(event) => {
+              setStandaloneOpponentLine(event.target.value);
+              setVaultStatus("");
+            }}
+            aria-label="Opponent line"
+          />
+        ) : (
+          <div className={styles.subtitle}>{headerLineTwo}</div>
+        )}
       </header>
 
       <section
@@ -1143,11 +1275,23 @@ export default function PreGame() {
 
       <div className={styles.bottomRow}>
         <div className={styles.actions}>
+          {standalone ? (
+            <>
+              <Link className={styles.actionButton} to="/me?tab=graphics&graphic=court-time">My Vault</Link>
+              <button type="button" className={styles.actionButton} onClick={handleSaveToVault} disabled={vaultSaving}>
+                {vaultSaving ? "Saving..." : "Save"}
+              </button>
+            </>
+          ) : null}
           <button type="button" className={styles.actionButton} onClick={openSlotsEditor}>Edit Slots</button>
           <button type="button" className={styles.actionButton} onClick={openPlayersEditor}>Edit Players</button>
           <button type="button" className={styles.actionButton} onClick={() => setExportOpen(true)}>Export</button>
         </div>
       </div>
+
+      {standalone && vaultStatus ? (
+        <div className={styles.vaultStatus}>{vaultStatus}</div>
+      ) : null}
 
       {playersOpen && (
         <div className={styles.modalOverlay}>

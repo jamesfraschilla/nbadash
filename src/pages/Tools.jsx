@@ -46,6 +46,8 @@ import {
 import { exportMatchupGraphic } from "./matchupGraphicExport.js";
 import DepthChartGraphicAdmin from "./DepthChartGraphicAdmin.jsx";
 import PersonnelGraphicAdmin from "./PersonnelGraphicAdmin.jsx";
+import PreGame from "./PreGame.jsx";
+import Rotations from "./Rotations.jsx";
 import VisualDrillGenerator from "./VisualDrillGenerator.jsx";
 import { requestCustomDashboardRequest } from "../customRequestsData.js";
 import {
@@ -68,8 +70,10 @@ const CAPITAL_CITY_TEAM_ID = "1612709928";
 const TOOL_TABS = {
   GRAPHICS: "graphics",
   MATCHUP: "matchup",
+  COURT_TIME: "court-time",
   PERSONNEL: "personnel",
   DEPTH_CHART: "depth-chart",
+  ROTATIONS: "rotations",
   SCOUTING: "scouting",
   LATE_GAME: "late-game",
   CUSTOM_REQUESTS: "custom-requests",
@@ -569,13 +573,15 @@ export default function Tools({ section = "tools" }) {
       ? TOOL_TABS.SCOUTING
     : rawTab === TOOL_TABS.CUSTOM_REQUESTS
       ? TOOL_TABS.CUSTOM_REQUESTS
+    : rawTab === TOOL_TABS.ROTATIONS
+      ? TOOL_TABS.ROTATIONS
     : rawTab === TOOL_TABS.VISUAL_DRILL
       ? TOOL_TABS.VISUAL_DRILL
       : TOOL_TABS.VISUAL_DRILL;
-  const legacyGraphicTab = [TOOL_TABS.MATCHUP, TOOL_TABS.PERSONNEL, TOOL_TABS.DEPTH_CHART].includes(rawTab)
+  const legacyGraphicTab = [TOOL_TABS.MATCHUP, TOOL_TABS.COURT_TIME, TOOL_TABS.PERSONNEL, TOOL_TABS.DEPTH_CHART].includes(rawTab)
     ? rawTab
     : "";
-  const activeGraphic = [TOOL_TABS.MATCHUP, TOOL_TABS.PERSONNEL, TOOL_TABS.DEPTH_CHART].includes(rawGraphic)
+  const activeGraphic = [TOOL_TABS.MATCHUP, TOOL_TABS.COURT_TIME, TOOL_TABS.PERSONNEL, TOOL_TABS.DEPTH_CHART].includes(rawGraphic)
     ? rawGraphic
     : legacyGraphicTab || TOOL_TABS.MATCHUP;
   const draftLeague = draft.league === "gleague" ? "gleague" : "nba";
@@ -1102,6 +1108,8 @@ export default function Tools({ section = "tools" }) {
         ? TOOL_TABS.SCOUTING
       : nextTab === TOOL_TABS.CUSTOM_REQUESTS
         ? TOOL_TABS.CUSTOM_REQUESTS
+      : nextTab === TOOL_TABS.ROTATIONS
+        ? TOOL_TABS.ROTATIONS
       : nextTab === TOOL_TABS.VISUAL_DRILL
         ? TOOL_TABS.VISUAL_DRILL
         : TOOL_TABS.VISUAL_DRILL;
@@ -1551,6 +1559,13 @@ export default function Tools({ section = "tools" }) {
         >
           Visual Drill
         </button>
+        <button
+          type="button"
+          className={`${styles.tabButton} ${activeTab === TOOL_TABS.ROTATIONS ? styles.tabButtonActive : ""}`}
+          onClick={() => handleToolTabChange(TOOL_TABS.ROTATIONS)}
+        >
+          Rotations
+        </button>
         {canUseAdminTools ? (
         <button
           type="button"
@@ -1587,6 +1602,13 @@ export default function Tools({ section = "tools" }) {
             onClick={() => handleGraphicTabChange(TOOL_TABS.MATCHUP)}
           >
             Match-Up
+          </button>
+          <button
+            type="button"
+            className={`${styles.graphicTabButton} ${activeGraphic === TOOL_TABS.COURT_TIME ? styles.graphicTabButtonActive : ""}`}
+            onClick={() => handleGraphicTabChange(TOOL_TABS.COURT_TIME)}
+          >
+            Court Time
           </button>
           <button
             type="button"
@@ -1738,6 +1760,10 @@ export default function Tools({ section = "tools" }) {
             </div>
           ) : null}
         </section>
+      ) : activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.COURT_TIME ? (
+        <section className={styles.workspace}>
+          <PreGame standalone />
+        </section>
       ) : activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.PERSONNEL ? (
         <section className={styles.workspace}>
           <PersonnelGraphicAdmin
@@ -1759,6 +1785,10 @@ export default function Tools({ section = "tools" }) {
       ) : activeTab === TOOL_TABS.VISUAL_DRILL ? (
         <section className={styles.workspace}>
           <VisualDrillGenerator />
+        </section>
+      ) : activeTab === TOOL_TABS.ROTATIONS ? (
+        <section className={styles.workspace}>
+          <Rotations standalone />
         </section>
       ) : activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.DEPTH_CHART ? (
         <section className={styles.workspace}>
