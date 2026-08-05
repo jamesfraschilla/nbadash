@@ -374,6 +374,28 @@
   color: var(--muted);
 }
 
+.matchupPreviewPanel {
+  display: grid;
+  gap: 10px;
+  width: min(100%, 960px);
+  justify-self: center;
+}
+
+.matchupPreviewCanvas {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: #000;
+  box-shadow: var(--shadow-panel);
+}
+
+.previewStatus {
+  color: var(--muted);
+  font-size: 0.88rem;
+  text-align: center;
+}
+
 .inlineStatusLink {
   color: var(--highlight-text);
   font-weight: 800;

@@ -310,6 +310,26 @@
   line-height: 1.4;
 }
 
+.savedGraphicPreview {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.savedGraphicPreviewCanvas {
+  width: min(100%, 560px);
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #000;
+  box-shadow: var(--shadow-panel);
+}
+
+.previewStatus {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
 .tagRow {
   display: flex;
   flex-wrap: wrap;

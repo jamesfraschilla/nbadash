@@ -109,7 +109,12 @@ export default function Header({ theme, onToggleTheme, onSignOut, profile, isAdm
                   My Vault
                 </Link>
                 {canUseTools ? (
-                  <Link to="/tools" className={styles.dropdownItem} role="menuitem" onClick={() => setIsMenuOpen(false)}>
+                  <Link to="/graphics" className={styles.dropdownItem} role="menuitem" onClick={() => setIsMenuOpen(false)}>
+                    Graphics
+                  </Link>
+                ) : null}
+                {canUseTools ? (
+                  <Link to="/tools?tab=visual-drill" className={styles.dropdownItem} role="menuitem" onClick={() => setIsMenuOpen(false)}>
                     Tools
                   </Link>
                 ) : null}

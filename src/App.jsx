@@ -272,6 +272,7 @@ export default function App() {
             <Route path="/me" element={<UserContent />} />
             <Route path="/admin" element={<Admin />} />
             <Route path="/tools" element={<Tools />} />
+            <Route path="/graphics" element={<Tools section="graphics" />} />
             <Route path="/g/:gameId" element={<Game />} />
             <Route path="/g/:gameId/atc" element={<Game variant="atc" />} />
             <Route path="/g/:gameId/events" element={<PlayByPlay />} />

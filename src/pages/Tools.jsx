@@ -8,6 +8,7 @@ import {
   teamLogoUrl,
 } from "../api.js";
 import { useAuth } from "../auth/useAuth.js";
+import MatchupGraphicPreview from "../components/MatchupGraphicPreview.jsx";
 import {
   deleteGraphicHeadshot,
   getGraphicHeadshotPublicUrl,
@@ -520,8 +521,8 @@ function ToolColumn({
   );
 }
 
-export default function Tools() {
-  const { accountsEnabled, user, profile, hasFeature } = useAuth();
+export default function Tools({ section = "tools" }) {
+  const { accountsEnabled, user, profile, hasFeature, isAdmin } = useAuth();
   const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
   const defaultDraft = useMemo(() => buildDefaultDraftForProfile(profile), [profile]);
@@ -550,21 +551,27 @@ export default function Tools() {
   const [customTableSort, setCustomTableSort] = useState({ table: "", column: "", direction: "asc" });
 
   const canUseTools = !accountsEnabled || hasFeature("tools");
+  const canUseAdminTools = !accountsEnabled || isAdmin;
+  const isGraphicsRoute = section === "graphics";
   const vaultUserId = user?.id || (!accountsEnabled ? "guest" : "");
   const draftParam = String(params.get("draft") || "").trim();
   const packetParam = String(params.get("packet") || "").trim();
   const dateInput = String(params.get("d") || "").trim() || formatDateInputInTimeZone(new Date(), "America/New_York");
   const rawTab = String(params.get("tab") || "").trim();
   const rawGraphic = String(params.get("graphic") || "").trim();
-  const activeTab = rawTab === TOOL_TABS.LATE_GAME
+  const activeTab = isGraphicsRoute
+    ? TOOL_TABS.GRAPHICS
+    : rawTab === TOOL_TABS.GRAPHICS
+      ? TOOL_TABS.GRAPHICS
+    : rawTab === TOOL_TABS.LATE_GAME && canUseAdminTools
     ? TOOL_TABS.LATE_GAME
+    : rawTab === TOOL_TABS.SCOUTING && canUseAdminTools
+      ? TOOL_TABS.SCOUTING
     : rawTab === TOOL_TABS.CUSTOM_REQUESTS
       ? TOOL_TABS.CUSTOM_REQUESTS
     : rawTab === TOOL_TABS.VISUAL_DRILL
       ? TOOL_TABS.VISUAL_DRILL
-    : rawTab === TOOL_TABS.SCOUTING
-      ? TOOL_TABS.SCOUTING
-      : TOOL_TABS.GRAPHICS;
+      : TOOL_TABS.VISUAL_DRILL;
   const legacyGraphicTab = [TOOL_TABS.MATCHUP, TOOL_TABS.PERSONNEL, TOOL_TABS.DEPTH_CHART].includes(rawTab)
     ? rawTab
     : "";
@@ -919,7 +926,7 @@ export default function Tools() {
     let cancelled = false;
 
     async function loadPacket() {
-      if (!packetParam || !vaultUserId) {
+      if (!canUseAdminTools || !packetParam || !vaultUserId) {
         if (cancelled) return;
         setScoutingRecordId("");
         setScoutingDraft(defaultScoutingDraft);
@@ -962,12 +969,12 @@ export default function Tools() {
     return () => {
       cancelled = true;
     };
-  }, [accountsEnabled, defaultScoutingDraft, packetParam, user?.id, vaultUserId]);
+  }, [accountsEnabled, canUseAdminTools, defaultScoutingDraft, packetParam, user?.id, vaultUserId]);
 
   useEffect(() => {
-    if (packetParam) return;
+    if (!canUseAdminTools || packetParam) return;
     setScoutingDraft((current) => (current?.teamId || scoutingResult ? current : defaultScoutingDraft));
-  }, [defaultScoutingDraft, packetParam, scoutingResult]);
+  }, [canUseAdminTools, defaultScoutingDraft, packetParam, scoutingResult]);
 
   useEffect(() => {
     setCustomTableSort({ table: "", column: "", direction: "asc" });
@@ -1087,15 +1094,17 @@ export default function Tools() {
   };
 
   const handleToolTabChange = (nextTab) => {
-    const normalized = nextTab === TOOL_TABS.LATE_GAME
+    const normalized = nextTab === TOOL_TABS.GRAPHICS
+      ? TOOL_TABS.GRAPHICS
+    : nextTab === TOOL_TABS.LATE_GAME && canUseAdminTools
       ? TOOL_TABS.LATE_GAME
+      : nextTab === TOOL_TABS.SCOUTING && canUseAdminTools
+        ? TOOL_TABS.SCOUTING
       : nextTab === TOOL_TABS.CUSTOM_REQUESTS
         ? TOOL_TABS.CUSTOM_REQUESTS
       : nextTab === TOOL_TABS.VISUAL_DRILL
         ? TOOL_TABS.VISUAL_DRILL
-      : nextTab === TOOL_TABS.SCOUTING
-        ? TOOL_TABS.SCOUTING
-        : TOOL_TABS.GRAPHICS;
+        : TOOL_TABS.VISUAL_DRILL;
     const nextParams = new URLSearchParams(params);
     nextParams.set("tab", normalized);
     if (normalized === TOOL_TABS.GRAPHICS && !nextParams.get("graphic")) {
@@ -1520,9 +1529,10 @@ export default function Tools() {
   return (
     <div className={styles.page}>
       <section className={styles.hero}>
-        <h1 className={styles.title}>Coaching Tools</h1>
+        <h1 className={styles.title}>{activeTab === TOOL_TABS.GRAPHICS ? "Graphics" : "Coaching Tools"}</h1>
       </section>
 
+      {activeTab === TOOL_TABS.GRAPHICS ? null : (
       <div className={styles.tabBar}>
         <button
           type="button"
@@ -1531,13 +1541,7 @@ export default function Tools() {
         >
           Visual Drill
         </button>
-        <button
-          type="button"
-          className={`${styles.tabButton} ${activeTab === TOOL_TABS.GRAPHICS ? styles.tabButtonActive : ""}`}
-          onClick={() => handleToolTabChange(TOOL_TABS.GRAPHICS)}
-        >
-          Graphics
-        </button>
+        {canUseAdminTools ? (
         <button
           type="button"
           className={`${styles.tabButton} ${activeTab === TOOL_TABS.SCOUTING ? styles.tabButtonActive : ""}`}
@@ -1545,6 +1549,8 @@ export default function Tools() {
         >
           Pre-Game Scouting Packet
         </button>
+        ) : null}
+        {canUseAdminTools ? (
         <button
           type="button"
           className={`${styles.tabButton} ${activeTab === TOOL_TABS.LATE_GAME ? styles.tabButtonActive : ""}`}
@@ -1552,6 +1558,7 @@ export default function Tools() {
         >
           Late Game Matrix
         </button>
+        ) : null}
         <button
           type="button"
           className={`${styles.tabButton} ${activeTab === TOOL_TABS.CUSTOM_REQUESTS ? styles.tabButtonActive : ""}`}
@@ -1560,6 +1567,7 @@ export default function Tools() {
           Custom Requests
         </button>
       </div>
+      )}
 
       {activeTab === TOOL_TABS.GRAPHICS ? (
         <div className={styles.graphicTabBar} aria-label="Graphic tools">
@@ -1694,6 +1702,17 @@ export default function Tools() {
               </button>
             </div>
           </div>
+
+          <MatchupGraphicPreview
+            className={styles.matchupPreviewPanel}
+            canvasClassName={styles.matchupPreviewCanvas}
+            statusClassName={styles.previewStatus}
+            league={league}
+            leftPlayers={selectedLeftPlayers}
+            rightPlayers={selectedRightPlayers}
+            logoTeamId={draft.logoTeamId}
+            isReady={exportReady}
+          />
 
           {saveStatus ? (
             <div className={styles.statusNote}>

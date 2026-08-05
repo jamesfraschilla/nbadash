@@ -355,7 +355,7 @@ export function ensureMatchupExportFonts() {
   return exportFontsPromise;
 }
 
-export async function exportMatchupGraphic({ league = "nba", leftPlayers, rightPlayers, logoTeamId, leftTeam, rightTeam }) {
+export async function renderMatchupGraphicCanvas({ league = "nba", leftPlayers, rightPlayers, logoTeamId }) {
   await ensureMatchupExportFonts();
   if (document.fonts?.ready) {
     await document.fonts.ready;
@@ -382,5 +382,15 @@ export async function exportMatchupGraphic({ league = "nba", leftPlayers, rightP
     drawArrow(context, centerX, 566, 640);
   });
 
+  return canvas;
+}
+
+export async function exportMatchupGraphic({ league = "nba", leftPlayers, rightPlayers, logoTeamId, leftTeam, rightTeam }) {
+  const canvas = await renderMatchupGraphicCanvas({
+    league,
+    leftPlayers,
+    rightPlayers,
+    logoTeamId,
+  });
   downloadCanvas(canvas, buildFileName({ leftTeam, rightTeam }));
 }

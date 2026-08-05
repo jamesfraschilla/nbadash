@@ -2,9 +2,10 @@ import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { deleteDrawingRecord, deleteNoteRecord, listOwnedDrawings, listOwnedNotes } from "../accountData.js";
-import { fetchGamesMetadataByIds } from "../api.js";
+import { fetchCurrentGLeagueRosters, fetchCurrentNbaRosters, fetchGamesMetadataByIds } from "../api.js";
 import { useAuth } from "../auth/useAuth.js";
-import { getLeagueTeam } from "../data/nbaTeams.js";
+import MatchupGraphicPreview from "../components/MatchupGraphicPreview.jsx";
+import { GLEAGUE_TEAMS, getLeagueTeam, getNbaTeamRoster, NBA_TEAMS } from "../data/nbaTeams.js";
 import {
   deleteSavedToolRecord,
   deleteSavedToolRecordRemote,
@@ -31,6 +32,8 @@ const GRAPHIC_VAULT_TABS = [
   { key: "personnel", label: "Personnel", title: "Personnel Graphics" },
   { key: "depth-chart", label: "Depth Chart", title: "Depth Chart Graphics" },
 ];
+const EMPTY_MATCHUP_PLAYER_IDS = Array(5).fill("");
+const CUSTOM_MATCHUP_PLAYER_VALUE = "__custom__";
 
 function formatTimestamp(value) {
   if (!value) return "Unknown";
@@ -126,7 +129,7 @@ function getSavedGraphicPresentation(toolRecord) {
     return {
       meta: "Personnel Graphic · Saved draft",
       body: `${team?.fullName || `${league === "gleague" ? "G League" : "NBA"} personnel draft`}${playerCount ? ` · ${playerCount} players` : ""}`,
-      link: `/tools?tab=graphics&graphic=personnel&personnel=${encodeURIComponent(toolRecord.id)}`,
+      link: `/graphics?graphic=personnel&personnel=${encodeURIComponent(toolRecord.id)}`,
     };
   }
   if (toolRecord.type === TOOL_RECORD_TYPES.DEPTH_CHART_GRAPHIC) {
@@ -138,7 +141,7 @@ function getSavedGraphicPresentation(toolRecord) {
     return {
       meta: "Depth Chart Graphic · Saved draft",
       body: `${team?.fullName || (league === "gleague" ? "G League depth chart" : "NBA depth chart")}${selectedSlots ? ` · ${selectedSlots} slots filled` : ""}`,
-      link: `/tools?tab=graphics&graphic=depth-chart&depthChart=${encodeURIComponent(toolRecord.id)}`,
+      link: `/graphics?graphic=depth-chart&depthChart=${encodeURIComponent(toolRecord.id)}`,
     };
   }
   const league = String(toolRecord.payload?.league || "nba").trim() === "gleague" ? "gleague" : "nba";
@@ -149,11 +152,105 @@ function getSavedGraphicPresentation(toolRecord) {
     body: leftTeam || rightTeam
       ? `${leftTeam?.fullName || "Left side empty"} vs ${rightTeam?.fullName || "Right side empty"}`
       : "Saved match-up graphic.",
-    link: `/tools?tab=graphics&graphic=matchup&draft=${encodeURIComponent(toolRecord.id)}`,
+    link: `/graphics?graphic=matchup&draft=${encodeURIComponent(toolRecord.id)}`,
   };
 }
 
-function SavedGraphicArea({ title, records, deletingKey, onDelete }) {
+function normalizeRosterPlayer(player, fallbackTeamId) {
+  return {
+    personId: String(player?.personId || "").trim(),
+    firstName: String(player?.firstName || "").trim(),
+    familyName: String(player?.familyName || "").trim(),
+    fullName: String(player?.fullName || "").trim(),
+    jerseyNum: String(player?.jerseyNum || "").trim(),
+    teamId: String(player?.teamId || fallbackTeamId || "").trim(),
+  };
+}
+
+function buildRosterMapFromPayload(payload, teams, fallbackRosterForTeam = null) {
+  const remoteTeams = payload?.teams && typeof payload.teams === "object" ? payload.teams : {};
+  const next = {};
+  teams.forEach((team) => {
+    const remoteRoster = Array.isArray(remoteTeams?.[team.teamId]?.players)
+      ? remoteTeams[team.teamId].players
+        .map((player) => normalizeRosterPlayer(player, team.teamId))
+        .filter((player) => player.personId && player.fullName)
+      : [];
+    const fallbackRoster = fallbackRosterForTeam ? fallbackRosterForTeam(team.teamId) : [];
+    next[team.teamId] = remoteRoster.length ? remoteRoster : fallbackRoster;
+  });
+  return next;
+}
+
+function buildCustomMatchupPreviewPlayer(customPlayer, index, teamId) {
+  const lastName = String(customPlayer?.lastName || "").trim();
+  if (!lastName) return null;
+  return {
+    personId: `custom-matchup-${teamId || "team"}-${index}`,
+    firstName: "",
+    familyName: lastName,
+    fullName: lastName,
+    jerseyNum: String(customPlayer?.jerseyNum || "").trim(),
+    teamId: String(teamId || "").trim(),
+    headshotDataUrl: String(customPlayer?.headshotDataUrl || "").trim(),
+    headshotUrl: String(customPlayer?.headshotUrl || "").trim(),
+  };
+}
+
+function resolveMatchupPreviewPlayers(playerIds, roster, customPlayers, teamId) {
+  const playersById = new Map((roster || []).map((player) => [String(player.personId), player]));
+  return EMPTY_MATCHUP_PLAYER_IDS.map((_, index) => {
+    const playerId = String(playerIds?.[index] || "").trim();
+    if (playerId === CUSTOM_MATCHUP_PLAYER_VALUE) {
+      return buildCustomMatchupPreviewPlayer(customPlayers?.[index], index, teamId);
+    }
+    return playersById.get(playerId) || null;
+  });
+}
+
+function SavedMatchupGraphicPreview({ toolRecord, nbaRosterMap, gLeagueRosterMap }) {
+  const payload = toolRecord.payload && typeof toolRecord.payload === "object" ? toolRecord.payload : {};
+  const league = String(payload.league || "nba").trim() === "gleague" ? "gleague" : "nba";
+  const rosterMap = league === "gleague" ? gLeagueRosterMap : nbaRosterMap;
+  const leftTeam = getLeagueTeam(payload.leftTeamId, league);
+  const rightTeam = getLeagueTeam(payload.rightTeamId, league);
+  const leftPlayers = resolveMatchupPreviewPlayers(
+    payload.leftPlayerIds,
+    rosterMap[String(payload.leftTeamId || "")] || [],
+    payload.leftCustomPlayers,
+    payload.leftTeamId
+  );
+  const rightPlayers = resolveMatchupPreviewPlayers(
+    payload.rightPlayerIds,
+    rosterMap[String(payload.rightTeamId || "")] || [],
+    payload.rightCustomPlayers,
+    payload.rightTeamId
+  );
+  const isReady = Boolean(
+    leftTeam &&
+    rightTeam &&
+    String(payload.logoTeamId || "").trim() &&
+    leftPlayers.every(Boolean) &&
+    rightPlayers.every(Boolean)
+  );
+
+  return (
+    <MatchupGraphicPreview
+      className={styles.savedGraphicPreview}
+      canvasClassName={styles.savedGraphicPreviewCanvas}
+      statusClassName={styles.previewStatus}
+      league={league}
+      leftPlayers={leftPlayers}
+      rightPlayers={rightPlayers}
+      logoTeamId={payload.logoTeamId}
+      isReady={isReady}
+      unavailableMessage="Preview unavailable until this saved draft has both teams, ten players, and a logo."
+      lazy
+    />
+  );
+}
+
+function SavedGraphicArea({ title, records, deletingKey, onDelete, renderPreview }) {
   return (
     <section className={styles.graphicsArea}>
       <div className={styles.graphicsAreaHeader}>
@@ -170,7 +267,6 @@ function SavedGraphicArea({ title, records, deletingKey, onDelete }) {
                 <div className={styles.cardHeader}>
                   <div className={styles.cardTitleGroup}>
                     <div className={styles.cardTitle}>{toolRecord.title || "Untitled"}</div>
-                    <div className={styles.cardMeta}>{presentation.meta}</div>
                   </div>
                   <div className={styles.cardActions}>
                     <Link className={styles.cardLink} to={presentation.link}>Open Graphic</Link>
@@ -184,7 +280,7 @@ function SavedGraphicArea({ title, records, deletingKey, onDelete }) {
                     </button>
                   </div>
                 </div>
-                <div className={styles.cardBody}>{presentation.body}</div>
+                {renderPreview ? renderPreview(toolRecord) : null}
                 <div className={styles.cardFooter}>Updated {formatTimestamp(toolRecord.updatedAt)}</div>
               </article>
             );
@@ -198,17 +294,18 @@ function SavedGraphicArea({ title, records, deletingKey, onDelete }) {
 }
 
 export default function UserContent() {
-  const { user, profile, hasFeature, accountsEnabled } = useAuth();
+  const { user, profile, hasFeature, accountsEnabled, isAdmin } = useAuth();
   const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
   const canUseTools = !accountsEnabled || hasFeature("tools");
+  const canUseAdminTools = !accountsEnabled || isAdmin;
   const vaultUserId = user?.id || (!accountsEnabled ? "guest" : "");
   const rawTab = params.get("tab");
   const tab = rawTab === "drawings"
     ? "drawings"
     : rawTab === "graphics" && canUseTools
       ? "graphics"
-    : rawTab === "late-game" && canUseTools
+    : rawTab === "late-game" && canUseTools && canUseAdminTools
       ? "late-game"
       : rawTab === "tools" && canUseTools
         ? "tools"
@@ -252,6 +349,22 @@ export default function UserContent() {
         return listSavedToolRecords(vaultUserId);
       }
     },
+  });
+
+  const { data: remoteNbaRostersPayload } = useQuery({
+    queryKey: ["vault-current-nba-rosters"],
+    queryFn: ({ signal }) => fetchCurrentNbaRosters({ signal }),
+    enabled: Boolean(vaultUserId && canUseTools && tab === "graphics" && activeGraphicTab === "matchup"),
+    staleTime: 6 * 60 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
+  const { data: remoteGLeagueRostersPayload } = useQuery({
+    queryKey: ["vault-current-gleague-rosters"],
+    queryFn: ({ signal }) => fetchCurrentGLeagueRosters({ signal }),
+    enabled: Boolean(vaultUserId && canUseTools && tab === "graphics" && activeGraphicTab === "matchup"),
+    staleTime: 6 * 60 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   const uniqueGameIds = useMemo(() => (
@@ -344,6 +457,14 @@ export default function UserContent() {
   const matchupToolRecords = useMemo(
     () => savedTools.filter((record) => record.type === TOOL_RECORD_TYPES.MATCHUP_GRAPHIC),
     [savedTools]
+  );
+  const vaultNbaRosterMap = useMemo(
+    () => buildRosterMapFromPayload(remoteNbaRostersPayload, NBA_TEAMS, getNbaTeamRoster),
+    [remoteNbaRostersPayload]
+  );
+  const vaultGLeagueRosterMap = useMemo(
+    () => buildRosterMapFromPayload(remoteGLeagueRostersPayload, GLEAGUE_TEAMS),
+    [remoteGLeagueRostersPayload]
   );
   const personnelToolRecords = useMemo(
     () => savedTools.filter((record) => record.type === TOOL_RECORD_TYPES.PERSONNEL_GRAPHIC),
@@ -541,7 +662,7 @@ export default function UserContent() {
             Tools
           </button>
         ) : null}
-        {canUseTools ? (
+        {canUseTools && canUseAdminTools ? (
           <button
             type="button"
             className={`${styles.tabButton} ${tab === "late-game" ? styles.tabButtonActive : ""}`}
@@ -771,13 +892,22 @@ export default function UserContent() {
               records={matchupToolRecords}
               deletingKey={deletingKey}
               onDelete={handleDeleteTool}
+              renderPreview={(toolRecord) => (
+                <SavedMatchupGraphicPreview
+                  toolRecord={toolRecord}
+                  nbaRosterMap={vaultNbaRosterMap}
+                  gLeagueRosterMap={vaultGLeagueRosterMap}
+                />
+              )}
             />
           )}
         </section>
       ) : tab === "tools" ? (
         <section className={styles.section}>
           {toolVaultStatus ? <div className={styles.toolToolbarStatus}>{toolVaultStatus}</div> : null}
-          {analysisToolRecords.length === 0 && scoutingToolRecords.length === 0 && visualDrillPresetRecords.length === 0 ? (
+          {analysisToolRecords.length === 0
+            && visualDrillPresetRecords.length === 0
+            && (!canUseAdminTools || scoutingToolRecords.length === 0) ? (
             <div className={styles.emptyState}>You have not saved any tools yet.</div>
           ) : (
             <div className={styles.list}>
@@ -819,7 +949,7 @@ export default function UserContent() {
                   </article>
                 );
               })}
-              {scoutingToolRecords.map((toolRecord) => {
+              {canUseAdminTools ? scoutingToolRecords.map((toolRecord) => {
                 const isDeleting = deletingKey === `tool:${toolRecord.id}`;
                 const payload = toolRecord.payload && typeof toolRecord.payload === "object" ? toolRecord.payload : {};
                 const teamLabel = String(payload.scoutingResult?.team?.name || payload.scoutingResult?.team?.tricode || "").trim();
@@ -854,7 +984,7 @@ export default function UserContent() {
                     <div className={styles.cardFooter}>Updated {formatTimestamp(toolRecord.updatedAt)}</div>
                   </article>
                 );
-              })}
+              }) : null}
               {analysisToolRecords.map((toolRecord) => {
                 const isDeleting = deletingKey === `tool:${toolRecord.id}`;
                 const payload = toolRecord.payload && typeof toolRecord.payload === "object" ? toolRecord.payload : {};
