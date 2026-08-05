@@ -1190,10 +1190,13 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
             ? `${selectedValidation.rows.length} selected · exactly 4 stats required per exported player`
             : "Choose a team to begin")}
           {recordId && status.startsWith("Saved") ? (
-            <> · <Link to="/me?tab=graphics">View in My Vault</Link></>
+            <> · <Link to="/me?tab=graphics&graphic=personnel">View in My Vault</Link></>
           ) : null}
         </div>
         <div className={styles.actionGroup}>
+          <Link className={styles.secondaryButton} to="/me?tab=graphics&graphic=personnel">
+            My Vault
+          </Link>
           {recordId ? (
             <button type="button" className={styles.secondaryButton} onClick={handleDelete} disabled={Boolean(busyAction)}>
               Delete

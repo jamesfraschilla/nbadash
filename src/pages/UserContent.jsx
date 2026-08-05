@@ -26,6 +26,12 @@ const DEFAULT_NOTE_TAG_OPTIONS = [
   "Misc",
 ];
 
+const GRAPHIC_VAULT_TABS = [
+  { key: "matchup", label: "Match-Up", title: "Match-Up Graphics" },
+  { key: "personnel", label: "Personnel", title: "Personnel Graphics" },
+  { key: "depth-chart", label: "Depth Chart", title: "Depth Chart Graphics" },
+];
+
 function formatTimestamp(value) {
   if (!value) return "Unknown";
   const date = new Date(value);
@@ -206,7 +212,13 @@ export default function UserContent() {
       ? "late-game"
       : rawTab === "tools" && canUseTools
         ? "tools"
+      : canUseTools
+        ? "graphics"
         : "notes";
+  const rawGraphic = String(params.get("graphic") || "").trim();
+  const activeGraphicTab = GRAPHIC_VAULT_TABS.some((graphicTab) => graphicTab.key === rawGraphic)
+    ? rawGraphic
+    : "matchup";
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [opponentFilter, setOpponentFilter] = useState("all");
@@ -367,6 +379,18 @@ export default function UserContent() {
   const setTab = (nextTab) => {
     const nextParams = new URLSearchParams(params);
     nextParams.set("tab", nextTab);
+    if (nextTab === "graphics") {
+      nextParams.set("graphic", activeGraphicTab);
+    } else {
+      nextParams.delete("graphic");
+    }
+    setParams(nextParams, { replace: true });
+  };
+
+  const setGraphicTab = (nextGraphicTab) => {
+    const nextParams = new URLSearchParams(params);
+    nextParams.set("tab", "graphics");
+    nextParams.set("graphic", nextGraphicTab);
     setParams(nextParams, { replace: true });
   };
 
@@ -485,6 +509,15 @@ export default function UserContent() {
       </section>
 
       <div className={styles.tabRow}>
+        {canUseTools ? (
+          <button
+            type="button"
+            className={`${styles.tabButton} ${tab === "graphics" ? styles.tabButtonActive : ""}`}
+            onClick={() => setTab("graphics")}
+          >
+            Graphics
+          </button>
+        ) : null}
         <button
           type="button"
           className={`${styles.tabButton} ${tab === "notes" ? styles.tabButtonActive : ""}`}
@@ -499,15 +532,6 @@ export default function UserContent() {
         >
           Court Drawings
         </button>
-        {canUseTools ? (
-          <button
-            type="button"
-            className={`${styles.tabButton} ${tab === "graphics" ? styles.tabButtonActive : ""}`}
-            onClick={() => setTab("graphics")}
-          >
-            Graphics
-          </button>
-        ) : null}
         {canUseTools ? (
           <button
             type="button"
@@ -715,24 +739,40 @@ export default function UserContent() {
       ) : tab === "graphics" ? (
         <section className={styles.graphicsVault}>
           {toolVaultStatus ? <div className={styles.toolToolbarStatus}>{toolVaultStatus}</div> : null}
-          <SavedGraphicArea
-            title="Match-Up Graphics"
-            records={matchupToolRecords}
-            deletingKey={deletingKey}
-            onDelete={handleDeleteTool}
-          />
-          <SavedGraphicArea
-            title="Personnel Graphics"
-            records={personnelToolRecords}
-            deletingKey={deletingKey}
-            onDelete={handleDeleteTool}
-          />
-          <SavedGraphicArea
-            title="Depth Chart Graphics"
-            records={depthChartToolRecords}
-            deletingKey={deletingKey}
-            onDelete={handleDeleteTool}
-          />
+          <div className={styles.graphicTabBar} aria-label="Saved graphic tools">
+            {GRAPHIC_VAULT_TABS.map((graphicTab) => (
+              <button
+                key={graphicTab.key}
+                type="button"
+                className={`${styles.graphicTabButton} ${activeGraphicTab === graphicTab.key ? styles.graphicTabButtonActive : ""}`}
+                onClick={() => setGraphicTab(graphicTab.key)}
+              >
+                {graphicTab.label}
+              </button>
+            ))}
+          </div>
+          {activeGraphicTab === "personnel" ? (
+            <SavedGraphicArea
+              title="Personnel Graphics"
+              records={personnelToolRecords}
+              deletingKey={deletingKey}
+              onDelete={handleDeleteTool}
+            />
+          ) : activeGraphicTab === "depth-chart" ? (
+            <SavedGraphicArea
+              title="Depth Chart Graphics"
+              records={depthChartToolRecords}
+              deletingKey={deletingKey}
+              onDelete={handleDeleteTool}
+            />
+          ) : (
+            <SavedGraphicArea
+              title="Match-Up Graphics"
+              records={matchupToolRecords}
+              deletingKey={deletingKey}
+              onDelete={handleDeleteTool}
+            />
+          )}
         </section>
       ) : tab === "tools" ? (
         <section className={styles.section}>

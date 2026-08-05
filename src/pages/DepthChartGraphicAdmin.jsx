@@ -638,6 +638,9 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
             <canvas ref={previewCanvasRef} className={styles.depthChartPreviewCanvas} width="400" height="400" />
           </div>
           <div className={styles.depthChartPreviewActions}>
+            <Link className={styles.secondaryButton} to="/me?tab=graphics&graphic=depth-chart">
+              My Vault
+            </Link>
             {recordId ? (
               <button
                 type="button"
@@ -679,7 +682,7 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
               {recordId && status.startsWith("Saved") ? (
                 <>
                   {" "}
-                  <Link className={styles.inlineStatusLink} to="/me?tab=graphics">View in My Vault</Link>
+                  <Link className={styles.inlineStatusLink} to="/me?tab=graphics&graphic=depth-chart">View in My Vault</Link>
                 </>
               ) : null}
             </div>

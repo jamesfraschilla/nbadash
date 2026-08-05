@@ -1669,6 +1669,9 @@ export default function Tools() {
             ) : null}
 
             <div className={styles.actionCluster}>
+              <Link className={styles.secondaryButton} to="/me?tab=graphics&graphic=matchup">
+                My Vault
+              </Link>
               {recordId ? (
                 <button type="button" className={styles.secondaryButton} onClick={handleDelete} disabled={Boolean(busyAction)}>
                   Delete
@@ -1698,7 +1701,7 @@ export default function Tools() {
               {recordId && saveStatus.startsWith("Saved") ? (
                 <>
                   {" "}
-                  <Link className={styles.inlineStatusLink} to="/me?tab=graphics">View in My Vault</Link>
+                  <Link className={styles.inlineStatusLink} to="/me?tab=graphics&graphic=matchup">View in My Vault</Link>
                 </>
               ) : null}
             </div>

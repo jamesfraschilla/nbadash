@@ -328,6 +328,9 @@
 
 .primaryButton,
 .secondaryButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 108px;
   min-height: var(--control-height-md);
   border-radius: var(--radius-md);
@@ -335,6 +338,7 @@
   font-size: 0.95rem;
   font-weight: 700;
   cursor: pointer;
+  text-decoration: none;
 }
 
 .primaryButton {

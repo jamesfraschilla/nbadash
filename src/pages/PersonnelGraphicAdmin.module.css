@@ -490,11 +490,15 @@
 .primaryButton,
 .secondaryButton,
 .exportAllButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: var(--control-height-md);
   border-radius: var(--radius-md);
   padding: 0 16px;
   font-weight: 800;
   cursor: pointer;
+  text-decoration: none;
 }
 
 .primaryButton {
