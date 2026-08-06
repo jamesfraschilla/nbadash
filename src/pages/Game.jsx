@@ -474,6 +474,7 @@ const foulsClass = (fouls, stylesRef, warningCount = 4, limitCount = 5) => {
 };
 
 const isRotationsTeam = (team) => isWashingtonTeam(team) || isCapitalCityTeam(team);
+const CURRENT_ROSTER_STALE_TIME_MS = 5 * 60 * 1000;
 
 const getClockSortValue = (clock) => {
   const normalized = normalizeClock(clock);
@@ -802,7 +803,7 @@ export default function Game({ variant = "full" }) {
     queryKey: ["game-current-nba-rosters"],
     queryFn: ({ signal }) => fetchCurrentNbaRosters({ signal }),
     enabled: !isSummerLeagueMatch && (awayLeague === "nba" || homeLeague === "nba"),
-    staleTime: 6 * 60 * 60 * 1000,
+    staleTime: CURRENT_ROSTER_STALE_TIME_MS,
     retry: 1,
   });
 
@@ -810,7 +811,7 @@ export default function Game({ variant = "full" }) {
     queryKey: ["game-current-gleague-rosters"],
     queryFn: ({ signal }) => fetchCurrentGLeagueRosters({ signal }),
     enabled: !isSummerLeagueMatch && (awayLeague === "gleague" || homeLeague === "gleague"),
-    staleTime: 6 * 60 * 60 * 1000,
+    staleTime: CURRENT_ROSTER_STALE_TIME_MS,
     retry: 1,
   });
 

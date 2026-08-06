@@ -71,15 +71,16 @@ export function buildMatchupDefaultLineup({ league = "nba", teamId, defaultTeam,
   if (!normalizedTeamId) return null;
   const nameIndex = buildRosterNameIndex(roster);
   const usedIds = new Set();
-  const playerIds = [];
-  const players = [];
+  const playerIds = Array.from({ length: MATCHUP_GRAPHIC_PLAYER_SLOTS }, () => "");
+  const players = Array.from({ length: MATCHUP_GRAPHIC_PLAYER_SLOTS }, () => null);
   const unmatched = [];
+  let resolvedCount = 0;
 
   (Array.isArray(defaultTeam?.players) ? defaultTeam.players : [])
     .map(normalizeDefaultPlayer)
     .filter((player) => player.fullName)
-    .forEach((defaultPlayer) => {
-      if (playerIds.length >= MATCHUP_GRAPHIC_PLAYER_SLOTS) return;
+    .slice(0, MATCHUP_GRAPHIC_PLAYER_SLOTS)
+    .forEach((defaultPlayer, index) => {
       const rosterPlayer = resolveRosterPlayer(defaultPlayer, nameIndex, usedIds);
       if (!rosterPlayer) {
         unmatched.push(defaultPlayer.fullName);
@@ -87,14 +88,12 @@ export function buildMatchupDefaultLineup({ league = "nba", teamId, defaultTeam,
       }
       const personId = String(rosterPlayer.personId || "").trim();
       usedIds.add(personId);
-      playerIds.push(personId);
-      players.push(rosterPlayer);
+      playerIds[index] = personId;
+      players[index] = rosterPlayer;
+      resolvedCount += 1;
     });
 
-  if (!playerIds.length) return null;
-
-  while (playerIds.length < MATCHUP_GRAPHIC_PLAYER_SLOTS) playerIds.push("");
-  while (players.length < MATCHUP_GRAPHIC_PLAYER_SLOTS) players.push(null);
+  if (!resolvedCount) return null;
 
   return {
     schemaVersion: 1,

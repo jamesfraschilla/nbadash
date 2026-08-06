@@ -45,6 +45,11 @@ import {
 import { exportMatchupGraphic } from "./matchupGraphicExport.js";
 import { requestCustomDashboardRequest } from "../customRequestsData.js";
 import {
+  TOOL_TABS,
+  isGraphicToolTab,
+  normalizeGraphicToolTab,
+} from "../toolNavigation.js";
+import {
   buildMatchupGraphicLineupFromDraft,
   buildMatchupGraphicLineupMap,
   getDefaultMatchupGraphicTeamId,
@@ -68,18 +73,7 @@ const EMPTY_PLAYER_IDS = Array(5).fill("");
 const CUSTOM_PLAYER_VALUE = "__custom__";
 const WIZARDS_TEAM_ID = "1610612764";
 const CAPITAL_CITY_TEAM_ID = "1612709928";
-const TOOL_TABS = {
-  GRAPHICS: "graphics",
-  MATCHUP: "matchup",
-  COURT_TIME: "court-time",
-  PERSONNEL: "personnel",
-  DEPTH_CHART: "depth-chart",
-  ROTATIONS: "rotations",
-  SCOUTING: "scouting",
-  LATE_GAME: "late-game",
-  CUSTOM_REQUESTS: "custom-requests",
-  VISUAL_DRILL: "visual-drill",
-};
+const CURRENT_ROSTER_STALE_TIME_MS = 5 * 60 * 1000;
 const PREVIOUS_GAME_OPTIONS = Array.from({ length: 20 }, (_, index) => index + 1);
 
 function buildEmptyDraft() {
@@ -599,12 +593,10 @@ export default function Tools({ section = "tools" }) {
     : rawTab === TOOL_TABS.VISUAL_DRILL
       ? TOOL_TABS.VISUAL_DRILL
       : TOOL_TABS.VISUAL_DRILL;
-  const legacyGraphicTab = [TOOL_TABS.MATCHUP, TOOL_TABS.COURT_TIME, TOOL_TABS.PERSONNEL, TOOL_TABS.DEPTH_CHART].includes(rawTab)
+  const legacyGraphicTab = isGraphicToolTab(rawTab)
     ? rawTab
     : "";
-  const activeGraphic = [TOOL_TABS.MATCHUP, TOOL_TABS.COURT_TIME, TOOL_TABS.PERSONNEL, TOOL_TABS.DEPTH_CHART].includes(rawGraphic)
-    ? rawGraphic
-    : legacyGraphicTab || TOOL_TABS.MATCHUP;
+  const activeGraphic = normalizeGraphicToolTab(rawGraphic, legacyGraphicTab || TOOL_TABS.MATCHUP);
   const draftLeague = draft.league === "gleague" ? "gleague" : "nba";
   const graphicsNeedBothLeagues = activeTab === TOOL_TABS.GRAPHICS
     && [TOOL_TABS.PERSONNEL, TOOL_TABS.DEPTH_CHART].includes(activeGraphic);
@@ -641,14 +633,14 @@ export default function Tools({ section = "tools" }) {
     queryKey: ["tools-current-nba-rosters"],
     queryFn: ({ signal }) => fetchCurrentNbaRosters({ signal }),
     enabled: needsNbaRosters,
-    staleTime: 6 * 60 * 60 * 1000,
+    staleTime: CURRENT_ROSTER_STALE_TIME_MS,
     retry: 1,
   });
   const { data: remoteGLeagueRostersPayload } = useQuery({
     queryKey: ["tools-current-gleague-rosters"],
     queryFn: ({ signal }) => fetchCurrentGLeagueRosters({ signal }),
     enabled: needsGLeagueRosters,
-    staleTime: 6 * 60 * 60 * 1000,
+    staleTime: CURRENT_ROSTER_STALE_TIME_MS,
     retry: 1,
   });
   const {
@@ -1144,9 +1136,7 @@ export default function Tools({ section = "tools" }) {
   };
 
   const handleGraphicTabChange = (nextGraphic) => {
-    const normalized = [TOOL_TABS.MATCHUP, TOOL_TABS.COURT_TIME, TOOL_TABS.PERSONNEL, TOOL_TABS.DEPTH_CHART].includes(nextGraphic)
-      ? nextGraphic
-      : TOOL_TABS.MATCHUP;
+    const normalized = normalizeGraphicToolTab(nextGraphic);
     const nextParams = new URLSearchParams(params);
     nextParams.set("tab", TOOL_TABS.GRAPHICS);
     nextParams.set("graphic", normalized);

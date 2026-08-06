@@ -7,6 +7,11 @@ import { useAuth } from "../auth/useAuth.js";
 import MatchupGraphicPreview from "../components/MatchupGraphicPreview.jsx";
 import { GLEAGUE_TEAMS, getLeagueTeam, getNbaTeamRoster, NBA_TEAMS } from "../data/nbaTeams.js";
 import {
+  GRAPHIC_TOOL_TABS,
+  TOOL_TABS,
+  normalizeGraphicToolTab,
+} from "../toolNavigation.js";
+import {
   deleteSavedToolRecord,
   deleteSavedToolRecordRemote,
   listSavedToolRecords,
@@ -27,14 +32,9 @@ const DEFAULT_NOTE_TAG_OPTIONS = [
   "Misc",
 ];
 
-const GRAPHIC_VAULT_TABS = [
-  { key: "matchup", label: "Match-Up", title: "Match-Up Graphics" },
-  { key: "court-time", label: "Court Time", title: "Court Time Graphics" },
-  { key: "personnel", label: "Personnel", title: "Personnel Graphics" },
-  { key: "depth-chart", label: "Depth Chart", title: "Depth Chart Graphics" },
-];
 const EMPTY_MATCHUP_PLAYER_IDS = Array(5).fill("");
 const CUSTOM_MATCHUP_PLAYER_VALUE = "__custom__";
+const CURRENT_ROSTER_STALE_TIME_MS = 5 * 60 * 1000;
 
 function formatTimestamp(value) {
   if (!value) return "Unknown";
@@ -328,9 +328,7 @@ export default function UserContent() {
         ? "graphics"
         : "notes";
   const rawGraphic = String(params.get("graphic") || "").trim();
-  const activeGraphicTab = GRAPHIC_VAULT_TABS.some((graphicTab) => graphicTab.key === rawGraphic)
-    ? rawGraphic
-    : "matchup";
+  const activeGraphicTab = normalizeGraphicToolTab(rawGraphic);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [opponentFilter, setOpponentFilter] = useState("all");
@@ -469,7 +467,7 @@ export default function UserContent() {
     vaultUserId &&
     canUseTools &&
     tab === "graphics" &&
-    activeGraphicTab === "matchup" &&
+    activeGraphicTab === TOOL_TABS.MATCHUP &&
     matchupToolRecords.length
   );
 
@@ -477,7 +475,7 @@ export default function UserContent() {
     queryKey: ["vault-current-nba-rosters"],
     queryFn: ({ signal }) => fetchCurrentNbaRosters({ signal }),
     enabled: shouldLoadMatchupPreviewRosters && matchupPreviewLeagueNeeds.nba,
-    staleTime: 6 * 60 * 60 * 1000,
+    staleTime: CURRENT_ROSTER_STALE_TIME_MS,
     refetchOnWindowFocus: false,
   });
 
@@ -485,7 +483,7 @@ export default function UserContent() {
     queryKey: ["vault-current-gleague-rosters"],
     queryFn: ({ signal }) => fetchCurrentGLeagueRosters({ signal }),
     enabled: shouldLoadMatchupPreviewRosters && matchupPreviewLeagueNeeds.gleague,
-    staleTime: 6 * 60 * 60 * 1000,
+    staleTime: CURRENT_ROSTER_STALE_TIME_MS,
     refetchOnWindowFocus: false,
   });
   const vaultNbaRosterMap = useMemo(
@@ -538,7 +536,7 @@ export default function UserContent() {
   const setTab = (nextTab) => {
     const nextParams = new URLSearchParams(params);
     nextParams.set("tab", nextTab);
-    if (nextTab === "graphics") {
+    if (nextTab === TOOL_TABS.GRAPHICS) {
       nextParams.set("graphic", activeGraphicTab);
     } else {
       nextParams.delete("graphic");
@@ -548,7 +546,7 @@ export default function UserContent() {
 
   const setGraphicTab = (nextGraphicTab) => {
     const nextParams = new URLSearchParams(params);
-    nextParams.set("tab", "graphics");
+    nextParams.set("tab", TOOL_TABS.GRAPHICS);
     nextParams.set("graphic", nextGraphicTab);
     setParams(nextParams, { replace: true });
   };
@@ -908,7 +906,7 @@ export default function UserContent() {
         <section className={styles.graphicsVault}>
           {toolVaultStatus ? <div className={styles.toolToolbarStatus}>{toolVaultStatus}</div> : null}
           <div className={styles.graphicTabBar} aria-label="Saved graphic tools">
-            {GRAPHIC_VAULT_TABS.map((graphicTab) => (
+            {GRAPHIC_TOOL_TABS.map((graphicTab) => (
               <button
                 key={graphicTab.key}
                 type="button"
@@ -919,21 +917,21 @@ export default function UserContent() {
               </button>
             ))}
           </div>
-          {activeGraphicTab === "court-time" ? (
+          {activeGraphicTab === TOOL_TABS.COURT_TIME ? (
             <SavedGraphicArea
               title="Court Time Graphics"
               records={courtTimeToolRecords}
               deletingKey={deletingKey}
               onDelete={handleDeleteTool}
             />
-          ) : activeGraphicTab === "personnel" ? (
+          ) : activeGraphicTab === TOOL_TABS.PERSONNEL ? (
             <SavedGraphicArea
               title="Personnel Graphics"
               records={personnelToolRecords}
               deletingKey={deletingKey}
               onDelete={handleDeleteTool}
             />
-          ) : activeGraphicTab === "depth-chart" ? (
+          ) : activeGraphicTab === TOOL_TABS.DEPTH_CHART ? (
             <SavedGraphicArea
               title="Depth Chart Graphics"
               records={depthChartToolRecords}

@@ -27,6 +27,8 @@ import PlayerHeadshotsAdmin from "./PlayerHeadshotsAdmin.jsx";
 import RefereeHeadshotsPreview from "./RefereeHeadshotsPreview.jsx";
 import styles from "./Admin.module.css";
 
+const CURRENT_ROSTER_STALE_TIME_MS = 5 * 60 * 1000;
+
 function formatTimestamp(value) {
   if (!value) return "Never";
   const date = new Date(value);
@@ -826,7 +828,7 @@ export default function Admin() {
   const { data: remoteNbaRostersPayload } = useQuery({
     queryKey: ["admin-current-nba-rosters"],
     queryFn: ({ signal }) => fetchCurrentNbaRosters({ signal }),
-    staleTime: 6 * 60 * 60 * 1000,
+    staleTime: CURRENT_ROSTER_STALE_TIME_MS,
     retry: 1,
     enabled: Boolean(user?.id && canUseAdmin),
   });
@@ -834,7 +836,7 @@ export default function Admin() {
   const { data: remoteGLeagueRostersPayload } = useQuery({
     queryKey: ["admin-current-gleague-rosters"],
     queryFn: ({ signal }) => fetchCurrentGLeagueRosters({ signal }),
-    staleTime: 6 * 60 * 60 * 1000,
+    staleTime: CURRENT_ROSTER_STALE_TIME_MS,
     retry: 1,
     enabled: Boolean(user?.id && canUseAdmin),
   });

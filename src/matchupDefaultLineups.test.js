@@ -32,7 +32,7 @@ test("buildMatchupDefaultLineup resolves ESPN names to roster person IDs", () =>
   assert.deepEqual(lineup.unmatched, []);
 });
 
-test("buildMatchupDefaultLineup pads unmatched players without inventing selections", () => {
+test("buildMatchupDefaultLineup preserves unmatched slots without inventing selections", () => {
   const lineup = buildMatchupDefaultLineup({
     teamId: "1610612764",
     defaultTeam: {
@@ -44,7 +44,7 @@ test("buildMatchupDefaultLineup pads unmatched players without inventing selecti
     roster,
   });
 
-  assert.deepEqual(lineup.playerIds, ["1", "", "", "", ""]);
+  assert.deepEqual(lineup.playerIds, ["", "1", "", "", ""]);
   assert.deepEqual(lineup.unmatched, ["Missing Player"]);
 });
 
