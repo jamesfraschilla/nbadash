@@ -5,7 +5,7 @@ const corsHeaders = {
 };
 
 const ESPN_DEPTHCHART_TIMEOUT_MS = 7_000;
-const ESPN_ATHLETE_TIMEOUT_MS = 4_000;
+const ESPN_ATHLETE_TIMEOUT_MS = 6_000;
 const POSITION_ORDER = ["pg", "sg", "sf", "pf", "c"] as const;
 
 const NBA_TO_ESPN_TEAMS: Record<string, { espnTeamId: string; tricode: string; fullName: string }> = {
@@ -86,22 +86,31 @@ function normalizeRequestedTeamIds(url: URL) {
   )].slice(0, 4);
 }
 
-async function requestJson(url: string, timeoutMs: number) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort("timeout"), timeoutMs);
-  try {
-    const response = await fetch(url, {
-      headers: {
-        Accept: "application/json",
-        "User-Agent": "Mozilla/5.0 (compatible; NBA Dash Match-Up Defaults)",
-      },
-      signal: controller.signal,
-    });
-    if (!response.ok) throw new Error(`Request failed: ${response.status}`);
-    return await response.json();
-  } finally {
-    clearTimeout(timeoutId);
+async function requestJson(url: string, timeoutMs: number, attempts = 2) {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort("timeout"), timeoutMs);
+    try {
+      const response = await fetch(url, {
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "Mozilla/5.0 (compatible; NBA Dash Match-Up Defaults)",
+        },
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error(`Request failed: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 150));
+      }
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
+  throw lastError instanceof Error ? lastError : new Error("Request failed");
 }
 
 function athleteIdFromRef(ref: string) {
@@ -183,6 +192,7 @@ async function fetchTeamDefaults(teamId: string, season: number) {
     source: "espn-depth-chart",
     sourceUrl: depthUrl,
     players: players.slice(0, 5),
+    partial: players.length < 5 || errors.length > 0,
     errors,
   };
 }
@@ -219,13 +229,18 @@ Deno.serve(async (req) => {
       }
     });
 
+    const partial = Object.values(teams).some((team) => Boolean((team as Record<string, unknown>)?.partial)) || errors.length > 0;
+
     return jsonResponse(200, {
       fetchedAt: new Date().toISOString(),
       season,
       teams,
+      partial,
       errors,
     }, {
-      "Cache-Control": "public, max-age=1800, s-maxage=1800, stale-while-revalidate=21600",
+      "Cache-Control": partial
+        ? "public, max-age=30, s-maxage=30, stale-while-revalidate=300"
+        : "public, max-age=1800, s-maxage=1800, stale-while-revalidate=21600",
     });
   } catch (error) {
     return jsonResponse(502, {

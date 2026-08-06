@@ -389,6 +389,26 @@ function draftSideHasPlayerEdits(draft, side) {
   ));
 }
 
+function draftSideCanApplyLineup(draft, side, lineup) {
+  if (!lineup) return false;
+  const playerIds = Array.isArray(draft?.[`${side}PlayerIds`]) ? draft[`${side}PlayerIds`] : [];
+  const customPlayers = Array.isArray(draft?.[`${side}CustomPlayers`]) ? draft[`${side}CustomPlayers`] : [];
+  const hasCustomEdits = customPlayers.some((player) => (
+    String(player?.jerseyNum || "").trim()
+    || String(player?.lastName || "").trim()
+    || String(player?.headshotDataUrl || "").trim()
+    || String(player?.headshotUrl || "").trim()
+  ));
+  if (hasCustomEdits) return false;
+  const existingIds = [...EMPTY_PLAYER_IDS].map((_, index) => String(playerIds?.[index] || "").trim());
+  if (existingIds.every((value) => !value)) return true;
+  const lineupIds = [...EMPTY_PLAYER_IDS].map((_, index) => String(lineup.playerIds?.[index] || "").trim());
+  const existingCount = existingIds.filter(Boolean).length;
+  const lineupCount = lineupIds.filter(Boolean).length;
+  if (lineupCount <= existingCount) return false;
+  return existingIds.every((value, index) => !value || value === lineupIds[index]);
+}
+
 function applyTeamLineupToDraftSide(draft, side, lineup) {
   if (!lineup) return draft;
   return {
@@ -653,7 +673,7 @@ export default function Tools({ section = "tools" }) {
     queryKey: ["nba-matchup-defaults", nbaMatchupDefaultTeamIds],
     queryFn: ({ signal }) => fetchNbaMatchupDefaults({ teamIds: nbaMatchupDefaultTeamIds, signal }),
     enabled: needsSharedMatchupLineups && draftLeague === "nba" && nbaMatchupDefaultTeamIds.length > 0,
-    staleTime: 6 * 60 * 60 * 1000,
+    staleTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,
     retry: 1,
   });
@@ -916,13 +936,14 @@ export default function Tools({ section = "tools" }) {
       let next = current;
       ["left", "right"].forEach((side) => {
         const teamId = String(next?.[`${side}TeamId`] || "").trim();
-        if (!teamId || draftSideHasPlayerEdits(next, side)) return;
+        if (!teamId) return;
         const lineup = getPreferredTeamLineup(
           next.league,
           teamId,
           sharedMatchupLineupMap,
           nbaMatchupDefaultLineupMap
         );
+        if (!draftSideCanApplyLineup(next, side, lineup)) return;
         if (lineup) next = applyTeamLineupToDraftSide(next, side, lineup);
       });
       return next;
@@ -1123,7 +1144,7 @@ export default function Tools({ section = "tools" }) {
   };
 
   const handleGraphicTabChange = (nextGraphic) => {
-    const normalized = [TOOL_TABS.PERSONNEL, TOOL_TABS.DEPTH_CHART].includes(nextGraphic)
+    const normalized = [TOOL_TABS.MATCHUP, TOOL_TABS.COURT_TIME, TOOL_TABS.PERSONNEL, TOOL_TABS.DEPTH_CHART].includes(nextGraphic)
       ? nextGraphic
       : TOOL_TABS.MATCHUP;
     const nextParams = new URLSearchParams(params);
