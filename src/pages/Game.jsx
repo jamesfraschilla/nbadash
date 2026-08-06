@@ -720,13 +720,13 @@ export default function Game({ variant = "full" }) {
     segment: segmentParam,
     dateStr: dateParam,
     refetchInterval: (query) => getGamePollingInterval(query.state.data, { gameId }),
-    refetchIntervalInBackground: true,
+    refetchIntervalInBackground: false,
   });
 
   const { data: minutesData } = useMinutes(gameId, {
     optional: true,
     refetchInterval: () => getGamePollingInterval(game, { gameId }),
-    refetchIntervalInBackground: true,
+    refetchIntervalInBackground: false,
   });
 
   const isSummerLeagueMatch = isSummerLeagueGame(gameId);
@@ -844,7 +844,7 @@ export default function Game({ variant = "full" }) {
     enabled: Boolean(gameId) && Boolean(supabase),
     staleTime: 30_000,
     refetchInterval: () => (game?.gameStatus === 2 ? 60_000 : false),
-    refetchIntervalInBackground: true,
+    refetchIntervalInBackground: false,
   });
 
   const { homeTeam, awayTeam, teamStats, boxScore, officials, callsAgainst } = game || {};
@@ -887,6 +887,7 @@ export default function Game({ variant = "full" }) {
     staleTime: 15_000,
     refetchOnWindowFocus: false,
     refetchInterval: () => (isLive ? 60_000 : false),
+    refetchIntervalInBackground: false,
   });
   const preparedAnalysisSegments = useMemo(() => {
     const byKey = new Map(

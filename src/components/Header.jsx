@@ -18,15 +18,16 @@ export default function Header({ theme, onToggleTheme, onSignOut, profile, isAdm
   const dateInput = dateParam || formatDateInputInTimeZone(new Date(), "America/New_York");
   const date = parseDateInput(dateInput);
   const dateLabel = formatDateLabel(date);
-  const shouldLivePollGames = location.pathname === "/"
+  const shouldShowGameStrip = location.pathname === "/"
     || location.pathname.startsWith("/g/")
     || location.pathname.startsWith("/m/");
 
   const { data: games = [], isLoading, isFetching } = useGamesByDate(dateInput, {
-    refetchInterval: shouldLivePollGames
+    enabled: shouldShowGameStrip,
+    refetchInterval: shouldShowGameStrip
       ? (query) => getGamesListPollingInterval(query.state.data)
       : false,
-    refetchIntervalInBackground: shouldLivePollGames,
+    refetchIntervalInBackground: false,
   });
 
   const orderedGames = useMemo(() => {
@@ -164,17 +165,19 @@ export default function Header({ theme, onToggleTheme, onSignOut, profile, isAdm
           />
         </div>
 
-        <div className={styles.gamesWrapper}>
-          <div className={styles.gamesList}>
-            {isLoading || (isFetching && orderedGames.length === 0) ? (
-              <div className={styles.noGames}>Loading...</div>
-            ) : orderedGames.length === 0 ? (
-              <div className={styles.noGames}>No games scheduled</div>
-            ) : (
-              orderedGames.map((game) => <GameCard key={game.gameId} game={game} />)
-            )}
+        {shouldShowGameStrip ? (
+          <div className={styles.gamesWrapper}>
+            <div className={styles.gamesList}>
+              {isLoading || (isFetching && orderedGames.length === 0) ? (
+                <div className={styles.noGames}>Loading...</div>
+              ) : orderedGames.length === 0 ? (
+                <div className={styles.noGames}>No games scheduled</div>
+              ) : (
+                orderedGames.map((game) => <GameCard key={game.gameId} game={game} />)
+              )}
+            </div>
           </div>
-        </div>
+        ) : null}
 
       </div>
     </header>

@@ -50,12 +50,7 @@ function getAdminClient() {
 
 async function requireAdmin(adminClient: any, req: Request) {
   const authHeader = req.headers.get("Authorization") || "";
-  let token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
-  if (!token) {
-    const cloned = req.clone();
-    const body = await cloned.json().catch(() => ({}));
-    token = typeof body?.accessToken === "string" ? body.accessToken : "";
-  }
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
   if (!token) {
     return { error: "Missing authorization token.", status: 401 } as const;
   }

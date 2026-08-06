@@ -663,7 +663,7 @@ export default function PreGame({ standalone = false }) {
   const { data: remotePlayers, isFetched: remotePlayersFetched } = useQuery({
     queryKey: ["pregame-players-remote", trackedTeamScope],
     queryFn: () => fetchRemotePregamePlayers(trackedTeamScope),
-    enabled: Boolean(supabase && trackedTeamScope),
+    enabled: Boolean(!standalone && supabase && trackedTeamScope),
     staleTime: 10_000,
     refetchInterval: 10_000,
   });
@@ -728,12 +728,15 @@ export default function PreGame({ standalone = false }) {
 
       setStandaloneRecordId(savedRecord.id);
       setStandaloneOpponentLine(String(savedRecord.payload.opponentLine || "vs OPPONENT").trim() || "vs OPPONENT");
+      const loadedAt = Date.now();
       if (Array.isArray(savedRecord.payload.players)) {
         setPlayers(savedRecord.payload.players);
+        playersUpdatedAtRef.current = loadedAt;
         setPlayersHydrated(true);
       }
       if (Array.isArray(savedRecord.payload.slots)) {
         setSlots(normalizeSlots(savedRecord.payload.slots));
+        slotsUpdatedAtRef.current = loadedAt;
         setSlotsHydrated(true);
       }
       setVaultStatus(`Loaded ${savedRecord.title || "Court Time graphic"}.`);
@@ -748,7 +751,7 @@ export default function PreGame({ standalone = false }) {
   useEffect(() => {
     if (playersHydrated) return;
     if (!trackedTeamScope) return;
-    if (supabase && !remotePlayersFetched) return;
+    if (!standalone && supabase && !remotePlayersFetched) return;
     const localPayload = loadPregamePlayersPayload(trackedTeamScope);
     const sharedPayload = resolveSharedPregamePlayersPayload(localPayload, remotePlayers);
 
@@ -876,12 +879,13 @@ export default function PreGame({ standalone = false }) {
 
   useEffect(() => {
     if (!playersHydrated || !trackedTeamScope) return;
+    if (standalone) return;
     const remoteUpdatedAt = Number(remotePlayers?.updatedAt || 0);
     if (!remoteUpdatedAt || remoteUpdatedAt <= playersUpdatedAtRef.current) return;
     setPlayers(remotePlayers.players || []);
     playersUpdatedAtRef.current = remoteUpdatedAt;
     persistPregamePlayers(trackedTeamScope, remotePlayers.players || [], remoteUpdatedAt);
-  }, [playersHydrated, remotePlayers, trackedTeamScope]);
+  }, [playersHydrated, remotePlayers, standalone, trackedTeamScope]);
 
   useEffect(() => {
     if (!playersHydrated || !trackedTeamScope || !trackedApiPlayers.length) return;

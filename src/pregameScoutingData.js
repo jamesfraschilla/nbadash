@@ -25,7 +25,6 @@ export async function requestPregameScoutingPacket({
   const { data, error } = await supabase.functions.invoke("pregame-scouting", {
     headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
     body: {
-      accessToken,
       teamId,
       mode,
       gameCount,

@@ -19,7 +19,7 @@ import {
   mergePersonnelStatsPayloads,
 } from "./personnelStatsResolution.js";
 import { supabase } from "./supabaseClient.js";
-import { readLocalStorage, writeLocalStorage } from "./storage.js";
+import { readLocalStorage, writeLocalStorage, writeLocalStorageWithEviction } from "./storage.js";
 import { currentSeasonString, formatDateInput, seasonBoundsForSeason } from "./utils.js";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
@@ -1508,6 +1508,13 @@ const TEAM_SEASON_GAMES_PROMISES = new Map();
 const SEASON_GAMES_STORAGE_PREFIX = "nba-dashboard-season-games:";
 const TEAM_SEASON_GAMES_STORAGE_PREFIX = "nba-dashboard-team-season-games:";
 const SEASON_GAMES_STORAGE_TTL_MS = 6 * 60 * 60 * 1000;
+const SEASON_GAMES_EVICTION_PREFIXES = [
+  SEASON_GAMES_STORAGE_PREFIX,
+  TEAM_SEASON_GAMES_STORAGE_PREFIX,
+  "nba-dashboard:match-ups:",
+  "pregame:players:v2:",
+  "pregame:players:v1",
+];
 
 function enumerateDateInputs(start, end) {
   const dates = [];
@@ -1608,27 +1615,25 @@ function loadTeamSeasonGamesFromStorage(teamId, season) {
 }
 
 function saveSeasonGamesToStorage(season, games) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(seasonGamesStorageKey(season), JSON.stringify({
+  writeLocalStorageWithEviction(
+    seasonGamesStorageKey(season),
+    JSON.stringify({
       updatedAt: Date.now(),
       games: games.map(compactSeasonGame),
-    }));
-  } catch {
-    // Ignore storage failures.
-  }
+    }),
+    SEASON_GAMES_EVICTION_PREFIXES
+  );
 }
 
 function saveTeamSeasonGamesToStorage(teamId, season, games) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(teamSeasonGamesStorageKey(teamId, season), JSON.stringify({
+  writeLocalStorageWithEviction(
+    teamSeasonGamesStorageKey(teamId, season),
+    JSON.stringify({
       updatedAt: Date.now(),
       games: games.map(compactSeasonGame),
-    }));
-  } catch {
-    // Ignore storage failures.
-  }
+    }),
+    SEASON_GAMES_EVICTION_PREFIXES
+  );
 }
 
 async function fetchAllSeasonGames(season = currentSeasonString()) {

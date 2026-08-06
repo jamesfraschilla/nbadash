@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -36,7 +36,6 @@ import {
   evaluateLateGameStrategy,
 } from "../lateGameStrategy.js";
 import { requestPregameScoutingPacket } from "../pregameScoutingData.js";
-import LateGameMatrixPanel from "../components/LateGameMatrixPanel.jsx";
 import {
   buildMarginRange,
   buildDefaultStrategyOverrides,
@@ -44,11 +43,6 @@ import {
   getMarginOptionLabel,
 } from "../components/lateGamePanelHelpers.js";
 import { exportMatchupGraphic } from "./matchupGraphicExport.js";
-import DepthChartGraphicAdmin from "./DepthChartGraphicAdmin.jsx";
-import PersonnelGraphicAdmin from "./PersonnelGraphicAdmin.jsx";
-import PreGame from "./PreGame.jsx";
-import Rotations from "./Rotations.jsx";
-import VisualDrillGenerator from "./VisualDrillGenerator.jsx";
 import { requestCustomDashboardRequest } from "../customRequestsData.js";
 import {
   buildMatchupGraphicLineupFromDraft,
@@ -62,6 +56,13 @@ import { buildMatchupDefaultLineupMap } from "../matchupDefaultLineups.js";
 import { findWashingtonOpponentTeamId } from "../matchupGameDefaults.js";
 import { formatDateInputInTimeZone } from "../utils.js";
 import styles from "./Tools.module.css";
+
+const DepthChartGraphicAdmin = lazy(() => import("./DepthChartGraphicAdmin.jsx"));
+const LateGameMatrixPanel = lazy(() => import("../components/LateGameMatrixPanel.jsx"));
+const PersonnelGraphicAdmin = lazy(() => import("./PersonnelGraphicAdmin.jsx"));
+const PreGame = lazy(() => import("./PreGame.jsx"));
+const Rotations = lazy(() => import("./Rotations.jsx"));
+const VisualDrillGenerator = lazy(() => import("./VisualDrillGenerator.jsx"));
 
 const EMPTY_PLAYER_IDS = Array(5).fill("");
 const CUSTOM_PLAYER_VALUE = "__custom__";
@@ -1627,6 +1628,7 @@ export default function Tools({ section = "tools" }) {
         </div>
       ) : null}
 
+      <Suspense fallback={<section className={styles.workspace}><div className={styles.statusNote}>Loading...</div></section>}>
       {activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.MATCHUP ? (
         <section className={styles.workspace}>
           {!remoteRostersPayload?.teams && league === "gleague" ? (
@@ -2236,6 +2238,7 @@ export default function Tools({ section = "tools" }) {
           />
         </section>
       )}
+      </Suspense>
     </div>
   );
 }

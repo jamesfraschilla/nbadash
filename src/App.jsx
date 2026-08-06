@@ -43,6 +43,10 @@ function RouteLoadingFallback() {
   return <div style={{ padding: "40px 16px", textAlign: "center" }}>Loading page...</div>;
 }
 
+function AccessRequired({ children }) {
+  return <div style={{ padding: "40px 16px", textAlign: "center" }}>{children}</div>;
+}
+
 function scheduleIdleWork(callback, timeout = 5000) {
   if (typeof window === "undefined") return () => {};
   if (typeof window.requestIdleCallback === "function") {
@@ -270,9 +274,18 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/me" element={<UserContent />} />
-            <Route path="/admin" element={<Admin />} />
-            <Route path="/tools" element={<Tools />} />
-            <Route path="/graphics" element={<Tools section="graphics" />} />
+            <Route
+              path="/admin"
+              element={isAdmin ? <Admin /> : <AccessRequired>Admin access is required to view this page.</AccessRequired>}
+            />
+            <Route
+              path="/tools"
+              element={canUseTools ? <Tools /> : <AccessRequired>An admin needs to grant the Tools feature flag before you can use this page.</AccessRequired>}
+            />
+            <Route
+              path="/graphics"
+              element={canUseTools ? <Tools section="graphics" /> : <AccessRequired>An admin needs to grant the Tools feature flag before you can use this page.</AccessRequired>}
+            />
             <Route path="/g/:gameId" element={<Game />} />
             <Route path="/g/:gameId/atc" element={<Game variant="atc" />} />
             <Route path="/g/:gameId/events" element={<PlayByPlay />} />

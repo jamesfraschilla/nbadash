@@ -1852,6 +1852,7 @@ export default function Rotations({ standalone = false }) {
 
   useEffect(() => {
     if (playersHydrated) return;
+    if (standalone && rotationParam) return;
     if (!monitoredTeamScope) return;
     if (supabase && (!remotePregamePlayersFetched || !legacyRemotePlayersFetched)) return;
 
@@ -1892,10 +1893,13 @@ export default function Rotations({ standalone = false }) {
     remotePregamePlayersFetched,
     legacyRemotePlayers,
     legacyRemotePlayersFetched,
+    rotationParam,
+    standalone,
   ]);
 
   useEffect(() => {
     if (!playersHydrated || !monitoredTeamScope) return;
+    if (standalone && rotationParam) return;
     if (supabase && !remotePregamePlayersFetched) return;
 
     const localPregamePayload = loadPregamePlayersPayload(monitoredTeamScope);
@@ -1909,7 +1913,7 @@ export default function Rotations({ standalone = false }) {
       playersStateKeyRef.current = nextKey;
       return next;
     });
-  }, [playersHydrated, monitoredTeamScope, remotePregamePlayers, remotePregamePlayersFetched]);
+  }, [playersHydrated, monitoredTeamScope, remotePregamePlayers, remotePregamePlayersFetched, rotationParam, standalone]);
 
   useEffect(() => {
     if (!playersHydrated || !monitoredTeamScope || !trackedApiPlayers.length) return;

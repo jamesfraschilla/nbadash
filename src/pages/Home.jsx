@@ -74,12 +74,12 @@ export default function Home() {
   const dateGamesQuery = useGamesByDate(dateInput, {
     enabled: !selectedTeamId,
     refetchInterval: (query) => getGamesListPollingInterval(query.state.data),
-    refetchIntervalInBackground: true,
+    refetchIntervalInBackground: false,
   });
   const teamGamesQuery = useTeamSeasonGames(selectedTeamId, selectedOpponentTeamId, "", {
     enabled: Boolean(selectedTeamId),
     refetchInterval: (query) => getGamesListPollingInterval(query.state.data),
-    refetchIntervalInBackground: true,
+    refetchIntervalInBackground: false,
   });
   const activeGamesQuery = selectedTeamId ? teamGamesQuery : dateGamesQuery;
   const games = activeGamesQuery.data || [];

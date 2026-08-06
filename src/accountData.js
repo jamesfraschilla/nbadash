@@ -168,9 +168,9 @@ export async function createUserInvite({ accessToken, email, displayName, role, 
   requireSupabase();
   const currentAccessToken = await getCurrentAccessToken(accessToken);
   const { data, error } = await supabase.functions.invoke("admin-users", {
+    headers: currentAccessToken ? { Authorization: `Bearer ${currentAccessToken}` } : undefined,
     body: {
       action: "invite",
-      accessToken: currentAccessToken,
       email,
       displayName,
       role,
@@ -190,9 +190,9 @@ export async function createManagedUser({ accessToken, email, password, displayN
   requireSupabase();
   const currentAccessToken = await getCurrentAccessToken(accessToken);
   const { data, error } = await supabase.functions.invoke("admin-users", {
+    headers: currentAccessToken ? { Authorization: `Bearer ${currentAccessToken}` } : undefined,
     body: {
       action: "create_user",
-      accessToken: currentAccessToken,
       email,
       password,
       displayName,

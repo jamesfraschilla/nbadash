@@ -31,7 +31,6 @@ export async function requestCustomDashboardRequest({ prompt }) {
     method: "POST",
     headers,
     body: JSON.stringify({
-      accessToken,
       prompt,
     }),
   });
