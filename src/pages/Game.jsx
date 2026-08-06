@@ -551,6 +551,8 @@ export default function Game({ variant = "full" }) {
   const [analysisSaveStatus, setAnalysisSaveStatus] = useState("");
   const [analysisSaving, setAnalysisSaving] = useState(false);
   const [analysisForm, setAnalysisForm] = useState(() => buildInitialAnalysisForm(null, false));
+  const [analysisPrewarmPending, setAnalysisPrewarmPending] = useState([]);
+  const [analysisPrewarmError, setAnalysisPrewarmError] = useState("");
   const analysisRequestRef = useRef({ id: 0, controller: null });
   const analysisAutoCacheRef = useRef(new Set());
   const [strategyVantageTeamId, setStrategyVantageTeamId] = useState("");
@@ -853,6 +855,7 @@ export default function Game({ variant = "full" }) {
   const awayTeamId = awayTeam?.teamId ?? null;
   const isWashingtonGame = isWashingtonTeam(homeTeam) || isWashingtonTeam(awayTeam);
   const isRotationsGame = isRotationsTeam(homeTeam) || isRotationsTeam(awayTeam);
+  const shouldUseSharedAnalysisRecaps = isRotationsGame;
   const [publishedOfficialOrder, setPublishedOfficialOrder] = useState(null);
   const timeouts = game?.timeouts;
   const isPregame = game?.gameStatus === 1;
@@ -880,11 +883,12 @@ export default function Game({ variant = "full" }) {
   );
   const {
     data: cachedAnalysisSegments = [],
+    error: cachedAnalysisSegmentsError,
     refetch: refetchCachedAnalysisSegments,
   } = useQuery({
     queryKey: cachedAnalysisSegmentsQueryKey,
     queryFn: ({ signal }) => listCachedGameAnalyses(gameId, { signal, timeoutMs: 12_000 }),
-    enabled: Boolean(gameId) && hasAnalysisData,
+    enabled: Boolean(gameId) && hasAnalysisData && shouldUseSharedAnalysisRecaps,
     staleTime: 15_000,
     refetchOnWindowFocus: false,
     refetchInterval: () => (isLive ? 60_000 : false),
@@ -903,6 +907,11 @@ export default function Game({ variant = "full" }) {
       }))
       .filter((segmentRecord) => segmentRecord.cachedRecord);
   }, [cachedAnalysisSegments, completedAnalysisSegments]);
+
+  useEffect(() => {
+    setAnalysisPrewarmPending([]);
+    setAnalysisPrewarmError("");
+  }, [gameId, shouldUseSharedAnalysisRecaps]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1341,6 +1350,10 @@ export default function Game({ variant = "full" }) {
     setAnalysisUniformOpen(false);
     setAnalysisSaveStatus(`Loaded shared ${cachedRecord.segmentLabel || segmentRecord.label} analysis.`);
   };
+  const handlePreparedAnalysisSelect = (value) => {
+    const segmentRecord = preparedAnalysisSegments.find((record) => record.key === value);
+    if (segmentRecord) openPreparedAnalysisSegment(segmentRecord);
+  };
 
   const openAddNoteForAction = (action) => {
     if (!action) return;
@@ -1460,7 +1473,14 @@ export default function Game({ variant = "full" }) {
   };
 
   useEffect(() => {
-    if (!gameId || !game || !hasAnalysisData || !completedAnalysisSegments.length) return undefined;
+    if (
+      !gameId ||
+      !game ||
+      !hasAnalysisData ||
+      !completedAnalysisSegments.length ||
+      !shouldUseSharedAnalysisRecaps ||
+      cachedAnalysisSegmentsError
+    ) return undefined;
     const cachedSegmentKeys = new Set(
       cachedAnalysisSegments
         .map((segmentRecord) => String(segmentRecord?.segmentKey || "").trim())
@@ -1481,6 +1501,10 @@ export default function Game({ variant = "full" }) {
         analysisAutoCacheRef.current.add(localCacheKey);
 
         try {
+          setAnalysisPrewarmPending((current) => (
+            current.includes(segmentRecord.key) ? current : [...current, segmentRecord.key]
+          ));
+          setAnalysisPrewarmError("");
           await requestGameAnalysis({
             gameId,
             range: buildAnalysisRequestRange(validation),
@@ -1495,6 +1519,13 @@ export default function Game({ variant = "full" }) {
           }
         } catch (error) {
           console.warn("Unable to pre-generate shared segment analysis.", error);
+          if (!cancelled) {
+            setAnalysisPrewarmError(error?.message || "Unable to prepare shared segment recaps.");
+          }
+        } finally {
+          if (!cancelled) {
+            setAnalysisPrewarmPending((current) => current.filter((key) => key !== segmentRecord.key));
+          }
         }
       }
     };
@@ -1505,6 +1536,7 @@ export default function Game({ variant = "full" }) {
     };
   }, [
     cachedAnalysisSegments,
+    cachedAnalysisSegmentsError,
     cachedAnalysisSegmentsQueryKey,
     completedAnalysisSegments,
     game,
@@ -1512,6 +1544,7 @@ export default function Game({ variant = "full" }) {
     hasAnalysisData,
     isLive,
     queryClient,
+    shouldUseSharedAnalysisRecaps,
   ]);
 
   const saveAnalysisToVault = async () => {
@@ -3268,27 +3301,43 @@ export default function Game({ variant = "full" }) {
                   <div className={styles.analysisPaneTitle}>Game Analysis</div>
                 </div>
 
-                <div className={styles.analysisPreparedPanel}>
-                  <div className={styles.analysisPreparedTitle}>Prepared Segments</div>
-                  {preparedAnalysisSegments.length ? (
-                    <div className={styles.analysisPreparedList}>
-                      {preparedAnalysisSegments.map((segmentRecord) => (
-                        <button
-                          key={segmentRecord.key}
-                          type="button"
-                          className={styles.analysisPreparedButton}
-                          onClick={() => openPreparedAnalysisSegment(segmentRecord)}
-                        >
-                          {segmentRecord.label}
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className={styles.analysisPreparedEmpty}>
-                      Completed segments will appear here after their shared analysis is prepared.
-                    </div>
-                  )}
-                </div>
+                {shouldUseSharedAnalysisRecaps ? (
+                  <div className={styles.analysisPreparedPanel}>
+                    <div className={styles.analysisPreparedTitle}>Prepared Segments</div>
+                    {preparedAnalysisSegments.length ? (
+                      <select
+                        className={styles.analysisPreparedSelect}
+                        value=""
+                        onChange={(event) => handlePreparedAnalysisSelect(event.target.value)}
+                      >
+                        <option value="">Select shared recap</option>
+                        {preparedAnalysisSegments.map((segmentRecord) => (
+                          <option key={segmentRecord.key} value={segmentRecord.key}>
+                            {segmentRecord.cachedRecord?.segmentLabel || segmentRecord.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className={styles.analysisPreparedEmpty}>
+                        {cachedAnalysisSegmentsError
+                          ? "Shared recaps are unavailable right now."
+                          : analysisPrewarmPending.length
+                            ? `Preparing ${analysisPrewarmPending.length} shared recap${analysisPrewarmPending.length === 1 ? "" : "s"}...`
+                            : "Completed segments will appear here after their shared analysis is prepared."}
+                      </div>
+                    )}
+                    {preparedAnalysisSegments.length && analysisPrewarmPending.length ? (
+                      <div className={styles.analysisPreparedEmpty}>
+                        Preparing {analysisPrewarmPending.length} more shared recap{analysisPrewarmPending.length === 1 ? "" : "s"}...
+                      </div>
+                    ) : null}
+                    {cachedAnalysisSegmentsError || analysisPrewarmError ? (
+                      <div className={styles.analysisPreparedError}>
+                        {cachedAnalysisSegmentsError?.message || analysisPrewarmError}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 <div className={styles.noteTimeRow}>
                   <div className={styles.noteTimeLabel}>Start</div>

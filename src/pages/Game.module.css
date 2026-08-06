@@ -331,30 +331,35 @@ html[data-theme="dark"] .pbpWheel {
   color: var(--muted);
 }
 
-.analysisPreparedList {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.analysisPreparedButton {
+.analysisPreparedSelect {
+  width: 100%;
   border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  padding: 9px 10px;
   background: var(--panel-strong);
   color: var(--text);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
-  cursor: pointer;
 }
 
-.analysisPreparedButton:hover {
+.analysisPreparedSelect:focus {
+  outline: none;
   border-color: var(--border-strong);
-  background: var(--button-hover);
 }
 
 .analysisPreparedEmpty {
   color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.analysisPreparedSelect + .analysisPreparedEmpty,
+.analysisPreparedError {
+  margin-top: 8px;
+}
+
+.analysisPreparedError {
+  color: var(--danger-text);
   font-size: 12px;
   line-height: 1.45;
 }

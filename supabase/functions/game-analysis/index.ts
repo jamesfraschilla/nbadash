@@ -73,6 +73,14 @@ function createAdminClient() {
   });
 }
 
+function requireAdminClient() {
+  const supabase = createAdminClient();
+  if (!supabase) {
+    throw new Error("Shared analysis cache is not configured.");
+  }
+  return supabase;
+}
+
 
 function safeNumber(value: unknown, fallback = 0) {
   const numeric = Number(value);
@@ -251,8 +259,7 @@ function normalizeCacheRequest(value: unknown) {
 }
 
 async function listCachedSegments(gameId: string) {
-  const supabase = createAdminClient();
-  if (!supabase) return [];
+  const supabase = requireAdminClient();
 
   const { data, error } = await supabase
     .from(CACHE_TABLE)
@@ -262,7 +269,7 @@ async function listCachedSegments(gameId: string) {
 
   if (error) {
     console.error("Unable to list cached game analyses.", error);
-    return [];
+    throw new Error("Unable to load shared analysis recaps.");
   }
 
   return (Array.isArray(data) ? data : []).map((row) => ({
@@ -279,8 +286,7 @@ async function listCachedSegments(gameId: string) {
 }
 
 async function readCachedSegment(gameId: string, segmentKey: string, dataSignature: string) {
-  const supabase = createAdminClient();
-  if (!supabase) return null;
+  const supabase = requireAdminClient();
 
   const { data, error } = await supabase
     .from(CACHE_TABLE)
@@ -291,7 +297,7 @@ async function readCachedSegment(gameId: string, segmentKey: string, dataSignatu
 
   if (error) {
     console.error("Unable to read cached game analysis.", error);
-    return null;
+    throw new Error("Unable to read shared analysis recap.");
   }
   if (!data || data.data_signature !== dataSignature || !data.result) return null;
 
@@ -323,8 +329,7 @@ async function writeCachedSegment({
   dataSignature: string;
   result: Record<string, unknown>;
 }) {
-  const supabase = createAdminClient();
-  if (!supabase) return null;
+  const supabase = requireAdminClient();
 
   const { data, error } = await supabase
     .from(CACHE_TABLE)
@@ -345,7 +350,7 @@ async function writeCachedSegment({
 
   if (error) {
     console.error("Unable to write cached game analysis.", error);
-    return null;
+    throw new Error("Unable to save shared analysis recap.");
   }
 
   return data;
