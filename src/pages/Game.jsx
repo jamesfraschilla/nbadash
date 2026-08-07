@@ -109,6 +109,7 @@ import styles from "./Game.module.css";
 
 const SNAPSHOT_STORAGE_PREFIX = "nba-dashboard:snapshots:";
 const LATE_GAME_PANEL_STORAGE_PREFIX = "nba-dashboard:late-game-panel:";
+const SHARED_ANALYSIS_FINAL_BACKFILL_WINDOW_MS = 36 * 60 * 60 * 1000;
 const CORE_STAT_FIELDS = [
   "points",
   "reboundsTotal",
@@ -218,6 +219,32 @@ const safeDisplayText = (value, fallback = "") => {
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   return fallback;
 };
+
+const parseGameTimeMs = (game) => {
+  const candidates = [
+    game?.gameTimeUTC,
+    game?.gameEt,
+    game?.gameDateTimeUTC,
+    game?.gameDate,
+    game?.date,
+  ];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const parsed = new Date(candidate);
+    if (!Number.isNaN(parsed.getTime())) return parsed.getTime();
+  }
+  return NaN;
+};
+
+const shouldAutoPrepareSharedAnalysis = (game, isLive) => {
+  if (isLive) return true;
+  if (Number(game?.gameStatus || 0) !== 3) return false;
+  const gameTimeMs = parseGameTimeMs(game);
+  if (!Number.isFinite(gameTimeMs)) return false;
+  const ageMs = Date.now() - gameTimeMs;
+  return ageMs >= 0 && ageMs <= SHARED_ANALYSIS_FINAL_BACKFILL_WINDOW_MS;
+};
+
 const buildStrategyHistoryDisplayRecord = (record) => {
   try {
     const payload = record?.payload && typeof record.payload === "object" ? record.payload : {};
@@ -907,6 +934,10 @@ export default function Game({ variant = "full" }) {
       }))
       .filter((segmentRecord) => segmentRecord.cachedRecord);
   }, [cachedAnalysisSegments, completedAnalysisSegments]);
+  const sharedAnalysisAutoPrepareEnabled = useMemo(
+    () => shouldAutoPrepareSharedAnalysis(game, isLive),
+    [game, isLive]
+  );
 
   useEffect(() => {
     setAnalysisPrewarmPending([]);
@@ -1479,6 +1510,7 @@ export default function Game({ variant = "full" }) {
       !hasAnalysisData ||
       !completedAnalysisSegments.length ||
       !shouldUseSharedAnalysisRecaps ||
+      !sharedAnalysisAutoPrepareEnabled ||
       cachedAnalysisSegmentsError
     ) return undefined;
     const cachedSegmentKeys = new Set(
@@ -1544,6 +1576,7 @@ export default function Game({ variant = "full" }) {
     hasAnalysisData,
     isLive,
     queryClient,
+    sharedAnalysisAutoPrepareEnabled,
     shouldUseSharedAnalysisRecaps,
   ]);
 
@@ -3323,7 +3356,9 @@ export default function Game({ variant = "full" }) {
                           ? "Shared recaps are unavailable right now."
                           : analysisPrewarmPending.length
                             ? `Preparing ${analysisPrewarmPending.length} shared recap${analysisPrewarmPending.length === 1 ? "" : "s"}...`
-                            : "Completed segments will appear here after their shared analysis is prepared."}
+                            : sharedAnalysisAutoPrepareEnabled
+                              ? "Completed segments will appear here after their shared analysis is prepared."
+                              : "No shared recaps have been prepared for this game yet."}
                       </div>
                     )}
                     {preparedAnalysisSegments.length && analysisPrewarmPending.length ? (

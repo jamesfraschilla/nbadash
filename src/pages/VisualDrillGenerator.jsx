@@ -181,9 +181,16 @@ function Shape({ name, color }) {
 }
 
 function Graphic({ graphic }) {
+  const componentCount = Math.max(1, graphic.components.length);
   return (
-    <div className={styles.graphic} style={{ backgroundColor: graphic.backgroundColor }}>
-      <div className={styles.components} data-count={graphic.components.length}>
+    <div
+      className={styles.graphic}
+      style={{
+        backgroundColor: graphic.backgroundColor,
+        "--visual-component-count": componentCount,
+      }}
+    >
+      <div className={styles.components} data-count={componentCount}>
         {graphic.components.map((component, index) => (
           <div className={styles.componentSpace} key={`${component.type}-${component.value}-${index}`}>
             {component.type === "digit" ? (
@@ -210,6 +217,7 @@ export default function VisualDrillGenerator() {
   const [graphic, setGraphic] = useState(() => generateVisualDrill(DEFAULT_CONFIG));
   const [drillMode, setDrillMode] = useState(false);
   const [nextInterval, setNextInterval] = useState(null);
+  const [timerCycleKey, setTimerCycleKey] = useState(0);
   const [favorites, setFavorites] = useState([]);
   const [favoriteId, setFavoriteId] = useState("");
   const [favoriteName, setFavoriteName] = useState("");
@@ -366,6 +374,7 @@ export default function VisualDrillGenerator() {
     }
     const seconds = randomIntegerInRange(config.minimumInterval, config.maximumInterval, 1, 20);
     setNextInterval(seconds);
+    setTimerCycleKey((current) => current + 1);
     const timer = window.setTimeout(generate, seconds * 1000);
     return () => window.clearTimeout(timer);
   }, [config.maximumInterval, config.minimumInterval, config.selfTimerEnabled, drillMode, generate, graphic]);
@@ -741,6 +750,15 @@ export default function VisualDrillGenerator() {
         <Graphic graphic={graphic} />
         <button type="button" className={styles.exitButton} onClick={exitDrillMode} aria-label="Exit Drill Mode">×</button>
         {nextInterval ? <div className={styles.timerBadge}>Auto · {nextInterval}s interval</div> : null}
+        {nextInterval ? (
+          <div className={styles.timerProgress} aria-hidden="true">
+            <span
+              key={timerCycleKey}
+              className={styles.timerProgressFill}
+              style={{ animationDuration: `${nextInterval}s` }}
+            />
+          </div>
+        ) : null}
         <button type="button" className={styles.refreshButton} onClick={generate}><span aria-hidden="true">↻</span> Refresh</button>
       </div>
     </div>

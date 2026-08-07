@@ -42,6 +42,11 @@ const STANDALONE_PREGAME_GAME = {
   homeTeam: { teamId: "1610612764", teamTricode: "WAS", teamCity: "Washington", teamName: "Wizards" },
   awayTeam: { teamId: "0", teamTricode: "OPP", teamCity: "Opponent", teamName: "" },
 };
+const STANDALONE_ROSTER_OPTIONS = [
+  { value: "washington", label: "Washington Wizards" },
+  { value: "capital_city", label: "Capital City Go-Go" },
+];
+const STANDALONE_ROSTER_SCOPES = new Set(STANDALONE_ROSTER_OPTIONS.map((option) => option.value));
 const TEAM_TIME_ZONES = {
   ATL: "America/New_York",
   BKN: "America/New_York",
@@ -338,6 +343,15 @@ function formatTime(dateValue, timeZone = "America/New_York") {
   return format(dateValue, "h:mm");
 }
 
+function formatClockMinutes(totalMinutes) {
+  const minutesInDay = 24 * 60;
+  const normalizedMinutes = ((totalMinutes % minutesInDay) + minutesInDay) % minutesInDay;
+  const hour24 = Math.floor(normalizedMinutes / 60);
+  const minute = normalizedMinutes % 60;
+  const hour12 = hour24 % 12 || 12;
+  return `${hour12}:${String(minute).padStart(2, "0")}`;
+}
+
 function parseGameStart(game) {
   const utcValue = game?.gameTimeUTC;
   const etValue = game?.gameEt;
@@ -349,7 +363,17 @@ function parseGameStart(game) {
   return new Date();
 }
 
-function buildDefaultSlots(game, count = 8) {
+function buildDefaultSlots(game, count = 8, options = {}) {
+  if (options.standalone) {
+    const finalSlotMinutes = 19 * 60;
+    const firstSlotMinutes = finalSlotMinutes - ((count - 1) * 15);
+    return Array.from({ length: count }, (_, index) => ({
+      id: crypto.randomUUID(),
+      time: formatClockMinutes(firstSlotMinutes + (index * 15)),
+      playerIds: ["", ""],
+    }));
+  }
+
   const start = parseGameStart(game);
   const timeZone = getGameTimeZone(game);
   const finalSlot = new Date(start.getTime() - (45 * 60 * 1000));
@@ -364,9 +388,9 @@ function buildDefaultSlots(game, count = 8) {
   });
 }
 
-function buildSlotsFromTemplate(game, template) {
+function buildSlotsFromTemplate(game, template, options = {}) {
   const count = Math.max(1, Number(template?.count || 8));
-  const seeded = buildDefaultSlots(game, count);
+  const seeded = buildDefaultSlots(game, count, options);
   return seeded.map((slot, index) => ({
     ...slot,
     playerIds: Array.isArray(template?.playerGroups?.[index])
@@ -375,9 +399,9 @@ function buildSlotsFromTemplate(game, template) {
   }));
 }
 
-function buildSlotsWithLocalTimes(game, slots) {
+function buildSlotsWithLocalTimes(game, slots, options = {}) {
   const normalizedSlots = normalizeSlots(slots);
-  const seeded = buildDefaultSlots(game, Math.max(1, normalizedSlots.length || 8));
+  const seeded = buildDefaultSlots(game, Math.max(1, normalizedSlots.length || 8), options);
   return seeded.map((slot, index) => ({
     ...slot,
     playerIds: Array.isArray(normalizedSlots[index]?.playerIds)
@@ -626,9 +650,12 @@ export default function PreGame({ standalone = false }) {
   const [params, setParams] = useSearchParams();
   const dateParam = params.get("d");
   const courtTimeParam = String(params.get("courtTime") || "").trim();
-  const effectiveGameId = standalone ? `${STANDALONE_PREGAME_GAME_ID}:${courtTimeParam || "draft"}` : gameId;
   const vaultUserId = user?.id || (!accountsEnabled ? "guest" : "");
   const backUrl = standalone ? "/graphics?graphic=court-time" : (dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`);
+  const [standaloneTeamScope, setStandaloneTeamScope] = useState("washington");
+  const effectiveGameId = standalone
+    ? `${STANDALONE_PREGAME_GAME_ID}:${standaloneTeamScope === "washington" ? "" : `${standaloneTeamScope}:`}${courtTimeParam || "draft"}`
+    : gameId;
 
   const { data: fetchedGame, isLoading, error } = useGame(gameId, {
     dateStr: dateParam,
@@ -658,12 +685,15 @@ export default function PreGame({ standalone = false }) {
   const slotsUpdatedAtRef = useRef(0);
   const templateUpdatedAtRef = useRef(0);
 
-  const trackedTeamScope = useMemo(() => (standalone ? "washington" : getPregameTeamScope(game)), [game, standalone]);
+  const trackedTeamScope = useMemo(
+    () => (standalone ? standaloneTeamScope : getPregameTeamScope(game)),
+    [game, standalone, standaloneTeamScope]
+  );
 
   const { data: remotePlayers, isFetched: remotePlayersFetched } = useQuery({
     queryKey: ["pregame-players-remote", trackedTeamScope],
     queryFn: () => fetchRemotePregamePlayers(trackedTeamScope),
-    enabled: Boolean(!standalone && supabase && trackedTeamScope),
+    enabled: Boolean(supabase && trackedTeamScope),
     staleTime: 10_000,
     refetchInterval: 10_000,
   });
@@ -727,6 +757,9 @@ export default function PreGame({ standalone = false }) {
       }
 
       setStandaloneRecordId(savedRecord.id);
+      if (STANDALONE_ROSTER_SCOPES.has(savedRecord.payload.teamScope)) {
+        setStandaloneTeamScope(savedRecord.payload.teamScope);
+      }
       setStandaloneOpponentLine(String(savedRecord.payload.opponentLine || "vs OPPONENT").trim() || "vs OPPONENT");
       const loadedAt = Date.now();
       if (Array.isArray(savedRecord.payload.players)) {
@@ -751,7 +784,7 @@ export default function PreGame({ standalone = false }) {
   useEffect(() => {
     if (playersHydrated) return;
     if (!trackedTeamScope) return;
-    if (!standalone && supabase && !remotePlayersFetched) return;
+    if (supabase && !remotePlayersFetched) return;
     const localPayload = loadPregamePlayersPayload(trackedTeamScope);
     const sharedPayload = resolveSharedPregamePlayersPayload(localPayload, remotePlayers);
 
@@ -805,7 +838,7 @@ export default function PreGame({ standalone = false }) {
     }
 
     if (remoteSchedule?.slots?.length && remoteScheduleUpdatedAt >= localScheduleUpdatedAt && !remoteHasAssignments) {
-      const migratedRemoteSlots = buildSlotsWithLocalTimes(game, remoteSchedule.slots);
+      const migratedRemoteSlots = buildSlotsWithLocalTimes(game, remoteSchedule.slots, { standalone });
       setSlots(migratedRemoteSlots);
       slotsUpdatedAtRef.current = remoteScheduleUpdatedAt;
       setSlotsHydrated(true);
@@ -813,7 +846,7 @@ export default function PreGame({ standalone = false }) {
     }
 
     if (localSchedulePayload?.slots?.length && !localHasAssignments) {
-      const migratedLocalSlots = buildSlotsWithLocalTimes(game, localSchedulePayload.slots);
+      const migratedLocalSlots = buildSlotsWithLocalTimes(game, localSchedulePayload.slots, { standalone });
       setSlots(migratedLocalSlots);
       slotsUpdatedAtRef.current = localScheduleUpdatedAt;
       setSlotsHydrated(true);
@@ -821,11 +854,11 @@ export default function PreGame({ standalone = false }) {
     }
 
     if (selectedTemplate) {
-      setSlots(buildSlotsFromTemplate(game, selectedTemplate));
+      setSlots(buildSlotsFromTemplate(game, selectedTemplate, { standalone }));
       templateUpdatedAtRef.current = Math.max(localTemplateUpdatedAt, remoteTemplateUpdatedAt);
       slotsUpdatedAtRef.current = templateUpdatedAtRef.current;
     } else {
-      setSlots(buildDefaultSlots(game));
+      setSlots(buildDefaultSlots(game, 8, { standalone }));
       slotsUpdatedAtRef.current = Date.now();
     }
     setSlotsHydrated(true);
@@ -1002,7 +1035,7 @@ export default function PreGame({ standalone = false }) {
         playerById,
         headerLineTwo,
         logoImage,
-        themeMode,
+        "light",
         landscapeScale
       );
       downloadCanvas(landscapeCanvas, `pregame-${effectiveGameId || "court-time"}-landscape.png`);
@@ -1034,6 +1067,7 @@ export default function PreGame({ standalone = false }) {
       type: TOOL_RECORD_TYPES.PREGAME_COURT_TIME_GRAPHIC,
       title,
       payload: {
+        teamScope: trackedTeamScope || "washington",
         opponentLine: headerLineTwo,
         players,
         slots,
@@ -1095,6 +1129,24 @@ export default function PreGame({ standalone = false }) {
       ) : null}
 
       <header className={styles.header}>
+        {standalone ? (
+          <label className={styles.rosterPicker}>
+            <span>Roster</span>
+            <select
+              value={standaloneTeamScope}
+              onChange={(event) => {
+                const nextScope = STANDALONE_ROSTER_SCOPES.has(event.target.value) ? event.target.value : "washington";
+                setStandaloneTeamScope(nextScope);
+                setVaultStatus("");
+                setActivePlayerCell(null);
+              }}
+            >
+              {STANDALONE_ROSTER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <h1 className={styles.title}>PRE-GAME COURT TIME</h1>
         {standalone ? (
           <input
