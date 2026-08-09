@@ -9,6 +9,7 @@ const TOOL_VAULT_EVICTION_PREFIXES = [
   "pregame:players:v2:",
   "pregame:players:v1",
 ];
+const TOOL_VAULT_REMOTE_TIMEOUT_MS = 12_000;
 
 export const TOOL_RECORD_TYPES = {
   MATCHUP_GRAPHIC: "matchup_graphic",
@@ -63,6 +64,35 @@ export function listSavedToolRecords(userId) {
 async function requireSupabase() {
   if (!supabase) {
     throw new Error("Supabase is not configured.");
+  }
+}
+
+function createRemoteToolRequestSignal(message) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort(new Error(message));
+  }, TOOL_VAULT_REMOTE_TIMEOUT_MS);
+  return {
+    signal: controller.signal,
+    cleanup: () => clearTimeout(timeoutId),
+  };
+}
+
+async function runRemoteToolRequest(queryBuilder, timeoutMessage) {
+  const { signal, cleanup } = createRemoteToolRequestSignal(timeoutMessage);
+  try {
+    const query = queryBuilder();
+    const request = typeof query?.abortSignal === "function"
+      ? query.abortSignal(signal)
+      : query;
+    return await request;
+  } catch (error) {
+    if (signal.aborted || error?.name === "AbortError") {
+      throw new Error(timeoutMessage);
+    }
+    throw error;
+  } finally {
+    cleanup();
   }
 }
 
@@ -131,11 +161,14 @@ export function replaceSavedToolRecords(userId, records) {
 export async function listSavedToolRecordsRemote(userId) {
   if (!userId) return [];
   await requireSupabase();
-  const { data, error } = await supabase
-    .from("user_tool_records")
-    .select("*")
-    .eq("owner_id", userId)
-    .order("updated_at", { ascending: false });
+  const { data, error } = await runRemoteToolRequest(
+    () => supabase
+      .from("user_tool_records")
+      .select("*")
+      .eq("owner_id", userId)
+      .order("updated_at", { ascending: false }),
+    "Account favorites took too long to load. Check your connection and try again."
+  );
   if (error) throw error;
   const records = (data || [])
     .map((row) => normalizeRecord({
@@ -155,12 +188,15 @@ export async function getSavedToolRecordRemote(userId, recordId) {
   const normalizedId = String(recordId || "").trim();
   if (!userId || !normalizedId) return null;
   await requireSupabase();
-  const { data, error } = await supabase
-    .from("user_tool_records")
-    .select("*")
-    .eq("owner_id", userId)
-    .eq("id", normalizedId)
-    .maybeSingle();
+  const { data, error } = await runRemoteToolRequest(
+    () => supabase
+      .from("user_tool_records")
+      .select("*")
+      .eq("owner_id", userId)
+      .eq("id", normalizedId)
+      .maybeSingle(),
+    "This saved tool took too long to load. Check your connection and try again."
+  );
   if (error) throw error;
   const record = data ? normalizeRecord({
     id: data.id,
@@ -190,11 +226,13 @@ export async function saveToolRecordRemote(userId, record) {
     payload: normalized.payload,
     created_at: normalized.createdAt,
   };
-  const { data, error } = await supabase
-    .rpc("save_user_tool_record_atomic", {
+  const { data, error } = await runRemoteToolRequest(
+    () => supabase.rpc("save_user_tool_record_atomic", {
       p_record: payload,
       p_expected_revision: expectedRevision,
-    });
+    }),
+    "Saving this favorite took too long. Check your connection and try again."
+  );
   if (error) {
     if (error.code === "40001" || String(error.message || "").includes("TOOL_RECORD_CONFLICT")) {
       throw new Error("This saved tool changed in another browser. Reload it before saving again.");
@@ -221,12 +259,15 @@ export async function deleteSavedToolRecordRemote(userId, recordId) {
   const normalizedId = String(recordId || "").trim();
   if (!userId || !normalizedId) return;
   await requireSupabase();
-  const { data, error } = await supabase
-    .from("user_tool_records")
-    .delete()
-    .eq("owner_id", userId)
-    .eq("id", normalizedId)
-    .select("id");
+  const { data, error } = await runRemoteToolRequest(
+    () => supabase
+      .from("user_tool_records")
+      .delete()
+      .eq("owner_id", userId)
+      .eq("id", normalizedId)
+      .select("id"),
+    "Deleting this favorite took too long. Check your connection and try again."
+  );
   if (error) throw error;
   if (!Array.isArray(data) || !data.some((row) => row.id === normalizedId)) {
     throw new Error("Supabase did not confirm that the saved record was deleted.");

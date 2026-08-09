@@ -460,7 +460,7 @@ export default function VisualDrillGenerator() {
       setFavoriteStatus(accountsEnabled
         ? `Saved ${saved.title} to your account.`
         : `Saved ${saved.title} in this browser.`);
-      await queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] }).catch(() => {});
+      queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] }).catch(() => {});
     } catch (error) {
       console.error("Failed to save Visual Drill favorite.", error);
       setFavoriteStatus(error?.message || "Unable to save this favorite.");
@@ -473,13 +473,16 @@ export default function VisualDrillGenerator() {
     if (!favoriteId || !vaultUserId || favoriteBusy) return;
     const favorite = favorites.find((record) => record.id === favoriteId);
     if (!window.confirm(`Delete “${favorite?.title || "this favorite"}”?`)) return;
+    const deletedFavoriteId = favoriteId;
     setFavoriteBusy(true);
     try {
       if (accountsEnabled && user?.id) await deleteSavedToolRecordRemote(user.id, favoriteId);
       else deleteSavedToolRecord(vaultUserId, favoriteId);
-      await queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] });
-      handleNewFavorite();
-      await refreshFavorites();
+      setFavorites((current) => current.filter((record) => record.id !== deletedFavoriteId));
+      setFavoriteId("");
+      setFavoriteName("");
+      setFavoriteStatus(`Deleted ${favorite?.title || "favorite"}.`);
+      queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] }).catch(() => {});
     } catch (error) {
       console.error("Failed to delete Visual Drill favorite remotely.", error);
       setFavoriteStatus("Unable to delete this Supabase favorite. It has not been removed; try again.");
