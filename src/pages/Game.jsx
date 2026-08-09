@@ -24,12 +24,10 @@ import {
   NOTE_TAG_OPTIONS,
 } from "../noteHelpers.js";
 import {
-  applyAnalysisSegmentShortcut,
   analysisPeriodLabel,
   buildCompletedAnalysisSegments,
   buildAnalysisMinuteOptions,
   buildAnalysisPeriodOptions,
-  buildAnalysisSegmentOptions,
   buildAnalysisSecondOptions,
   buildInitialAnalysisForm,
   formatAnalysisPoint,
@@ -110,6 +108,16 @@ import styles from "./Game.module.css";
 const SNAPSHOT_STORAGE_PREFIX = "nba-dashboard:snapshots:";
 const LATE_GAME_PANEL_STORAGE_PREFIX = "nba-dashboard:late-game-panel:";
 const SHARED_ANALYSIS_FINAL_BACKFILL_WINDOW_MS = 36 * 60 * 60 * 1000;
+const PREPARED_ANALYSIS_SEGMENT_OPTIONS = [
+  { key: "q1", label: "Q1" },
+  { key: "q2", label: "Q2" },
+  { key: "first-half", label: "1st Half" },
+  { key: "q3", label: "Q3" },
+  { key: "q1-q3", label: "Q1-Q3" },
+  { key: "q4", label: "Q4" },
+  { key: "second-half", label: "2nd Half" },
+  { key: "all", label: "All Segments [Final Full Game]" },
+];
 const CORE_STAT_FIELDS = [
   "points",
   "reboundsTotal",
@@ -934,6 +942,18 @@ export default function Game({ variant = "full" }) {
       }))
       .filter((segmentRecord) => segmentRecord.cachedRecord);
   }, [cachedAnalysisSegments, completedAnalysisSegments]);
+  const preparedAnalysisSegmentOptions = useMemo(() => {
+    const availableByKey = new Map(preparedAnalysisSegments.map((record) => [record.key, record]));
+    return PREPARED_ANALYSIS_SEGMENT_OPTIONS.map((option) => {
+      const segmentRecord = availableByKey.get(option.key);
+      return {
+        ...option,
+        form: segmentRecord?.form || null,
+        cachedRecord: segmentRecord?.cachedRecord || null,
+      };
+    });
+  }, [preparedAnalysisSegments]);
+  const hasPreparedAnalysisSegments = preparedAnalysisSegments.length > 0;
   const sharedAnalysisAutoPrepareEnabled = useMemo(
     () => shouldAutoPrepareSharedAnalysis(game, isLive),
     [game, isLive]
@@ -1334,15 +1354,6 @@ export default function Game({ variant = "full" }) {
     });
   };
 
-  const updateAnalysisSegmentShortcut = (value) => {
-    setAnalysisForm((prev) => {
-      if (value === "custom") {
-        return { ...prev, segmentShortcut: "custom" };
-      }
-      return applyAnalysisSegmentShortcut(value, game, isLive);
-    });
-  };
-
   const openAddNote = () => {
     setNoteSourceAction(null);
     setNoteForm(buildDefaultNoteForm(game, isLive));
@@ -1382,7 +1393,9 @@ export default function Game({ variant = "full" }) {
     setAnalysisSaveStatus(`Loaded shared ${cachedRecord.segmentLabel || segmentRecord.label} analysis.`);
   };
   const handlePreparedAnalysisSelect = (value) => {
-    const segmentRecord = preparedAnalysisSegments.find((record) => record.key === value);
+    const segmentRecord = preparedAnalysisSegmentOptions.find((record) => (
+      record.key === value && record.cachedRecord
+    ));
     if (segmentRecord) openPreparedAnalysisSegment(segmentRecord);
   };
 
@@ -1449,7 +1462,6 @@ export default function Game({ variant = "full" }) {
 
   const analysisValidation = validateAnalysisForm(analysisForm, game, isLive);
   const analysisPeriodOptions = buildAnalysisPeriodOptions(game?.period || 4);
-  const analysisSegmentOptions = buildAnalysisSegmentOptions(game, isLive);
   const minMinuteOptions = buildAnalysisMinuteOptions(analysisForm.minPeriod, game);
   const minSecondOptions = buildAnalysisSecondOptions(analysisForm.minPeriod, analysisForm.minMinutes, game);
   const maxMinuteOptions = buildAnalysisMinuteOptions(analysisForm.maxPeriod, game);
@@ -3337,20 +3349,23 @@ export default function Game({ variant = "full" }) {
                 {shouldUseSharedAnalysisRecaps ? (
                   <div className={styles.analysisPreparedPanel}>
                     <div className={styles.analysisPreparedTitle}>Prepared Segments</div>
-                    {preparedAnalysisSegments.length ? (
-                      <select
-                        className={styles.analysisPreparedSelect}
-                        value=""
-                        onChange={(event) => handlePreparedAnalysisSelect(event.target.value)}
-                      >
-                        <option value="">Select shared recap</option>
-                        {preparedAnalysisSegments.map((segmentRecord) => (
-                          <option key={segmentRecord.key} value={segmentRecord.key}>
-                            {segmentRecord.cachedRecord?.segmentLabel || segmentRecord.label}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
+                    <select
+                      className={styles.analysisPreparedSelect}
+                      value=""
+                      onChange={(event) => handlePreparedAnalysisSelect(event.target.value)}
+                    >
+                      <option value="">Select</option>
+                      {preparedAnalysisSegmentOptions.map((segmentRecord) => (
+                        <option
+                          key={segmentRecord.key}
+                          value={segmentRecord.key}
+                          disabled={!segmentRecord.cachedRecord}
+                        >
+                          {segmentRecord.label}
+                        </option>
+                      ))}
+                    </select>
+                    {!hasPreparedAnalysisSegments ? (
                       <div className={styles.analysisPreparedEmpty}>
                         {cachedAnalysisSegmentsError
                           ? "Shared recaps are unavailable right now."
@@ -3360,8 +3375,8 @@ export default function Game({ variant = "full" }) {
                               ? "Completed segments will appear here after their shared analysis is prepared."
                               : "No shared recaps have been prepared for this game yet."}
                       </div>
-                    )}
-                    {preparedAnalysisSegments.length && analysisPrewarmPending.length ? (
+                    ) : null}
+                    {hasPreparedAnalysisSegments && analysisPrewarmPending.length ? (
                       <div className={styles.analysisPreparedEmpty}>
                         Preparing {analysisPrewarmPending.length} more shared recap{analysisPrewarmPending.length === 1 ? "" : "s"}...
                       </div>
@@ -3374,120 +3389,108 @@ export default function Game({ variant = "full" }) {
                   </div>
                 ) : null}
 
-                <div className={styles.noteTimeRow}>
-                  <div className={styles.noteTimeLabel}>Start</div>
-                  <div className={styles.noteTimeControls}>
-                    <select
-                      className={styles.noteSelect}
-                      value={analysisForm.minPeriod}
-                      onChange={(event) => updateAnalysisPoint("min", "Period", event.target.value)}
-                    >
-                      {analysisPeriodOptions.map((option) => (
-                        <option key={`min-${option.value}`} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                    <div className={styles.noteClockSelects}>
-                      <select
-                        className={styles.noteSelect}
-                        value={analysisForm.minMinutes}
-                        onChange={(event) => updateAnalysisPoint("min", "Minutes", event.target.value)}
-                      >
-                        {minMinuteOptions.map((option) => (
-                          <option key={`min-minute-${option}`} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                      <span className={styles.noteClockSeparator}>:</span>
-                      <select
-                        className={styles.noteSelect}
-                        value={analysisForm.minSeconds}
-                        onChange={(event) => updateAnalysisPoint("min", "Seconds", event.target.value)}
-                      >
-                        {minSecondOptions.map((option) => (
-                          <option key={`min-second-${option}`} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
+                <details className={styles.analysisCustomPanel}>
+                  <summary className={styles.analysisCustomSummary}>Custom Range</summary>
+                  <div className={styles.analysisCustomBody}>
+                    <div className={styles.noteTimeRow}>
+                      <div className={styles.noteTimeLabel}>Start</div>
+                      <div className={styles.noteTimeControls}>
+                        <select
+                          className={styles.noteSelect}
+                          value={analysisForm.minPeriod}
+                          onChange={(event) => updateAnalysisPoint("min", "Period", event.target.value)}
+                        >
+                          {analysisPeriodOptions.map((option) => (
+                            <option key={`min-${option.value}`} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <div className={styles.noteClockSelects}>
+                          <select
+                            className={styles.noteSelect}
+                            value={analysisForm.minMinutes}
+                            onChange={(event) => updateAnalysisPoint("min", "Minutes", event.target.value)}
+                          >
+                            {minMinuteOptions.map((option) => (
+                              <option key={`min-minute-${option}`} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                          <span className={styles.noteClockSeparator}>:</span>
+                          <select
+                            className={styles.noteSelect}
+                            value={analysisForm.minSeconds}
+                            onChange={(event) => updateAnalysisPoint("min", "Seconds", event.target.value)}
+                          >
+                            {minSecondOptions.map((option) => (
+                              <option key={`min-second-${option}`} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
 
-                <div className={styles.noteTimeRow}>
-                  <div className={styles.noteTimeLabel}>End</div>
-                  <div className={styles.noteTimeControls}>
-                    <select
-                      className={styles.noteSelect}
-                      value={analysisForm.maxPeriod}
-                      onChange={(event) => updateAnalysisPoint("max", "Period", event.target.value)}
-                      disabled={isLive}
-                    >
-                      {analysisPeriodOptions.map((option) => (
-                        <option key={`max-${option.value}`} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                    <div className={styles.noteClockSelects}>
-                      <select
-                        className={styles.noteSelect}
-                        value={analysisForm.maxMinutes}
-                        onChange={(event) => updateAnalysisPoint("max", "Minutes", event.target.value)}
-                        disabled={isLive}
-                      >
-                        {maxMinuteOptions.map((option) => (
-                          <option key={`max-minute-${option}`} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                      <span className={styles.noteClockSeparator}>:</span>
-                      <select
-                        className={styles.noteSelect}
-                        value={analysisForm.maxSeconds}
-                        onChange={(event) => updateAnalysisPoint("max", "Seconds", event.target.value)}
-                        disabled={isLive}
-                      >
-                        {maxSecondOptions.map((option) => (
-                          <option key={`max-second-${option}`} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
+                    <div className={styles.noteTimeRow}>
+                      <div className={styles.noteTimeLabel}>End</div>
+                      <div className={styles.noteTimeControls}>
+                        <select
+                          className={styles.noteSelect}
+                          value={analysisForm.maxPeriod}
+                          onChange={(event) => updateAnalysisPoint("max", "Period", event.target.value)}
+                          disabled={isLive}
+                        >
+                          {analysisPeriodOptions.map((option) => (
+                            <option key={`max-${option.value}`} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <div className={styles.noteClockSelects}>
+                          <select
+                            className={styles.noteSelect}
+                            value={analysisForm.maxMinutes}
+                            onChange={(event) => updateAnalysisPoint("max", "Minutes", event.target.value)}
+                            disabled={isLive}
+                          >
+                            {maxMinuteOptions.map((option) => (
+                              <option key={`max-minute-${option}`} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                          <span className={styles.noteClockSeparator}>:</span>
+                          <select
+                            className={styles.noteSelect}
+                            value={analysisForm.maxSeconds}
+                            onChange={(event) => updateAnalysisPoint("max", "Seconds", event.target.value)}
+                            disabled={isLive}
+                          >
+                            {maxSecondOptions.map((option) => (
+                              <option key={`max-second-${option}`} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {isLive ? (
+                          <span className={styles.analysisLiveCap}>
+                            Live max: {analysisPeriodLabel(game?.period)} {clock}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
-                    {isLive ? (
-                      <span className={styles.analysisLiveCap}>
-                        Live max: {analysisPeriodLabel(game?.period)} {clock}
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
 
-                <div className={styles.noteTimeRow}>
-                  <div className={styles.noteTimeLabel}>Quick Range</div>
-                  <div className={styles.noteTimeControls}>
-                    <select
-                      className={styles.noteSelect}
-                      value={analysisForm.segmentShortcut || "custom"}
-                      onChange={(event) => updateAnalysisSegmentShortcut(event.target.value)}
-                    >
-                      {analysisSegmentOptions.map((option) => (
-                        <option key={`segment-${option.value}`} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                    {analysisValidation.error ? (
+                      <div className={styles.analysisError}>{analysisValidation.error}</div>
+                    ) : (
+                      <div className={styles.analysisRangeSummary}>{analysisValidation.rangeLabel}</div>
+                    )}
                   </div>
-                </div>
-
-                {analysisValidation.error ? (
-                  <div className={styles.analysisError}>{analysisValidation.error}</div>
-                ) : (
-                  <div className={styles.analysisRangeSummary}>{analysisValidation.rangeLabel}</div>
-                )}
+                </details>
 
                 {analysisError ? <div className={styles.analysisError}>{analysisError}</div> : null}
                 {analysisSaveStatus ? <div className={styles.analysisRangeSummary}>{analysisSaveStatus}</div> : null}

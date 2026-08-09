@@ -364,6 +364,53 @@ html[data-theme="dark"] .pbpWheel {
   line-height: 1.45;
 }
 
+.analysisCustomPanel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+}
+
+.analysisCustomSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  list-style: none;
+  text-transform: uppercase;
+}
+
+.analysisCustomSummary::-webkit-details-marker {
+  display: none;
+}
+
+.analysisCustomSummary::after {
+  color: var(--text);
+  content: "+";
+  font-size: 16px;
+  line-height: 1;
+}
+
+.analysisCustomPanel[open] .analysisCustomSummary {
+  border-bottom: 1px solid var(--border);
+}
+
+.analysisCustomPanel[open] .analysisCustomSummary::after {
+  content: "-";
+}
+
+.analysisCustomBody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px 12px;
+}
+
 .analysisPaneActions {
   display: flex;
   justify-content: flex-end;

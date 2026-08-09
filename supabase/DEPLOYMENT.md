@@ -9,6 +9,8 @@ Run these idempotent scripts in the Supabase SQL Editor:
 1. `account_data_atomic.sql` — atomic note/drawing saves and sharing, drawing version snapshots, and tool-vault revision checks.
 2. `graphic_headshots_storage.sql` — the bounded PNG bucket and owner-scoped Storage policies for custom graphic headshots.
 3. `roster_feed_snapshots.sql` — service-role-only last-known-good NBA and G League roster snapshots.
+4. `game_analysis_segments.sql` — shared cached game-segment analysis recaps.
+5. `wizards_analysis_prewarm_schedule.sql` — schedules Wizards-only shared Analysis recap prewarming. Before running it, store `nba_dash_project_url` and `nba_dash_service_role_key` in Supabase Vault.
 
 ## Edge Functions
 
@@ -17,8 +19,11 @@ Deploy the current repository versions of:
 - `nba-rosters` — bounded global deadline and partial team results.
 - `nba-player-stats` — nullable statistics and partial player results.
 - `game-metadata` — one authenticated, bounded metadata batch for the Vault.
+- `game-analysis` — shared Analysis generation and cached segment recaps.
+- `wizards-analysis-prewarm` — scheduled Wizards-only shared Analysis recap preparation.
 
 The `game-metadata` function must keep JWT verification enabled, as configured in `config.toml`.
+The `wizards-analysis-prewarm` function must keep JWT verification enabled and should be called by the scheduled SQL job with the service-role bearer token.
 
 ## Verification
 
