@@ -584,8 +584,10 @@
 
 .componentImage {
   display: block;
-  width: min(92%, calc(92vw / var(--visual-component-count)), 90vh);
-  height: min(90%, 90vh);
+  width: auto;
+  height: auto;
+  max-width: min(92%, calc(92vw / var(--visual-component-count)), 90vh);
+  max-height: min(90%, 90vh);
   object-fit: contain;
 }
 
@@ -750,6 +752,6 @@
 
   .drillModeOpen .shape,
   .drillModeOpen .componentImage {
-    width: min(92%, calc(92vw / var(--visual-component-count)), 84vh);
+    max-width: min(92%, calc(92vw / var(--visual-component-count)), 84vh);
   }
 }

@@ -4,6 +4,7 @@ export const VISUAL_DRILL_IMAGE_BUCKET = "visual-drill-images";
 export const VISUAL_DRILL_IMAGE_MAX_SOURCE_BYTES = 8 * 1024 * 1024;
 export const VISUAL_DRILL_IMAGE_MAX_UPLOAD_BYTES = 512 * 1024;
 export const VISUAL_DRILL_IMAGE_MAX_DIMENSION = 900;
+const VISUAL_DRILL_IMAGE_CROP_PADDING_RATIO = 0.1;
 
 const IMAGE_FORMATS = {
   "image/jpeg": { contentType: "image/jpeg", extension: "jpg" },
@@ -81,10 +82,52 @@ function imageSourceSize(imageSource) {
   };
 }
 
-export function findVisualDrillImageContentBounds(imageData, width, height, alphaThreshold = 8) {
-  const data = imageData?.data || imageData;
-  if (!data || !width || !height) return null;
+function pixelOffset(width, x, y) {
+  return (y * width + x) * 4;
+}
 
+function readPixel(data, width, x, y) {
+  const offset = pixelOffset(width, x, y);
+  return {
+    red: data[offset] || 0,
+    green: data[offset + 1] || 0,
+    blue: data[offset + 2] || 0,
+    alpha: data[offset + 3] || 0,
+  };
+}
+
+function colorDistanceSquared(left, right) {
+  return ((left.red - right.red) ** 2)
+    + ((left.green - right.green) ** 2)
+    + ((left.blue - right.blue) ** 2);
+}
+
+function averageColors(colors) {
+  return colors.reduce((acc, color) => ({
+    red: acc.red + color.red / colors.length,
+    green: acc.green + color.green / colors.length,
+    blue: acc.blue + color.blue / colors.length,
+    alpha: acc.alpha + color.alpha / colors.length,
+  }), { red: 0, green: 0, blue: 0, alpha: 0 });
+}
+
+function inferUniformBackgroundColor(data, width, height, alphaThreshold) {
+  const samples = [
+    readPixel(data, width, 0, 0),
+    readPixel(data, width, width - 1, 0),
+    readPixel(data, width, 0, height - 1),
+    readPixel(data, width, width - 1, height - 1),
+  ];
+  if (samples.some((sample) => sample.alpha <= alphaThreshold)) return null;
+
+  const background = averageColors(samples);
+  const maxCornerDistance = Math.max(
+    ...samples.map((sample) => colorDistanceSquared(sample, background))
+  );
+  return maxCornerDistance <= 24 ** 2 ? background : null;
+}
+
+function findBoundsByPixelTest(width, height, isContentPixel) {
   let minX = width;
   let minY = height;
   let maxX = -1;
@@ -92,8 +135,7 @@ export function findVisualDrillImageContentBounds(imageData, width, height, alph
 
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
-      const alpha = data[(y * width + x) * 4 + 3] || 0;
-      if (alpha <= alphaThreshold) continue;
+      if (!isContentPixel(x, y)) continue;
       if (x < minX) minX = x;
       if (y < minY) minY = y;
       if (x > maxX) maxX = x;
@@ -108,6 +150,33 @@ export function findVisualDrillImageContentBounds(imageData, width, height, alph
     width: maxX - minX + 1,
     height: maxY - minY + 1,
   };
+}
+
+function isFullCanvasBounds(bounds, width, height) {
+  return bounds?.x === 0 && bounds?.y === 0 && bounds.width === width && bounds.height === height;
+}
+
+export function findVisualDrillImageContentBounds(imageData, width, height, alphaThreshold = 8) {
+  const data = imageData?.data || imageData;
+  if (!data || !width || !height) return null;
+
+  const alphaBounds = findBoundsByPixelTest(width, height, (x, y) => {
+    const alpha = data[pixelOffset(width, x, y) + 3] || 0;
+    return alpha > alphaThreshold;
+  });
+  if (alphaBounds && !isFullCanvasBounds(alphaBounds, width, height)) {
+    return alphaBounds;
+  }
+
+  const background = inferUniformBackgroundColor(data, width, height, alphaThreshold);
+  if (!background) return alphaBounds;
+
+  const backgroundBounds = findBoundsByPixelTest(width, height, (x, y) => {
+    const pixel = readPixel(data, width, x, y);
+    if (pixel.alpha <= alphaThreshold) return false;
+    return colorDistanceSquared(pixel, background) > 34 ** 2;
+  });
+  return backgroundBounds || alphaBounds;
 }
 
 function trimTransparentCanvasPadding(canvas, context) {
@@ -127,9 +196,10 @@ function trimTransparentCanvasPadding(canvas, context) {
     return canvas;
   }
 
+  const padding = Math.ceil(Math.max(bounds.width, bounds.height) * VISUAL_DRILL_IMAGE_CROP_PADDING_RATIO);
   const trimmedCanvas = document.createElement("canvas");
-  trimmedCanvas.width = bounds.width;
-  trimmedCanvas.height = bounds.height;
+  trimmedCanvas.width = bounds.width + padding * 2;
+  trimmedCanvas.height = bounds.height + padding * 2;
   const trimmedContext = trimmedCanvas.getContext("2d", { alpha: true });
   if (!trimmedContext) return canvas;
   trimmedContext.drawImage(
@@ -138,8 +208,8 @@ function trimTransparentCanvasPadding(canvas, context) {
     bounds.y,
     bounds.width,
     bounds.height,
-    0,
-    0,
+    padding,
+    padding,
     bounds.width,
     bounds.height
   );

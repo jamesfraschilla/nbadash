@@ -40,6 +40,33 @@ test("visual drill image bounds ignore transparent padding", () => {
   assert.equal(findVisualDrillImageContentBounds(new Uint8ClampedArray(16), 2, 2), null);
 });
 
+test("visual drill image bounds crop uniform opaque backgrounds", () => {
+  const pixels = new Uint8ClampedArray(5 * 4 * 4);
+  for (let index = 0; index < pixels.length; index += 4) {
+    pixels[index] = 0;
+    pixels[index + 1] = 0;
+    pixels[index + 2] = 0;
+    pixels[index + 3] = 255;
+  }
+  const setWhite = (x, y) => {
+    const index = (y * 5 + x) * 4;
+    pixels[index] = 255;
+    pixels[index + 1] = 255;
+    pixels[index + 2] = 255;
+  };
+  setWhite(2, 1);
+  setWhite(3, 1);
+  setWhite(2, 2);
+  setWhite(3, 2);
+
+  assert.deepEqual(findVisualDrillImageContentBounds(pixels, 5, 4), {
+    x: 2,
+    y: 1,
+    width: 2,
+    height: 2,
+  });
+});
+
 test("visual drill uploads keep compact storage limits", async () => {
   assert.equal(VISUAL_DRILL_IMAGE_MAX_UPLOAD_BYTES, 512 * 1024);
   assert.equal(VISUAL_DRILL_IMAGE_MAX_DIMENSION, 900);
