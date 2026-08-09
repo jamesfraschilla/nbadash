@@ -24,6 +24,19 @@ function colorsVisibleOnBackground(colors, backgroundColor) {
     .filter((color) => normalizeColor(color) !== normalizedBackground);
 }
 
+function colorsExcluding(colors, excludedColor) {
+  const normalizedExcludedColor = normalizeColor(excludedColor);
+  if (!normalizedExcludedColor) return colors;
+  return colors.filter((color) => normalizeColor(color) !== normalizedExcludedColor);
+}
+
+function componentTypesForPreviousDigit(enabledTypes, digitColors, previousDigitColor) {
+  if (!previousDigitColor) return enabledTypes;
+  if (colorsExcluding(digitColors, previousDigitColor).length) return enabledTypes;
+  const nonDigitTypes = enabledTypes.filter((type) => type !== "digit");
+  return nonDigitTypes.length ? nonDigitTypes : enabledTypes;
+}
+
 function componentOptionsForBackground(config, backgroundColor) {
   const images = Array.isArray(config.images) ? config.images.filter((image) => image?.url) : [];
   const shapes = Array.isArray(config.shapes) ? config.shapes.filter(Boolean) : [];
@@ -68,32 +81,40 @@ export function generateVisualDrill(config, random = Math.random) {
   const backgroundColor = pick(eligibleBackgrounds, random) || pick(configuredBackgrounds, random) || "#ffffff";
   const { digitColors, enabledTypes, images, shapeColors, shapes } = componentOptionsForBackground(config, backgroundColor);
 
-  const components = Array.from({ length: enabledTypes.length ? spaceCount : 0 }, () => {
-    const type = pick(enabledTypes, random);
+  const components = [];
+  let previousDigitColor = "";
+  for (let index = 0; index < (enabledTypes.length ? spaceCount : 0); index += 1) {
+    const type = pick(componentTypesForPreviousDigit(enabledTypes, digitColors, previousDigitColor), random);
     if (type === "digit") {
-      return {
+      const alternateDigitColors = colorsExcluding(digitColors, previousDigitColor);
+      const color = pick(alternateDigitColors.length ? alternateDigitColors : digitColors, random);
+      previousDigitColor = color;
+      components.push({
         type,
         value: randomIntegerInRange(config.minimumDigit, config.maximumDigit, 0, 9, random),
-        color: pick(digitColors, random),
-      };
+        color,
+      });
+      continue;
     }
 
+    previousDigitColor = "";
     if (type === "image") {
       const image = pick(images, random);
-      return {
+      components.push({
         type,
         value: image.id || image.path || image.url,
         url: image.url,
         label: image.name || "Uploaded image",
-      };
+      });
+      continue;
     }
 
-    return {
+    components.push({
       type,
       value: pick(shapes, random),
       color: pick(shapeColors, random),
-    };
-  });
+    });
+  }
 
   return {
     backgroundColor,

@@ -79,6 +79,30 @@
   backdrop-filter: blur(12px);
 }
 
+.favoriteQuickBar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  width: min(100%, 980px);
+  justify-self: center;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
+}
+
+.favoriteQuickField {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.favoriteQuickStatus {
+  grid-column: 1 / -1;
+}
+
 .runSummary {
   display: grid;
   gap: 2px;
@@ -209,21 +233,55 @@
   gap: 12px;
 }
 
-.favoriteSummary {
+.sectionSummary {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   cursor: pointer;
   list-style: none;
+  user-select: none;
 }
 
-.favoriteSummary::-webkit-details-marker {
+.sectionSummary::-webkit-details-marker {
   display: none;
 }
 
-.favoriteSummary strong {
+.sectionSummary strong {
   display: block;
+  font-size: 1.05rem;
+}
+
+.sectionSummary:focus-visible {
+  border-radius: var(--radius-md);
+  outline: 2px solid var(--highlight-text);
+  outline-offset: 4px;
+}
+
+.sectionSummaryMeta {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.summaryIndicator {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.summaryIndicator::before {
+  content: "+";
+}
+
+.groupPanel[open] .summaryIndicator::before {
+  content: "-";
 }
 
 .summaryMeta {
@@ -638,6 +696,14 @@
     position: static;
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .favoriteQuickBar {
+    grid-template-columns: 1fr;
+  }
+
+  .favoriteQuickBar > .summaryMeta {
+    justify-self: start;
   }
 
   .runActions {

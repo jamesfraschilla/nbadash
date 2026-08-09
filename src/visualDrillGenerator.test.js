@@ -71,6 +71,29 @@ test("never generates a digit matching the selected background", () => {
   assert.deepEqual(graphic.components.map((item) => item.color), ["#00ff00", "#00ff00", "#00ff00"]);
 });
 
+test("never generates adjacent digits with the same color when alternatives exist", () => {
+  const graphic = generateVisualDrill({
+    ...config,
+    minimumSpaces: 3,
+    maximumSpaces: 3,
+    digitColors: ["#ff0000", "#0000ff"],
+  }, () => 0);
+
+  assert.deepEqual(graphic.components.map((item) => item.color), ["#ff0000", "#0000ff", "#ff0000"]);
+});
+
+test("uses a non-digit component to break same-color digit runs when needed", () => {
+  const graphic = generateVisualDrill({
+    ...config,
+    minimumSpaces: 3,
+    maximumSpaces: 3,
+    useShapes: true,
+    digitColors: ["#123456"],
+  }, () => 0);
+
+  assert.deepEqual(graphic.components.map((item) => item.type), ["digit", "shape", "digit"]);
+});
+
 test("chooses a compatible background when a component has one possible color", () => {
   const graphic = generateVisualDrill({
     ...config,

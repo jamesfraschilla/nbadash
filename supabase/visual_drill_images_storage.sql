@@ -3,7 +3,7 @@ values (
   'visual-drill-images',
   'visual-drill-images',
   false,
-  5242880,
+  1048576,
   array['image/jpeg', 'image/png', 'image/webp']
 )
 on conflict (id) do update

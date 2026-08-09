@@ -7,15 +7,6 @@ function parseClock(clock) {
   return minutes * 60 + seconds;
 }
 
-function parseIsoClock(clock) {
-  if (!clock) return 0;
-  const match = /PT(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?/.exec(clock);
-  if (!match) return 0;
-  const minutes = Number(match[1] || 0);
-  const seconds = Number(match[2] || 0);
-  return minutes * 60 + seconds;
-}
-
 function parseClockValue(clock) {
   if (!clock) return null;
   const value = String(clock);
@@ -28,6 +19,63 @@ function parseClockValue(clock) {
   }
   if (!/^\d+:\d+$/.test(value)) return null;
   return parseClock(value);
+}
+
+function parseScoreValue(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function orderActions(actions) {
+  return [...actions].sort((a, b) => {
+    const aOrder = a.orderNumber ?? a.actionNumber ?? 0;
+    const bOrder = b.orderNumber ?? b.actionNumber ?? 0;
+    return aOrder - bOrder;
+  });
+}
+
+function withScoreDeltas(actions) {
+  let previousHomeScore = 0;
+  let previousAwayScore = 0;
+  return orderActions(actions).map((action) => {
+    const homeScore = parseScoreValue(action.scoreHome);
+    const awayScore = parseScoreValue(action.scoreAway);
+    const homeDelta = homeScore == null ? 0 : Math.max(0, homeScore - previousHomeScore);
+    const awayDelta = awayScore == null ? 0 : Math.max(0, awayScore - previousAwayScore);
+    if (homeScore != null) previousHomeScore = homeScore;
+    if (awayScore != null) previousAwayScore = awayScore;
+    return {
+      ...action,
+      __scoreDeltaHome: homeDelta,
+      __scoreDeltaAway: awayDelta,
+    };
+  });
+}
+
+function fallbackScoringPoints(action) {
+  if (action.actionType === "3pt" && action.shotResult === "Made") return 3;
+  if (action.actionType === "2pt" && action.shotResult === "Made") return 2;
+  if (action.actionType === "freethrow" && action.shotResult === "Made") {
+    const freeThrowText = [
+      action.subType,
+      action.descriptor,
+      action.description,
+    ].join(" ");
+    const valueMatch = /\b([123])\s*(?:pt|point)\b/i.exec(freeThrowText);
+    return valueMatch ? Number(valueMatch[1]) : 1;
+  }
+  return 0;
+}
+
+function scoringPoints(action, homeTeamId, awayTeamId) {
+  if (!action || action.shotResult !== "Made") return 0;
+  const teamId = Number(action.teamId);
+  const delta = teamId === Number(homeTeamId)
+    ? action.__scoreDeltaHome
+    : teamId === Number(awayTeamId)
+      ? action.__scoreDeltaAway
+      : null;
+  return Number.isFinite(delta) && delta > 0 ? delta : fallbackScoringPoints(action);
 }
 
 function isSummerLeagueGameId(gameId) {
@@ -149,6 +197,7 @@ export function aggregateSegmentStats({
   const predicate = segmentPeriods(segment);
   const livePeriod = isLive ? Number(currentPeriod) || null : null;
   const liveClockSec = isLive ? parseClockValue(currentClock) : null;
+  const actionsWithScoreDeltas = withScoreDeltas(actions);
   const segmentSeconds =
     minutesData?.periods?.reduce((sum, period) => {
       if (!predicate(period.period)) return sum;
@@ -164,12 +213,8 @@ export function aggregateSegmentStats({
         )
       );
     }, 0) ?? null;
-  const segmentActions = actions.filter((action) => predicate(action.period));
-  const orderedActions = [...segmentActions].sort((a, b) => {
-    const aOrder = a.orderNumber ?? a.actionNumber ?? 0;
-    const bOrder = b.orderNumber ?? b.actionNumber ?? 0;
-    return aOrder - bOrder;
-  });
+  const orderedActions = actionsWithScoreDeltas.filter((action) => predicate(action.period));
+  const segmentActions = orderedActions;
   const actionByNumber = new Map(segmentActions.map((action) => [action.actionNumber, action]));
   const actionsByPeriod = new Map();
   orderedActions.forEach((action) => {
@@ -380,7 +425,7 @@ export function aggregateSegmentStats({
         }
       }
       if (action.shotResult === "Made") {
-        const points = action.actionType === "3pt" ? 3 : 2;
+        const points = scoringPoints(action, homeTeam.teamId, awayTeam.teamId);
         if (teamStats) {
           teamStats.points += points;
           if (isFastBreak) teamStats.transitionPoints += points;
@@ -414,7 +459,7 @@ export function aggregateSegmentStats({
         if (shotType === "rim") player.rimFieldGoalsAttempted += 1;
         if (shotType === "mid") player.midFieldGoalsAttempted += 1;
         if (action.shotResult === "Made") {
-          const points = action.actionType === "3pt" ? 3 : 2;
+          const points = scoringPoints(action, homeTeam.teamId, awayTeam.teamId);
           player.points += points;
           player.fieldGoalsMade += 1;
           if (shotType === "three") player.threePointersMade += 1;
@@ -445,14 +490,16 @@ export function aggregateSegmentStats({
         const player = ensurePlayer(playerMap, action.personId, baseMap.get(action.personId));
         player.freeThrowsAttempted += 1;
         if (action.shotResult === "Made") {
+          const points = scoringPoints(action, homeTeam.teamId, awayTeam.teamId);
           player.freeThrowsMade += 1;
-          player.points += 1;
+          player.points += points;
         }
       }
       if (action.shotResult === "Made" && teamStats) {
+        const points = scoringPoints(action, homeTeam.teamId, awayTeam.teamId);
         teamStats.freeThrowsMade += 1;
-        teamStats.points += 1;
-        if (isFastBreak) teamStats.transitionPoints += 1;
+        teamStats.points += points;
+        if (isFastBreak) teamStats.transitionPoints += points;
       }
     }
 
@@ -626,15 +673,8 @@ export function aggregateSegmentStats({
         stintPossAway = 0;
       };
 
-      const scorePoints = (action) => {
-        if (action.actionType === "3pt" && action.shotResult === "Made") return 3;
-        if (action.actionType === "2pt" && action.shotResult === "Made") return 2;
-        if (action.actionType === "freethrow" && action.shotResult === "Made") return 1;
-        return 0;
-      };
-
       periodActions.forEach((action) => {
-        const actionSec = action.clock ? parseIsoClock(action.clock) : null;
+        const actionSec = action.clock ? parseClockValue(action.clock) : null;
         if (action.actionType === "substitution") {
           if (actionSec != null && !inSubBlock) {
             finalizeStint(actionSec);
@@ -660,7 +700,7 @@ export function aggregateSegmentStats({
 
         if (inSubBlock) inSubBlock = false;
 
-        const points = scorePoints(action);
+        const points = scoringPoints(action, homeTeam.teamId, awayTeam.teamId);
         if (points > 0) {
           if (action.teamId === homeTeam.teamId) stintPointsHome += points;
           if (action.teamId === awayTeam.teamId) stintPointsAway += points;
