@@ -81,6 +81,71 @@ function imageSourceSize(imageSource) {
   };
 }
 
+export function findVisualDrillImageContentBounds(imageData, width, height, alphaThreshold = 8) {
+  const data = imageData?.data || imageData;
+  if (!data || !width || !height) return null;
+
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const alpha = data[(y * width + x) * 4 + 3] || 0;
+      if (alpha <= alphaThreshold) continue;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+  }
+
+  if (maxX < minX || maxY < minY) return null;
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX + 1,
+    height: maxY - minY + 1,
+  };
+}
+
+function trimTransparentCanvasPadding(canvas, context) {
+  let bounds = null;
+  try {
+    bounds = findVisualDrillImageContentBounds(
+      context.getImageData(0, 0, canvas.width, canvas.height),
+      canvas.width,
+      canvas.height
+    );
+  } catch {
+    return canvas;
+  }
+
+  if (!bounds) return canvas;
+  if (bounds.x === 0 && bounds.y === 0 && bounds.width === canvas.width && bounds.height === canvas.height) {
+    return canvas;
+  }
+
+  const trimmedCanvas = document.createElement("canvas");
+  trimmedCanvas.width = bounds.width;
+  trimmedCanvas.height = bounds.height;
+  const trimmedContext = trimmedCanvas.getContext("2d", { alpha: true });
+  if (!trimmedContext) return canvas;
+  trimmedContext.drawImage(
+    canvas,
+    bounds.x,
+    bounds.y,
+    bounds.width,
+    bounds.height,
+    0,
+    0,
+    bounds.width,
+    bounds.height
+  );
+  return trimmedCanvas;
+}
+
 function validateImageFile(file) {
   const format = IMAGE_FORMATS[String(file?.type || "").toLowerCase()];
   if (!format) throw new Error("Use a PNG, JPG, or WebP image.");
@@ -126,10 +191,11 @@ export async function prepareVisualDrillImageUpload(file) {
     const context = canvas.getContext("2d", { alpha: true });
     if (!context) throw new Error("Unable to prepare this image for upload.");
     context.drawImage(imageSource, 0, 0, canvas.width, canvas.height);
+    const outputCanvas = trimTransparentCanvasPadding(canvas, context);
 
     let smallestBlob = null;
     for (const quality of COMPRESSION_QUALITIES) {
-      const blob = await canvasToBlob(canvas, "image/webp", quality);
+      const blob = await canvasToBlob(outputCanvas, "image/webp", quality);
       if (!blob) continue;
       if (!smallestBlob || blob.size < smallestBlob.size) smallestBlob = blob;
       if (blob.size <= VISUAL_DRILL_IMAGE_MAX_UPLOAD_BYTES) {

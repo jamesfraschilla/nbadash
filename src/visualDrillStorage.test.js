@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  findVisualDrillImageContentBounds,
   prepareVisualDrillImageUpload,
   sanitizeVisualDrillImageName,
   VISUAL_DRILL_IMAGE_MAX_DIMENSION,
@@ -18,6 +19,25 @@ test("visual drill storage paths produce readable labels", () => {
     visualDrillImageDisplayName("owner/123e4567-e89b-12d3-a456-426614174000--My-Team-Logo.png"),
     "My Team Logo"
   );
+});
+
+test("visual drill image bounds ignore transparent padding", () => {
+  const pixels = new Uint8ClampedArray(5 * 4 * 4);
+  const setAlpha = (x, y, alpha) => {
+    pixels[(y * 5 + x) * 4 + 3] = alpha;
+  };
+  setAlpha(2, 1, 255);
+  setAlpha(3, 1, 255);
+  setAlpha(2, 2, 255);
+  setAlpha(3, 2, 255);
+
+  assert.deepEqual(findVisualDrillImageContentBounds(pixels, 5, 4), {
+    x: 2,
+    y: 1,
+    width: 2,
+    height: 2,
+  });
+  assert.equal(findVisualDrillImageContentBounds(new Uint8ClampedArray(16), 2, 2), null);
 });
 
 test("visual drill uploads keep compact storage limits", async () => {
