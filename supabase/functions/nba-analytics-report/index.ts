@@ -1,5 +1,7 @@
 const NBA_STATS_BASE_URL = "https://stats.nba.com/stats";
 const REQUEST_TIMEOUT_MS = 16_000;
+const COMBINED_SEASON_TYPE = "Regular Season & Playoffs";
+const NBA_STATS_SEASON_TYPES = ["Pre Season", "Regular Season", "Playoffs"] as const;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -89,6 +91,34 @@ function clampInteger(value: unknown, fallback: number, min: number, max: number
   return Math.min(max, Math.max(min, parsed));
 }
 
+function normalizeReportSeasonType(value: unknown) {
+  const raw = String(value || "").trim();
+  const normalized = raw.toLowerCase().replace(/\s+/g, " ");
+  if (normalized === "regular season & playoffs" || normalized === "regular season and playoffs") {
+    return COMBINED_SEASON_TYPE;
+  }
+  if (normalized === "preseason" || normalized === "pre season") return "Pre Season";
+  const supported = NBA_STATS_SEASON_TYPES.find((seasonType) => seasonType.toLowerCase() === normalized);
+  return supported || "Regular Season";
+}
+
+function reportSeasonTypes(seasonType: string) {
+  return seasonType === COMBINED_SEASON_TYPE ? ["Regular Season", "Playoffs"] : [seasonType];
+}
+
+function normalizeLastNGames(value: unknown) {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (raw === "all") return 0;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed)) return 10;
+  if (parsed <= 0) return 0;
+  return Math.min(82, parsed);
+}
+
+function lastNGamesLabel(lastNGames: number) {
+  return lastNGames === 0 ? "All Games" : `Last ${lastNGames} Games`;
+}
+
 function safeNumber(value: unknown, fallback = 0) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : fallback;
@@ -152,6 +182,128 @@ function mapRows(resultSet: JsonRecord | undefined) {
         return accumulator;
       }, {})
     );
+}
+
+function resultSetColumnNames(resultSet: JsonRecord | undefined) {
+  const headers = Array.isArray(resultSet?.headers) ? resultSet.headers : [];
+  if (!headers.length) return [];
+  if (headers.every((entry) => typeof entry === "string")) {
+    return headers.map((value) => String(value || ""));
+  }
+  const columnsHeader = (headers as JsonRecord[]).find((entry) => String(entry?.name || "") === "columns");
+  return Array.isArray(columnsHeader?.columnNames)
+    ? columnsHeader.columnNames.map((value) => String(value || ""))
+    : [];
+}
+
+function resultSetRows(resultSet: JsonRecord | undefined) {
+  return Array.isArray(resultSet?.rowSet)
+    ? resultSet.rowSet.filter((row): row is unknown[] => Array.isArray(row))
+    : [];
+}
+
+function rowIdentity(row: unknown[], columns: string[], fallback: string) {
+  const keyColumn = ["TEAM_ID", "PLAYER_ID", "VS_PLAYER_ID", "GROUP_VALUE"].find((column) => columns.includes(column));
+  if (!keyColumn) return fallback;
+  const value = String(row[columns.indexOf(keyColumn)] || "").trim();
+  return value || fallback;
+}
+
+function rowMergeWeight(row: unknown[], columns: string[]) {
+  const gpIndex = columns.indexOf("GP");
+  if (gpIndex < 0) return 1;
+  return Math.max(0, safeNumber(row[gpIndex], 0));
+}
+
+function mergeRowsByGames(rows: unknown[][], columns: string[]) {
+  if (rows.length === 1) return rows[0];
+  const weights = rows.map((row) => rowMergeWeight(row, columns));
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+  const merged = [...rows[0]];
+  columns.forEach((column, index) => {
+    const numericValues = rows.map((row) => Number(row[index]));
+    const allNumeric = numericValues.every((value) => Number.isFinite(value));
+    if (!allNumeric) {
+      merged[index] = rows.find((row) => String(row[index] || "").trim())?.[index] ?? "";
+      return;
+    }
+    if (column === "GP" || column === "W" || column === "L") {
+      merged[index] = numericValues.reduce((sum, value) => sum + value, 0);
+      return;
+    }
+    if (/_RANK$/.test(column)) {
+      merged[index] = "";
+      return;
+    }
+    if (totalWeight <= 0) {
+      merged[index] = numericValues.reduce((sum, value) => sum + value, 0) / numericValues.length;
+      return;
+    }
+    merged[index] = numericValues.reduce((sum, value, weightIndex) => sum + value * weights[weightIndex], 0) / totalWeight;
+  });
+
+  const setRatio = (target: string, made: string, attempted: string) => {
+    const targetIndex = columns.indexOf(target);
+    const madeIndex = columns.indexOf(made);
+    const attemptedIndex = columns.indexOf(attempted);
+    if (targetIndex >= 0 && madeIndex >= 0 && attemptedIndex >= 0) {
+      merged[targetIndex] = safeRatio(merged[madeIndex], merged[attemptedIndex], 1);
+    }
+  };
+  setRatio("FG_PCT", "FGM", "FGA");
+  setRatio("FG3_PCT", "FG3M", "FG3A");
+  setRatio("FT_PCT", "FTM", "FTA");
+  setRatio("OPP_FG_PCT", "OPP_FGM", "OPP_FGA");
+  setRatio("OPP_FG3_PCT", "OPP_FG3M", "OPP_FG3A");
+
+  return merged;
+}
+
+function mergeResultSets(resultSets: JsonRecord[]) {
+  const first = resultSets[0];
+  if (!first || resultSets.length <= 1) return first;
+  const columns = resultSetColumnNames(first);
+  if (!columns.length) return first;
+  const grouped = new Map<string, unknown[][]>();
+  resultSets.forEach((resultSet, resultSetIndex) => {
+    resultSetRows(resultSet).forEach((row, rowIndex) => {
+      const key = rowIdentity(row, columns, `source-${resultSetIndex}-row-${rowIndex}`);
+      const existing = grouped.get(key) || [];
+      existing.push(row);
+      grouped.set(key, existing);
+    });
+  });
+  return {
+    ...first,
+    rowSet: Array.from(grouped.values()).map((rows) => mergeRowsByGames(rows, columns)),
+  };
+}
+
+function payloadResultSets(payload: JsonRecord) {
+  if (Array.isArray(payload.resultSets)) return payload.resultSets as JsonRecord[];
+  if (payload.resultSet) return [payload.resultSet as JsonRecord];
+  if (payload.resultSets && typeof payload.resultSets === "object") return [payload.resultSets as JsonRecord];
+  return [];
+}
+
+function mergeStatsPayloads(payloads: JsonRecord[]) {
+  const presentPayloads = payloads.filter(Boolean);
+  if (presentPayloads.length <= 1) return presentPayloads[0] || {};
+  const grouped = new Map<string, JsonRecord[]>();
+  presentPayloads.forEach((payload) => {
+    payloadResultSets(payload).forEach((resultSet, index) => {
+      const key = String(resultSet.name || `resultSet-${index}`);
+      const existing = grouped.get(key) || [];
+      existing.push(resultSet);
+      grouped.set(key, existing);
+    });
+  });
+  const resultSets = Array.from(grouped.values()).map((resultSetsForName) => mergeResultSets(resultSetsForName));
+  return {
+    ...presentPayloads[0],
+    resultSets,
+    resultSet: resultSets[0],
+  };
 }
 
 function mapBy(rows: JsonRecord[], key: string) {
@@ -299,6 +451,20 @@ async function fetchNbaStats(endpoint: string, params: Record<string, string>) {
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+async function fetchNbaStatsForSeasonTypes(
+  endpoint: string,
+  params: Record<string, string>,
+  seasonTypes: string[],
+) {
+  if (seasonTypes.length <= 1) {
+    return fetchNbaStats(endpoint, { ...params, SeasonType: seasonTypes[0] || params.SeasonType || "Regular Season" });
+  }
+  const payloads = await Promise.all(
+    seasonTypes.map((seasonType) => fetchNbaStats(endpoint, { ...params, SeasonType: seasonType })),
+  );
+  return mergeStatsPayloads(payloads);
 }
 
 function buildRankMap<T>(
@@ -793,9 +959,12 @@ async function buildAnalyticsReport(body: JsonRecord) {
   if (!team) throw new Error("Select a valid NBA team.");
   const season = String(body.season || currentReportSeason()).trim();
   if (!isValidSeason(season)) throw new Error("Select a valid NBA season.");
-  const seasonType = String(body.seasonType || "Regular Season").trim() || "Regular Season";
-  const lastNGames = clampInteger(body.lastNGames, 10, 1, 82);
-  const common = { Season: season, SeasonType: seasonType, LastNGames: String(lastNGames) };
+  const seasonType = normalizeReportSeasonType(body.seasonType);
+  const seasonTypes = reportSeasonTypes(seasonType);
+  const lastNGames = normalizeLastNGames(body.lastNGames);
+  const common = { Season: season, SeasonType: seasonTypes[0], LastNGames: String(lastNGames) };
+  const fetchReportStats = (endpoint: string, params: Record<string, string>) =>
+    fetchNbaStatsForSeasonTypes(endpoint, params, seasonTypes);
 
   const [
     teamBasePayload,
@@ -816,23 +985,23 @@ async function buildAnalyticsReport(body: JsonRecord) {
     playerWinsPayload,
     playerLossesPayload,
   ] = await Promise.all([
-    fetchNbaStats("leaguedashteamstats", buildStatsParams({ ...common, MeasureType: "Base", TeamID: "0" })),
-    fetchNbaStats("leaguedashteamstats", buildStatsParams({ ...common, MeasureType: "Advanced", TeamID: "0" })),
-    fetchNbaStats("leaguedashteamstats", buildStatsParams({ ...common, MeasureType: "Scoring", TeamID: "0" })),
-    fetchNbaStats("leaguedashteamstats", buildStatsParams({ ...common, MeasureType: "Misc", TeamID: "0" })),
-    fetchNbaStats("leaguedashteamstats", buildStatsParams({ ...common, MeasureType: "Opponent", TeamID: "0" })),
-    fetchNbaStats("leaguedashteamshotlocations", buildShotLocationParams({ ...common, MeasureType: "Base", TeamID: "0" })),
-    fetchNbaStats("leaguedashteamshotlocations", buildShotLocationParams({ ...common, MeasureType: "Opponent", TeamID: "0" })),
-    fetchNbaStats("leaguedashplayerstats", buildStatsParams({ ...common, MeasureType: "Base", TeamID: teamId })),
-    fetchNbaStats("leaguedashplayerstats", buildStatsParams({ ...common, MeasureType: "Advanced", TeamID: teamId })),
-    fetchNbaStats("leaguedashplayerstats", buildStatsParams({ ...common, MeasureType: "Usage", TeamID: teamId })),
-    fetchNbaStats("leaguedashplayerstats", buildStatsParams({ ...common, MeasureType: "Scoring", TeamID: teamId })),
-    fetchNbaStats("leaguedashplayershotlocations", buildShotLocationParams({ ...common, MeasureType: "Base", TeamID: teamId })),
-    fetchNbaStats("teamplayeronoffdetails", buildStatsParams({ ...common, MeasureType: "Advanced", TeamID: teamId, PerMode: "Per100Possessions", Rank: "N" })),
-    fetchNbaStats("leaguedashplayerstats", buildStatsParams({ ...common, MeasureType: "Base", TeamID: teamId, VsConference: team.conference })),
-    fetchNbaStats("leaguedashplayerstats", buildStatsParams({ ...common, MeasureType: "Base", TeamID: teamId, LastNGames: String(Math.min(5, lastNGames)) })),
-    fetchNbaStats("leaguedashplayerstats", buildStatsParams({ ...common, MeasureType: "Base", TeamID: teamId, Outcome: "W" })),
-    fetchNbaStats("leaguedashplayerstats", buildStatsParams({ ...common, MeasureType: "Base", TeamID: teamId, Outcome: "L" })),
+    fetchReportStats("leaguedashteamstats", buildStatsParams({ ...common, MeasureType: "Base", TeamID: "0" })),
+    fetchReportStats("leaguedashteamstats", buildStatsParams({ ...common, MeasureType: "Advanced", TeamID: "0" })),
+    fetchReportStats("leaguedashteamstats", buildStatsParams({ ...common, MeasureType: "Scoring", TeamID: "0" })),
+    fetchReportStats("leaguedashteamstats", buildStatsParams({ ...common, MeasureType: "Misc", TeamID: "0" })),
+    fetchReportStats("leaguedashteamstats", buildStatsParams({ ...common, MeasureType: "Opponent", TeamID: "0" })),
+    fetchReportStats("leaguedashteamshotlocations", buildShotLocationParams({ ...common, MeasureType: "Base", TeamID: "0" })),
+    fetchReportStats("leaguedashteamshotlocations", buildShotLocationParams({ ...common, MeasureType: "Opponent", TeamID: "0" })),
+    fetchReportStats("leaguedashplayerstats", buildStatsParams({ ...common, MeasureType: "Base", TeamID: teamId })),
+    fetchReportStats("leaguedashplayerstats", buildStatsParams({ ...common, MeasureType: "Advanced", TeamID: teamId })),
+    fetchReportStats("leaguedashplayerstats", buildStatsParams({ ...common, MeasureType: "Usage", TeamID: teamId })),
+    fetchReportStats("leaguedashplayerstats", buildStatsParams({ ...common, MeasureType: "Scoring", TeamID: teamId })),
+    fetchReportStats("leaguedashplayershotlocations", buildShotLocationParams({ ...common, MeasureType: "Base", TeamID: teamId })),
+    fetchReportStats("teamplayeronoffdetails", buildStatsParams({ ...common, MeasureType: "Advanced", TeamID: teamId, PerMode: "Per100Possessions", Rank: "N" })),
+    fetchReportStats("leaguedashplayerstats", buildStatsParams({ ...common, MeasureType: "Base", TeamID: teamId, VsConference: team.conference })),
+    fetchReportStats("leaguedashplayerstats", buildStatsParams({ ...common, MeasureType: "Base", TeamID: teamId, LastNGames: String(lastNGames === 0 ? 5 : Math.min(5, lastNGames)) })),
+    fetchReportStats("leaguedashplayerstats", buildStatsParams({ ...common, MeasureType: "Base", TeamID: teamId, Outcome: "W" })),
+    fetchReportStats("leaguedashplayerstats", buildStatsParams({ ...common, MeasureType: "Base", TeamID: teamId, Outcome: "L" })),
   ]);
 
   const teamBaseRows = mapRows(findResultSet(teamBasePayload, "LeagueDashTeamStats"));
@@ -878,7 +1047,7 @@ async function buildAnalyticsReport(body: JsonRecord) {
       season,
       seasonType,
       lastNGames,
-      rangeLabel: `${season} ${seasonType} · Last ${lastNGames} Games`,
+      rangeLabel: `${season} ${seasonType} · ${lastNGamesLabel(lastNGames)}`,
     },
     team,
     teamReport: buildTeamReport(teamMetrics, teamId),
@@ -892,7 +1061,7 @@ async function buildAnalyticsReport(body: JsonRecord) {
   };
 }
 
-Deno.serve(async (req) => {
+export async function handleRequest(req: Request) {
   if (req.method === "OPTIONS") {
     return responseWithHeaders(200, "ok");
   }
@@ -913,11 +1082,19 @@ Deno.serve(async (req) => {
       error: error instanceof Error ? error.message : "Unable to build NBA analytics report.",
     });
   }
-});
+}
+
+if (import.meta.main) {
+  Deno.serve(handleRequest);
+}
 
 export const __test__ = {
   buildRankMap,
   currentReportSeason,
   formatNumber,
+  lastNGamesLabel,
+  mergeStatsPayloads,
+  normalizeLastNGames,
   normalizePercent,
+  normalizeReportSeasonType,
 };

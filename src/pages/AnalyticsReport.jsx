@@ -7,7 +7,14 @@ import { NBA_TEAMS } from "../data/nbaTeams.js";
 import styles from "./AnalyticsReport.module.css";
 
 const DEFAULT_TEAM_ID = "1610612764";
-const LAST_GAME_OPTIONS = [5, 10, 15, 20, 30];
+const LAST_GAME_OPTIONS = [
+  { value: "5", label: "Last 5 Games" },
+  { value: "10", label: "Last 10 Games" },
+  { value: "15", label: "Last 15 Games" },
+  { value: "20", label: "Last 20 Games" },
+  { value: "30", label: "Last 30 Games" },
+  { value: "all", label: "All Games" },
+];
 
 function defaultReportSeason(date = new Date()) {
   const month = date.getMonth() + 1;
@@ -38,6 +45,11 @@ function formatGeneratedAt(value) {
   } catch {
     return String(value || "");
   }
+}
+
+function normalizeLastNGames(value) {
+  if (value === "all") return 0;
+  return Number.parseInt(value, 10) || 10;
 }
 
 function rankClass(rank) {
@@ -233,7 +245,7 @@ export default function AnalyticsReport() {
         teamId: draft.teamId,
         season: draft.season,
         seasonType: draft.seasonType,
-        lastNGames: Number.parseInt(draft.lastNGames, 10) || 10,
+        lastNGames: normalizeLastNGames(draft.lastNGames),
       });
       setReport(nextReport);
     } catch (requestError) {
@@ -294,6 +306,7 @@ export default function AnalyticsReport() {
               onChange={(event) => updateDraft({ seasonType: event.target.value })}
             >
               <option value="Regular Season">Regular Season</option>
+              <option value="Regular Season & Playoffs">Regular Season & Playoffs</option>
               <option value="Playoffs">Playoffs</option>
               <option value="Pre Season">Preseason</option>
             </select>
@@ -306,8 +319,8 @@ export default function AnalyticsReport() {
               value={draft.lastNGames}
               onChange={(event) => updateDraft({ lastNGames: event.target.value })}
             >
-              {LAST_GAME_OPTIONS.map((count) => (
-                <option key={count} value={String(count)}>Last {count} Games</option>
+              {LAST_GAME_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
           </label>
