@@ -63,6 +63,7 @@ import { formatDateInputInTimeZone } from "../utils.js";
 import styles from "./Tools.module.css";
 
 const DepthChartGraphicAdmin = lazy(() => import("./DepthChartGraphicAdmin.jsx"));
+const AnalyticsReport = lazy(() => import("./AnalyticsReport.jsx"));
 const LateGameMatrixPanel = lazy(() => import("../components/LateGameMatrixPanel.jsx"));
 const PersonnelGraphicAdmin = lazy(() => import("./PersonnelGraphicAdmin.jsx"));
 const PreGame = lazy(() => import("./PreGame.jsx"));
@@ -590,6 +591,8 @@ export default function Tools({ section = "tools" }) {
       ? TOOL_TABS.CUSTOM_REQUESTS
     : rawTab === TOOL_TABS.ROTATIONS
       ? TOOL_TABS.ROTATIONS
+    : rawTab === TOOL_TABS.ANALYTICS_REPORT
+      ? TOOL_TABS.ANALYTICS_REPORT
     : rawTab === TOOL_TABS.VISUAL_DRILL
       ? TOOL_TABS.VISUAL_DRILL
       : TOOL_TABS.VISUAL_DRILL;
@@ -1124,6 +1127,8 @@ export default function Tools({ section = "tools" }) {
         ? TOOL_TABS.CUSTOM_REQUESTS
       : nextTab === TOOL_TABS.ROTATIONS
         ? TOOL_TABS.ROTATIONS
+      : nextTab === TOOL_TABS.ANALYTICS_REPORT
+        ? TOOL_TABS.ANALYTICS_REPORT
       : nextTab === TOOL_TABS.VISUAL_DRILL
         ? TOOL_TABS.VISUAL_DRILL
         : TOOL_TABS.VISUAL_DRILL;
@@ -1578,6 +1583,13 @@ export default function Tools({ section = "tools" }) {
         >
           Rotations
         </button>
+        <button
+          type="button"
+          className={`${styles.tabButton} ${activeTab === TOOL_TABS.ANALYTICS_REPORT ? styles.tabButtonActive : ""}`}
+          onClick={() => handleToolTabChange(TOOL_TABS.ANALYTICS_REPORT)}
+        >
+          Analytics Report
+        </button>
         {canUseAdminTools ? (
         <button
           type="button"
@@ -1802,6 +1814,10 @@ export default function Tools({ section = "tools" }) {
       ) : activeTab === TOOL_TABS.ROTATIONS ? (
         <section className={styles.workspace}>
           <Rotations standalone />
+        </section>
+      ) : activeTab === TOOL_TABS.ANALYTICS_REPORT ? (
+        <section className={styles.workspace}>
+          <AnalyticsReport />
         </section>
       ) : activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.DEPTH_CHART ? (
         <section className={styles.workspace}>

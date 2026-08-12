@@ -5,6 +5,7 @@ export const TOOL_TABS = {
   PERSONNEL: "personnel",
   DEPTH_CHART: "depth-chart",
   ROTATIONS: "rotations",
+  ANALYTICS_REPORT: "analytics-report",
   SCOUTING: "scouting",
   LATE_GAME: "late-game",
   CUSTOM_REQUESTS: "custom-requests",

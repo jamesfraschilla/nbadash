@@ -10,6 +10,9 @@ verify_jwt = false
 [functions.nba-player-stats]
 verify_jwt = false
 
+[functions.nba-analytics-report]
+verify_jwt = true
+
 [functions.gleague-rosters]
 verify_jwt = false
 

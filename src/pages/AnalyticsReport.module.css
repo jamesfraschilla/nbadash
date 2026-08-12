@@ -1,0 +1,422 @@
+.analyticsTool {
+  display: grid;
+  gap: 18px;
+}
+
+.setupPanel,
+.reportShell,
+.emptyState,
+.reportBlock,
+.playersBlock {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
+}
+
+.setupPanel,
+.emptyState {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.setupGrid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) repeat(3, minmax(140px, 1fr));
+  gap: 14px;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.fieldLabel,
+.kicker,
+.cardLabel,
+.rankHeader {
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.select {
+  width: 100%;
+  min-height: var(--control-height-lg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--input-bg);
+  color: var(--text);
+  padding: 0 14px;
+  font: inherit;
+}
+
+.actionRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.sourceNote,
+.generatedAt {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.generateButton {
+  min-height: var(--control-height-md);
+  min-width: 150px;
+  border: 1px solid var(--button-primary-bg);
+  border-radius: var(--radius-md);
+  background: var(--button-primary-bg);
+  color: var(--button-primary-text);
+  padding: 0 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.generateButton:hover:not(:disabled) {
+  background: var(--button-primary-hover);
+  border-color: var(--button-primary-hover);
+}
+
+.generateButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.error {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.emptyState h2,
+.emptyState p,
+.reportHeader h1,
+.reportBlock h2,
+.playersBlock h2,
+.reportSection h3,
+.playerSummary h3 {
+  margin: 0;
+}
+
+.emptyState p {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.reportShell {
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+}
+
+.reportHeader,
+.blockHeader,
+.playerSummary {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.teamIdentity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.teamIdentity img {
+  width: 54px;
+  height: 54px;
+  object-fit: contain;
+}
+
+.reportHeader h1 {
+  font-size: clamp(1.5rem, 2.5vw, 2.2rem);
+}
+
+.notesBar {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.reportBlock,
+.playersBlock {
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+}
+
+.reportBlock h2,
+.playersBlock h2 {
+  font-size: clamp(1.25rem, 2vw, 1.7rem);
+}
+
+.rankHeader {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+}
+
+.reportSection {
+  display: grid;
+  gap: 8px;
+}
+
+.reportSection h3 {
+  padding-top: 4px;
+  font-size: 1.1rem;
+}
+
+.reportRows {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.reportRow {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) 68px minmax(92px, 118px) minmax(112px, 150px);
+  gap: 10px;
+  align-items: center;
+  min-height: 48px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.reportRow:nth-child(even) {
+  background: var(--table-stripe-bg);
+}
+
+.reportRow:last-child {
+  border-bottom: none;
+}
+
+.rowText {
+  line-height: 1.4;
+}
+
+.rankBadge,
+.keyStat,
+.categoryPill {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  padding: 0 10px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.rankBadge {
+  color: #03110a;
+}
+
+.rankElite {
+  background: #0f8a3d;
+  color: #ffffff;
+}
+
+.rankGood {
+  background: #86efac;
+}
+
+.rankNeutral {
+  background: var(--surface-muted);
+  color: var(--text);
+}
+
+.rankConcern {
+  background: #f59e0b;
+  color: #111827;
+}
+
+.rankPoor {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.keyStat {
+  justify-content: flex-start;
+  background: var(--surface-muted);
+}
+
+.categoryPill {
+  background: #050505;
+  color: #ffffff;
+}
+
+.playersBlock {
+  gap: 14px;
+}
+
+.playerList {
+  display: grid;
+  gap: 12px;
+}
+
+.playerPanel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  overflow: hidden;
+}
+
+.playerSummary {
+  padding: 14px 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.playerSummary::-webkit-details-marker {
+  display: none;
+}
+
+.playerSummary h3 {
+  font-size: 1.15rem;
+}
+
+.playerMeta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.playerMeta span {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 0 9px;
+}
+
+.playerBody {
+  display: grid;
+  gap: 14px;
+  padding: 0 16px 16px;
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.metricCard {
+  display: grid;
+  gap: 4px;
+  min-height: 86px;
+  align-content: center;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.cardValue {
+  font-size: 1.25rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.cardRank {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.splitWrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.splitTable {
+  width: 100%;
+  min-width: 1040px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.splitTable th,
+.splitTable td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.splitTable th {
+  background: var(--table-header-bg);
+  color: var(--muted);
+  font-size: 0.76rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.splitTable tbody tr:last-child td {
+  border-bottom: none;
+}
+
+@media (max-width: 1000px) {
+  .setupGrid,
+  .cardGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .reportRow {
+    grid-template-columns: 60px 1fr minmax(92px, 118px);
+  }
+
+  .rowText {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 640px) {
+  .setupGrid,
+  .cardGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .reportRow {
+    grid-template-columns: 54px 1fr;
+  }
+
+  .categoryPill {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
+  .actionRow,
+  .generateButton {
+    width: 100%;
+  }
+}
