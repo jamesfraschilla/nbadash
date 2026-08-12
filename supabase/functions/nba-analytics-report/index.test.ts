@@ -6,6 +6,7 @@ Deno.test("analytics report normalizes all-game and combined-season selections",
   assertEquals(__test__.normalizeLastNGames(0), 0);
   assertEquals(__test__.normalizeLastNGames(30), 30);
   assertEquals(__test__.lastNGamesLabel(0), "All Games");
+  assertEquals(__test__.lastNGamesLabel(0, 82), "All Games (82)");
   assertEquals(__test__.lastNGamesLabel(10), "Last 10 Games");
   assertEquals(__test__.normalizeReportSeasonType("Regular Season and Playoffs"), "Regular Season & Playoffs");
   assertEquals(__test__.normalizeReportSeasonType("Preseason"), "Pre Season");

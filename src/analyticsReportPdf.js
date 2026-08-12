@@ -650,7 +650,10 @@ function safeFileName(value) {
 
 function reportWindowLabel(selection = {}) {
   const games = Number(selection.lastNGames);
-  if (games === 0) return "All Games";
+  if (games === 0) {
+    const gamesUsed = Number(selection.gamesUsed);
+    return Number.isFinite(gamesUsed) && gamesUsed > 0 ? `All Games (${Math.round(gamesUsed)})` : "All Games";
+  }
   if (Number.isFinite(games) && games > 0) return `${games} ${games === 1 ? "Game" : "Games"}`;
   return "Selected Games";
 }

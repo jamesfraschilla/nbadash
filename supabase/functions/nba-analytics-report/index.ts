@@ -115,8 +115,12 @@ function normalizeLastNGames(value: unknown) {
   return Math.min(82, parsed);
 }
 
-function lastNGamesLabel(lastNGames: number) {
-  return lastNGames === 0 ? "All Games" : `Last ${lastNGames} Games`;
+function lastNGamesLabel(lastNGames: number, gamesUsed: number | null = null) {
+  if (lastNGames === 0) {
+    const count = Number(gamesUsed);
+    return Number.isFinite(count) && count > 0 ? `All Games (${Math.round(count)})` : "All Games";
+  }
+  return `Last ${lastNGames} Games`;
 }
 
 function safeNumber(value: unknown, fallback = 0) {
@@ -579,6 +583,7 @@ function buildTeamMetrics(
 
     return {
       teamId,
+      gamesPlayed: safeNumber(base.GP, 0),
       teamName: String(base.TEAM_NAME || ""),
       points,
       pace: safeNumber(advanced.PACE, 0),
@@ -1059,7 +1064,8 @@ async function buildAnalyticsReport(body: JsonRecord) {
       season,
       seasonType,
       lastNGames,
-      rangeLabel: `${season} ${seasonType} · ${lastNGamesLabel(lastNGames)}`,
+      gamesUsed: targetTeamMetrics.gamesPlayed,
+      rangeLabel: `${season} ${seasonType} · ${lastNGamesLabel(lastNGames, targetTeamMetrics.gamesPlayed)}`,
     },
     team,
     teamReport: buildTeamReport(teamMetrics, teamId),
