@@ -44,7 +44,7 @@ function playerReport(name, playerId) {
   };
 }
 
-test("analytics report PDF uses one page for each major report section", async () => {
+test("analytics report PDF uses one page for each report section without a cover page", async () => {
   const report = {
     team: {
       fullName: "Washington Wizards",
@@ -78,5 +78,5 @@ test("analytics report PDF uses one page for each major report section", async (
   const bytes = await createAnalyticsReportPdfBytes(report);
   const pdf = await PDFDocument.load(bytes);
 
-  assert.equal(pdf.getPageCount(), 6);
+  assert.equal(pdf.getPageCount(), 5);
 });

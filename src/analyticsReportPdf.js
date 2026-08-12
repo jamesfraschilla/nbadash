@@ -4,7 +4,7 @@ const PAGE_WIDTH = 612;
 const PAGE_HEIGHT = 792;
 const MARGIN_X = 24;
 const TOP_Y = PAGE_HEIGHT - 24;
-const BOTTOM_Y = 24;
+const PAGE_INNER_WIDTH = PAGE_WIDTH - MARGIN_X * 2;
 
 const COLORS = {
   black: rgb(0.04, 0.04, 0.04),
@@ -292,23 +292,23 @@ function drawHeader(page, fonts, { eyebrow, title, rightText = "", logo = null }
     height: 2,
     color: COLORS.blue,
   });
-  const textX = logo ? MARGIN_X + 42 : MARGIN_X;
-  if (logo) drawImageContain(page, logo, MARGIN_X, TOP_Y - 43, 31, 31);
-  drawText(page, eyebrow, textX, TOP_Y - 23, {
+  const textX = logo ? MARGIN_X + 43 : MARGIN_X;
+  if (logo) drawImageContain(page, logo, MARGIN_X + 2, TOP_Y - 45, 32, 32);
+  drawText(page, eyebrow, textX, TOP_Y - 24, {
     font: fonts.bold,
     size: 7.2,
     color: COLORS.muted,
   });
-  drawText(page, title, textX, TOP_Y - 40, {
+  drawText(page, title, textX, TOP_Y - 42, {
     font: fonts.bold,
-    size: 15,
+    size: 14.2,
     color: COLORS.black,
   });
   if (rightText) {
-    const width = measure(fonts.bold, rightText, 8.5);
-    drawText(page, rightText, PAGE_WIDTH - MARGIN_X - width, TOP_Y - 31, {
+    const width = measure(fonts.bold, rightText, 8);
+    drawText(page, rightText, PAGE_WIDTH - MARGIN_X - width, TOP_Y - 32, {
       font: fonts.bold,
-      size: 8.5,
+      size: 8,
       color: COLORS.black,
     });
   }
@@ -318,15 +318,15 @@ function drawHeader(page, fonts, { eyebrow, title, rightText = "", logo = null }
     thickness: 0.7,
     color: COLORS.lightLine,
   });
-  return TOP_Y - 70;
+  return TOP_Y - 67;
 }
 
 function metricLayout(x, options = {}) {
   const {
-    textWidth = 354,
+    textWidth = 348,
     rankWidth = 34,
-    valueWidth = 72,
-    categoryWidth = 80,
+    valueWidth = 74,
+    categoryWidth = 84,
     columnGap = 6,
   } = options;
   const rankX = x + textWidth + columnGap;
@@ -348,12 +348,12 @@ function drawColumnHeaders(page, fonts, x, y, rowOptions, labels) {
   const layout = metricLayout(x, rowOptions);
   drawCenteredText(page, fonts, labels.rankTop, layout.rankX, y, layout.rankWidth, {
     font: fonts.bold,
-    size: 6.7,
+    size: 6.6,
     color: COLORS.black,
   });
   drawCenteredText(page, fonts, labels.rankBottom, layout.rankX, y - 8, layout.rankWidth, {
     font: fonts.bold,
-    size: 6.1,
+    size: 6,
     color: COLORS.headerGray,
   });
   drawCenteredText(
@@ -365,7 +365,7 @@ function drawColumnHeaders(page, fonts, x, y, rowOptions, labels) {
     layout.valueWidth + layout.columnGap + layout.categoryWidth,
     {
       font: fonts.bold,
-      size: 6.7,
+      size: 6.6,
       color: COLORS.black,
     },
   );
@@ -378,7 +378,7 @@ function drawColumnHeaders(page, fonts, x, y, rowOptions, labels) {
     layout.valueWidth + layout.columnGap + layout.categoryWidth,
     {
       font: fonts.bold,
-      size: 6.1,
+      size: 6,
       color: COLORS.headerGray,
     },
   );
@@ -398,11 +398,11 @@ function drawPill(page, fonts, { x, y, width, height, text, fill, color = COLORS
 
 function drawMetricRow(page, fonts, row, x, y, options = {}) {
   const {
-    width = PAGE_WIDTH - MARGIN_X * 2,
-    textWidth = 354,
+    width = PAGE_INNER_WIDTH,
+    textWidth = 348,
     rankWidth = 34,
-    valueWidth = 72,
-    categoryWidth = 80,
+    valueWidth = 74,
+    categoryWidth = 84,
     columnGap = 6,
     rowHeight = 17.4,
     textSize = 7.15,
@@ -422,7 +422,7 @@ function drawMetricRow(page, fonts, row, x, y, options = {}) {
   });
   const textLines = wrapText(row?.text || "", fonts.regular, textSize, textWidth, 2);
   textLines.forEach((line, index) => {
-    drawText(page, line, x + 4, y + 5.8 - index * (textSize + 1), {
+    drawText(page, line, x + 4, y + 6.2 - index * (textSize + 1.1), {
       font: fonts.regular,
       size: textSize,
       color: COLORS.black,
@@ -439,9 +439,9 @@ function drawMetricRow(page, fonts, row, x, y, options = {}) {
     color: rankStyle.text,
     size: 7.2,
   });
-  drawText(page, truncateText(row?.displayValue || "-", fonts.bold, 7.4, valueWidth), layout.valueX, y + 4, {
+  drawText(page, truncateText(row?.displayValue || "-", fonts.bold, 7.35, valueWidth), layout.valueX, y + 4.1, {
     font: fonts.bold,
-    size: 7.4,
+    size: 7.35,
     color: COLORS.black,
   });
   const categoryLabel = row?.statLabel || row?.category || "";
@@ -453,7 +453,7 @@ function drawMetricRow(page, fonts, row, x, y, options = {}) {
     text: categoryLabel,
     fill: categoryColor(categoryLabel),
     color: COLORS.white,
-    size: 6.15,
+    size: 6.05,
   });
   return y - rowHeight;
 }
@@ -484,67 +484,6 @@ function drawReportSections(page, fonts, sections, startY, options = {}) {
   return y;
 }
 
-function drawCover(pdfDoc, fonts, report, assets = {}) {
-  const page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-  const team = report.team || {};
-  page.drawRectangle({
-    x: MARGIN_X,
-    y: TOP_Y - 5,
-    width: PAGE_WIDTH - MARGIN_X * 2,
-    height: 2.5,
-    color: COLORS.blue,
-  });
-  drawImageContain(page, assets.teamLogo, MARGIN_X, TOP_Y - 73, 54, 54);
-  const titleX = assets.teamLogo ? MARGIN_X + 70 : MARGIN_X;
-  drawText(page, pdfText(team.fullName || "NBA"), titleX, TOP_Y - 45, {
-    font: fonts.bold,
-    size: 21,
-    color: COLORS.black,
-  });
-  drawText(page, "Advanced Insights Report", titleX, TOP_Y - 82, {
-    font: fonts.bold,
-    size: 34,
-    color: COLORS.black,
-  });
-  drawText(page, report.selection?.rangeLabel || "", titleX, TOP_Y - 105, {
-    font: fonts.bold,
-    size: 12,
-    color: COLORS.muted,
-  });
-
-  const cardY = TOP_Y - 210;
-  [
-    ["Team Breakdown", "Team offense, scoring mix, shot profile, opponent tendencies, rank context, and key stats."],
-    ["Player Breakdowns", "Split tables, usage indicators, scoring mix, shooting zones, on/off impact, and team rank context."],
-  ].forEach(([title, body], index) => {
-    const x = MARGIN_X + index * 282;
-    page.drawLine({
-      start: { x, y: cardY },
-      end: { x: x + 248, y: cardY },
-      thickness: 1.4,
-      color: COLORS.black,
-    });
-    drawText(page, title, x, cardY - 26, {
-      font: fonts.bold,
-      size: 16,
-      color: COLORS.black,
-    });
-    wrapText(body, fonts.regular, 10.5, 240, 3).forEach((line, lineIndex) => {
-      drawText(page, line, x, cardY - 50 - lineIndex * 14, {
-        font: fonts.regular,
-        size: 10.5,
-        color: COLORS.black,
-      });
-    });
-  });
-
-  drawText(page, "Situational Points Per Possession is excluded until Synergy access is available.", MARGIN_X, BOTTOM_Y + 18, {
-    font: fonts.regular,
-    size: 9,
-    color: COLORS.muted,
-  });
-}
-
 function drawTeamLikePage(pdfDoc, fonts, report, { title, eyebrow, sections }, assets = {}) {
   const page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
   const y = drawHeader(page, fonts, {
@@ -561,52 +500,54 @@ function drawTeamLikePage(pdfDoc, fonts, report, { title, eyebrow, sections }, a
       keyBottom: reportWindowLabel(report.selection).toUpperCase(),
     },
     rowOptions: {
-      rowHeight: 17.2,
-      textSize: 6.85,
-      textWidth: 354,
+      rowHeight: 18.6,
+      textSize: 7.05,
+      textWidth: 348,
       rankWidth: 34,
-      valueWidth: 72,
-      categoryWidth: 80,
+      valueWidth: 74,
+      categoryWidth: 84,
       columnGap: 6,
     },
-    afterHeading: 13,
-    sectionGap: 8,
-    headingSize: 11.2,
+    afterColumnHeader: 2,
+    afterHeading: 13.2,
+    sectionGap: 9,
+    headingSize: 11.4,
   });
 }
 
 function drawCards(page, fonts, cards, y, options = {}) {
   const startX = options.x ?? MARGIN_X;
   const cardWidth = options.cardWidth ?? 105;
-  const gap = 8;
+  const cardHeight = options.cardHeight ?? 35;
+  const gap = options.gap ?? 8;
   cards.slice(0, 5).forEach((card, index) => {
     const x = startX + index * (cardWidth + gap);
-    page.drawRectangle({ x, y: y - 35, width: cardWidth, height: 35, color: COLORS.lightGray });
-    drawText(page, card.label || "", x + 6, y - 12, {
+    page.drawRectangle({ x, y: y - cardHeight, width: cardWidth, height: cardHeight, color: COLORS.lightGray });
+    drawText(page, card.label || "", x + 6, y - 12.2, {
       font: fonts.bold,
-      size: 6.4,
+      size: 6.2,
       color: COLORS.muted,
     });
-    drawText(page, card.value || "-", x + 6, y - 27, {
+    drawText(page, card.value || "-", x + 6, y - 27.6, {
       font: fonts.bold,
-      size: 11,
+      size: 10.6,
       color: COLORS.black,
     });
   });
-  return y - 46;
+  return y - cardHeight - 9;
 }
 
 function drawSplitTable(page, fonts, rows, y) {
   const columns = [
-    ["Split", 52, "label"],
-    ["MPG", 27, "mpg"],
-    ["PPG", 27, "ppg"],
-    ["FGM/A", 44, "fgmA"],
-    ["FG%", 34, "fgPct"],
-    ["3PM/A", 44, "threePmA"],
-    ["3P%", 34, "threePct"],
-    ["FTM/A", 44, "ftmA"],
-    ["FT%", 34, "ftPct"],
+    ["Split", 50, "label"],
+    ["MPG", 28, "mpg"],
+    ["PPG", 28, "ppg"],
+    ["FGM/A", 43, "fgmA"],
+    ["FG%", 33, "fgPct"],
+    ["3PM/A", 43, "threePmA"],
+    ["3P%", 33, "threePct"],
+    ["FTM/A", 43, "ftmA"],
+    ["FT%", 33, "ftPct"],
     ["OFF", 24, "off"],
     ["DEF", 24, "def"],
     ["TOT", 24, "tot"],
@@ -617,22 +558,22 @@ function drawSplitTable(page, fonts, rows, y) {
     ["PF", 22, "pf"],
   ];
   let x = MARGIN_X;
-  page.drawRectangle({ x: MARGIN_X, y: y - 11, width: PAGE_WIDTH - MARGIN_X * 2, height: 13, color: COLORS.lightGray });
+  page.drawRectangle({ x: MARGIN_X, y: y - 11.5, width: PAGE_INNER_WIDTH, height: 13.5, color: COLORS.lightGray });
   columns.forEach(([label, width]) => {
     drawText(page, label, x + 2, y - 7, {
       font: fonts.bold,
-      size: 5.6,
+      size: 5.65,
       color: COLORS.black,
     });
     x += Number(width);
   });
-  y -= 18;
+  y -= 17.5;
   (Array.isArray(rows) ? rows : []).slice(0, 5).forEach((row) => {
     x = MARGIN_X;
     columns.forEach(([, width, key]) => {
-      drawText(page, truncateText(row?.[key] || "-", fonts.regular, 5.8, Number(width) - 3), x + 2, y, {
+      drawText(page, truncateText(row?.[key] || "-", fonts.regular, 5.65, Number(width) - 3), x + 2, y, {
         font: fonts.regular,
-        size: 5.8,
+        size: 5.65,
         color: COLORS.black,
       });
       x += Number(width);
@@ -643,9 +584,9 @@ function drawSplitTable(page, fonts, rows, y) {
       thickness: 0.35,
       color: COLORS.lightLine,
     });
-    y -= 12;
+    y -= 11;
   });
-  return y - 4;
+  return y - 7;
 }
 
 function drawPlayerPage(pdfDoc, fonts, report, playerReport, assets = {}, maxRank = null) {
@@ -659,14 +600,17 @@ function drawPlayerPage(pdfDoc, fonts, report, playerReport, assets = {}, maxRan
   });
 
   const headshot = assets.playerHeadshots?.get(String(player.playerId || ""));
-  const headshotBottom = y - 42;
-  if (headshot) drawImageContain(page, headshot, MARGIN_X, headshotBottom, 72, 72);
-  else drawHeadshotFallback(page, fonts, player, MARGIN_X, headshotBottom, 72, 72);
-  y = drawCards(page, fonts, playerReport.cards || [], y + 8, {
-    x: MARGIN_X + 88,
-    cardWidth: 86.5,
+  const headshotSize = 82;
+  const headshotBottom = y - 75;
+  if (headshot) drawImageContain(page, headshot, MARGIN_X + 2, headshotBottom, headshotSize, headshotSize);
+  else drawHeadshotFallback(page, fonts, player, MARGIN_X + 2, headshotBottom, headshotSize, headshotSize);
+  y = drawCards(page, fonts, playerReport.cards || [], y + 7, {
+    x: MARGIN_X + 104,
+    cardWidth: 84,
+    cardHeight: 36,
+    gap: 9,
   });
-  y = Math.min(y, headshotBottom - 8);
+  y = Math.min(y, headshotBottom - 9);
   y = drawSplitTable(page, fonts, playerReport.splitRows || [], y);
   drawReportSections(page, fonts, playerReport.sections || [], y - 3, {
     columnHeader: {
@@ -676,19 +620,20 @@ function drawPlayerPage(pdfDoc, fonts, report, playerReport, assets = {}, maxRan
       keyBottom: reportWindowLabel(report.selection).toUpperCase(),
     },
     rowOptions: {
-      rowHeight: 15.2,
-      textSize: 6.15,
-      textWidth: 342,
+      rowHeight: 15.8,
+      textSize: 6.25,
+      textWidth: 337,
       rankWidth: 30,
-      valueWidth: 78,
-      categoryWidth: 78,
+      valueWidth: 77,
+      categoryWidth: 84,
       columnGap: 6,
       rankMode: "ordinal",
       maxRank,
     },
-    afterHeading: 11,
-    sectionGap: 5,
-    headingSize: 10.3,
+    afterColumnHeader: 1,
+    afterHeading: 11.2,
+    sectionGap: 5.5,
+    headingSize: 10.5,
   });
 }
 
@@ -703,7 +648,7 @@ function safeFileName(value) {
 function reportWindowLabel(selection = {}) {
   const games = Number(selection.lastNGames);
   if (games === 0) return "All Games";
-  if (Number.isFinite(games) && games > 0) return `${games} Games`;
+  if (Number.isFinite(games) && games > 0) return `${games} ${games === 1 ? "Game" : "Games"}`;
   return "Selected Games";
 }
 
@@ -728,7 +673,6 @@ export async function createAnalyticsReportPdfBytes(report) {
   const assets = await loadReportAssets(pdfDoc, report);
   const playerReports = Array.isArray(report.playerReports) ? report.playerReports : [];
 
-  drawCover(pdfDoc, fonts, report, assets);
   drawTeamLikePage(pdfDoc, fonts, report, {
     eyebrow: "Team Breakdown",
     title: `${report.team?.fullName || "Team"} Team Report`,
