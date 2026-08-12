@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { requestNbaAnalyticsReport } from "../analyticsReportData.js";
 import { teamLogoUrl } from "../api.js";
+import PlayerHeadshot from "../components/PlayerHeadshot.jsx";
 import { NBA_TEAMS } from "../data/nbaTeams.js";
 import styles from "./AnalyticsReport.module.css";
 
@@ -148,15 +149,30 @@ function SplitTable({ rows }) {
   );
 }
 
-function PlayerReport({ report, defaultOpen }) {
+function PlayerReport({ report, defaultOpen, forceOpen = false }) {
   const player = report?.player || {};
   const cards = Array.isArray(report?.cards) ? report.cards : [];
+  const initials = String(player.name || "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
   return (
-    <details className={styles.playerPanel} open={defaultOpen}>
+    <details className={styles.playerPanel} open={defaultOpen || forceOpen}>
       <summary className={styles.playerSummary}>
-        <div>
-          <div className={styles.kicker}>{player.teamAbbreviation || "NBA"}</div>
-          <h3>{player.name}</h3>
+        <div className={styles.playerIdentity}>
+          <PlayerHeadshot
+            personId={player.playerId}
+            teamId={player.teamId}
+            className={styles.playerHeadshot}
+            fallback={<div className={styles.playerHeadshotFallback}>{initials}</div>}
+          />
+          <div>
+            <div className={styles.kicker}>{player.teamAbbreviation || "NBA"}</div>
+            <h3>{player.name}</h3>
+          </div>
         </div>
         <div className={styles.playerMeta}>
           {cards.slice(0, 3).map((card) => (
@@ -197,6 +213,7 @@ export default function AnalyticsReport() {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [printExpanded, setPrintExpanded] = useState(false);
 
   const selectedTeam = NBA_TEAMS.find((team) => team.teamId === draft.teamId) || NBA_TEAMS[0];
   const playerReports = Array.isArray(report?.playerReports) ? report.playerReports : [];
@@ -223,6 +240,31 @@ export default function AnalyticsReport() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleExportPdf = () => {
+    if (!report || typeof window === "undefined" || typeof document === "undefined") return;
+
+    const previousTitle = document.title;
+    const teamLabel = report.team?.tricode || selectedTeam.tricode || "NBA";
+    const windowLabel = `${report.selection?.lastNGames || draft.lastNGames || 10} Games`;
+    document.title = `${teamLabel} Insight Report - ${windowLabel}`;
+    document.body.classList.add("analytics-report-print");
+    setPrintExpanded(true);
+
+    const cleanup = () => {
+      document.body.classList.remove("analytics-report-print");
+      document.title = previousTitle;
+      setPrintExpanded(false);
+      window.removeEventListener("afterprint", cleanup);
+    };
+
+    window.addEventListener("afterprint", cleanup);
+    window.requestAnimationFrame(() => {
+      window.setTimeout(() => {
+        window.print();
+      }, 50);
+    });
   };
 
   return (
@@ -300,7 +342,32 @@ export default function AnalyticsReport() {
       </section>
 
       {report ? (
-        <section className={styles.reportShell}>
+        <section className={`${styles.reportShell} ${styles.analyticsPrintRoot}`}>
+          <section className={styles.printCover}>
+            <div className={styles.printTopRule} />
+            <div className={styles.printCoverIdentity}>
+              <img src={teamLogoUrl(report.team?.teamId || draft.teamId, "nba")} alt="" />
+              <div>
+                <div className={styles.printCoverTeam}>{report.team?.fullName || selectedTeam.fullName}</div>
+                <h1>Advanced Insights Report</h1>
+                <p>{report.selection?.rangeLabel}</p>
+              </div>
+            </div>
+            <div className={styles.printCoverGrid}>
+              <div>
+                <h2>Team Breakdown</h2>
+                <p>Team offense, opponent tendencies, shot profile, scoring mix, rank context, and key stats.</p>
+              </div>
+              <div>
+                <h2>Player Breakdowns</h2>
+                <p>Split tables, usage indicators, scoring mix, shooting zones, on/off impact, and team rank context.</p>
+              </div>
+            </div>
+            <div className={styles.printCoverNote}>
+              Situational Points Per Possession is excluded from this version until Synergy access is available.
+            </div>
+          </section>
+
           <header className={styles.reportHeader}>
             <div className={styles.teamIdentity}>
               <img src={teamLogoUrl(report.team?.teamId || draft.teamId, "nba")} alt="" />
@@ -309,8 +376,13 @@ export default function AnalyticsReport() {
                 <h1>{report.team?.fullName || selectedTeam.fullName} Insight Report</h1>
               </div>
             </div>
-            <div className={styles.generatedAt}>
-              Generated {formatGeneratedAt(report.generatedAt)}
+            <div className={styles.reportHeaderActions}>
+              <div className={styles.generatedAt}>
+                Generated {formatGeneratedAt(report.generatedAt)}
+              </div>
+              <button type="button" className={styles.exportButton} onClick={handleExportPdf}>
+                Export PDF
+              </button>
             </div>
           </header>
 
@@ -348,6 +420,7 @@ export default function AnalyticsReport() {
                     key={playerReport.player?.playerId || playerReport.player?.name}
                     report={playerReport}
                     defaultOpen={index < 3}
+                    forceOpen={printExpanded}
                   />
                 ))}
               </div>

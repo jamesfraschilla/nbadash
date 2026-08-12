@@ -68,7 +68,8 @@
   font-size: 0.92rem;
 }
 
-.generateButton {
+.generateButton,
+.exportButton {
   min-height: var(--control-height-md);
   min-width: 150px;
   border: 1px solid var(--button-primary-bg);
@@ -80,14 +81,20 @@
   cursor: pointer;
 }
 
-.generateButton:hover:not(:disabled) {
+.generateButton:hover:not(:disabled),
+.exportButton:hover:not(:disabled) {
   background: var(--button-primary-hover);
   border-color: var(--button-primary-hover);
 }
 
-.generateButton:disabled {
+.generateButton:disabled,
+.exportButton:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.exportButton {
+  min-width: 118px;
 }
 
 .error {
@@ -126,6 +133,14 @@
   flex-wrap: wrap;
 }
 
+.reportHeaderActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .teamIdentity {
   display: flex;
   align-items: center;
@@ -140,6 +155,10 @@
 
 .reportHeader h1 {
   font-size: clamp(1.5rem, 2.5vw, 2.2rem);
+}
+
+.printCover {
+  display: none;
 }
 
 .notesBar {
@@ -296,6 +315,34 @@
   font-size: 1.15rem;
 }
 
+.playerIdentity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.playerHeadshot,
+.playerHeadshotFallback {
+  width: 50px;
+  height: 50px;
+  flex: 0 0 50px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.playerHeadshot {
+  object-fit: cover;
+  object-position: top center;
+}
+
+.playerHeadshotFallback {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-weight: 900;
+}
+
 .playerMeta {
   display: flex;
   gap: 8px;
@@ -418,5 +465,395 @@
   .actionRow,
   .generateButton {
     width: 100%;
+  }
+}
+
+@media print {
+  @page {
+    size: letter;
+    margin: 0.36in;
+  }
+
+  :global(body.analytics-report-print) {
+    background: #ffffff !important;
+    color: #111111 !important;
+  }
+
+  :global(body.analytics-report-print *) {
+    visibility: hidden !important;
+  }
+
+  :global(body.analytics-report-print) .analyticsPrintRoot,
+  :global(body.analytics-report-print) .analyticsPrintRoot * {
+    visibility: visible !important;
+  }
+
+  :global(body.analytics-report-print) .analyticsPrintRoot {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+  }
+
+  .setupPanel,
+  .emptyState,
+  .notesBar,
+  .exportButton,
+  .generatedAt {
+    display: none !important;
+  }
+
+  .analyticsTool {
+    display: block;
+  }
+
+  .reportShell,
+  .reportBlock,
+  .playersBlock,
+  .playerPanel,
+  .metricCard,
+  .splitWrap,
+  .reportRows {
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #111111 !important;
+  }
+
+  .reportShell {
+    display: block;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 8.7pt;
+    line-height: 1.28;
+  }
+
+  .printCover {
+    display: grid;
+    min-height: 9.55in;
+    align-content: start;
+    gap: 28px;
+    padding-top: 0.18in;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .printTopRule {
+    height: 3px;
+    background: #1477c9;
+    width: 100%;
+  }
+
+  .printCoverIdentity {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding-top: 12px;
+  }
+
+  .printCoverIdentity img {
+    width: 58px;
+    height: 58px;
+    object-fit: contain;
+  }
+
+  .printCoverTeam {
+    font-size: 15pt;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .printCoverIdentity h1 {
+    margin: 10px 0 6px;
+    font-size: 30pt;
+    letter-spacing: 0;
+  }
+
+  .printCoverIdentity p,
+  .printCoverGrid p,
+  .printCoverNote {
+    margin: 0;
+    color: #333333;
+    font-size: 11pt;
+  }
+
+  .printCoverGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+    margin-top: 34px;
+  }
+
+  .printCoverGrid > div {
+    border-top: 2px solid #111111;
+    padding-top: 10px;
+  }
+
+  .printCoverGrid h2 {
+    margin: 0 0 8px;
+    font-size: 16pt;
+  }
+
+  .printCoverNote {
+    margin-top: 18px;
+    padding-top: 12px;
+    border-top: 1px solid #777777;
+  }
+
+  .reportHeader {
+    border-top: 3px solid #1477c9;
+    border-bottom: 1px solid #cfcfcf;
+    padding: 10px 0 8px;
+    margin-bottom: 12px;
+  }
+
+  .teamIdentity img {
+    width: 32px;
+    height: 32px;
+  }
+
+  .kicker,
+  .fieldLabel,
+  .cardLabel,
+  .rankHeader {
+    color: #777777 !important;
+    font-size: 7pt;
+    letter-spacing: 0.08em;
+  }
+
+  .reportHeader h1,
+  .reportBlock h2,
+  .playersBlock h2,
+  .playerSummary h3,
+  .reportSection h3 {
+    color: #111111 !important;
+    letter-spacing: 0;
+  }
+
+  .reportHeader h1 {
+    font-size: 13pt;
+  }
+
+  .reportHeaderActions,
+  .rankHeader {
+    display: none;
+  }
+
+  .reportBlock,
+  .playersBlock {
+    display: grid;
+    gap: 9px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .reportBlock h2,
+  .playersBlock h2 {
+    font-size: 15pt;
+  }
+
+  .blockHeader {
+    border-bottom: 1px solid #111111;
+    padding-bottom: 7px;
+    margin-bottom: 3px;
+  }
+
+  .reportSection {
+    display: grid;
+    gap: 4px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .reportSection h3 {
+    font-size: 11.5pt;
+    padding-top: 4px;
+  }
+
+  .reportRows,
+  .splitWrap {
+    border: 0;
+    border-radius: 0;
+    overflow: visible;
+  }
+
+  .reportRow {
+    grid-template-columns: minmax(0, 1fr) 0.46in 0.95in 1.12in;
+    min-height: 0;
+    gap: 6px;
+    padding: 4px 4px 4px 0;
+    border-bottom: 0.7pt solid #555555;
+    background: #ffffff !important;
+    color: #111111 !important;
+  }
+
+  .reportRow:nth-child(even) {
+    background: #f2f2f2 !important;
+  }
+
+  .rowText {
+    line-height: 1.22;
+  }
+
+  .rankBadge,
+  .keyStat,
+  .categoryPill {
+    min-height: 0.2in;
+    border-radius: 4px;
+    padding: 0 5px;
+    font-size: 8pt;
+    line-height: 1.1;
+  }
+
+  .rankElite {
+    background: #008000 !important;
+    color: #ffffff !important;
+  }
+
+  .rankGood {
+    background: #90ee90 !important;
+    color: #111111 !important;
+  }
+
+  .rankNeutral {
+    background: #eeeeee !important;
+    color: #111111 !important;
+  }
+
+  .rankConcern {
+    background: #ffa500 !important;
+    color: #111111 !important;
+  }
+
+  .rankPoor {
+    background: #d00000 !important;
+    color: #ffffff !important;
+  }
+
+  .keyStat {
+    background: transparent !important;
+    justify-content: center;
+  }
+
+  .categoryPill {
+    background: #000000 !important;
+    color: #ffffff !important;
+  }
+
+  .playersBlock {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  .playerList {
+    display: block;
+  }
+
+  .playerPanel {
+    display: block;
+    border: 0;
+    border-radius: 0;
+    overflow: visible;
+    break-before: page;
+    page-break-before: always;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .playerPanel:first-child {
+    break-before: auto;
+    page-break-before: auto;
+  }
+
+  .playerPanel:not([open]) > :not(.playerSummary) {
+    display: block !important;
+  }
+
+  .playerSummary {
+    display: flex;
+    padding: 0 0 7px;
+    border-bottom: 1px solid #111111;
+    cursor: default;
+  }
+
+  .playerSummary h3 {
+    font-size: 15pt;
+  }
+
+  .playerIdentity {
+    gap: 10px;
+  }
+
+  .playerHeadshot,
+  .playerHeadshotFallback {
+    width: 0.72in;
+    height: 0.72in;
+    flex-basis: 0.72in;
+    border-color: #dddddd;
+    border-radius: 4px;
+    background: #f2f2f2 !important;
+  }
+
+  .playerMeta {
+    color: #111111;
+    font-size: 7.4pt;
+  }
+
+  .playerMeta span {
+    border-color: #dddddd;
+    background: #f3f3f3 !important;
+    color: #111111 !important;
+    min-height: 0.22in;
+  }
+
+  .playerBody {
+    display: grid !important;
+    gap: 7px;
+    padding: 8px 0 0;
+  }
+
+  .cardGrid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 5px;
+  }
+
+  .metricCard {
+    min-height: 0.44in;
+    gap: 2px;
+    padding: 5px 6px;
+    border: 1px solid #dddddd;
+    border-radius: 4px;
+  }
+
+  .cardValue {
+    color: #111111;
+    font-size: 10pt;
+  }
+
+  .cardRank {
+    color: #777777;
+    font-size: 6.7pt;
+  }
+
+  .splitTable {
+    min-width: 0;
+    width: 100%;
+    font-size: 6.8pt;
+  }
+
+  .splitTable th,
+  .splitTable td {
+    padding: 3px 4px;
+    border-bottom: 0.7pt solid #bdbdbd;
+    color: #111111;
+  }
+
+  .splitTable th {
+    background: #e9e9e9 !important;
+    color: #111111 !important;
+    letter-spacing: 0;
   }
 }
