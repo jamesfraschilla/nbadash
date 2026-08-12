@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { requestNbaAnalyticsReport } from "../analyticsReportData.js";
+import { downloadAnalyticsReportPdf } from "../analyticsReportPdf.js";
 import { teamLogoUrl } from "../api.js";
 import PlayerHeadshot from "../components/PlayerHeadshot.jsx";
 import { NBA_TEAMS } from "../data/nbaTeams.js";
@@ -149,7 +150,7 @@ function SplitTable({ rows }) {
   );
 }
 
-function PlayerReport({ report, defaultOpen, forceOpen = false }) {
+function PlayerReport({ report, defaultOpen }) {
   const player = report?.player || {};
   const cards = Array.isArray(report?.cards) ? report.cards : [];
   const initials = String(player.name || "")
@@ -160,7 +161,7 @@ function PlayerReport({ report, defaultOpen, forceOpen = false }) {
     .join("")
     .toUpperCase();
   return (
-    <details className={styles.playerPanel} open={defaultOpen || forceOpen}>
+    <details className={styles.playerPanel} open={defaultOpen}>
       <summary className={styles.playerSummary}>
         <div className={styles.playerIdentity}>
           <PlayerHeadshot
@@ -212,8 +213,8 @@ export default function AnalyticsReport() {
   });
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState("");
-  const [printExpanded, setPrintExpanded] = useState(false);
 
   const selectedTeam = NBA_TEAMS.find((team) => team.teamId === draft.teamId) || NBA_TEAMS[0];
   const playerReports = Array.isArray(report?.playerReports) ? report.playerReports : [];
@@ -242,29 +243,17 @@ export default function AnalyticsReport() {
     }
   };
 
-  const handleExportPdf = () => {
-    if (!report || typeof window === "undefined" || typeof document === "undefined") return;
-
-    const previousTitle = document.title;
-    const teamLabel = report.team?.tricode || selectedTeam.tricode || "NBA";
-    const windowLabel = `${report.selection?.lastNGames || draft.lastNGames || 10} Games`;
-    document.title = `${teamLabel} Insight Report - ${windowLabel}`;
-    document.body.classList.add("analytics-report-print");
-    setPrintExpanded(true);
-
-    const cleanup = () => {
-      document.body.classList.remove("analytics-report-print");
-      document.title = previousTitle;
-      setPrintExpanded(false);
-      window.removeEventListener("afterprint", cleanup);
-    };
-
-    window.addEventListener("afterprint", cleanup);
-    window.requestAnimationFrame(() => {
-      window.setTimeout(() => {
-        window.print();
-      }, 50);
-    });
+  const handleExportPdf = async () => {
+    if (!report || exporting) return;
+    setExporting(true);
+    setError("");
+    try {
+      await downloadAnalyticsReportPdf(report);
+    } catch (exportError) {
+      setError(exportError?.message || "Unable to export PDF.");
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -380,8 +369,13 @@ export default function AnalyticsReport() {
               <div className={styles.generatedAt}>
                 Generated {formatGeneratedAt(report.generatedAt)}
               </div>
-              <button type="button" className={styles.exportButton} onClick={handleExportPdf}>
-                Export PDF
+              <button
+                type="button"
+                className={styles.exportButton}
+                onClick={handleExportPdf}
+                disabled={exporting}
+              >
+                {exporting ? "Exporting..." : "Export PDF"}
               </button>
             </div>
           </header>
@@ -420,7 +414,6 @@ export default function AnalyticsReport() {
                     key={playerReport.player?.playerId || playerReport.player?.name}
                     report={playerReport}
                     defaultOpen={index < 3}
-                    forceOpen={printExpanded}
                   />
                 ))}
               </div>
