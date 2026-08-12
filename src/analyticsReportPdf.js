@@ -346,12 +346,15 @@ function metricLayout(x, options = {}) {
 
 function drawColumnHeaders(page, fonts, x, y, rowOptions, labels) {
   const layout = metricLayout(x, rowOptions);
-  drawCenteredText(page, fonts, labels.rankTop, layout.rankX, y, layout.rankWidth, {
+  const labelY = y - 4;
+  const keyHeaderX = layout.categoryX;
+  const keyHeaderWidth = layout.categoryWidth;
+  drawCenteredText(page, fonts, labels.rankTop, layout.rankX, labelY, layout.rankWidth, {
     font: fonts.bold,
     size: 6.6,
     color: COLORS.black,
   });
-  drawCenteredText(page, fonts, labels.rankBottom, layout.rankX, y - 8, layout.rankWidth, {
+  drawCenteredText(page, fonts, labels.rankBottom, layout.rankX, labelY - 8, layout.rankWidth, {
     font: fonts.bold,
     size: 6,
     color: COLORS.headerGray,
@@ -360,9 +363,9 @@ function drawColumnHeaders(page, fonts, x, y, rowOptions, labels) {
     page,
     fonts,
     labels.keyTop,
-    layout.valueX,
-    y,
-    layout.valueWidth + layout.columnGap + layout.categoryWidth,
+    keyHeaderX,
+    labelY,
+    keyHeaderWidth,
     {
       font: fonts.bold,
       size: 6.6,
@@ -373,9 +376,9 @@ function drawColumnHeaders(page, fonts, x, y, rowOptions, labels) {
     page,
     fonts,
     labels.keyBottom,
-    layout.valueX,
-    y - 8,
-    layout.valueWidth + layout.columnGap + layout.categoryWidth,
+    keyHeaderX,
+    labelY - 8,
+    keyHeaderWidth,
     {
       font: fonts.bold,
       size: 6,
@@ -509,7 +512,7 @@ function drawTeamLikePage(pdfDoc, fonts, report, { title, eyebrow, sections }, a
       columnGap: 6,
     },
     afterColumnHeader: 2,
-    afterHeading: 13.2,
+    afterHeading: 18.4,
     sectionGap: 9,
     headingSize: 11.4,
   });
@@ -631,7 +634,7 @@ function drawPlayerPage(pdfDoc, fonts, report, playerReport, assets = {}, maxRan
       maxRank,
     },
     afterColumnHeader: 1,
-    afterHeading: 11.2,
+    afterHeading: 15.8,
     sectionGap: 5.5,
     headingSize: 10.5,
   });
