@@ -938,7 +938,7 @@ function buildPlayerReports(players: ReturnType<typeof buildPlayerMetrics>, team
           ],
         },
         {
-          title: "How They Play",
+          title: "Shooting Efficiency",
           rows: [
             makeMetricRow(`${lastName} is shooting ${formatNumber(metrics.fgPct, 1)} percent from the field, making ${formatNumber(metrics.fgm, 1)} per game.`, playerRank(players, player.playerId, "fgPct"), `${formatNumber(metrics.fgPct, 1)} FG%`, "Shooting", "Shooting", metrics.fgPct),
             makeMetricRow(`${lastName} is shooting ${formatNumber(metrics.fg3Pct, 1)} percent from three, making ${formatNumber(metrics.fg3m, 1)} per game.`, playerRank(players, player.playerId, "fg3Pct"), `${formatNumber(metrics.fg3Pct, 1)} 3FG%`, "3PT", "3PT", metrics.fg3Pct),

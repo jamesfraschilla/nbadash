@@ -39,7 +39,7 @@ function playerReport(name, playerId) {
     sections: [
       section("About Player", 8),
       section("How They Score", 6),
-      section("How They Play", 6),
+      section("Shooting Efficiency", 6),
     ],
   };
 }
