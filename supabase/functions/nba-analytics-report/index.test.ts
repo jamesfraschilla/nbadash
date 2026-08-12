@@ -39,3 +39,37 @@ Deno.test("analytics report combines season-type payload rows by games played", 
   assert(Math.abs(Number(row[6]) - 0.5) < 0.001);
   assertEquals(row[7], "");
 });
+
+Deno.test("analytics report combines player payload rows by player instead of team", () => {
+  const regularPayload = {
+    resultSets: [
+      {
+        name: "LeagueDashPlayerStats",
+        headers: ["PLAYER_ID", "PLAYER_NAME", "TEAM_ID", "GP", "PTS", "FGM", "FGA", "FG_PCT"],
+        rowSet: [
+          ["1", "Player One", "1610612764", 10, 12, 5, 10, 0.5],
+          ["2", "Player Two", "1610612764", 10, 8, 3, 8, 0.375],
+        ],
+      },
+    ],
+  };
+  const playoffPayload = {
+    resultSets: [
+      {
+        name: "LeagueDashPlayerStats",
+        headers: ["PLAYER_ID", "PLAYER_NAME", "TEAM_ID", "GP", "PTS", "FGM", "FGA", "FG_PCT"],
+        rowSet: [
+          ["1", "Player One", "1610612764", 2, 16, 6, 12, 0.5],
+        ],
+      },
+    ],
+  };
+
+  const merged = __test__.mergeStatsPayloads([regularPayload, playoffPayload]);
+  const rows = merged.resultSets[0].rowSet as unknown[][];
+
+  assertEquals(rows.length, 2);
+  assertEquals(rows.map((row) => row[0]), ["1", "2"]);
+  assertEquals(rows[0][3], 12);
+  assert(Math.abs(Number(rows[0][4]) - 12.6666667) < 0.001);
+});

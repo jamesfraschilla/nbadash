@@ -203,7 +203,7 @@ function resultSetRows(resultSet: JsonRecord | undefined) {
 }
 
 function rowIdentity(row: unknown[], columns: string[], fallback: string) {
-  const keyColumn = ["TEAM_ID", "PLAYER_ID", "VS_PLAYER_ID", "GROUP_VALUE"].find((column) => columns.includes(column));
+  const keyColumn = ["PLAYER_ID", "VS_PLAYER_ID", "GROUP_VALUE", "TEAM_ID"].find((column) => columns.includes(column));
   if (!keyColumn) return fallback;
   const value = String(row[columns.indexOf(keyColumn)] || "").trim();
   return value || fallback;
@@ -215,12 +215,24 @@ function rowMergeWeight(row: unknown[], columns: string[]) {
   return Math.max(0, safeNumber(row[gpIndex], 0));
 }
 
+function isIdentityColumn(column: string) {
+  return column === "PLAYER_ID" ||
+    column === "TEAM_ID" ||
+    column === "VS_PLAYER_ID" ||
+    column === "GROUP_VALUE" ||
+    /_ID$/.test(column);
+}
+
 function mergeRowsByGames(rows: unknown[][], columns: string[]) {
   if (rows.length === 1) return rows[0];
   const weights = rows.map((row) => rowMergeWeight(row, columns));
   const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
   const merged = [...rows[0]];
   columns.forEach((column, index) => {
+    if (isIdentityColumn(column)) {
+      merged[index] = rows.find((row) => String(row[index] || "").trim())?.[index] ?? "";
+      return;
+    }
     const numericValues = rows.map((row) => Number(row[index]));
     const allNumeric = numericValues.every((value) => Number.isFinite(value));
     if (!allNumeric) {
