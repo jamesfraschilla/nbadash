@@ -26,6 +26,7 @@ import {
   drawContainBottom,
   drawLogo,
   ensureMatchupExportFonts,
+  loadExportBackgroundImage,
   loadFirstImage,
   makeCanvas,
 } from "./matchupGraphicExport.js";
@@ -287,14 +288,15 @@ export async function renderPersonnelGraphic({
   await ensureMatchupExportFonts();
   if (document.fonts?.ready) await document.fonts.ready;
 
-  const [resolvedHeadshot, resolvedLogo, resolvedTags] = await Promise.all([
+  const [resolvedHeadshot, resolvedLogo, resolvedTags, backgroundImage] = await Promise.all([
     headshotImage || loadFirstImage(buildPlayerHeadshotCandidates(player)),
     logoImage || loadFirstImage(teamId ? [teamLogoUrl(teamId, league)] : []),
     tagImages || loadTagImages(),
+    loadExportBackgroundImage(),
   ]);
 
   const { canvas, context } = makeCanvas(EXPORT_WIDTH, EXPORT_HEIGHT, BLACK);
-  drawBackdrop(context);
+  drawBackdrop(context, backgroundImage);
   drawLogo(context, resolvedLogo);
 
   if (resolvedHeadshot) {

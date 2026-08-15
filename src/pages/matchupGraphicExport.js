@@ -1,5 +1,6 @@
 import dinFontUrl from "../assets/fonts/DIN.ttf";
 import dinAltFontUrl from "../assets/fonts/DINalt.ttf";
+import slideBackgroundUrl from "../assets/graphics/slide-background.png";
 import { playerHeadshotUrls, teamLogoUrl } from "../api.js";
 import {
   buildNbaFallbackHeadshotUrl,
@@ -9,14 +10,18 @@ import {
 export const EXPORT_WIDTH = 1920;
 export const EXPORT_HEIGHT = 1080;
 export const BLACK = "#000000";
-const WEDGE = "#24211f";
-const PAPER = "#efebe2";
 export const WHITE = "#ffffff";
 const SHADOW = "rgba(0, 0, 0, 0.28)";
 export const EXPORT_FONT_FAMILIES = {
   header: "\"DIN\"",
   body: "\"DINalt\", sans-serif",
 };
+export const TEAM_LOGO_EXPORT_BOX = Object.freeze({
+  x: 83,
+  y: 53,
+  width: 140,
+  height: 140,
+});
 const SUPABASE_FUNCTIONS_BASE = import.meta.env.VITE_SUPABASE_URL
   ? `${String(import.meta.env.VITE_SUPABASE_URL).replace(/\/$/, "")}/functions/v1`
   : "";
@@ -88,6 +93,18 @@ export function drawContain(context, source, targetX, targetY, targetWidth, targ
   const sourceHeight = source.height || source.naturalHeight;
   if (!sourceWidth || !sourceHeight) return;
   const scale = Math.min(targetWidth / sourceWidth, targetHeight / sourceHeight);
+  const drawWidth = sourceWidth * scale;
+  const drawHeight = sourceHeight * scale;
+  const drawX = targetX + (targetWidth - drawWidth) / 2;
+  const drawY = targetY + (targetHeight - drawHeight) / 2;
+  context.drawImage(source, drawX, drawY, drawWidth, drawHeight);
+}
+
+function drawCover(context, source, targetX, targetY, targetWidth, targetHeight) {
+  const sourceWidth = source.width || source.naturalWidth;
+  const sourceHeight = source.height || source.naturalHeight;
+  if (!sourceWidth || !sourceHeight) return;
+  const scale = Math.max(targetWidth / sourceWidth, targetHeight / sourceHeight);
   const drawWidth = sourceWidth * scale;
   const drawHeight = sourceHeight * scale;
   const drawX = targetX + (targetWidth - drawWidth) / 2;
@@ -176,6 +193,10 @@ export async function loadFirstImage(urls) {
   return null;
 }
 
+export function loadExportBackgroundImage() {
+  return loadImage(slideBackgroundUrl);
+}
+
 function imageFingerprint(image) {
   if (imageFingerprintCache.has(image)) return imageFingerprintCache.get(image);
   const canvas = document.createElement("canvas");
@@ -219,32 +240,13 @@ function drawArrow(context, centerX, startY, endY) {
   context.restore();
 }
 
-export function drawBackdrop(context) {
+export function drawBackdrop(context, backgroundImage = null) {
   context.fillStyle = BLACK;
   context.fillRect(0, 0, EXPORT_WIDTH, EXPORT_HEIGHT);
 
-  context.fillStyle = WEDGE;
-  context.beginPath();
-  context.moveTo(1552, 0);
-  context.lineTo(EXPORT_WIDTH, 0);
-  context.lineTo(EXPORT_WIDTH, 276);
-  context.closePath();
-  context.fill();
-
-  context.strokeStyle = PAPER;
-  context.lineWidth = 20;
-  context.lineCap = "round";
-  context.beginPath();
-  context.moveTo(1570, -4);
-  context.lineTo(EXPORT_WIDTH + 6, 284);
-  context.stroke();
-
-  context.strokeStyle = "rgba(255, 255, 255, 0.32)";
-  context.lineWidth = 5;
-  context.beginPath();
-  context.moveTo(1578, -6);
-  context.lineTo(EXPORT_WIDTH + 8, 274);
-  context.stroke();
+  if (backgroundImage) {
+    drawCover(context, backgroundImage, 0, 0, EXPORT_WIDTH, EXPORT_HEIGHT);
+  }
 }
 
 function drawHeader(context) {
@@ -294,11 +296,14 @@ function drawPlayerRow(context, players, images, headshotY, labelY) {
 
 export function drawLogo(context, logoImage) {
   if (!logoImage) return;
-  const boxWidth = 124;
-  const boxHeight = 100;
-  const x = EXPORT_WIDTH - boxWidth - 34;
-  const y = 30;
-  drawContain(context, logoImage, x, y, boxWidth, boxHeight);
+  drawContain(
+    context,
+    logoImage,
+    TEAM_LOGO_EXPORT_BOX.x,
+    TEAM_LOGO_EXPORT_BOX.y,
+    TEAM_LOGO_EXPORT_BOX.width,
+    TEAM_LOGO_EXPORT_BOX.height
+  );
 }
 
 function buildFileName({ leftTeam, rightTeam }) {
@@ -368,10 +373,11 @@ export async function renderMatchupGraphicCanvas({
     await document.fonts.ready;
   }
 
-  const [leftImages, rightImages, logoImage] = await Promise.all([
+  const [leftImages, rightImages, logoImage, backgroundImage] = await Promise.all([
     Promise.all((leftPlayers || []).map((player) => loadFirstImage(buildPlayerHeadshotCandidates(player)))),
     Promise.all((rightPlayers || []).map((player) => loadFirstImage(buildPlayerHeadshotCandidates(player)))),
     loadImage(logoTeamId ? buildProxyUrl(teamLogoUrl(logoTeamId, league)) : null),
+    loadExportBackgroundImage(),
   ]);
 
   const outputWidth = Math.max(1, Math.round(Number(width) || EXPORT_WIDTH));
@@ -380,7 +386,7 @@ export async function renderMatchupGraphicCanvas({
   if (outputWidth !== EXPORT_WIDTH || outputHeight !== EXPORT_HEIGHT) {
     context.scale(outputWidth / EXPORT_WIDTH, outputHeight / EXPORT_HEIGHT);
   }
-  drawBackdrop(context);
+  drawBackdrop(context, backgroundImage);
   drawHeader(context);
   drawLogo(context, logoImage);
   drawPlayerRow(context, leftPlayers, leftImages, 286, 484);
