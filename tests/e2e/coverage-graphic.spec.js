@@ -21,6 +21,14 @@ test("coverage editor removes and re-adds the third column", async ({ page }) =>
   await page.goto("http://127.0.0.1:4174/nbadash/#/graphics?graphic=coverage");
 
   await expect(page.getByRole("button", { name: "Coverage", exact: true })).toBeVisible();
+  await expect(page.getByText("Title text", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Column header").nth(0)).toHaveValue("P/R");
+  await expect(page.getByLabel("Column header").nth(1)).toHaveValue("DHO + C&S");
+  await expect(page.getByLabel("Column header").nth(2)).toHaveValue("MISC");
+  await expect(page.getByLabel("Text above icon").nth(0)).toHaveValue("5");
+  await expect(page.getByLabel("Text above icon").nth(1)).toHaveValue("1-4");
+  await expect(page.getByLabel("Coverage icon").nth(0)).toHaveValue("vol-1");
+  await expect(page.getByLabel("Coverage icon").nth(1)).toHaveValue("red");
   await expect(page.getByText("Column 3", { exact: true })).toBeVisible();
   await page.getByLabel("Remove third coverage column").click();
   await expect(page.getByText("Column 3", { exact: true })).toHaveCount(0);

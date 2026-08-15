@@ -106,10 +106,11 @@ function readPixel(canvas, x, y) {
 
 window.renderCoverageColumnRegression = async () => {
   const twoColumnSlots = buildEmptyCoverageSlots();
-  twoColumnSlots[0] = { ...twoColumnSlots[0], title: "P/R", subtitle: "5", iconKey: "vol-1" };
-  twoColumnSlots[2] = { ...twoColumnSlots[2], title: "DHO + C&S", subtitle: "Peterson / Hinson", iconKey: "war" };
+  twoColumnSlots[0] = { ...twoColumnSlots[0], subtitle: "5", iconKey: "vol-1" };
+  twoColumnSlots[2] = { ...twoColumnSlots[2], subtitle: "Peterson / Hinson", iconKey: "war" };
   const twoColumnCanvas = await renderCoverageGraphicCanvas({
     slots: twoColumnSlots,
+    columnHeaders: ["P/R", "DHO + C&S", ""],
     columnCount: 3,
     logoTeamId: "",
     outputWidth: 960,
@@ -117,11 +118,12 @@ window.renderCoverageColumnRegression = async () => {
   });
 
   const threeColumnSlots = buildEmptyCoverageSlots();
-  threeColumnSlots[0] = { ...threeColumnSlots[0], title: "P/R", subtitle: "5", iconKey: "vol-1" };
-  threeColumnSlots[2] = { ...threeColumnSlots[2], title: "DHO + C&S", subtitle: "Peterson / Hinson", iconKey: "war" };
-  threeColumnSlots[4] = { ...threeColumnSlots[4], title: "Misc", subtitle: "Jamir on Peterson" };
+  threeColumnSlots[0] = { ...threeColumnSlots[0], subtitle: "5", iconKey: "vol-1" };
+  threeColumnSlots[2] = { ...threeColumnSlots[2], subtitle: "Peterson / Hinson", iconKey: "war" };
+  threeColumnSlots[4] = { ...threeColumnSlots[4], subtitle: "Jamir on Peterson" };
   const threeColumnCanvas = await renderCoverageGraphicCanvas({
     slots: threeColumnSlots,
+    columnHeaders: ["P/R", "DHO + C&S", "MISC"],
     columnCount: 3,
     logoTeamId: "",
     outputWidth: 960,

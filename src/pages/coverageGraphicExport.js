@@ -13,6 +13,7 @@ import { teamLogoUrl } from "../api.js";
 import {
   COVERAGE_ROW_COUNT,
   getCoverageExportColumnCount,
+  hydrateCoverageColumnHeaders,
   hydrateCoverageSlots,
 } from "../coverageGraphic.js";
 import {
@@ -67,26 +68,26 @@ const COLUMN_LAYOUTS = Object.freeze({
 
 const ROW_LAYOUTS = Object.freeze([
   Object.freeze({
-    titleY: 174,
     subtitleY: 300,
     iconY: 350,
     iconSize: 242,
-    titleSize: 58,
-    titleMinSize: 36,
     subtitleSize: 36,
     subtitleMinSize: 25,
   }),
   Object.freeze({
-    titleY: 604,
     subtitleY: 660,
     iconY: 700,
     iconSize: 242,
-    titleSize: 48,
-    titleMinSize: 32,
     subtitleSize: 36,
     subtitleMinSize: 25,
   }),
 ]);
+
+const COLUMN_HEADER_LAYOUT = Object.freeze({
+  y: 174,
+  size: 58,
+  minSize: 36,
+});
 
 function safeFilePart(value, fallback) {
   return String(value || fallback)
@@ -126,42 +127,47 @@ async function loadCoverageIconImages(slots) {
 
 function getSlot(slots, columnIndex, rowIndex) {
   return hydrateCoverageSlots(slots).find((slot) => slot.column === columnIndex && slot.row === rowIndex)
-    || { title: "", subtitle: "", iconKey: "" };
+    || { subtitle: "", iconKey: "" };
 }
 
 function formatExportText(value) {
   return String(value || "").trim().toUpperCase();
 }
 
+function drawColumnHeader(context, header, centerX, width) {
+  const title = formatExportText(header);
+  if (!title) return;
+  const textWidth = width - 80;
+  context.save();
+  context.shadowColor = "rgba(0, 0, 0, 0.38)";
+  context.shadowBlur = 16;
+  context.shadowOffsetY = 4;
+  drawCenteredText(context, title, centerX - textWidth / 2, COLUMN_HEADER_LAYOUT.y, textWidth, {
+    size: COLUMN_HEADER_LAYOUT.size,
+    minSize: COLUMN_HEADER_LAYOUT.minSize,
+    family: EXPORT_FONT_FAMILIES.header,
+    weight: 700,
+    color: WHITE,
+  });
+  context.restore();
+}
+
 function drawSlotText(context, slot, centerX, width, rowLayout) {
-  const title = formatExportText(slot.title);
   const subtitle = formatExportText(slot.subtitle);
+  if (!subtitle) return;
   const textWidth = width - 80;
   context.save();
   context.shadowColor = "rgba(0, 0, 0, 0.38)";
   context.shadowBlur = 16;
   context.shadowOffsetY = 4;
 
-  if (title) {
-    drawCenteredText(context, title, centerX - textWidth / 2, rowLayout.titleY, textWidth, {
-      size: rowLayout.titleSize,
-      minSize: rowLayout.titleMinSize,
-      family: EXPORT_FONT_FAMILIES.header,
-      weight: 700,
-      color: WHITE,
-    });
-  }
-
-  if (subtitle) {
-    const yPosition = rowLayout.subtitleY;
-    drawCenteredText(context, subtitle, centerX - textWidth / 2, yPosition, textWidth, {
-      size: title ? rowLayout.subtitleSize : Math.min(rowLayout.titleSize, 42),
-      minSize: title ? rowLayout.subtitleMinSize : rowLayout.subtitleMinSize,
-      family: EXPORT_FONT_FAMILIES.header,
-      weight: 700,
-      color: WHITE,
-    });
-  }
+  drawCenteredText(context, subtitle, centerX - textWidth / 2, rowLayout.subtitleY, textWidth, {
+    size: rowLayout.subtitleSize,
+    minSize: rowLayout.subtitleMinSize,
+    family: EXPORT_FONT_FAMILIES.header,
+    weight: 700,
+    color: WHITE,
+  });
   context.restore();
 }
 
@@ -179,11 +185,12 @@ function drawCoverageSeparators(context, geometry) {
   context.restore();
 }
 
-function drawCoverageSlots(context, slots, columnCount, iconImages) {
+function drawCoverageSlots(context, slots, columnHeaders, columnCount, iconImages) {
   const geometry = getColumnGeometry(columnCount);
   drawCoverageSeparators(context, geometry);
 
   for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
+    drawColumnHeader(context, columnHeaders[columnIndex], geometry.centers[columnIndex], geometry.columnWidth);
     for (let rowIndex = 0; rowIndex < COVERAGE_ROW_COUNT; rowIndex += 1) {
       const slot = getSlot(slots, columnIndex, rowIndex);
       const rowLayout = ROW_LAYOUTS[rowIndex];
@@ -206,6 +213,7 @@ function drawCoverageSlots(context, slots, columnCount, iconImages) {
 
 export async function renderCoverageGraphicCanvas({
   slots = [],
+  columnHeaders = [],
   columnCount = 3,
   logoTeamId = "",
   league = "nba",
@@ -218,7 +226,8 @@ export async function renderCoverageGraphicCanvas({
   if (document.fonts?.ready) await document.fonts.ready;
 
   const hydratedSlots = hydrateCoverageSlots(slots);
-  const resolvedColumnCount = getCoverageExportColumnCount(hydratedSlots, columnCount);
+  const hydratedColumnHeaders = hydrateCoverageColumnHeaders(columnHeaders);
+  const resolvedColumnCount = getCoverageExportColumnCount(hydratedSlots, columnCount, hydratedColumnHeaders);
   const [resolvedLogo, resolvedIcons, backgroundImage] = await Promise.all([
     logoImage || loadFirstImage(logoTeamId ? [teamLogoUrl(logoTeamId, league)] : []),
     iconImages || loadCoverageIconImages(hydratedSlots),
@@ -233,19 +242,20 @@ export async function renderCoverageGraphicCanvas({
   }
   drawBackdrop(context, backgroundImage);
   drawLogo(context, resolvedLogo);
-  drawCoverageSlots(context, hydratedSlots, resolvedColumnCount, resolvedIcons);
+  drawCoverageSlots(context, hydratedSlots, hydratedColumnHeaders, resolvedColumnCount, resolvedIcons);
   return canvas;
 }
 
 export async function exportCoverageGraphic({
   slots,
+  columnHeaders,
   columnCount,
   logoTeamId,
   league = "nba",
   team = null,
   fileName = "",
 }) {
-  const canvas = await renderCoverageGraphicCanvas({ slots, columnCount, logoTeamId, league });
+  const canvas = await renderCoverageGraphicCanvas({ slots, columnHeaders, columnCount, logoTeamId, league });
   downloadCanvas(canvas, fileName || buildFileName(team));
 }
 

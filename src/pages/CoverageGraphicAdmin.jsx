@@ -8,9 +8,12 @@ import { GLEAGUE_TEAMS, NBA_TEAMS } from "../data/nbaTeams.js";
 import {
   COVERAGE_MAX_COLUMNS,
   COVERAGE_MIN_COLUMNS,
-  buildEmptyCoverageSlots,
+  DEFAULT_COVERAGE_COLUMN_HEADERS,
+  buildDefaultCoverageColumnHeaders,
+  buildDefaultCoverageSlots,
   coverageSlotHasContent,
   hydrateCoveragePayload,
+  serializeCoverageColumnHeaders,
   serializeCoverageSlots,
 } from "../coverageGraphic.js";
 import {
@@ -53,23 +56,12 @@ function CoverageSlotEditor({ slot, iconOptions, onChange }) {
     <div className={styles.coverageSlotCard}>
       <div className={styles.coverageSlotTitle}>Space {slotNumber}</div>
       <label className={styles.field}>
-        <span className={styles.fieldLabel}>Title text</span>
-        <input
-          className={styles.select}
-          type="text"
-          value={slot.title}
-          onChange={(event) => onChange(slot.id, { title: event.target.value })}
-          placeholder={slot.row === 0 ? "P/R" : ""}
-        />
-      </label>
-      <label className={styles.field}>
         <span className={styles.fieldLabel}>Text above icon</span>
         <input
           className={styles.select}
           type="text"
           value={slot.subtitle}
           onChange={(event) => onChange(slot.id, { subtitle: event.target.value })}
-          placeholder={slot.row === 0 ? "5" : "1-4"}
         />
       </label>
       <label className={styles.field}>
@@ -104,7 +96,8 @@ export default function CoverageGraphicAdmin() {
   const [league, setLeague] = useState("nba");
   const [logoTeamId, setLogoTeamId] = useState(WIZARDS_TEAM_ID);
   const [columnCount, setColumnCount] = useState(COVERAGE_MAX_COLUMNS);
-  const [slots, setSlots] = useState(() => buildEmptyCoverageSlots());
+  const [columnHeaders, setColumnHeaders] = useState(() => buildDefaultCoverageColumnHeaders());
+  const [slots, setSlots] = useState(() => buildDefaultCoverageSlots());
   const [status, setStatus] = useState("");
   const [recordId, setRecordId] = useState("");
   const [busyAction, setBusyAction] = useState("");
@@ -121,8 +114,9 @@ export default function CoverageGraphicAdmin() {
     [columnCount, slots]
   );
   const hasCoverageContent = useMemo(
-    () => activeSlots.some(coverageSlotHasContent),
-    [activeSlots]
+    () => activeSlots.some(coverageSlotHasContent) ||
+      columnHeaders.slice(0, columnCount).some((header) => String(header || "").trim()),
+    [activeSlots, columnCount, columnHeaders]
   );
   const exportReady = Boolean(hasCoverageContent && logoTeamId);
   const logoPreviewUrl = String(logoTeamId) === WIZARDS_TEAM_ID
@@ -139,6 +133,7 @@ export default function CoverageGraphicAdmin() {
 
     renderCoverageGraphicCanvas({
       slots,
+      columnHeaders,
       columnCount,
       logoTeamId,
       league,
@@ -164,7 +159,7 @@ export default function CoverageGraphicAdmin() {
     return () => {
       if (previewRenderIdRef.current === renderId) previewRenderIdRef.current += 1;
     };
-  }, [columnCount, league, logoTeamId, slots]);
+  }, [columnCount, columnHeaders, league, logoTeamId, slots]);
 
   useEffect(() => {
     let cancelled = false;
@@ -198,6 +193,7 @@ export default function CoverageGraphicAdmin() {
       setLeague(hydrated.league);
       setLogoTeamId(hydrated.logoTeamId);
       setColumnCount(hydrated.columnCount);
+      setColumnHeaders(hydrated.columnHeaders);
       setSlots(hydrated.slots);
       setStatus(`Loaded ${savedRecord.title}`);
     }
@@ -213,12 +209,20 @@ export default function CoverageGraphicAdmin() {
     league,
     logoTeamId,
     columnCount,
+    columnHeaders: serializeCoverageColumnHeaders(columnHeaders),
     slots: serializeCoverageSlots(sourceSlots),
   });
 
   const updateSlot = (slotId, patch) => {
     setSlots((current) => current.map((slot) => (
       slot.id === slotId ? { ...slot, ...patch } : slot
+    )));
+    setStatus("");
+  };
+
+  const updateColumnHeader = (columnIndex, value) => {
+    setColumnHeaders((current) => current.map((header, index) => (
+      index === columnIndex ? value : header
     )));
     setStatus("");
   };
@@ -233,14 +237,18 @@ export default function CoverageGraphicAdmin() {
 
   const handleRemoveThirdColumn = () => {
     setColumnCount(COVERAGE_MIN_COLUMNS);
+    setColumnHeaders((current) => current.map((header, index) => (index === 2 ? "" : header)));
     setSlots((current) => current.map((slot) => (
-      Number(slot.column) === 2 ? { ...slot, title: "", subtitle: "", iconKey: "" } : slot
+      Number(slot.column) === 2 ? { ...slot, subtitle: "", iconKey: "" } : slot
     )));
     setStatus("");
   };
 
   const handleAddThirdColumn = () => {
     setColumnCount(COVERAGE_MAX_COLUMNS);
+    setColumnHeaders((current) => current.map((header, index) => (
+      index === 2 && !String(header || "").trim() ? DEFAULT_COVERAGE_COLUMN_HEADERS[2] : header
+    )));
     setStatus("");
   };
 
@@ -248,7 +256,8 @@ export default function CoverageGraphicAdmin() {
     setLeague("nba");
     setLogoTeamId(WIZARDS_TEAM_ID);
     setColumnCount(COVERAGE_MAX_COLUMNS);
-    setSlots(buildEmptyCoverageSlots());
+    setColumnHeaders(buildDefaultCoverageColumnHeaders());
+    setSlots(buildDefaultCoverageSlots());
     setRecordId("");
     const nextParams = new URLSearchParams(params);
     nextParams.set("tab", "graphics");
@@ -268,6 +277,7 @@ export default function CoverageGraphicAdmin() {
     try {
       await exportCoverageGraphic({
         slots,
+        columnHeaders,
         columnCount,
         logoTeamId,
         league,
@@ -342,7 +352,8 @@ export default function CoverageGraphicAdmin() {
       setRecordId("");
       setLeague("nba");
       setLogoTeamId(WIZARDS_TEAM_ID);
-      setSlots(buildEmptyCoverageSlots());
+      setColumnHeaders(buildDefaultCoverageColumnHeaders());
+      setSlots(buildDefaultCoverageSlots());
       setColumnCount(COVERAGE_MAX_COLUMNS);
       const nextParams = new URLSearchParams(params);
       nextParams.set("tab", "graphics");
@@ -398,7 +409,7 @@ export default function CoverageGraphicAdmin() {
             <div>
               <div className={styles.coverageSectionTitle}>Coverage spaces</div>
               <div className={styles.statusNote}>
-                The export uses 2 columns when column 3 has no text or icon.
+                The export uses 2 columns when column 3 has no header, row text, or icon.
               </div>
             </div>
             {columnCount === COVERAGE_MIN_COLUMNS ? (
@@ -426,6 +437,16 @@ export default function CoverageGraphicAdmin() {
                       </button>
                     ) : null}
                   </div>
+                  <label className={styles.field}>
+                    <span className={styles.fieldLabel}>Column header</span>
+                    <input
+                      className={styles.select}
+                      type="text"
+                      value={columnHeaders[columnIndex] || ""}
+                      onChange={(event) => updateColumnHeader(columnIndex, event.target.value)}
+                      placeholder={DEFAULT_COVERAGE_COLUMN_HEADERS[columnIndex] || ""}
+                    />
+                  </label>
                   {columnSlots.map((slot) => (
                     <CoverageSlotEditor
                       key={slot.id}
