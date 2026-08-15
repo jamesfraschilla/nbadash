@@ -9,6 +9,7 @@ import {
   normalizePersonnelCustomStatLabel,
   calculateThreePointAttemptRatio,
   formatPersonnelStatValue,
+  resolvePersonnelThreePointColorForTags,
 } from "../personnelGraphic.js";
 import { PERSONNEL_LAYOUT } from "../personnelGraphicLayout.js";
 import {
@@ -312,7 +313,7 @@ export async function renderPersonnelGraphic({
 
   drawPlayerName(context, player);
   drawStatsBox(context, stats, selectedStats);
-  drawThreePointBar(context, stats, threePointColor);
+  drawThreePointBar(context, stats, resolvePersonnelThreePointColorForTags(threePointColor, tags));
   drawTags(context, tags, resolvedTags);
   return canvas;
 }

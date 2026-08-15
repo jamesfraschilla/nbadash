@@ -5,6 +5,7 @@ import {
   createPersonnelDraft,
   populatePersonnelDraftFromRoster,
 } from "./personnelGraphic.js";
+import { PERSONNEL_LAYOUT } from "./personnelGraphicLayout.js";
 import { createSerialTaskQueue } from "./serialTaskQueue.js";
 import { saveToolRecordRemote } from "./toolVault.js";
 
@@ -76,6 +77,24 @@ window.exportPersonnelGoldenZip = () => exportPersonnelGraphics({
     },
   ],
 });
+
+window.renderPersonnelFireColorRegression = async () => {
+  const canvas = await renderPersonnelGraphic({
+    player,
+    stats,
+    selectedStats,
+    tags: ["fire"],
+    threePointColor: "red",
+    teamId: "",
+    logoImage: null,
+    tagImages: {},
+    headshotImage: await makeDeterministicHeadshot(),
+  });
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  const { x, y, height } = PERSONNEL_LAYOUT.threePointBar;
+  const [r, g, b, a] = context.getImageData(x + 12, y + Math.floor(height / 2), 1, 1).data;
+  return { r, g, b, a };
+};
 
 window.fetchPersonnelStatsForTest = (options) => fetchNbaPlayerStats(options);
 

@@ -163,6 +163,15 @@ test("multiple personnel exports download once as a ZIP", async ({ page }) => {
   ]);
 });
 
+test("fire personnel tag forces the exported 3P bar to bright green", async ({ page }) => {
+  expect(await page.evaluate(() => window.renderPersonnelFireColorRegression())).toEqual({
+    r: 0,
+    g: 255,
+    b: 0,
+    a: 255,
+  });
+});
+
 test("complete Edge stats skip every browser-scraping fallback", async ({ page }) => {
   let fallbackRequests = 0;
   await page.route("**/functions/v1/nba-player-stats**", async (route) => {

@@ -26,6 +26,7 @@ import {
   orderPersonnelSelectedStats,
   populatePersonnelDraftFromRoster,
   reorderPersonnelStatColumns,
+  resolvePersonnelThreePointColorForTags,
   togglePersonnelRowStat,
   togglePersonnelStat,
   validatePersonnelDraftForExport,
@@ -70,6 +71,20 @@ test("default 3P colors are selected from the player's 3FG percentage", () => {
   assert.equal(getPersonnelThreePointColorForPercentage(14.9), "red");
   assert.equal(getPersonnelThreePointColorForPercentage(0), "red");
   assert.equal(getPersonnelThreePointColorForPercentage(null), DEFAULT_PERSONNEL_THREE_POINT_COLOR);
+});
+
+test("fire personnel tags force bright green 3P color without mutating tags", () => {
+  assert.equal(resolvePersonnelThreePointColorForTags("red", ["fire"]), "bright_green");
+  assert.equal(resolvePersonnelThreePointColorForTags("yellow", ["hot"]), "bright_green");
+  assert.equal(resolvePersonnelThreePointColorForTags("red", ["cold"]), "red");
+  assert.equal(resolvePersonnelThreePointColorForTags("bogus", []), DEFAULT_PERSONNEL_THREE_POINT_COLOR);
+
+  const brightGreenRow = createPersonnelRow({
+    threePointColor: "bright_green",
+    tags: [],
+  });
+  assert.equal(brightGreenRow.threePointColor, "bright_green");
+  assert.deepEqual(brightGreenRow.tags, []);
 });
 
 test("createPersonnelDraft produces 18 independent rows with the exact draft shape", () => {

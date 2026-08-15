@@ -49,6 +49,11 @@ export function getPersonnelThreePointColorForPercentage(value) {
   return DEFAULT_PERSONNEL_THREE_POINT_COLOR;
 }
 
+export function resolvePersonnelThreePointColorForTags(threePointColor, tags) {
+  if (normalizeTags(tags).includes("fire")) return "bright_green";
+  return normalizeThreePointColor(threePointColor);
+}
+
 export function getCurrentPersonnelSeason(date = new Date()) {
   const parsedDate = date instanceof Date ? date : new Date(date);
   const safeDate = Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
