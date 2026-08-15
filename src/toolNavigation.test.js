@@ -10,6 +10,7 @@ import {
 test("all configured graphic tabs are accepted by shared navigation helpers", () => {
   const expected = [
     TOOL_TABS.MATCHUP,
+    TOOL_TABS.COVERAGE,
     TOOL_TABS.COURT_TIME,
     TOOL_TABS.PERSONNEL,
     TOOL_TABS.DEPTH_CHART,

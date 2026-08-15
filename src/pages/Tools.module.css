@@ -637,6 +637,174 @@
   flex-wrap: wrap;
 }
 
+.coveragePanel {
+  display: grid;
+  gap: 16px;
+}
+
+.coverageSetupCard,
+.coverageColumnCard,
+.coverageSlotCard,
+.coveragePreviewPanel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
+}
+
+.coverageSetupCard,
+.coverageColumnCard,
+.coverageSlotCard,
+.coveragePreviewPanel {
+  padding: 16px;
+}
+
+.coverageSetupGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr)) auto;
+  gap: 14px;
+  align-items: end;
+}
+
+.coverageLogoPreview {
+  width: 68px;
+  height: 68px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  display: grid;
+  place-items: center;
+}
+
+.coverageLogoPreview img {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+
+.coverageBuilder {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 520px);
+  gap: 16px;
+  align-items: start;
+}
+
+.coverageControls,
+.coverageColumnCard,
+.coverageSlotCard,
+.coveragePreviewPanel {
+  display: grid;
+  gap: 12px;
+}
+
+.coverageToolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.coverageSectionTitle {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.coverageColumnGrid {
+  display: grid;
+  grid-template-columns: repeat(var(--coverage-columns, 3), minmax(0, 1fr));
+  gap: 12px;
+}
+
+.coverageColumnHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 36px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.coverageRemoveColumnButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--button-bg);
+  color: var(--text);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.coverageRemoveColumnButton:hover {
+  border-color: var(--border-strong);
+  background: var(--button-hover);
+}
+
+.coverageSlotCard {
+  background: var(--surface-muted);
+  border-radius: var(--radius-md);
+}
+
+.coverageSlotTitle {
+  font-weight: 800;
+  color: var(--text);
+}
+
+.coverageIconPreview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.coverageIconPreview img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.coveragePreviewPanel {
+  position: sticky;
+  top: 16px;
+}
+
+.coveragePreviewFrame {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: #000;
+}
+
+.coveragePreviewCanvas {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  display: block;
+}
+
+.coveragePreviewActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 @media (max-width: 900px) {
   .toolGrid {
     grid-template-columns: 1fr;
@@ -663,11 +831,15 @@
   }
 
   .depthChartSetupGrid,
-  .depthChartBuilder {
+  .depthChartBuilder,
+  .coverageSetupGrid,
+  .coverageBuilder,
+  .coverageColumnGrid {
     grid-template-columns: 1fr;
   }
 
-  .depthChartPreviewPanel {
+  .depthChartPreviewPanel,
+  .coveragePreviewPanel {
     position: static;
   }
 

@@ -1,4 +1,6 @@
 import { fetchNbaPlayerStats } from "./api.js";
+import { buildEmptyCoverageSlots } from "./coverageGraphic.js";
+import { renderCoverageGraphicCanvas } from "./pages/coverageGraphicExport.js";
 import { exportPersonnelGraphics, renderPersonnelGraphic } from "./pages/personnelGraphicExport.js";
 import {
   clearPersonnelStatOverridesForSeason,
@@ -94,6 +96,44 @@ window.renderPersonnelFireColorRegression = async () => {
   const { x, y, height } = PERSONNEL_LAYOUT.threePointBar;
   const [r, g, b, a] = context.getImageData(x + 12, y + Math.floor(height / 2), 1, 1).data;
   return { r, g, b, a };
+};
+
+function readPixel(canvas, x, y) {
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  const [r, g, b, a] = context.getImageData(x, y, 1, 1).data;
+  return { r, g, b, a };
+}
+
+window.renderCoverageColumnRegression = async () => {
+  const twoColumnSlots = buildEmptyCoverageSlots();
+  twoColumnSlots[0] = { ...twoColumnSlots[0], title: "P/R", subtitle: "5", iconKey: "vol-1" };
+  twoColumnSlots[2] = { ...twoColumnSlots[2], title: "DHO + C&S", subtitle: "Peterson / Hinson", iconKey: "war" };
+  const twoColumnCanvas = await renderCoverageGraphicCanvas({
+    slots: twoColumnSlots,
+    columnCount: 3,
+    logoTeamId: "",
+    outputWidth: 960,
+    outputHeight: 540,
+  });
+
+  const threeColumnSlots = buildEmptyCoverageSlots();
+  threeColumnSlots[0] = { ...threeColumnSlots[0], title: "P/R", subtitle: "5", iconKey: "vol-1" };
+  threeColumnSlots[2] = { ...threeColumnSlots[2], title: "DHO + C&S", subtitle: "Peterson / Hinson", iconKey: "war" };
+  threeColumnSlots[4] = { ...threeColumnSlots[4], title: "Misc", subtitle: "Jamir on Peterson" };
+  const threeColumnCanvas = await renderCoverageGraphicCanvas({
+    slots: threeColumnSlots,
+    columnCount: 3,
+    logoTeamId: "",
+    outputWidth: 960,
+    outputHeight: 540,
+  });
+
+  return {
+    twoColumnMiddleSeparator: readPixel(twoColumnCanvas, 480, 270),
+    twoColumnFirstThirdSeparator: readPixel(twoColumnCanvas, 344, 270),
+    threeColumnFirstSeparator: readPixel(threeColumnCanvas, 344, 270),
+    threeColumnSecondSeparator: readPixel(threeColumnCanvas, 616, 270),
+  };
 };
 
 window.fetchPersonnelStatsForTest = (options) => fetchNbaPlayerStats(options);

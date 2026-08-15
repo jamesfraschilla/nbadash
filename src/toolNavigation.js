@@ -1,6 +1,7 @@
 export const TOOL_TABS = {
   GRAPHICS: "graphics",
   MATCHUP: "matchup",
+  COVERAGE: "coverage",
   COURT_TIME: "court-time",
   PERSONNEL: "personnel",
   DEPTH_CHART: "depth-chart",
@@ -14,6 +15,7 @@ export const TOOL_TABS = {
 
 export const GRAPHIC_TOOL_TABS = [
   { key: TOOL_TABS.MATCHUP, label: "Match-Up", title: "Match-Up Graphics" },
+  { key: TOOL_TABS.COVERAGE, label: "Coverage", title: "Coverage Graphics" },
   { key: TOOL_TABS.COURT_TIME, label: "Court Time", title: "Court Time Graphics" },
   { key: TOOL_TABS.PERSONNEL, label: "Personnel", title: "Personnel Graphics" },
   { key: TOOL_TABS.DEPTH_CHART, label: "Depth Chart", title: "Depth Chart Graphics" },

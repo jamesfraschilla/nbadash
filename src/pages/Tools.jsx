@@ -45,6 +45,7 @@ import {
 import { exportMatchupGraphic } from "./matchupGraphicExport.js";
 import { requestCustomDashboardRequest } from "../customRequestsData.js";
 import {
+  GRAPHIC_TOOL_TABS,
   TOOL_TABS,
   isGraphicToolTab,
   normalizeGraphicToolTab,
@@ -63,6 +64,7 @@ import { formatDateInputInTimeZone } from "../utils.js";
 import styles from "./Tools.module.css";
 
 const DepthChartGraphicAdmin = lazy(() => import("./DepthChartGraphicAdmin.jsx"));
+const CoverageGraphicAdmin = lazy(() => import("./CoverageGraphicAdmin.jsx"));
 const AnalyticsReport = lazy(() => import("./AnalyticsReport.jsx"));
 const LateGameMatrixPanel = lazy(() => import("../components/LateGameMatrixPanel.jsx"));
 const PersonnelGraphicAdmin = lazy(() => import("./PersonnelGraphicAdmin.jsx"));
@@ -1620,34 +1622,16 @@ export default function Tools({ section = "tools" }) {
 
       {activeTab === TOOL_TABS.GRAPHICS ? (
         <div className={styles.graphicTabBar} aria-label="Graphic tools">
-          <button
-            type="button"
-            className={`${styles.graphicTabButton} ${activeGraphic === TOOL_TABS.MATCHUP ? styles.graphicTabButtonActive : ""}`}
-            onClick={() => handleGraphicTabChange(TOOL_TABS.MATCHUP)}
-          >
-            Match-Up
-          </button>
-          <button
-            type="button"
-            className={`${styles.graphicTabButton} ${activeGraphic === TOOL_TABS.COURT_TIME ? styles.graphicTabButtonActive : ""}`}
-            onClick={() => handleGraphicTabChange(TOOL_TABS.COURT_TIME)}
-          >
-            Court Time
-          </button>
-          <button
-            type="button"
-            className={`${styles.graphicTabButton} ${activeGraphic === TOOL_TABS.PERSONNEL ? styles.graphicTabButtonActive : ""}`}
-            onClick={() => handleGraphicTabChange(TOOL_TABS.PERSONNEL)}
-          >
-            Personnel
-          </button>
-          <button
-            type="button"
-            className={`${styles.graphicTabButton} ${activeGraphic === TOOL_TABS.DEPTH_CHART ? styles.graphicTabButtonActive : ""}`}
-            onClick={() => handleGraphicTabChange(TOOL_TABS.DEPTH_CHART)}
-          >
-            Depth Chart
-          </button>
+          {GRAPHIC_TOOL_TABS.map((graphicTab) => (
+            <button
+              key={graphicTab.key}
+              type="button"
+              className={`${styles.graphicTabButton} ${activeGraphic === graphicTab.key ? styles.graphicTabButtonActive : ""}`}
+              onClick={() => handleGraphicTabChange(graphicTab.key)}
+            >
+              {graphicTab.label}
+            </button>
+          ))}
         </div>
       ) : null}
 
@@ -1788,6 +1772,10 @@ export default function Tools({ section = "tools" }) {
       ) : activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.COURT_TIME ? (
         <section className={styles.workspace}>
           <PreGame standalone />
+        </section>
+      ) : activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.COVERAGE ? (
+        <section className={styles.workspace}>
+          <CoverageGraphicAdmin />
         </section>
       ) : activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.PERSONNEL ? (
         <section className={styles.workspace}>

@@ -121,6 +121,20 @@ function buildGameMeta(game) {
 }
 
 function getSavedGraphicPresentation(toolRecord) {
+  if (toolRecord.type === TOOL_RECORD_TYPES.COVERAGE_GRAPHIC) {
+    const league = String(toolRecord.payload?.league || "nba").trim() === "gleague" ? "gleague" : "nba";
+    const team = getLeagueTeam(toolRecord.payload?.logoTeamId, league);
+    const slotCount = Array.isArray(toolRecord.payload?.slots)
+      ? toolRecord.payload.slots.filter((slot) => (
+        String(slot?.title || slot?.subtitle || slot?.iconKey || "").trim()
+      )).length
+      : 0;
+    return {
+      meta: "Coverage Graphic · Saved draft",
+      body: `${team?.fullName || "Coverage graphic"}${slotCount ? ` · ${slotCount} spaces filled` : ""}`,
+      link: `/graphics?graphic=coverage&coverage=${encodeURIComponent(toolRecord.id)}`,
+    };
+  }
   if (toolRecord.type === TOOL_RECORD_TYPES.PREGAME_COURT_TIME_GRAPHIC) {
     const opponentLine = String(toolRecord.payload?.opponentLine || "").trim();
     const slotCount = Array.isArray(toolRecord.payload?.slots) ? toolRecord.payload.slots.length : 0;
@@ -500,6 +514,10 @@ export default function UserContent() {
   );
   const courtTimeToolRecords = useMemo(
     () => savedTools.filter((record) => record.type === TOOL_RECORD_TYPES.PREGAME_COURT_TIME_GRAPHIC),
+    [savedTools]
+  );
+  const coverageToolRecords = useMemo(
+    () => savedTools.filter((record) => record.type === TOOL_RECORD_TYPES.COVERAGE_GRAPHIC),
     [savedTools]
   );
   const depthChartToolRecords = useMemo(
@@ -921,6 +939,13 @@ export default function UserContent() {
             <SavedGraphicArea
               title="Court Time Graphics"
               records={courtTimeToolRecords}
+              deletingKey={deletingKey}
+              onDelete={handleDeleteTool}
+            />
+          ) : activeGraphicTab === TOOL_TABS.COVERAGE ? (
+            <SavedGraphicArea
+              title="Coverage Graphics"
+              records={coverageToolRecords}
               deletingKey={deletingKey}
               onDelete={handleDeleteTool}
             />

@@ -13,6 +13,7 @@ const TOOL_VAULT_REMOTE_TIMEOUT_MS = 12_000;
 
 export const TOOL_RECORD_TYPES = {
   MATCHUP_GRAPHIC: "matchup_graphic",
+  COVERAGE_GRAPHIC: "coverage_graphic",
   PREGAME_COURT_TIME_GRAPHIC: "pregame_court_time_graphic",
   PERSONNEL_GRAPHIC: "personnel_graphic",
   DEPTH_CHART_GRAPHIC: "depth_chart_graphic",
