@@ -80,6 +80,7 @@ export default function Home() {
     enabled: Boolean(selectedTeamId),
     refetchInterval: (query) => getGamesListPollingInterval(query.state.data),
     refetchIntervalInBackground: false,
+    retry: 1,
   });
   const activeGamesQuery = selectedTeamId ? teamGamesQuery : dateGamesQuery;
   const games = activeGamesQuery.data || [];

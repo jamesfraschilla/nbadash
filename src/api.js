@@ -1707,11 +1707,19 @@ function filterSeasonGamesForTeam(games, teamId, opponentTeamId = "") {
   });
 }
 
+async function fetchStaticTeamSeasonGames(teamId, season) {
+  if (String(season || "").trim() !== "2026-27") return null;
+  const scheduleModule = await import("./data/nbaSchedule2026_27.json");
+  const schedule = scheduleModule.default || scheduleModule;
+  return filterSeasonGamesForTeam(schedule?.games, teamId);
+}
+
 export async function fetchTeamSeasonGames(teamId, opponentTeamId = "", season = currentSeasonString()) {
   const safeTeamId = String(teamId || "").trim();
   const safeOpponentTeamId = String(opponentTeamId || "").trim();
-  const teamSeasonCacheKey = `${season}:${safeTeamId}`;
-  let seasonGames = TEAM_SEASON_GAMES_CACHE.get(teamSeasonCacheKey) || loadTeamSeasonGamesFromStorage(safeTeamId, season);
+  const safeSeason = String(season || "").trim() || currentSeasonString();
+  const teamSeasonCacheKey = `${safeSeason}:${safeTeamId}`;
+  let seasonGames = TEAM_SEASON_GAMES_CACHE.get(teamSeasonCacheKey) || loadTeamSeasonGamesFromStorage(safeTeamId, safeSeason);
 
   if (!seasonGames) {
     const pending = TEAM_SEASON_GAMES_PROMISES.get(teamSeasonCacheKey);
@@ -1720,17 +1728,27 @@ export async function fetchTeamSeasonGames(teamId, opponentTeamId = "", season =
     } else {
       const nextPromise = (
         SUPABASE_FUNCTIONS_BASE
-          ? fetchTeamSeasonGamesFromFunction(safeTeamId, season).catch(() => {
-            const cachedFullSeasonGames = SEASON_GAMES_CACHE.get(season) || loadSeasonGamesFromStorage(season);
+          ? fetchTeamSeasonGamesFromFunction(safeTeamId, safeSeason).catch((error) => {
+            return fetchStaticTeamSeasonGames(safeTeamId, safeSeason).then((staticGames) => {
+              if (staticGames?.length) return staticGames;
+              const cachedFullSeasonGames = SEASON_GAMES_CACHE.get(safeSeason) || loadSeasonGamesFromStorage(safeSeason);
+              if (cachedFullSeasonGames?.length) {
+                return filterSeasonGamesForTeam(cachedFullSeasonGames, safeTeamId);
+              }
+              throw error;
+            });
+          })
+          : fetchStaticTeamSeasonGames(safeTeamId, safeSeason).then((staticGames) => {
+            if (staticGames?.length) return staticGames;
+            const cachedFullSeasonGames = SEASON_GAMES_CACHE.get(safeSeason) || loadSeasonGamesFromStorage(safeSeason);
             if (cachedFullSeasonGames?.length) {
               return filterSeasonGamesForTeam(cachedFullSeasonGames, safeTeamId);
             }
-            return fetchAllSeasonGames(season);
+            return fetchAllSeasonGames(safeSeason);
           })
-          : fetchAllSeasonGames(season)
       ).then((games) => {
         TEAM_SEASON_GAMES_CACHE.set(teamSeasonCacheKey, games);
-        saveTeamSeasonGamesToStorage(safeTeamId, season, games);
+        saveTeamSeasonGamesToStorage(safeTeamId, safeSeason, games);
         return games;
       }).finally(() => {
         TEAM_SEASON_GAMES_PROMISES.delete(teamSeasonCacheKey);

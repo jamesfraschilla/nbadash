@@ -1,4 +1,9 @@
+import staticSchedule2026_27 from "./nbaSchedule2026_27.json" with { type: "json" };
+
 const STATS_API_URL = "https://stats.nba.com/stats/leaguegamefinder";
+const SCHEDULE_API_URL = "https://cdn.nba.com/static/json/staticData/scheduleLeagueV2_1.json";
+const SCHEDULE_TIMEOUT_MS = 8_000;
+const STATS_TIMEOUT_MS = 5_000;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -73,6 +78,19 @@ function parseRowSet(payload: Record<string, unknown>) {
   }, {} as Record<string, unknown>));
 }
 
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 8_000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 async function fetchSeasonTypeRows(season: string, seasonType: string, teamId: string) {
   const url = new URL(STATS_API_URL);
   url.searchParams.set("LeagueID", "00");
@@ -81,7 +99,7 @@ async function fetchSeasonTypeRows(season: string, seasonType: string, teamId: s
   url.searchParams.set("SeasonType", seasonType);
   url.searchParams.set("TeamID", teamId);
 
-  const response = await fetch(url.toString(), {
+  const response = await fetchWithTimeout(url.toString(), {
     headers: {
       Accept: "application/json, text/plain, */*",
       "Accept-Language": "en-US,en;q=0.9",
@@ -92,7 +110,7 @@ async function fetchSeasonTypeRows(season: string, seasonType: string, teamId: s
       "x-nba-stats-token": "true",
     },
     cache: "no-store",
-  });
+  }, STATS_TIMEOUT_MS);
 
   if (!response.ok) {
     throw new Error(`Stats request failed (${response.status}) for ${seasonType}`);
@@ -169,6 +187,147 @@ function buildTeamPayload(row: TeamGameFinderRow, fallbackTricode = "", recordOv
 function normalizeSeasonType(seasonType: unknown) {
   if (seasonType === "Pre Season") return "Preseason";
   return String(seasonType || "");
+}
+
+function formatScheduleDate(value: unknown) {
+  const raw = String(value || "").trim();
+  const isoMatch = /^(\d{4}-\d{2}-\d{2})/.exec(raw);
+  if (isoMatch) return isoMatch[1];
+
+  const usMatch = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(raw);
+  if (!usMatch) return "";
+  return `${usMatch[3]}-${String(usMatch[1]).padStart(2, "0")}-${String(usMatch[2]).padStart(2, "0")}`;
+}
+
+function inferScheduleSeasonType(game: Record<string, unknown>) {
+  const gameId = String(game?.gameId || "");
+  const label = `${String(game?.gameLabel || "")} ${String(game?.gameSubLabel || "")}`.toLowerCase();
+  if (gameId.startsWith("001") || label.includes("preseason")) return "Preseason";
+  if (gameId.startsWith("004") || label.includes("playoff")) return "Playoffs";
+  return "Regular Season";
+}
+
+function buildScheduleTeamPayload(team: Record<string, unknown> | null | undefined) {
+  return {
+    teamId: toNumber(team?.teamId, 0),
+    teamName: String(team?.teamName || "").trim(),
+    teamCity: String(team?.teamCity || "").trim(),
+    teamTricode: String(team?.teamTricode || "").trim(),
+    wins: Number.isFinite(Number(team?.wins)) ? toNumber(team?.wins, 0) : null,
+    losses: Number.isFinite(Number(team?.losses)) ? toNumber(team?.losses, 0) : null,
+    score: toNumber(team?.score, 0),
+    timeoutsRemaining: 0,
+  };
+}
+
+function normalizeScheduleGame(game: Record<string, unknown>, season: string) {
+  return {
+    gameId: String(game?.gameId || ""),
+    gameCode: String(game?.gameCode || ""),
+    gameStatus: toNumber(game?.gameStatus, 1),
+    gameStatusText: String(game?.gameStatusText || ""),
+    period: 0,
+    gameClock: "",
+    gameTimeUTC: String(game?.gameDateTimeUTC || game?.gameTimeUTC || ""),
+    gameEt: String(game?.gameDateTimeEst || game?.gameTimeEst || ""),
+    seasonYear: season,
+    seasonType: inferScheduleSeasonType(game),
+    gameDate: formatScheduleDate(game?.gameDateEst || game?.gameDateTimeEst || game?.gameDateUTC),
+    arena: {
+      arenaName: String(game?.arenaName || "").trim(),
+      arenaState: String(game?.arenaState || "").trim(),
+      arenaCity: String(game?.arenaCity || "").trim(),
+    },
+    homeTeam: buildScheduleTeamPayload(game?.homeTeam as Record<string, unknown> | null),
+    awayTeam: buildScheduleTeamPayload(game?.awayTeam as Record<string, unknown> | null),
+  };
+}
+
+function normalizeStaticScheduleGame(game: Record<string, unknown>, season: string) {
+  return {
+    gameId: String(game?.gameId || ""),
+    gameCode: String(game?.gameCode || ""),
+    gameStatus: toNumber(game?.gameStatus, 1),
+    gameStatusText: String(game?.gameStatusText || ""),
+    period: toNumber(game?.period, 0),
+    gameClock: String(game?.gameClock || ""),
+    gameTimeUTC: String(game?.gameTimeUTC || ""),
+    gameEt: String(game?.gameEt || ""),
+    seasonYear: season,
+    seasonType: String(game?.seasonType || ""),
+    gameDate: formatScheduleDate(game?.gameDate),
+    arena: {
+      arenaName: String((game?.arena as Record<string, unknown> | undefined)?.arenaName || "").trim(),
+      arenaState: String((game?.arena as Record<string, unknown> | undefined)?.arenaState || "").trim(),
+      arenaCity: String((game?.arena as Record<string, unknown> | undefined)?.arenaCity || "").trim(),
+    },
+    homeTeam: buildScheduleTeamPayload(game?.homeTeam as Record<string, unknown> | null),
+    awayTeam: buildScheduleTeamPayload(game?.awayTeam as Record<string, unknown> | null),
+  };
+}
+
+async function fetchScheduleGames(season: string, teamId: string) {
+  const response = await fetchWithTimeout(SCHEDULE_API_URL, {
+    headers: {
+      Accept: "application/json, text/plain, */*",
+      "Accept-Language": "en-US,en;q=0.9",
+      Referer: "https://www.nba.com/schedule",
+      "Sec-Fetch-Dest": "empty",
+      "Sec-Fetch-Mode": "cors",
+      "Sec-Fetch-Site": "same-site",
+      "User-Agent": "Mozilla/5.0 (compatible; NBA Dashboard Team Games Bot)",
+    },
+    cache: "no-store",
+  }, SCHEDULE_TIMEOUT_MS);
+
+  if (!response.ok) {
+    throw new Error(`Schedule request failed (${response.status})`);
+  }
+
+  const payload = await response.json();
+  if (String(payload?.leagueSchedule?.seasonYear || "").trim() !== season) {
+    return [];
+  }
+
+  const gameDates = Array.isArray(payload?.leagueSchedule?.gameDates)
+    ? payload.leagueSchedule.gameDates
+    : [];
+  const games = gameDates.flatMap((dateRecord: Record<string, unknown>) => (
+    Array.isArray(dateRecord?.games) ? dateRecord.games : []
+  ));
+
+  return games
+    .filter((game: Record<string, unknown>) => {
+      const homeTeamId = String((game?.homeTeam as Record<string, unknown> | undefined)?.teamId || "");
+      const awayTeamId = String((game?.awayTeam as Record<string, unknown> | undefined)?.teamId || "");
+      return homeTeamId === teamId || awayTeamId === teamId;
+    })
+    .map((game: Record<string, unknown>) => normalizeScheduleGame(game, season))
+    .filter((game: Record<string, unknown>) => Boolean(game.gameId && game.gameDate))
+    .sort((left: Record<string, unknown>, right: Record<string, unknown>) => {
+      const dateCompare = String(right.gameDate || "").localeCompare(String(left.gameDate || ""));
+      if (dateCompare !== 0) return dateCompare;
+      return String(right.gameId || "").localeCompare(String(left.gameId || ""));
+    });
+}
+
+function filterStaticScheduleGames(season: string, teamId: string) {
+  if (season !== "2026-27") return [];
+  const games = Array.isArray(staticSchedule2026_27?.games) ? staticSchedule2026_27.games : [];
+
+  return games
+    .filter((game: Record<string, unknown>) => {
+      const homeTeamId = String((game?.homeTeam as Record<string, unknown> | undefined)?.teamId || "");
+      const awayTeamId = String((game?.awayTeam as Record<string, unknown> | undefined)?.teamId || "");
+      return homeTeamId === teamId || awayTeamId === teamId;
+    })
+    .map((game: Record<string, unknown>) => normalizeStaticScheduleGame(game, season))
+    .filter((game: Record<string, unknown>) => Boolean(game.gameId && game.gameDate))
+    .sort((left: Record<string, unknown>, right: Record<string, unknown>) => {
+      const dateCompare = String(right.gameDate || "").localeCompare(String(left.gameDate || ""));
+      if (dateCompare !== 0) return dateCompare;
+      return String(right.gameId || "").localeCompare(String(left.gameId || ""));
+    });
 }
 
 function buildSyntheticOpponentRow(selectedRow: TeamGameFinderRow, opponentTricode: string): TeamGameFinderRow {
@@ -256,6 +415,17 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const scheduleGames = await fetchScheduleGames(season, teamId).catch(() => filterStaticScheduleGames(season, teamId));
+    if (scheduleGames.length) {
+      return jsonResponse(200, {
+        season,
+        teamId,
+        source: "schedule",
+        count: scheduleGames.length,
+        games: scheduleGames,
+      });
+    }
+
     const rowsBySeasonType = await Promise.all(
       SEASON_TYPES.map(async (seasonType) => {
         const rows = await fetchSeasonTypeRows(season, seasonType, teamId);
@@ -268,6 +438,7 @@ Deno.serve(async (req) => {
     return jsonResponse(200, {
       season,
       teamId,
+      source: "gamefinder",
       count: games.length,
       games,
     });
