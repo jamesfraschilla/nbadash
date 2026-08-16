@@ -5,6 +5,7 @@ import {
 
 const DEFAULT_PREVIEW_WIDTH = 960;
 const DEFAULT_PREVIEW_HEIGHT = 540;
+const DEFAULT_PREVIEW_DEBOUNCE_MS = 400;
 const MAX_CONCURRENT_PREVIEW_RENDERS = 2;
 let activePreviewRenders = 0;
 const previewRenderQueue = [];
@@ -53,6 +54,7 @@ export default function MatchupGraphicPreview({
   lazy = false,
   previewWidth = DEFAULT_PREVIEW_WIDTH,
   previewHeight = DEFAULT_PREVIEW_HEIGHT,
+  debounceMs = DEFAULT_PREVIEW_DEBOUNCE_MS,
 }) {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
@@ -83,9 +85,8 @@ export default function MatchupGraphicPreview({
     const context = canvas?.getContext("2d");
     if (!canvas || !context) return undefined;
 
-    context.clearRect(0, 0, canvas.width, canvas.height);
-
     if (!isReady) {
+      context.clearRect(0, 0, canvas.width, canvas.height);
       setStatus(unavailableMessage);
       return undefined;
     }
@@ -96,35 +97,41 @@ export default function MatchupGraphicPreview({
     }
 
     let cancelled = false;
-    setStatus("Rendering preview...");
-    const cancelQueuedRender = enqueuePreviewRender(() => renderMatchupGraphicCanvas({
-      league,
-      leftPlayers,
-      rightPlayers,
-      logoTeamId,
-      width: canvas.width,
-      height: canvas.height,
-    }).then((previewCanvas) => {
-      if (cancelled) {
+    let cancelQueuedRender = () => {};
+    const delay = Math.max(0, Number(debounceMs) || 0);
+    const timerId = window.setTimeout(() => {
+      if (cancelled) return;
+      setStatus("Rendering preview...");
+      cancelQueuedRender = enqueuePreviewRender(() => renderMatchupGraphicCanvas({
+        league,
+        leftPlayers,
+        rightPlayers,
+        logoTeamId,
+        width: canvas.width,
+        height: canvas.height,
+      }).then((previewCanvas) => {
+        if (cancelled) {
+          previewCanvas.width = 1;
+          previewCanvas.height = 1;
+          return;
+        }
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(previewCanvas, 0, 0, canvas.width, canvas.height);
         previewCanvas.width = 1;
         previewCanvas.height = 1;
-        return;
-      }
-      context.clearRect(0, 0, canvas.width, canvas.height);
-      context.drawImage(previewCanvas, 0, 0, canvas.width, canvas.height);
-      previewCanvas.width = 1;
-      previewCanvas.height = 1;
-      setStatus("");
-    }).catch((error) => {
-      console.error("Failed to render match-up preview.", error);
-      if (!cancelled) setStatus("Preview unavailable.");
-    }));
+        setStatus("");
+      }).catch((error) => {
+        console.error("Failed to render match-up preview.", error);
+        if (!cancelled) setStatus("Preview unavailable.");
+      }));
+    }, delay);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(timerId);
       cancelQueuedRender();
     };
-  }, [isReady, isVisible, league, leftPlayers, logoTeamId, previewHeight, previewWidth, rightPlayers, unavailableMessage]);
+  }, [debounceMs, isReady, isVisible, league, leftPlayers, logoTeamId, previewHeight, previewWidth, rightPlayers, unavailableMessage]);
 
   return (
     <div className={className} ref={containerRef}>

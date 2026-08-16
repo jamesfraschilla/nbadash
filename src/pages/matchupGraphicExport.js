@@ -271,7 +271,8 @@ function drawPlayerRow(context, players, images, headshotY, labelY) {
   const headshotWidth = 282;
   const headshotHeight = 190;
 
-  players.forEach((player, index) => {
+  (Array.isArray(players) ? players : []).forEach((player, index) => {
+    if (!player || typeof player !== "object") return;
     const centerX = leftPadding + slotWidth * index + slotWidth / 2;
     const headshotX = centerX - headshotWidth / 2;
     const image = images[index];
@@ -372,10 +373,12 @@ export async function renderMatchupGraphicCanvas({
   if (document.fonts?.ready) {
     await document.fonts.ready;
   }
+  const resolvedLeftPlayers = Array.isArray(leftPlayers) ? leftPlayers : [];
+  const resolvedRightPlayers = Array.isArray(rightPlayers) ? rightPlayers : [];
 
   const [leftImages, rightImages, logoImage, backgroundImage] = await Promise.all([
-    Promise.all((leftPlayers || []).map((player) => loadFirstImage(buildPlayerHeadshotCandidates(player)))),
-    Promise.all((rightPlayers || []).map((player) => loadFirstImage(buildPlayerHeadshotCandidates(player)))),
+    Promise.all(resolvedLeftPlayers.map((player) => loadFirstImage(buildPlayerHeadshotCandidates(player)))),
+    Promise.all(resolvedRightPlayers.map((player) => loadFirstImage(buildPlayerHeadshotCandidates(player)))),
     loadImage(logoTeamId ? buildProxyUrl(teamLogoUrl(logoTeamId, league)) : null),
     loadExportBackgroundImage(),
   ]);
@@ -389,8 +392,8 @@ export async function renderMatchupGraphicCanvas({
   drawBackdrop(context, backgroundImage);
   drawHeader(context);
   drawLogo(context, logoImage);
-  drawPlayerRow(context, leftPlayers, leftImages, 286, 484);
-  drawPlayerRow(context, rightPlayers, rightImages, 700, 896);
+  drawPlayerRow(context, resolvedLeftPlayers, leftImages, 286, 484);
+  drawPlayerRow(context, resolvedRightPlayers, rightImages, 700, 896);
 
   const leftPadding = 72;
   const usableWidth = EXPORT_WIDTH - leftPadding * 2;

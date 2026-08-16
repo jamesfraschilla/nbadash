@@ -210,6 +210,42 @@ function inferScheduleSeasonType(game: Record<string, unknown>) {
   return "Regular Season";
 }
 
+function normalizeNbaCupInfo(game: Record<string, unknown>) {
+  const gameLabel = String(game?.gameLabel || "").trim();
+  const gameSubLabel = String(game?.gameSubLabel || "").trim();
+  const gameSubtype = String(game?.gameSubtype || "").trim();
+  const providedIsCup = game?.isNbaCup === true || String(game?.isNbaCup || "").toLowerCase() === "true";
+  const cupText = `${gameLabel} ${gameSubLabel} ${gameSubtype}`.toLowerCase();
+  const isNbaCup = providedIsCup || cupText.includes("nba cup") || cupText.includes("in-season");
+  let nbaCupStage = String(game?.nbaCupStage || "").trim();
+  let nbaCupGroup = String(game?.nbaCupGroup || "").trim();
+
+  if (isNbaCup && !nbaCupStage) {
+    if (/championship/i.test(gameSubLabel)) {
+      nbaCupStage = "Championship";
+    } else if (/semifinal/i.test(gameSubLabel)) {
+      nbaCupStage = "Semifinal";
+    } else if (/quarterfinal/i.test(gameSubLabel)) {
+      nbaCupStage = "Quarterfinal";
+    } else {
+      nbaCupStage = "Group Play";
+    }
+  }
+
+  if (isNbaCup && !nbaCupGroup && /\bgroup\b/i.test(gameSubLabel)) {
+    nbaCupGroup = gameSubLabel;
+  }
+
+  return {
+    gameLabel,
+    gameSubLabel,
+    gameSubtype,
+    isNbaCup,
+    nbaCupStage,
+    nbaCupGroup,
+  };
+}
+
 function buildScheduleTeamPayload(team: Record<string, unknown> | null | undefined) {
   return {
     teamId: toNumber(team?.teamId, 0),
@@ -235,6 +271,7 @@ function normalizeScheduleGame(game: Record<string, unknown>, season: string) {
     gameEt: String(game?.gameDateTimeEst || game?.gameTimeEst || ""),
     seasonYear: season,
     seasonType: inferScheduleSeasonType(game),
+    ...normalizeNbaCupInfo(game),
     gameDate: formatScheduleDate(game?.gameDateEst || game?.gameDateTimeEst || game?.gameDateUTC),
     arena: {
       arenaName: String(game?.arenaName || "").trim(),
@@ -258,6 +295,7 @@ function normalizeStaticScheduleGame(game: Record<string, unknown>, season: stri
     gameEt: String(game?.gameEt || ""),
     seasonYear: season,
     seasonType: String(game?.seasonType || ""),
+    ...normalizeNbaCupInfo(game),
     gameDate: formatScheduleDate(game?.gameDate),
     arena: {
       arenaName: String((game?.arena as Record<string, unknown> | undefined)?.arenaName || "").trim(),

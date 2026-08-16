@@ -130,10 +130,20 @@
   transition: box-shadow 0.2s ease;
   cursor: pointer;
   width: 300px;
+  box-sizing: border-box;
 }
 
 .gameCard:hover {
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.gameCardNbaCup {
+  border: 2px solid #d4af37;
+  box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.18), 0 10px 22px rgba(212, 175, 55, 0.08);
+}
+
+.gameCardNbaCup:hover {
+  box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.28), 0 12px 26px rgba(212, 175, 55, 0.16);
 }
 
 .mainContent {

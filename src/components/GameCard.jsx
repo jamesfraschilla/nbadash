@@ -1,4 +1,5 @@
 import { Link, useSearchParams } from "react-router-dom";
+import { isNbaCupGame } from "../nbaCup.js";
 import { formatTipTime, gameStatusLabel, normalizeClock } from "../utils.js";
 import styles from "./GameCard.module.css";
 
@@ -10,12 +11,13 @@ export default function GameCard({ game }) {
   const status = gameStatusLabel(game);
   const isFinal = game.gameStatus === 3 || (game.gameStatusText || "").toLowerCase().includes("final");
   const isLive = game.gameStatus === 2;
+  const isCupGame = isNbaCupGame(game);
 
   const timeLabel = isLive ? normalizeClock(game.gameClock) : formatTipTime(game.gameTimeUTC, game.gameEt);
 
   return (
     <Link to={href} className={styles.gameLink}>
-      <div className={styles.gameCard}>
+      <div className={`${styles.gameCard} ${isCupGame ? styles.gameCardNbaCup : ""}`}>
         <div className={styles.gameContent}>
           <div className={styles.teamTricodes}>
             <span className={styles.teamTricode}>{game.awayTeam.teamTricode}</span>

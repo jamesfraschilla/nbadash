@@ -4,6 +4,7 @@ import { teamLogoUrl } from "../api.js";
 import { buildFreshnessSummary, formatPollingInterval } from "../dataFreshness.js";
 import { NBA_TEAMS } from "../data/nbaTeams.js";
 import { getGamesListPollingInterval } from "../gamePolling.js";
+import { isNbaCupGame } from "../nbaCup.js";
 import { useGamesByDate, useTeamSeasonGames } from "../queries.js";
 import {
   formatDateInput,
@@ -254,6 +255,7 @@ export default function Home() {
       const isLive = game.gameStatus === 2;
       const scoreVisible = game.gameStatus === 2 || game.gameStatus === 3;
       const clock = isLive ? normalizeClock(game.gameClock) : "";
+      const isCupGame = isNbaCupGame(game);
       const metadata = [];
 
       if (selectedTeamId && game.gameDate) {
@@ -270,7 +272,7 @@ export default function Home() {
       return (
         <Link
           key={game.gameId}
-          className={styles.gameCard}
+          className={`${styles.gameCard} ${isCupGame ? styles.gameCardNbaCup : ""}`}
           to={`/g/${game.gameId}${linkDateParam ? `?d=${linkDateParam}` : ""}`}
         >
           <div className={styles.mainContent}>

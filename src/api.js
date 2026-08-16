@@ -1,4 +1,5 @@
 import { gLeagueHeadshotOverrides } from "./gLeagueHeadshotOverrides.js";
+import nbaCupSchedule2026_27 from "./data/nbaCupGames2026_27.json" with { type: "json" };
 import {
   normalizePlayerHeadshotOverrides,
   resolvePlayerHeadshotOverrideUrls,
@@ -18,6 +19,7 @@ import {
   getMissingPersonnelStatsPlayers,
   mergePersonnelStatsPayloads,
 } from "./personnelStatsResolution.js";
+import { getNbaCupInfo } from "./nbaCup.js";
 import { supabase } from "./supabaseClient.js";
 import { readLocalStorage, writeLocalStorage, writeLocalStorageWithEviction } from "./storage.js";
 import { currentSeasonString, formatDateInput, seasonBoundsForSeason } from "./utils.js";
@@ -36,6 +38,11 @@ const SUPABASE_FUNCTIONS_BASE = SUPABASE_URL
   : "";
 const APP_BASE_PATH = apiEnv.BASE_URL || "/nbadash/";
 const ROSTER_CACHE_PREFIX = "nba-dashboard:roster-feed:v1:";
+const NBA_CUP_METADATA_BY_GAME_ID = new Map(
+  (Array.isArray(nbaCupSchedule2026_27?.games) ? nbaCupSchedule2026_27.games : [])
+    .map((game) => [String(game?.gameId || ""), game])
+    .filter(([gameId]) => gameId)
+);
 
 async function requestJson(url, options = {}) {
   const { timeoutMs = 0, signal: parentSignal = null, headers: optionHeaders, ...fetchOptions } = options;
@@ -205,6 +212,11 @@ function normalizeSummerLeagueGameMetadata(game) {
     ...game,
     seasonType: "Summer League",
   };
+}
+
+function mergeNbaCupMetadata(game) {
+  const cupMetadata = NBA_CUP_METADATA_BY_GAME_ID.get(String(game?.gameId || ""));
+  return cupMetadata ? { ...game, ...cupMetadata } : game;
 }
 
 function safeNumber(value, fallback = 0) {
@@ -1486,7 +1498,9 @@ export async function fetchGamesByDate(dateStr) {
     isJulyDate(dateStr) ? fetchSummerLeagueGamesByDate(dateStr).catch(() => []) : Promise.resolve([]),
   ]);
   const filteredBaseGames = (Array.isArray(baseGames) ? baseGames : []).filter(isNbaDashboardGame);
-  const normalizedBaseGames = filteredBaseGames.map(normalizeSummerLeagueGameMetadata);
+  const normalizedBaseGames = filteredBaseGames
+    .map(normalizeSummerLeagueGameMetadata)
+    .map(mergeNbaCupMetadata);
 
   if (!summerGames.length) {
     return normalizedBaseGames;
@@ -1505,12 +1519,14 @@ const SEASON_GAMES_CACHE = new Map();
 const SEASON_GAMES_PROMISES = new Map();
 const TEAM_SEASON_GAMES_CACHE = new Map();
 const TEAM_SEASON_GAMES_PROMISES = new Map();
-const SEASON_GAMES_STORAGE_PREFIX = "nba-dashboard-season-games:";
-const TEAM_SEASON_GAMES_STORAGE_PREFIX = "nba-dashboard-team-season-games:";
+const SEASON_GAMES_STORAGE_PREFIX = "nba-dashboard-season-games:v2:";
+const TEAM_SEASON_GAMES_STORAGE_PREFIX = "nba-dashboard-team-season-games:v2:";
 const SEASON_GAMES_STORAGE_TTL_MS = 6 * 60 * 60 * 1000;
 const SEASON_GAMES_EVICTION_PREFIXES = [
   SEASON_GAMES_STORAGE_PREFIX,
   TEAM_SEASON_GAMES_STORAGE_PREFIX,
+  "nba-dashboard-season-games:",
+  "nba-dashboard-team-season-games:",
   "nba-dashboard:match-ups:",
   "pregame:players:v2:",
   "pregame:players:v1",
@@ -1549,6 +1565,7 @@ function compactSeasonGameTeam(team) {
 }
 
 function compactSeasonGame(game) {
+  const nbaCupInfo = getNbaCupInfo(game);
   return {
     gameId: String(game?.gameId || ""),
     gameDate: String(game?.gameDate || ""),
@@ -1556,6 +1573,7 @@ function compactSeasonGame(game) {
     gameStatusText: String(game?.gameStatusText || ""),
     gameClock: String(game?.gameClock || ""),
     seasonType: String(game?.seasonType || ""),
+    ...nbaCupInfo,
     homeTeam: compactSeasonGameTeam(game?.homeTeam),
     awayTeam: compactSeasonGameTeam(game?.awayTeam),
   };

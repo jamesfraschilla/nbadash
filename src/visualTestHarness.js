@@ -1,6 +1,7 @@
 import { fetchNbaPlayerStats } from "./api.js";
 import { buildEmptyCoverageSlots } from "./coverageGraphic.js";
 import { renderCoverageGraphicCanvas } from "./pages/coverageGraphicExport.js";
+import { renderMatchupGraphicCanvas } from "./pages/matchupGraphicExport.js";
 import { exportPersonnelGraphics, renderPersonnelGraphic } from "./pages/personnelGraphicExport.js";
 import {
   clearPersonnelStatOverridesForSeason,
@@ -104,6 +105,19 @@ function readPixel(canvas, x, y) {
   return { r, g, b, a };
 }
 
+function countPixelMismatches(leftCanvas, rightCanvas) {
+  const leftContext = leftCanvas.getContext("2d", { willReadFrequently: true });
+  const rightContext = rightCanvas.getContext("2d", { willReadFrequently: true });
+  const leftPixels = leftContext.getImageData(0, 0, leftCanvas.width, leftCanvas.height).data;
+  const rightPixels = rightContext.getImageData(0, 0, rightCanvas.width, rightCanvas.height).data;
+  if (leftPixels.length !== rightPixels.length) return Number.POSITIVE_INFINITY;
+  let mismatches = 0;
+  for (let index = 0; index < leftPixels.length; index += 1) {
+    if (leftPixels[index] !== rightPixels[index]) mismatches += 1;
+  }
+  return mismatches;
+}
+
 window.renderCoverageColumnRegression = async () => {
   const twoColumnSlots = buildEmptyCoverageSlots();
   twoColumnSlots[0] = { ...twoColumnSlots[0], subtitle: "5", iconKey: "vol-1" };
@@ -135,6 +149,26 @@ window.renderCoverageColumnRegression = async () => {
     twoColumnFirstThirdSeparator: readPixel(twoColumnCanvas, 344, 270),
     threeColumnFirstSeparator: readPixel(threeColumnCanvas, 344, 270),
     threeColumnSecondSeparator: readPixel(threeColumnCanvas, 616, 270),
+  };
+};
+
+window.renderPartialMatchupSlotRegression = async () => {
+  const emptyCanvas = await renderMatchupGraphicCanvas({
+    leftPlayers: [],
+    rightPlayers: [],
+    logoTeamId: "",
+    width: 480,
+    height: 270,
+  });
+  const nullSlotCanvas = await renderMatchupGraphicCanvas({
+    leftPlayers: [null, null, null, null, null],
+    rightPlayers: [null, null, null, null, null],
+    logoTeamId: "",
+    width: 480,
+    height: 270,
+  });
+  return {
+    mismatches: countPixelMismatches(emptyCanvas, nullSlotCanvas),
   };
 };
 

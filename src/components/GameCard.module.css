@@ -12,6 +12,7 @@
   padding: 4px 6px;
   transition: all 0.2s ease;
   width: fit-content;
+  box-sizing: border-box;
 }
 
 .gameCard:hover {
@@ -19,6 +20,15 @@
   border-color: var(--header-button-border-hover);
   transform: translateY(-1px);
   color: var(--header-text);
+}
+
+.gameCardNbaCup {
+  border: 2px solid #d4af37;
+  box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.18);
+}
+
+.gameCardNbaCup:hover {
+  border-color: #f3d66b;
 }
 
 .gameContent {

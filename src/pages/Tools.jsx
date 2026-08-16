@@ -763,6 +763,13 @@ export default function Tools({ section = "tools" }) {
     selectedLeftPlayers.every(Boolean) &&
     selectedRightPlayers.every(Boolean)
   );
+  const matchupPreviewReady = Boolean(
+    leftTeam ||
+    rightTeam ||
+    draft.logoTeamId ||
+    selectedLeftPlayers.some(Boolean) ||
+    selectedRightPlayers.some(Boolean)
+  );
 
   useEffect(() => {
     if (!lateGameAwayTeam?.teamId || !lateGameHomeTeam?.teamId) return;
@@ -1654,120 +1661,125 @@ export default function Tools({ section = "tools" }) {
             </p>
           ) : null}
 
-          <label className={`${styles.field} ${styles.leagueField}`}>
-            <select
-              className={styles.select}
-              value={league}
-              onChange={(event) => handleLeagueChange(event.target.value)}
-            >
-              <option value="nba">NBA</option>
-              <option value="gleague">G League</option>
-            </select>
-          </label>
+          <div className={styles.matchupBuilder}>
+            <div className={styles.matchupControls}>
+              <label className={`${styles.field} ${styles.leagueField}`}>
+                <select
+                  className={styles.select}
+                  value={league}
+                  onChange={(event) => handleLeagueChange(event.target.value)}
+                >
+                  <option value="nba">NBA</option>
+                  <option value="gleague">G League</option>
+                </select>
+              </label>
 
-          <div className={styles.toolGrid}>
-            <ToolColumn
-              columnId="left"
-              teamId={draft.leftTeamId}
-              teams={availableTeams}
-              playerIds={draft.leftPlayerIds}
-              rosterMap={rosterMap}
-              customPlayers={draft.leftCustomPlayers}
-              onTeamChange={(nextTeamId) => handleTeamChange("left", nextTeamId)}
-              onPlayerChange={(index, nextPlayerId) => handlePlayerChange("left", index, nextPlayerId)}
-              onCustomPlayerChange={(index, patch) => handleCustomPlayerChange("left", index, patch)}
-              onCustomHeadshotChange={(index, file) => handleCustomHeadshotChange("left", index, file)}
-            />
+              <div className={styles.toolGrid}>
+                <ToolColumn
+                  columnId="left"
+                  teamId={draft.leftTeamId}
+                  teams={availableTeams}
+                  playerIds={draft.leftPlayerIds}
+                  rosterMap={rosterMap}
+                  customPlayers={draft.leftCustomPlayers}
+                  onTeamChange={(nextTeamId) => handleTeamChange("left", nextTeamId)}
+                  onPlayerChange={(index, nextPlayerId) => handlePlayerChange("left", index, nextPlayerId)}
+                  onCustomPlayerChange={(index, patch) => handleCustomPlayerChange("left", index, patch)}
+                  onCustomHeadshotChange={(index, file) => handleCustomHeadshotChange("left", index, file)}
+                />
 
-            <ToolColumn
-              columnId="right"
-              teamId={draft.rightTeamId}
-              teams={availableTeams}
-              playerIds={draft.rightPlayerIds}
-              rosterMap={rosterMap}
-              customPlayers={draft.rightCustomPlayers}
-              onTeamChange={(nextTeamId) => handleTeamChange("right", nextTeamId)}
-              onPlayerChange={(index, nextPlayerId) => handlePlayerChange("right", index, nextPlayerId)}
-              onCustomPlayerChange={(index, patch) => handleCustomPlayerChange("right", index, patch)}
-              onCustomHeadshotChange={(index, file) => handleCustomHeadshotChange("right", index, file)}
-            />
-          </div>
-
-          <div className={styles.footerRow}>
-            <label className={`${styles.field} ${styles.logoField}`}>
-              <span className={styles.fieldLabel}>Logo</span>
-              <select
-                className={styles.select}
-                value={draft.logoTeamId}
-                onChange={(event) => {
-                  setDraft((current) => ({ ...current, logoTeamId: event.target.value }));
-                  setSaveStatus("");
-                }}
-              >
-                <option value="">Logo</option>
-                {availableTeams.map((team) => (
-                  <option key={`logo-${team.teamId}`} value={team.teamId}>{team.fullName}</option>
-                ))}
-              </select>
-            </label>
-
-            {logoPreviewUrl ? (
-              <div className={styles.logoPreview}>
-                <img src={logoPreviewUrl} alt="" />
+                <ToolColumn
+                  columnId="right"
+                  teamId={draft.rightTeamId}
+                  teams={availableTeams}
+                  playerIds={draft.rightPlayerIds}
+                  rosterMap={rosterMap}
+                  customPlayers={draft.rightCustomPlayers}
+                  onTeamChange={(nextTeamId) => handleTeamChange("right", nextTeamId)}
+                  onPlayerChange={(index, nextPlayerId) => handlePlayerChange("right", index, nextPlayerId)}
+                  onCustomPlayerChange={(index, patch) => handleCustomPlayerChange("right", index, patch)}
+                  onCustomHeadshotChange={(index, file) => handleCustomHeadshotChange("right", index, file)}
+                />
               </div>
-            ) : null}
 
-            <div className={styles.actionCluster}>
-              <Link className={styles.secondaryButton} to="/me?tab=graphics&graphic=matchup">
-                My Vault
-              </Link>
-              {recordId ? (
-                <button type="button" className={styles.secondaryButton} onClick={handleDelete} disabled={Boolean(busyAction)}>
-                  Delete
-                </button>
+              <div className={styles.footerRow}>
+                <label className={`${styles.field} ${styles.logoField}`}>
+                  <span className={styles.fieldLabel}>Logo</span>
+                  <select
+                    className={styles.select}
+                    value={draft.logoTeamId}
+                    onChange={(event) => {
+                      setDraft((current) => ({ ...current, logoTeamId: event.target.value }));
+                      setSaveStatus("");
+                    }}
+                  >
+                    <option value="">Logo</option>
+                    {availableTeams.map((team) => (
+                      <option key={`logo-${team.teamId}`} value={team.teamId}>{team.fullName}</option>
+                    ))}
+                  </select>
+                </label>
+
+                {logoPreviewUrl ? (
+                  <div className={styles.logoPreview}>
+                    <img src={logoPreviewUrl} alt="" />
+                  </div>
+                ) : null}
+
+                <div className={styles.actionCluster}>
+                  <Link className={styles.secondaryButton} to="/me?tab=graphics&graphic=matchup">
+                    My Vault
+                  </Link>
+                  {recordId ? (
+                    <button type="button" className={styles.secondaryButton} onClick={handleDelete} disabled={Boolean(busyAction)}>
+                      Delete
+                    </button>
+                  ) : null}
+                  <button type="button" className={styles.secondaryButton} onClick={handleReset} disabled={Boolean(busyAction)}>
+                    Reset
+                  </button>
+                  <button type="button" className={styles.primaryButton} onClick={handleSave} disabled={Boolean(busyAction)}>
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.secondaryButton}
+                    onClick={handleExport}
+                    disabled={!exportReady || Boolean(busyAction)}
+                    title={exportReady ? "Export the matchup graphic as a PNG" : "Select both teams, all ten players, and a logo first"}
+                  >
+                    {busyAction === "export" ? "Exporting..." : "Export"}
+                  </button>
+                </div>
+              </div>
+
+              {saveStatus ? (
+                <div className={styles.statusNote}>
+                  {saveStatus}
+                  {recordId && saveStatus.startsWith("Saved") ? (
+                    <>
+                      {" "}
+                      <Link className={styles.inlineStatusLink} to="/me?tab=graphics&graphic=matchup">View in My Vault</Link>
+                    </>
+                  ) : null}
+                </div>
               ) : null}
-              <button type="button" className={styles.secondaryButton} onClick={handleReset} disabled={Boolean(busyAction)}>
-                Reset
-              </button>
-              <button type="button" className={styles.primaryButton} onClick={handleSave} disabled={Boolean(busyAction)}>
-                Save
-              </button>
-              <button
-                type="button"
-                className={styles.secondaryButton}
-                onClick={handleExport}
-                disabled={!exportReady || Boolean(busyAction)}
-                title={exportReady ? "Export the matchup graphic as a PNG" : "Select both teams, all ten players, and a logo first"}
-              >
-                {busyAction === "export" ? "Exporting..." : "Export"}
-              </button>
             </div>
+
+            <MatchupGraphicPreview
+              className={styles.matchupPreviewPanel}
+              canvasClassName={styles.matchupPreviewCanvas}
+              statusClassName={styles.previewStatus}
+              league={league}
+              leftPlayers={selectedLeftPlayers}
+              rightPlayers={selectedRightPlayers}
+              logoTeamId={draft.logoTeamId}
+              isReady={matchupPreviewReady}
+              unavailableMessage="Preview appears after a team, logo, or player is selected."
+              previewWidth={960}
+              previewHeight={540}
+            />
           </div>
-
-          <MatchupGraphicPreview
-            className={styles.matchupPreviewPanel}
-            canvasClassName={styles.matchupPreviewCanvas}
-            statusClassName={styles.previewStatus}
-            league={league}
-            leftPlayers={selectedLeftPlayers}
-            rightPlayers={selectedRightPlayers}
-            logoTeamId={draft.logoTeamId}
-            isReady={exportReady}
-            previewWidth={960}
-            previewHeight={540}
-          />
-
-          {saveStatus ? (
-            <div className={styles.statusNote}>
-              {saveStatus}
-              {recordId && saveStatus.startsWith("Saved") ? (
-                <>
-                  {" "}
-                  <Link className={styles.inlineStatusLink} to="/me?tab=graphics&graphic=matchup">View in My Vault</Link>
-                </>
-              ) : null}
-            </div>
-          ) : null}
         </section>
       ) : activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.COURT_TIME ? (
         <section className={styles.workspace}>
