@@ -1697,14 +1697,20 @@ export function prefetchCurrentSeasonGames(season = currentSeasonString()) {
 function filterSeasonGamesForTeam(games, teamId, opponentTeamId = "") {
   const safeTeamId = String(teamId || "").trim();
   const safeOpponentTeamId = String(opponentTeamId || "").trim();
-  return (Array.isArray(games) ? games : []).filter((game) => {
-    const homeTeamId = String(game?.homeTeam?.teamId || "");
-    const awayTeamId = String(game?.awayTeam?.teamId || "");
-    const teamMatches = homeTeamId === safeTeamId || awayTeamId === safeTeamId;
-    if (!teamMatches) return false;
-    if (!safeOpponentTeamId) return true;
-    return homeTeamId === safeOpponentTeamId || awayTeamId === safeOpponentTeamId;
-  });
+  return (Array.isArray(games) ? games : [])
+    .filter((game) => {
+      const homeTeamId = String(game?.homeTeam?.teamId || "");
+      const awayTeamId = String(game?.awayTeam?.teamId || "");
+      const teamMatches = homeTeamId === safeTeamId || awayTeamId === safeTeamId;
+      if (!teamMatches) return false;
+      if (!safeOpponentTeamId) return true;
+      return homeTeamId === safeOpponentTeamId || awayTeamId === safeOpponentTeamId;
+    })
+    .sort((left, right) => {
+      const dateCompare = String(left?.gameDate || "").localeCompare(String(right?.gameDate || ""));
+      if (dateCompare !== 0) return dateCompare;
+      return String(left?.gameId || "").localeCompare(String(right?.gameId || ""));
+    });
 }
 
 async function fetchStaticTeamSeasonGames(teamId, season) {

@@ -3,6 +3,7 @@ import staticSchedule2026_27 from "./nbaSchedule2026_27.json" with { type: "json
 const STATS_API_URL = "https://stats.nba.com/stats/leaguegamefinder";
 const SCHEDULE_API_URL = "https://cdn.nba.com/static/json/staticData/scheduleLeagueV2_1.json";
 const SCHEDULE_TIMEOUT_MS = 8_000;
+const SCHEDULE_CACHE_TTL_MS = 15 * 60 * 1000;
 const STATS_TIMEOUT_MS = 5_000;
 
 const corsHeaders = {
@@ -48,6 +49,8 @@ const TEAM_METADATA = [
 
 const TEAM_BY_ID = new Map<string, (typeof TEAM_METADATA)[number]>(TEAM_METADATA.map((team) => [String(team.teamId), team]));
 const TEAM_BY_TRICODE = new Map<string, (typeof TEAM_METADATA)[number]>(TEAM_METADATA.map((team) => [team.teamTricode, team]));
+const scheduleGamesCache = new Map<string, { updatedAt: number; games: Record<string, unknown>[] }>();
+const scheduleGamesPromises = new Map<string, Promise<Record<string, unknown>[]>>();
 
 function jsonResponse(status: number, payload: Record<string, unknown>) {
   return new Response(JSON.stringify(payload), {
@@ -266,7 +269,21 @@ function normalizeStaticScheduleGame(game: Record<string, unknown>, season: stri
   };
 }
 
-async function fetchScheduleGames(season: string, teamId: string) {
+function compareGamesSoonestFirst(left: Record<string, unknown>, right: Record<string, unknown>) {
+  const dateCompare = String(left.gameDate || "").localeCompare(String(right.gameDate || ""));
+  if (dateCompare !== 0) return dateCompare;
+  return String(left.gameId || "").localeCompare(String(right.gameId || ""));
+}
+
+function filterScheduleGamesForTeam(games: Record<string, unknown>[], teamId: string) {
+  return games.filter((game: Record<string, unknown>) => {
+    const homeTeamId = String((game?.homeTeam as Record<string, unknown> | undefined)?.teamId || "");
+    const awayTeamId = String((game?.awayTeam as Record<string, unknown> | undefined)?.teamId || "");
+    return homeTeamId === teamId || awayTeamId === teamId;
+  });
+}
+
+async function fetchScheduleGamesForSeason(season: string) {
   const response = await fetchWithTimeout(SCHEDULE_API_URL, {
     headers: {
       Accept: "application/json, text/plain, */*",
@@ -297,37 +314,48 @@ async function fetchScheduleGames(season: string, teamId: string) {
   ));
 
   return games
-    .filter((game: Record<string, unknown>) => {
-      const homeTeamId = String((game?.homeTeam as Record<string, unknown> | undefined)?.teamId || "");
-      const awayTeamId = String((game?.awayTeam as Record<string, unknown> | undefined)?.teamId || "");
-      return homeTeamId === teamId || awayTeamId === teamId;
-    })
     .map((game: Record<string, unknown>) => normalizeScheduleGame(game, season))
     .filter((game: Record<string, unknown>) => Boolean(game.gameId && game.gameDate))
-    .sort((left: Record<string, unknown>, right: Record<string, unknown>) => {
-      const dateCompare = String(right.gameDate || "").localeCompare(String(left.gameDate || ""));
-      if (dateCompare !== 0) return dateCompare;
-      return String(right.gameId || "").localeCompare(String(left.gameId || ""));
-    });
+    .sort(compareGamesSoonestFirst);
 }
 
-function filterStaticScheduleGames(season: string, teamId: string) {
+function getStaticScheduleGames(season: string) {
   if (season !== "2026-27") return [];
   const games = Array.isArray(staticSchedule2026_27?.games) ? staticSchedule2026_27.games : [];
 
   return games
-    .filter((game: Record<string, unknown>) => {
-      const homeTeamId = String((game?.homeTeam as Record<string, unknown> | undefined)?.teamId || "");
-      const awayTeamId = String((game?.awayTeam as Record<string, unknown> | undefined)?.teamId || "");
-      return homeTeamId === teamId || awayTeamId === teamId;
-    })
     .map((game: Record<string, unknown>) => normalizeStaticScheduleGame(game, season))
     .filter((game: Record<string, unknown>) => Boolean(game.gameId && game.gameDate))
-    .sort((left: Record<string, unknown>, right: Record<string, unknown>) => {
-      const dateCompare = String(right.gameDate || "").localeCompare(String(left.gameDate || ""));
-      if (dateCompare !== 0) return dateCompare;
-      return String(right.gameId || "").localeCompare(String(left.gameId || ""));
+    .sort(compareGamesSoonestFirst);
+}
+
+async function getCachedScheduleGames(season: string) {
+  const now = Date.now();
+  const cached = scheduleGamesCache.get(season);
+  if (cached && now - cached.updatedAt < SCHEDULE_CACHE_TTL_MS) {
+    return cached.games;
+  }
+
+  const pending = scheduleGamesPromises.get(season);
+  if (pending) return pending;
+
+  const nextPromise = fetchScheduleGamesForSeason(season)
+    .catch(() => getStaticScheduleGames(season))
+    .then((games) => {
+      scheduleGamesCache.set(season, { updatedAt: Date.now(), games });
+      return games;
+    })
+    .finally(() => {
+      scheduleGamesPromises.delete(season);
     });
+
+  scheduleGamesPromises.set(season, nextPromise);
+  return nextPromise;
+}
+
+async function fetchScheduleGames(season: string, teamId: string) {
+  const games = await getCachedScheduleGames(season);
+  return filterScheduleGamesForTeam(games, teamId);
 }
 
 function buildSyntheticOpponentRow(selectedRow: TeamGameFinderRow, opponentTricode: string): TeamGameFinderRow {
@@ -389,11 +417,11 @@ function groupRowsIntoGames(rows: Record<string, unknown>[], season: string) {
       };
     })
     .sort((left, right) => {
-      const dateCompare = String(right.gameDate || "").localeCompare(String(left.gameDate || ""));
+      const dateCompare = String(left.gameDate || "").localeCompare(String(right.gameDate || ""));
       if (dateCompare !== 0) return dateCompare;
-      const seasonTypeCompare = seasonTypeRank(right.seasonType) - seasonTypeRank(left.seasonType);
+      const seasonTypeCompare = seasonTypeRank(left.seasonType) - seasonTypeRank(right.seasonType);
       if (seasonTypeCompare !== 0) return seasonTypeCompare;
-      return String(right.gameId || "").localeCompare(String(left.gameId || ""));
+      return String(left.gameId || "").localeCompare(String(right.gameId || ""));
     });
 }
 
@@ -415,7 +443,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const scheduleGames = await fetchScheduleGames(season, teamId).catch(() => filterStaticScheduleGames(season, teamId));
+    const scheduleGames = await fetchScheduleGames(season, teamId);
     if (scheduleGames.length) {
       return jsonResponse(200, {
         season,
