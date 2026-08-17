@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "assets:upload-referees": "node scripts/upload-referee-full-assets.mjs",
     "schedule:update": "node scripts/update-nba-schedule.mjs",
+    "schedule:prewarm:update": "node scripts/update-wizards-analysis-prewarm-schedule.mjs",
     "test": "node --test \"src/**/*.test.js\"",
     "test:edge": "npx -y deno test --allow-env --config supabase/deno.json supabase/functions/**/*.test.ts",
     "test:e2e": "playwright test",
