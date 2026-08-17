@@ -6,7 +6,7 @@
 --    - nba_dash_project_url: https://<project-ref>.supabase.co
 --    - nba_dash_service_role_key: <service role key>
 --
--- The job runs once per minute during the broad NBA game window in UTC.
+-- The job runs every five minutes during the broad NBA game window in UTC.
 -- The Edge Function is still conservative: it only processes live or recently
 -- final Washington Wizards games and skips already cached segments.
 
@@ -23,7 +23,7 @@ $$;
 
 select cron.schedule(
   'wizards-analysis-prewarm',
-  '* 16-23,0-9 * * *',
+  '*/5 16-23,0-9 * * *',
   $$
   select net.http_post(
     url := (

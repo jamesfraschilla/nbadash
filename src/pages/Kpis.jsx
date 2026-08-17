@@ -11,6 +11,8 @@ const KPI_SHARED_TABLE = "rotations_shared_state";
 const KPI_SCOPE_TYPE = "shared_game_kpis";
 const STAGE_WIDTH = 3840;
 const STAGE_HEIGHT = 2160;
+const KPI_REMOTE_SAVE_DEBOUNCE_MS = 750;
+const KPI_REMOTE_POLL_INTERVAL_MS = 5000;
 const DEFAULT_METRICS = [
   { id: "kpi-1", name: "KPI #1", value: "50", nameUpdatedAt: 0, valueUpdatedAt: 0 },
   { id: "kpi-2", name: "KPI #2", value: "127", nameUpdatedAt: 0, valueUpdatedAt: 0 },
@@ -280,12 +282,14 @@ export default function Kpis() {
       });
     };
 
-    fetchRemoteMetricsPayload(gameId)
-      .then((payload) => {
-        if (cancelled || !payload) return;
-        applyIncomingPayload(payload);
-      })
-      .catch(() => {});
+    const loadRemoteMetrics = () => {
+      fetchRemoteMetricsPayload(gameId)
+        .then((payload) => {
+          if (cancelled || !payload) return;
+          applyIncomingPayload(payload);
+        })
+        .catch(() => {});
+    };
 
     if (!supabase) {
       return () => {
@@ -293,27 +297,14 @@ export default function Kpis() {
       };
     }
 
-    const channel = supabase
-      .channel(`kpis-${gameId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: KPI_SHARED_TABLE,
-          filter: `scope_type=eq.${KPI_SCOPE_TYPE}`,
-        },
-        (payload) => {
-          const row = payload.new || payload.old;
-          if (!row || row.scope_key !== String(gameId)) return;
-          applyIncomingPayload(normalizeMetricsPayload(row.payload));
-        }
-      )
-      .subscribe();
+    loadRemoteMetrics();
+    const intervalId = window.setInterval(loadRemoteMetrics, KPI_REMOTE_POLL_INTERVAL_MS);
+    window.addEventListener("focus", loadRemoteMetrics);
 
     return () => {
       cancelled = true;
-      supabase.removeChannel(channel);
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", loadRemoteMetrics);
     };
   }, [gameId]);
 
@@ -409,7 +400,7 @@ export default function Kpis() {
           console.error("Failed to save KPI state.", saveError);
           setSyncError(saveError?.message || "Unable to sync KPI changes.");
         });
-    }, 250);
+    }, KPI_REMOTE_SAVE_DEBOUNCE_MS);
 
     return () => window.clearTimeout(timeoutId);
   }, [gameId, metricsPayload]);

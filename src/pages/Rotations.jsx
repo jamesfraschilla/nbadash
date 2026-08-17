@@ -46,6 +46,9 @@ const LONG_PRESS_DURATION_MS = 700;
 const TOUCH_FILL_MOVE_TOLERANCE_PX = 16;
 const DEPTH_OUT_PRESS_DURATION_MS = 1000;
 const DEPTH_PRESS_RELEASE_LOCK_MS = 120;
+const ROTATIONS_REMOTE_SAVE_DEBOUNCE_MS = 750;
+const ROTATIONS_REMOTE_POLL_INTERVAL_MS = 5000;
+const ROTATIONS_TEMPLATE_REMOTE_POLL_INTERVAL_MS = 15000;
 const STANDALONE_ROTATIONS_GAME_ID = "standalone-rotations";
 const STANDALONE_ROTATIONS_GAME = {
   gameId: STANDALONE_ROTATIONS_GAME_ID,
@@ -1653,24 +1656,30 @@ export default function Rotations({ standalone = false }) {
     queryKey: ["rotations-saved-lineups-remote", monitoredTeamScope],
     queryFn: () => fetchRemoteSavedLineups(monitoredTeamScope),
     enabled: Boolean(supabase && monitoredTeamScope),
-    staleTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: false,
+    staleTime: ROTATIONS_REMOTE_POLL_INTERVAL_MS,
+    refetchInterval: ROTATIONS_REMOTE_POLL_INTERVAL_MS,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 
   const { data: remoteGameState, isFetched: remoteGameFetched } = useQuery({
     queryKey: ["rotations-game-remote", gameId, monitoredTeamScope, periodMinuteCount],
     queryFn: () => fetchRemoteGameState(gameId, monitoredTeamScope, periodMinuteCount),
     enabled: Boolean(!standalone && supabase && gameId && monitoredTeamScope),
-    staleTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: false,
+    staleTime: ROTATIONS_REMOTE_POLL_INTERVAL_MS,
+    refetchInterval: ROTATIONS_REMOTE_POLL_INTERVAL_MS,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 
   const { data: remoteDepthTemplate, isFetched: remoteDepthFetched } = useQuery({
     queryKey: ["rotations-depth-template-remote", monitoredTeamScope],
     queryFn: () => fetchRemoteDepthTemplate(monitoredTeamScope),
     enabled: Boolean(supabase && monitoredTeamScope),
-    staleTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: false,
+    staleTime: ROTATIONS_TEMPLATE_REMOTE_POLL_INTERVAL_MS,
+    refetchInterval: ROTATIONS_TEMPLATE_REMOTE_POLL_INTERVAL_MS,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 
   const activeVersion = useMemo(
@@ -2046,7 +2055,7 @@ export default function Rotations({ standalone = false }) {
           console.error("Failed to save rotations players", saveError);
           setSyncError(saveError?.message || "Unable to sync roster changes.");
         });
-    }, 250);
+    }, ROTATIONS_REMOTE_SAVE_DEBOUNCE_MS);
 
     return () => window.clearTimeout(timeoutId);
   }, [players, playersHydrated, monitoredTeamScope, standalone]);
@@ -2070,12 +2079,17 @@ export default function Rotations({ standalone = false }) {
     const updatedAt = Date.now();
     savedLineupsUpdatedAtRef.current = updatedAt;
     persistSavedLineups(monitoredTeamScope, savedLineups, updatedAt);
-    saveRemoteSavedLineups(monitoredTeamScope, savedLineups, updatedAt)
-      .then(() => setSyncError(""))
-      .catch((saveError) => {
-        console.error("Failed to save rotations lineups", saveError);
-        setSyncError(saveError?.message || "Unable to sync saved lineups.");
-      });
+
+    const timeoutId = window.setTimeout(() => {
+      saveRemoteSavedLineups(monitoredTeamScope, savedLineups, updatedAt)
+        .then(() => setSyncError(""))
+        .catch((saveError) => {
+          console.error("Failed to save rotations lineups", saveError);
+          setSyncError(saveError?.message || "Unable to sync saved lineups.");
+        });
+    }, ROTATIONS_REMOTE_SAVE_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timeoutId);
   }, [savedLineups, savedLineupsHydrated, monitoredTeamScope, standalone]);
 
   useEffect(() => {
@@ -2132,12 +2146,17 @@ export default function Rotations({ standalone = false }) {
     const updatedAt = Date.now();
     depthTemplateUpdatedAtRef.current = updatedAt;
     persistDepthTemplate(monitoredTeamScope, depthTemplate, updatedAt, depthTemplateSourceGameIdRef.current);
-    saveRemoteDepthTemplate(monitoredTeamScope, depthTemplate, updatedAt, depthTemplateSourceGameIdRef.current)
-      .then(() => setSyncError(""))
-      .catch((saveError) => {
-        console.error("Failed to save rotations depth template", saveError);
-        setSyncError(saveError?.message || "Unable to sync depth chart template.");
-      });
+
+    const timeoutId = window.setTimeout(() => {
+      saveRemoteDepthTemplate(monitoredTeamScope, depthTemplate, updatedAt, depthTemplateSourceGameIdRef.current)
+        .then(() => setSyncError(""))
+        .catch((saveError) => {
+          console.error("Failed to save rotations depth template", saveError);
+          setSyncError(saveError?.message || "Unable to sync depth chart template.");
+        });
+    }, ROTATIONS_REMOTE_SAVE_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timeoutId);
   }, [depthTemplate, depthTemplateHydrated, monitoredTeamScope, standalone]);
 
   useEffect(() => {
@@ -2158,13 +2177,18 @@ export default function Rotations({ standalone = false }) {
     const updatedAt = Date.now();
     gameUpdatedAtRef.current = updatedAt;
     persistGameState(effectiveGameId, state, updatedAt);
-    if (standalone) return;
-    saveRemoteGameState(effectiveGameId, state, updatedAt)
-      .then(() => setSyncError(""))
-      .catch((saveError) => {
-        console.error("Failed to save rotations game state", saveError);
-        setSyncError(saveError?.message || "Unable to sync rotations state.");
-      });
+    if (standalone) return undefined;
+
+    const timeoutId = window.setTimeout(() => {
+      saveRemoteGameState(effectiveGameId, state, updatedAt)
+        .then(() => setSyncError(""))
+        .catch((saveError) => {
+          console.error("Failed to save rotations game state", saveError);
+          setSyncError(saveError?.message || "Unable to sync rotations state.");
+        });
+    }, ROTATIONS_REMOTE_SAVE_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timeoutId);
   }, [gameState, gameHydrated, effectiveGameId, monitoredTeamScope, standalone]);
 
   useEffect(() => {
@@ -3034,72 +3058,6 @@ export default function Rotations({ standalone = false }) {
     window.addEventListener("touchmove", handleTouchMove, { passive: false });
     return () => window.removeEventListener("touchmove", handleTouchMove);
   }, []);
-
-  useEffect(() => {
-    if (standalone || !supabase || !gameId || !monitoredTeamScope) return undefined;
-    const channel = supabase
-      .channel(`rotations-${monitoredTeamScope}-${gameId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: ROTATIONS_TABLE,
-          filter: `scope_type=eq.${ROTATIONS_SCOPE_SAVED_LINEUPS}`,
-        },
-        (payload) => {
-          const row = payload.new || payload.old;
-          if (!row || row.scope_key !== globalScopeKey(monitoredTeamScope)) return;
-          const parsed = parseSharedStateRow(row);
-          applyRemoteSavedLineups({
-            updatedAt: parsed.updatedAt,
-            lineups: normalizeSavedLineups(parsed.payload?.lineups),
-          });
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: ROTATIONS_TABLE,
-          filter: `scope_type=eq.${ROTATIONS_SCOPE_DEPTH_TEMPLATE}`,
-        },
-        (payload) => {
-          const row = payload.new || payload.old;
-          if (!row || row.scope_key !== globalScopeKey(monitoredTeamScope)) return;
-          const parsed = parseSharedStateRow(row);
-          applyRemoteDepthTemplate({
-            updatedAt: parsed.updatedAt,
-            depthChart: parsed.payload?.depthChart,
-            sourceGameId: parsed.payload?.sourceGameId,
-          });
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: ROTATIONS_TABLE,
-          filter: `scope_type=eq.${ROTATIONS_SCOPE_GAME}`,
-        },
-        (payload) => {
-          const row = payload.new || payload.old;
-          if (!row || row.scope_key !== String(gameId)) return;
-          const parsed = parseSharedStateRow(row);
-          applyRemoteGameState({
-            updatedAt: Number(parsed.payload?.updatedAt || parsed.updatedAt || 0),
-            state: normalizeGameState(parsed.payload, monitoredTeamScope, periodMinuteCount),
-          });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [gameId, monitoredTeamScope, standalone]);
 
   const getRowValues = (quarter, minuteIndex) => (lineups[quarter]?.[minuteIndex] || []);
 

@@ -44,4 +44,18 @@ for update
 using (true)
 with check (true);
 
-alter publication supabase_realtime add table public.rotations_shared_state;
+-- Keep this table out of Supabase Realtime. The app uses narrow polling for
+-- shared-state sync, which is cheaper than WAL-based subscriptions here.
+do $$
+begin
+  if exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'rotations_shared_state'
+  ) then
+    alter publication supabase_realtime drop table public.rotations_shared_state;
+  end if;
+end
+$$;
