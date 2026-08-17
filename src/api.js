@@ -22,7 +22,7 @@ import {
 import { getNbaCupInfo } from "./nbaCup.js";
 import { supabase } from "./supabaseClient.js";
 import { readLocalStorage, writeLocalStorage, writeLocalStorageWithEviction } from "./storage.js";
-import { currentSeasonString, formatDateInput, seasonBoundsForSeason } from "./utils.js";
+import { currentSeasonString, formatDateInput } from "./utils.js";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const ALL_ORIGINS_RAW_URL = "https://api.allorigins.win/raw?url=";
@@ -1532,21 +1532,6 @@ const SEASON_GAMES_EVICTION_PREFIXES = [
   "pregame:players:v1",
 ];
 
-function enumerateDateInputs(start, end) {
-  const dates = [];
-  const cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-  const last = new Date(end.getFullYear(), end.getMonth(), end.getDate());
-  while (cursor <= last) {
-    dates.push(formatDateInput(cursor));
-    cursor.setDate(cursor.getDate() + 1);
-  }
-  return dates;
-}
-
-function isPlayedGame(game) {
-  return Number(game?.gameStatus) === 2 || Number(game?.gameStatus) === 3;
-}
-
 function annotateSeasonGame(game, gameDate) {
   return {
     ...game,
@@ -1654,7 +1639,7 @@ function saveTeamSeasonGamesToStorage(teamId, season, games) {
   );
 }
 
-async function fetchAllSeasonGames(season = currentSeasonString()) {
+async function fetchStaticSeasonGames(season = currentSeasonString()) {
   const cachedInMemory = SEASON_GAMES_CACHE.get(season);
   if (cachedInMemory) return cachedInMemory;
 
@@ -1668,35 +1653,28 @@ async function fetchAllSeasonGames(season = currentSeasonString()) {
   if (pending) return pending;
 
   const nextPromise = (async () => {
-    const { start, end } = seasonBoundsForSeason(season, new Date());
-    const dateInputs = enumerateDateInputs(start, end);
-    const concurrency = 8;
-    const aggregated = [];
-
-    for (let index = 0; index < dateInputs.length; index += concurrency) {
-      const slice = dateInputs.slice(index, index + concurrency);
-      const batchResults = await Promise.all(
-        slice.map(async (dateInput) => {
-          const games = await fetchGamesByDate(dateInput).catch(() => []);
-          return (Array.isArray(games) ? games : [])
-            .filter((game) => !String(game?.gameId || "").startsWith("202"))
-            .filter(isPlayedGame)
-            .map((game) => annotateSeasonGame(game, dateInput));
-        })
-      );
-      aggregated.push(...batchResults.flat());
+    if (String(season || "").trim() !== "2026-27") {
+      return [];
     }
 
+    const scheduleModule = await import("./data/nbaSchedule2026_27.json");
+    const schedule = scheduleModule.default || scheduleModule;
+    const games = Array.isArray(schedule?.games) ? schedule.games : [];
     const deduped = [...new Map(
-      aggregated.map((game) => [String(game.gameId || ""), compactSeasonGame(game)])
+      games
+        .map((game) => annotateSeasonGame(game, String(game?.gameDate || "")))
+        .filter((game) => game.gameId && game.gameDate)
+        .map((game) => [String(game.gameId || ""), compactSeasonGame(game)])
     ).values()].sort((left, right) => {
-      const dateCompare = String(right.gameDate || "").localeCompare(String(left.gameDate || ""));
+      const dateCompare = String(left.gameDate || "").localeCompare(String(right.gameDate || ""));
       if (dateCompare !== 0) return dateCompare;
-      return String(right.gameId || "").localeCompare(String(left.gameId || ""));
+      return String(left.gameId || "").localeCompare(String(right.gameId || ""));
     });
 
     SEASON_GAMES_CACHE.set(season, deduped);
-    saveSeasonGamesToStorage(season, deduped);
+    if (deduped.length) {
+      saveSeasonGamesToStorage(season, deduped);
+    }
     return deduped;
   })();
 
@@ -1709,7 +1687,7 @@ async function fetchAllSeasonGames(season = currentSeasonString()) {
 }
 
 export function prefetchCurrentSeasonGames(season = currentSeasonString()) {
-  return fetchAllSeasonGames(season).catch(() => null);
+  return fetchStaticSeasonGames(season).catch(() => null);
 }
 
 function filterSeasonGamesForTeam(games, teamId, opponentTeamId = "") {
@@ -1732,10 +1710,8 @@ function filterSeasonGamesForTeam(games, teamId, opponentTeamId = "") {
 }
 
 async function fetchStaticTeamSeasonGames(teamId, season) {
-  if (String(season || "").trim() !== "2026-27") return null;
-  const scheduleModule = await import("./data/nbaSchedule2026_27.json");
-  const schedule = scheduleModule.default || scheduleModule;
-  return filterSeasonGamesForTeam(schedule?.games, teamId);
+  const games = await fetchStaticSeasonGames(season);
+  return filterSeasonGamesForTeam(games, teamId);
 }
 
 export async function fetchTeamSeasonGames(teamId, opponentTeamId = "", season = currentSeasonString()) {
@@ -1768,7 +1744,7 @@ export async function fetchTeamSeasonGames(teamId, opponentTeamId = "", season =
             if (cachedFullSeasonGames?.length) {
               return filterSeasonGamesForTeam(cachedFullSeasonGames, safeTeamId);
             }
-            return fetchAllSeasonGames(safeSeason);
+            throw new Error(`Team schedule is unavailable for ${safeSeason}.`);
           })
       ).then((games) => {
         TEAM_SEASON_GAMES_CACHE.set(teamSeasonCacheKey, games);
@@ -1898,8 +1874,17 @@ export async function fetchCurrentNbaRosters(options = {}) {
   if (!SUPABASE_FUNCTIONS_BASE) {
     throw new Error("Supabase functions are not configured.");
   }
+  const safeTeamIds = [...new Set(
+    (Array.isArray(options?.teamIds) ? options.teamIds : [])
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+  )];
+  const url = new URL(`${SUPABASE_FUNCTIONS_BASE}/nba-rosters`);
+  if (safeTeamIds.length) {
+    url.searchParams.set("teamIds", safeTeamIds.join(","));
+  }
   try {
-    const payload = await requestJson(`${SUPABASE_FUNCTIONS_BASE}/nba-rosters`, {
+    const payload = await requestJson(url.toString(), {
       timeoutMs: 15000,
       signal: options?.signal,
     });

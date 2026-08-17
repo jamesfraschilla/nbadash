@@ -6,7 +6,7 @@ import {
 const DEFAULT_PREVIEW_WIDTH = 960;
 const DEFAULT_PREVIEW_HEIGHT = 540;
 const DEFAULT_PREVIEW_DEBOUNCE_MS = 400;
-const MAX_CONCURRENT_PREVIEW_RENDERS = 2;
+const MAX_CONCURRENT_PREVIEW_RENDERS = 1;
 let activePreviewRenders = 0;
 const previewRenderQueue = [];
 

@@ -477,6 +477,18 @@ export default function UserContent() {
     });
     return needs;
   }, [matchupToolRecords]);
+  const nbaMatchupPreviewTeamIds = useMemo(() => {
+    const teamIds = new Set();
+    matchupToolRecords.forEach((record) => {
+      const league = String(record?.payload?.league || "nba").trim() === "gleague" ? "gleague" : "nba";
+      if (league !== "nba") return;
+      [record?.payload?.leftTeamId, record?.payload?.rightTeamId].forEach((teamId) => {
+        const safeTeamId = String(teamId || "").trim();
+        if (safeTeamId) teamIds.add(safeTeamId);
+      });
+    });
+    return [...teamIds];
+  }, [matchupToolRecords]);
   const shouldLoadMatchupPreviewRosters = Boolean(
     vaultUserId &&
     canUseTools &&
@@ -486,8 +498,8 @@ export default function UserContent() {
   );
 
   const { data: remoteNbaRostersPayload } = useQuery({
-    queryKey: ["vault-current-nba-rosters"],
-    queryFn: ({ signal }) => fetchCurrentNbaRosters({ signal }),
+    queryKey: ["vault-current-nba-rosters", nbaMatchupPreviewTeamIds],
+    queryFn: ({ signal }) => fetchCurrentNbaRosters({ teamIds: nbaMatchupPreviewTeamIds, signal }),
     enabled: shouldLoadMatchupPreviewRosters && matchupPreviewLeagueNeeds.nba,
     staleTime: CURRENT_ROSTER_STALE_TIME_MS,
     refetchOnWindowFocus: false,

@@ -2,6 +2,9 @@ const NBA_STATS_BASE_URL = "https://stats.nba.com/stats";
 const REQUEST_TIMEOUT_MS = 16_000;
 const COMBINED_SEASON_TYPE = "Regular Season & Playoffs";
 const NBA_STATS_SEASON_TYPES = ["Pre Season", "Regular Season", "Playoffs"] as const;
+const NBA_STATS_MAX_CONCURRENT_REQUESTS = 6;
+const REPORT_CACHE_TTL_MS = 5 * 60 * 1000;
+const REPORT_CACHE_MAX_ENTRIES = 80;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -55,6 +58,81 @@ const NBA_TEAMS = [
 ];
 
 type JsonRecord = Record<string, unknown>;
+type CachedReportEntry = {
+  expiresAt: number;
+  promise: Promise<JsonRecord>;
+};
+
+let activeNbaStatsRequests = 0;
+const nbaStatsRequestQueue: Array<() => void> = [];
+const analyticsReportCache = new Map<string, CachedReportEntry>();
+
+function drainNbaStatsRequestQueue() {
+  while (activeNbaStatsRequests < NBA_STATS_MAX_CONCURRENT_REQUESTS && nbaStatsRequestQueue.length) {
+    const next = nbaStatsRequestQueue.shift();
+    next?.();
+  }
+}
+
+function runWithNbaStatsConcurrency<T>(task: () => Promise<T>) {
+  return new Promise<T>((resolve, reject) => {
+    const run = () => {
+      activeNbaStatsRequests += 1;
+      task()
+        .then(resolve, reject)
+        .finally(() => {
+          activeNbaStatsRequests = Math.max(0, activeNbaStatsRequests - 1);
+          drainNbaStatsRequestQueue();
+        });
+    };
+
+    nbaStatsRequestQueue.push(run);
+    drainNbaStatsRequestQueue();
+  });
+}
+
+function pruneAnalyticsReportCache() {
+  const now = Date.now();
+  for (const [key, entry] of analyticsReportCache.entries()) {
+    if (entry.expiresAt <= now) analyticsReportCache.delete(key);
+  }
+  while (analyticsReportCache.size > REPORT_CACHE_MAX_ENTRIES) {
+    const oldestKey = analyticsReportCache.keys().next().value as string | undefined;
+    if (!oldestKey) break;
+    analyticsReportCache.delete(oldestKey);
+  }
+}
+
+function analyticsReportCacheKey(body: JsonRecord) {
+  const teamId = String(body.teamId || "1610612764").trim();
+  const season = String(body.season || currentReportSeason()).trim();
+  const seasonType = normalizeReportSeasonType(body.seasonType);
+  const lastNGames = normalizeLastNGames(body.lastNGames);
+  return JSON.stringify({ teamId, season, seasonType, lastNGames });
+}
+
+function getCachedAnalyticsReport(cacheKey: string, builder: () => Promise<JsonRecord>) {
+  pruneAnalyticsReportCache();
+  const cached = analyticsReportCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    analyticsReportCache.delete(cacheKey);
+    analyticsReportCache.set(cacheKey, cached);
+    return { promise: cached.promise, cacheHit: true };
+  }
+
+  let reportPromise: Promise<JsonRecord>;
+  reportPromise = builder().catch((error) => {
+    const current = analyticsReportCache.get(cacheKey);
+    if (current?.promise === reportPromise) analyticsReportCache.delete(cacheKey);
+    throw error;
+  });
+  analyticsReportCache.set(cacheKey, {
+    expiresAt: Date.now() + REPORT_CACHE_TTL_MS,
+    promise: reportPromise,
+  });
+  pruneAnalyticsReportCache();
+  return { promise: reportPromise, cacheHit: false };
+}
 
 function responseWithHeaders(status: number, body: BodyInit | null, extraHeaders: HeadersInit = {}) {
   return new Response(body, {
@@ -450,23 +528,25 @@ function buildShotLocationParams(overrides: Record<string, string>) {
 }
 
 async function fetchNbaStats(endpoint: string, params: Record<string, string>) {
-  const url = new URL(`${NBA_STATS_BASE_URL}/${endpoint}`);
-  Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
+  return runWithNbaStatsConcurrency(async () => {
+    const url = new URL(`${NBA_STATS_BASE_URL}/${endpoint}`);
+    Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort("nba-stats-timeout"), REQUEST_TIMEOUT_MS);
-  try {
-    const response = await fetch(url.toString(), {
-      headers: nbaStatsHeaders,
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      throw new Error(`${endpoint} failed (${response.status})`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort("nba-stats-timeout"), REQUEST_TIMEOUT_MS);
+    try {
+      const response = await fetch(url.toString(), {
+        headers: nbaStatsHeaders,
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        throw new Error(`${endpoint} failed (${response.status})`);
+      }
+      return await response.json() as JsonRecord;
+    } finally {
+      clearTimeout(timeoutId);
     }
-    return await response.json() as JsonRecord;
-  } finally {
-    clearTimeout(timeoutId);
-  }
+  });
 }
 
 async function fetchNbaStatsForSeasonTypes(
@@ -1090,9 +1170,12 @@ export async function handleRequest(req: Request) {
 
   try {
     const body = await req.json().catch(() => ({})) as JsonRecord;
-    const report = await buildAnalyticsReport(body);
+    const cacheKey = analyticsReportCacheKey(body);
+    const { promise, cacheHit } = getCachedAnalyticsReport(cacheKey, () => buildAnalyticsReport(body) as Promise<JsonRecord>);
+    const report = await promise;
     return jsonResponse(200, report, {
       "Cache-Control": "public, max-age=300",
+      "X-NBA-Dashboard-Cache": cacheHit ? "HIT" : "MISS",
     });
   } catch (error) {
     console.error("Unable to build NBA analytics report.", error);

@@ -25,6 +25,7 @@ export const TEAM_LOGO_EXPORT_BOX = Object.freeze({
 const SUPABASE_FUNCTIONS_BASE = import.meta.env.VITE_SUPABASE_URL
   ? `${String(import.meta.env.VITE_SUPABASE_URL).replace(/\/$/, "")}/functions/v1`
   : "";
+const LOADED_IMAGE_CACHE_MAX_ENTRIES = 160;
 
 const loadedImageCache = new Map();
 const imageFingerprintCache = new WeakMap();
@@ -151,7 +152,12 @@ function buildProxyUrl(url) {
 
 function loadImage(url) {
   if (!url) return Promise.resolve(null);
-  if (loadedImageCache.has(url)) return loadedImageCache.get(url);
+  if (loadedImageCache.has(url)) {
+    const cached = loadedImageCache.get(url);
+    loadedImageCache.delete(url);
+    loadedImageCache.set(url, cached);
+    return cached;
+  }
 
   const promise = new Promise((resolve) => {
     const image = new Image();
@@ -172,6 +178,11 @@ function loadImage(url) {
   });
 
   loadedImageCache.set(url, promise);
+  while (loadedImageCache.size > LOADED_IMAGE_CACHE_MAX_ENTRIES) {
+    const oldestKey = loadedImageCache.keys().next().value;
+    if (!oldestKey) break;
+    loadedImageCache.delete(oldestKey);
+  }
   return promise;
 }
 

@@ -5,7 +5,10 @@ const supabaseUrl = supabaseEnv.VITE_SUPABASE_URL;
 const supabaseAnonKey = supabaseEnv.VITE_SUPABASE_ANON_KEY;
 const AUTH_STORAGE_KEY = "nba-dashboard-auth";
 const STORAGE_EVICTION_PREFIXES = [
+  "nba-dashboard-season-games:v2:",
+  "nba-dashboard-team-season-games:v2:",
   "nba-dashboard-season-games:",
+  "nba-dashboard-team-season-games:",
   "nba-dashboard:match-ups:",
   "pregame:players:v2:",
   "pregame:players:v1",

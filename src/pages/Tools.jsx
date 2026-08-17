@@ -623,6 +623,11 @@ export default function Tools({ section = "tools" }) {
       ? [...new Set([draft.leftTeamId, draft.rightTeamId].map((value) => String(value || "").trim()).filter(Boolean))]
       : []
   ), [draft.leftTeamId, draft.rightTeamId, draftLeague]);
+  const nbaRosterTeamIds = useMemo(() => (
+    activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.MATCHUP && draftLeague === "nba"
+      ? nbaMatchupDefaultTeamIds
+      : []
+  ), [activeGraphic, activeTab, draftLeague, nbaMatchupDefaultTeamIds]);
   const needsWizardsOpponentDefault = needsSharedMatchupLineups && draftLeague === "nba" && !draftParam;
   const { data: selectedDateGames = [] } = useGamesByDate(dateInput, {
     enabled: needsWizardsOpponentDefault,
@@ -635,8 +640,8 @@ export default function Tools({ section = "tools" }) {
     [nbaTeamIds, selectedDateGames]
   );
   const { data: remoteNbaRostersPayload } = useQuery({
-    queryKey: ["tools-current-nba-rosters"],
-    queryFn: ({ signal }) => fetchCurrentNbaRosters({ signal }),
+    queryKey: ["tools-current-nba-rosters", nbaRosterTeamIds],
+    queryFn: ({ signal }) => fetchCurrentNbaRosters({ teamIds: nbaRosterTeamIds, signal }),
     enabled: needsNbaRosters,
     staleTime: CURRENT_ROSTER_STALE_TIME_MS,
     retry: 1,

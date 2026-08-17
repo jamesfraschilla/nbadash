@@ -44,6 +44,7 @@ const NBA_TEAMS = [
 ];
 
 type TeamRecord = typeof NBA_TEAMS[number];
+const TEAM_ID_SET = new Set(NBA_TEAMS.map((team) => team.teamId));
 
 function responseWithHeaders(status: number, body: BodyInit | null, extraHeaders: HeadersInit = {}) {
   return new Response(body, {
@@ -73,6 +74,22 @@ function currentSeasonString(date = new Date()) {
   const year = date.getUTCFullYear();
   const startYear = month >= 7 ? year : year - 1;
   return `${startYear}-${String(startYear + 1).slice(-2)}`;
+}
+
+function parseRequestedTeamIds(req: Request) {
+  const url = new URL(req.url);
+  if (!url.searchParams.has("teamIds")) {
+    return { hasFilter: false, teamIds: [] };
+  }
+
+  const teamIds = [...new Set(
+    String(url.searchParams.get("teamIds") || "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter((value) => TEAM_ID_SET.has(value))
+  )];
+
+  return { hasFilter: true, teamIds };
 }
 
 function splitName(fullName: string) {
@@ -218,7 +235,16 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const requested = parseRequestedTeamIds(req);
+    if (requested.hasFilter && !requested.teamIds.length) {
+      return jsonResponse(400, { error: "Select at least one valid NBA team." });
+    }
+
     const season = currentSeasonString();
+    const requestedTeamIdSet = new Set(requested.teamIds);
+    const teamsToFetch = requested.hasFilter
+      ? NBA_TEAMS.filter((team) => requestedTeamIdSet.has(team.teamId))
+      : NBA_TEAMS;
     const snapshotPromise = readRosterSnapshot("nba");
     const globalController = new AbortController();
     const globalTimeoutId = setTimeout(
@@ -228,7 +254,7 @@ Deno.serve(async (req) => {
     let rosterResults: PromiseSettledResult<Awaited<ReturnType<typeof fetchTeamRoster>>>[];
     try {
       rosterResults = await mapSettledWithConcurrency(
-        NBA_TEAMS,
+        teamsToFetch,
         (team) => fetchTeamRoster(team, season, globalController.signal),
         6,
       );
@@ -242,11 +268,16 @@ Deno.serve(async (req) => {
     const snapshotTeams = snapshot?.teams && typeof snapshot.teams === "object"
       ? snapshot.teams as Record<string, Awaited<ReturnType<typeof fetchTeamRoster>>>
       : {};
+    const selectedSnapshotTeams = requested.hasFilter
+      ? Object.fromEntries(
+        Object.entries(snapshotTeams).filter(([teamId]) => requestedTeamIdSet.has(teamId)),
+      )
+      : snapshotTeams;
     const errors = rosterResults.flatMap((result, index) => (
       result.status === "rejected"
         ? [{
-          teamId: NBA_TEAMS[index].teamId,
-          teamAbbreviation: NBA_TEAMS[index].teamAbbreviation,
+          teamId: teamsToFetch[index].teamId,
+          teamAbbreviation: teamsToFetch[index].teamAbbreviation,
           error: result.reason instanceof Error ? result.reason.message : "unknown",
         }]
         : []
@@ -255,8 +286,8 @@ Deno.serve(async (req) => {
       accumulator[team.teamId] = team;
       return accumulator;
     }, {});
-    const teams = { ...snapshotTeams, ...liveTeams };
-    const cachedTeamIds = Object.keys(snapshotTeams).filter((teamId) => !liveTeams[teamId]);
+    const teams = { ...selectedSnapshotTeams, ...liveTeams };
+    const cachedTeamIds = Object.keys(selectedSnapshotTeams).filter((teamId) => !liveTeams[teamId]);
     const fetchedAt = teamRosters.length ? new Date().toISOString() : String(snapshot?.fetchedAt || new Date().toISOString());
     const resolvedSeason = teamRosters.length ? season : String(snapshot?.season || season);
     const responsePayload = {
@@ -264,14 +295,15 @@ Deno.serve(async (req) => {
       requestedSeason: season,
       season: resolvedSeason,
       fallbackSeason: resolvedSeason !== season,
+      requestedTeamIds: requested.teamIds,
       teams,
       partial: errors.length > 0 || cachedTeamIds.length > 0,
       deadlineReached: globalController.signal.aborted,
-      cacheFallback: teamRosters.length === 0 && Object.keys(snapshotTeams).length > 0,
+      cacheFallback: teamRosters.length === 0 && Object.keys(selectedSnapshotTeams).length > 0,
       cachedTeamIds,
       errors,
     };
-    if (teamRosters.length) {
+    if (teamRosters.length && !requested.hasFilter) {
       await writeRosterSnapshot("nba", resolvedSeason, responsePayload);
     }
 
