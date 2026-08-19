@@ -34,6 +34,8 @@ const SLOT_STORAGE_PREFIX = "pregame:slots:v1:";
 const SLOT_TEMPLATE_KEY = "pregame:slot-template:v1";
 const PREGAME_GLOBAL_TEMPLATE_GAME_ID = "9999999902";
 const PREGAME_ACTION_PAYLOAD = 900000001;
+const PREGAME_REMOTE_SCHEDULE_POLL_INTERVAL_MS = 60_000;
+const PREGAME_REMOTE_REFERENCE_STALE_TIME_MS = 5 * 60 * 1000;
 const STANDALONE_PREGAME_GAME_ID = "standalone-pregame-court-time";
 const STANDALONE_PREGAME_GAME = {
   gameId: STANDALONE_PREGAME_GAME_ID,
@@ -694,24 +696,26 @@ export default function PreGame({ standalone = false }) {
     queryKey: ["pregame-players-remote", trackedTeamScope],
     queryFn: () => fetchRemotePregamePlayers(trackedTeamScope),
     enabled: Boolean(supabase && trackedTeamScope),
-    staleTime: 10_000,
-    refetchInterval: 10_000,
+    staleTime: PREGAME_REMOTE_REFERENCE_STALE_TIME_MS,
+    refetchOnWindowFocus: true,
   });
 
   const { data: remoteSchedule, isFetched: remoteScheduleFetched } = useQuery({
     queryKey: ["pregame-schedule-remote", gameId],
     queryFn: () => fetchRemoteSchedule(gameId),
     enabled: Boolean(!standalone && supabase && gameId),
-    staleTime: 10_000,
-    refetchInterval: 10_000,
+    staleTime: PREGAME_REMOTE_SCHEDULE_POLL_INTERVAL_MS,
+    refetchInterval: PREGAME_REMOTE_SCHEDULE_POLL_INTERVAL_MS,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 
   const { data: remoteTemplate, isFetched: remoteTemplateFetched } = useQuery({
     queryKey: ["pregame-template-remote"],
     queryFn: fetchRemoteTemplate,
     enabled: Boolean(!standalone && supabase),
-    staleTime: 10_000,
-    refetchInterval: 10_000,
+    staleTime: PREGAME_REMOTE_REFERENCE_STALE_TIME_MS,
+    refetchOnWindowFocus: true,
   });
 
   const washingtonGame = useMemo(() => (

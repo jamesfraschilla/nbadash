@@ -47,8 +47,9 @@ const TOUCH_FILL_MOVE_TOLERANCE_PX = 16;
 const DEPTH_OUT_PRESS_DURATION_MS = 1000;
 const DEPTH_PRESS_RELEASE_LOCK_MS = 120;
 const ROTATIONS_REMOTE_SAVE_DEBOUNCE_MS = 750;
-const ROTATIONS_REMOTE_POLL_INTERVAL_MS = 5000;
-const ROTATIONS_TEMPLATE_REMOTE_POLL_INTERVAL_MS = 15000;
+const ROTATIONS_LIVE_REMOTE_POLL_INTERVAL_MS = 5000;
+const ROTATIONS_REMOTE_REFERENCE_STALE_TIME_MS = 60_000;
+const ROTATIONS_TEMPLATE_REMOTE_STALE_TIME_MS = 5 * 60 * 1000;
 const STANDALONE_ROTATIONS_GAME_ID = "standalone-rotations";
 const STANDALONE_ROTATIONS_GAME = {
   gameId: STANDALONE_ROTATIONS_GAME_ID,
@@ -1635,6 +1636,9 @@ export default function Rotations({ standalone = false }) {
     () => getTeamBoxScorePlayers(game, monitoredTeamScope),
     [game, monitoredTeamScope]
   );
+  const rotationsLiveRemotePollingEnabled = !standalone
+    && rotationsAvailable
+    && Number(game?.gameStatus || 0) === 2;
 
   const { data: legacyRemotePlayers, isFetched: legacyRemotePlayersFetched } = useQuery({
     queryKey: ["rotations-players-legacy-remote", monitoredTeamScope],
@@ -1656,9 +1660,7 @@ export default function Rotations({ standalone = false }) {
     queryKey: ["rotations-saved-lineups-remote", monitoredTeamScope],
     queryFn: () => fetchRemoteSavedLineups(monitoredTeamScope),
     enabled: Boolean(supabase && monitoredTeamScope),
-    staleTime: ROTATIONS_REMOTE_POLL_INTERVAL_MS,
-    refetchInterval: ROTATIONS_REMOTE_POLL_INTERVAL_MS,
-    refetchIntervalInBackground: false,
+    staleTime: ROTATIONS_REMOTE_REFERENCE_STALE_TIME_MS,
     refetchOnWindowFocus: true,
   });
 
@@ -1666,8 +1668,8 @@ export default function Rotations({ standalone = false }) {
     queryKey: ["rotations-game-remote", gameId, monitoredTeamScope, periodMinuteCount],
     queryFn: () => fetchRemoteGameState(gameId, monitoredTeamScope, periodMinuteCount),
     enabled: Boolean(!standalone && supabase && gameId && monitoredTeamScope),
-    staleTime: ROTATIONS_REMOTE_POLL_INTERVAL_MS,
-    refetchInterval: ROTATIONS_REMOTE_POLL_INTERVAL_MS,
+    staleTime: rotationsLiveRemotePollingEnabled ? ROTATIONS_LIVE_REMOTE_POLL_INTERVAL_MS : ROTATIONS_REMOTE_REFERENCE_STALE_TIME_MS,
+    refetchInterval: () => (rotationsLiveRemotePollingEnabled ? ROTATIONS_LIVE_REMOTE_POLL_INTERVAL_MS : false),
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
@@ -1676,9 +1678,7 @@ export default function Rotations({ standalone = false }) {
     queryKey: ["rotations-depth-template-remote", monitoredTeamScope],
     queryFn: () => fetchRemoteDepthTemplate(monitoredTeamScope),
     enabled: Boolean(supabase && monitoredTeamScope),
-    staleTime: ROTATIONS_TEMPLATE_REMOTE_POLL_INTERVAL_MS,
-    refetchInterval: ROTATIONS_TEMPLATE_REMOTE_POLL_INTERVAL_MS,
-    refetchIntervalInBackground: false,
+    staleTime: ROTATIONS_TEMPLATE_REMOTE_STALE_TIME_MS,
     refetchOnWindowFocus: true,
   });
 

@@ -10,6 +10,8 @@ const TOOL_VAULT_EVICTION_PREFIXES = [
   "pregame:players:v1",
 ];
 const TOOL_VAULT_REMOTE_TIMEOUT_MS = 12_000;
+const TOOL_VAULT_REMOTE_LIST_LIMIT = 200;
+const TOOL_VAULT_REMOTE_MAX_LIST_LIMIT = 500;
 
 export const TOOL_RECORD_TYPES = {
   MATCHUP_GRAPHIC: "matchup_graphic",
@@ -24,6 +26,33 @@ export const TOOL_RECORD_TYPES = {
   LATE_GAME_RECOMMENDATION: "late_game_recommendation",
   VISUAL_DRILL_PRESET: "visual_drill_preset",
 };
+
+function normalizeToolRecordTypes(types) {
+  const allowedTypes = new Set(Object.values(TOOL_RECORD_TYPES));
+  const values = Array.isArray(types) ? types : [types];
+  return [...new Set(
+    values
+      .map((type) => String(type || "").trim())
+      .filter((type) => allowedTypes.has(type))
+  )];
+}
+
+function normalizeRemoteListLimit(limit) {
+  const value = Number(limit);
+  if (!Number.isFinite(value) || value <= 0) return TOOL_VAULT_REMOTE_LIST_LIMIT;
+  return Math.min(TOOL_VAULT_REMOTE_MAX_LIST_LIMIT, Math.floor(value));
+}
+
+function filterToolRecords(records, options = {}) {
+  const types = normalizeToolRecordTypes(options.types);
+  const typeSet = new Set(types);
+  const filtered = types.length
+    ? records.filter((record) => typeSet.has(record.type))
+    : records;
+  const limit = Number(options.limit);
+  if (!Number.isFinite(limit) || limit <= 0) return filtered;
+  return filtered.slice(0, Math.floor(limit));
+}
 
 function toolVaultKey(userId) {
   return `${TOOL_VAULT_STORAGE_PREFIX}${String(userId || "guest").trim() || "guest"}`;
@@ -53,13 +82,14 @@ function normalizeRecord(record) {
   };
 }
 
-export function listSavedToolRecords(userId) {
+export function listSavedToolRecords(userId, options = {}) {
   const raw = readLocalStorage(toolVaultKey(userId));
   const parsed = safeParse(raw, []);
-  return (Array.isArray(parsed) ? parsed : [])
+  const records = (Array.isArray(parsed) ? parsed : [])
     .map(normalizeRecord)
     .filter(Boolean)
     .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+  return filterToolRecords(records, options);
 }
 
 async function requireSupabase() {
@@ -159,15 +189,48 @@ export function replaceSavedToolRecords(userId, records) {
   return normalized;
 }
 
-export async function listSavedToolRecordsRemote(userId) {
+function mergeSavedToolRecords(userId, records, replacedTypes = []) {
+  const normalized = (Array.isArray(records) ? records : [])
+    .map(normalizeRecord)
+    .filter(Boolean)
+    .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+  const types = normalizeToolRecordTypes(replacedTypes);
+  if (!types.length) {
+    replaceSavedToolRecords(userId, normalized);
+    return normalized;
+  }
+  const typeSet = new Set(types);
+  const recordIds = new Set(normalized.map((record) => record.id));
+  const preserved = listSavedToolRecords(userId).filter((record) => (
+    !typeSet.has(record.type) && !recordIds.has(record.id)
+  ));
+  writeToolVaultRecords(
+    userId,
+    [...normalized, ...preserved].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
+  );
+  return normalized;
+}
+
+export async function listSavedToolRecordsRemote(userId, options = {}) {
   if (!userId) return [];
   await requireSupabase();
+  const types = normalizeToolRecordTypes(options.types);
+  const limit = normalizeRemoteListLimit(options.limit);
   const { data, error } = await runRemoteToolRequest(
-    () => supabase
-      .from("user_tool_records")
-      .select("*")
-      .eq("owner_id", userId)
-      .order("updated_at", { ascending: false }),
+    () => {
+      let query = supabase
+        .from("user_tool_records")
+        .select("*")
+        .eq("owner_id", userId);
+      if (types.length === 1) {
+        query = query.eq("type", types[0]);
+      } else if (types.length > 1) {
+        query = query.in("type", types);
+      }
+      return query
+        .order("updated_at", { ascending: false })
+        .limit(limit);
+    },
     "Account favorites took too long to load. Check your connection and try again."
   );
   if (error) throw error;
@@ -182,7 +245,7 @@ export async function listSavedToolRecordsRemote(userId) {
       revision: row.revision,
     }))
     .filter(Boolean);
-  return replaceSavedToolRecords(userId, records);
+  return mergeSavedToolRecords(userId, records, types);
 }
 
 export async function getSavedToolRecordRemote(userId, recordId) {

@@ -147,10 +147,16 @@ create table if not exists public.audit_logs (
 create index if not exists idx_account_invites_email on public.account_invites (lower(email));
 create index if not exists idx_user_notes_game_id on public.user_notes (game_id);
 create index if not exists idx_user_notes_owner_id on public.user_notes (owner_id);
+create index if not exists idx_user_notes_owner_updated_at
+on public.user_notes (owner_id, updated_at desc);
 create unique index if not exists idx_user_notes_owner_legacy_local_id
 on public.user_notes (owner_id, legacy_local_id);
 create index if not exists idx_user_drawings_owner_id on public.user_drawings (owner_id);
+create index if not exists idx_user_drawings_owner_updated_at
+on public.user_drawings (owner_id, updated_at desc);
 create index if not exists idx_user_tool_records_owner_id on public.user_tool_records (owner_id);
+create index if not exists idx_user_tool_records_owner_type_updated_at
+on public.user_tool_records (owner_id, type, updated_at desc);
 create index if not exists idx_audit_logs_actor_id on public.audit_logs (actor_id);
 create index if not exists idx_matchup_player_profiles_team_id on public.matchup_player_profiles (team_id);
 

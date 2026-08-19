@@ -107,7 +107,6 @@ import styles from "./Game.module.css";
 
 const SNAPSHOT_STORAGE_PREFIX = "nba-dashboard:snapshots:";
 const LATE_GAME_PANEL_STORAGE_PREFIX = "nba-dashboard:late-game-panel:";
-const SHARED_ANALYSIS_FINAL_BACKFILL_WINDOW_MS = 36 * 60 * 60 * 1000;
 const PREPARED_ANALYSIS_SEGMENT_OPTIONS = [
   { key: "q1", label: "Q1" },
   { key: "q2", label: "Q2" },
@@ -226,31 +225,6 @@ const safeDisplayText = (value, fallback = "") => {
   if (typeof value === "string") return value;
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   return fallback;
-};
-
-const parseGameTimeMs = (game) => {
-  const candidates = [
-    game?.gameTimeUTC,
-    game?.gameEt,
-    game?.gameDateTimeUTC,
-    game?.gameDate,
-    game?.date,
-  ];
-  for (const candidate of candidates) {
-    if (!candidate) continue;
-    const parsed = new Date(candidate);
-    if (!Number.isNaN(parsed.getTime())) return parsed.getTime();
-  }
-  return NaN;
-};
-
-const shouldAutoPrepareSharedAnalysis = (game, isLive) => {
-  if (isLive) return true;
-  if (Number(game?.gameStatus || 0) !== 3) return false;
-  const gameTimeMs = parseGameTimeMs(game);
-  if (!Number.isFinite(gameTimeMs)) return false;
-  const ageMs = Date.now() - gameTimeMs;
-  return ageMs >= 0 && ageMs <= SHARED_ANALYSIS_FINAL_BACKFILL_WINDOW_MS;
 };
 
 const buildStrategyHistoryDisplayRecord = (record) => {
@@ -586,10 +560,7 @@ export default function Game({ variant = "full" }) {
   const [analysisSaveStatus, setAnalysisSaveStatus] = useState("");
   const [analysisSaving, setAnalysisSaving] = useState(false);
   const [analysisForm, setAnalysisForm] = useState(() => buildInitialAnalysisForm(null, false));
-  const [analysisPrewarmPending, setAnalysisPrewarmPending] = useState([]);
-  const [analysisPrewarmError, setAnalysisPrewarmError] = useState("");
   const analysisRequestRef = useRef({ id: 0, controller: null });
-  const analysisAutoCacheRef = useRef(new Set());
   const [strategyVantageTeamId, setStrategyVantageTeamId] = useState("");
   const [strategyFeedback, setStrategyFeedback] = useState(() => buildDefaultStrategyFeedback());
   const [strategyOverrides, setStrategyOverrides] = useState(() => buildDefaultStrategyOverrides());
@@ -835,11 +806,17 @@ export default function Game({ variant = "full" }) {
   const homeTeamScope = getPregameTeamScopeForTeam(game?.homeTeam, game);
   const awayLeague = inferLeagueFromTeamId(game?.awayTeam?.teamId);
   const homeLeague = inferLeagueFromTeamId(game?.homeTeam?.teamId);
+  const currentGameNbaRosterTeamIds = useMemo(() => (
+    [...new Set([
+      awayLeague === "nba" ? game?.awayTeam?.teamId : "",
+      homeLeague === "nba" ? game?.homeTeam?.teamId : "",
+    ].map((value) => String(value || "").trim()).filter(Boolean))]
+  ), [awayLeague, game?.awayTeam?.teamId, game?.homeTeam?.teamId, homeLeague]);
 
   const { data: currentNbaRostersPayload } = useQuery({
-    queryKey: ["game-current-nba-rosters"],
-    queryFn: ({ signal }) => fetchCurrentNbaRosters({ signal }),
-    enabled: !isSummerLeagueMatch && (awayLeague === "nba" || homeLeague === "nba"),
+    queryKey: ["game-current-nba-rosters", currentGameNbaRosterTeamIds],
+    queryFn: ({ signal }) => fetchCurrentNbaRosters({ teamIds: currentGameNbaRosterTeamIds, signal }),
+    enabled: !isSummerLeagueMatch && currentGameNbaRosterTeamIds.length > 0,
     staleTime: CURRENT_ROSTER_STALE_TIME_MS,
     retry: 1,
   });
@@ -954,15 +931,6 @@ export default function Game({ variant = "full" }) {
     });
   }, [preparedAnalysisSegments]);
   const hasPreparedAnalysisSegments = preparedAnalysisSegments.length > 0;
-  const sharedAnalysisAutoPrepareEnabled = useMemo(
-    () => shouldAutoPrepareSharedAnalysis(game, isLive),
-    [game, isLive]
-  );
-
-  useEffect(() => {
-    setAnalysisPrewarmPending([]);
-    setAnalysisPrewarmError("");
-  }, [gameId, shouldUseSharedAnalysisRecaps]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1514,83 +1482,6 @@ export default function Game({ variant = "full" }) {
       }
     }
   };
-
-  useEffect(() => {
-    if (
-      !gameId ||
-      !game ||
-      !hasAnalysisData ||
-      !completedAnalysisSegments.length ||
-      !shouldUseSharedAnalysisRecaps ||
-      !sharedAnalysisAutoPrepareEnabled ||
-      cachedAnalysisSegmentsError
-    ) return undefined;
-    const cachedSegmentKeys = new Set(
-      cachedAnalysisSegments
-        .map((segmentRecord) => String(segmentRecord?.segmentKey || "").trim())
-        .filter(Boolean)
-    );
-    let cancelled = false;
-
-    const prewarmCompletedSegments = async () => {
-      for (const segmentRecord of completedAnalysisSegments) {
-        if (cancelled) return;
-        if (cachedSegmentKeys.has(segmentRecord.key)) continue;
-
-        const validation = validateAnalysisForm(segmentRecord.form, game, isLive);
-        if (validation.error) continue;
-
-        const localCacheKey = `${gameId}:${segmentRecord.key}:${validation.rangeLabel}`;
-        if (analysisAutoCacheRef.current.has(localCacheKey)) continue;
-        analysisAutoCacheRef.current.add(localCacheKey);
-
-        try {
-          setAnalysisPrewarmPending((current) => (
-            current.includes(segmentRecord.key) ? current : [...current, segmentRecord.key]
-          ));
-          setAnalysisPrewarmError("");
-          await requestGameAnalysis({
-            gameId,
-            range: buildAnalysisRequestRange(validation),
-            cache: {
-              segmentKey: segmentRecord.key,
-              segmentLabel: segmentRecord.label,
-            },
-            timeoutMs: 60_000,
-          });
-          if (!cancelled) {
-            queryClient.invalidateQueries({ queryKey: cachedAnalysisSegmentsQueryKey });
-          }
-        } catch (error) {
-          console.warn("Unable to pre-generate shared segment analysis.", error);
-          if (!cancelled) {
-            setAnalysisPrewarmError(error?.message || "Unable to prepare shared segment recaps.");
-          }
-        } finally {
-          if (!cancelled) {
-            setAnalysisPrewarmPending((current) => current.filter((key) => key !== segmentRecord.key));
-          }
-        }
-      }
-    };
-
-    prewarmCompletedSegments();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    cachedAnalysisSegments,
-    cachedAnalysisSegmentsError,
-    cachedAnalysisSegmentsQueryKey,
-    completedAnalysisSegments,
-    game,
-    gameId,
-    hasAnalysisData,
-    isLive,
-    queryClient,
-    sharedAnalysisAutoPrepareEnabled,
-    shouldUseSharedAnalysisRecaps,
-  ]);
 
   const saveAnalysisToVault = async () => {
     if (!user?.id || !analysisResult || analysisSaving || !gameId) return;
@@ -2484,9 +2375,10 @@ export default function Game({ variant = "full" }) {
     }
     try {
       setStrategyHistoryLoading(true);
+      const historyOptions = { types: [TOOL_RECORD_TYPES.LATE_GAME_RECOMMENDATION], limit: 100 };
       const records = accountsEnabled
-        ? await listSavedToolRecordsRemote(user.id)
-        : listSavedToolRecords(user.id);
+        ? await listSavedToolRecordsRemote(user.id, historyOptions)
+        : listSavedToolRecords(user.id, historyOptions);
       const filtered = records.filter((record) => (
         record.type === TOOL_RECORD_TYPES.LATE_GAME_RECOMMENDATION &&
         String(record.payload?.gameId || "") === String(gameId)
@@ -2494,7 +2386,10 @@ export default function Game({ variant = "full" }) {
       setStrategyHistoryRecords(filtered);
       setStrategyHistoryStatus("");
     } catch (error) {
-      const fallback = listSavedToolRecords(user.id).filter((record) => (
+      const fallback = listSavedToolRecords(user.id, {
+        types: [TOOL_RECORD_TYPES.LATE_GAME_RECOMMENDATION],
+        limit: 100,
+      }).filter((record) => (
         record.type === TOOL_RECORD_TYPES.LATE_GAME_RECOMMENDATION &&
         String(record.payload?.gameId || "") === String(gameId)
       ));
@@ -3369,21 +3264,12 @@ export default function Game({ variant = "full" }) {
                       <div className={styles.analysisPreparedEmpty}>
                         {cachedAnalysisSegmentsError
                           ? "Shared recaps are unavailable right now."
-                          : analysisPrewarmPending.length
-                            ? `Preparing ${analysisPrewarmPending.length} shared recap${analysisPrewarmPending.length === 1 ? "" : "s"}...`
-                            : sharedAnalysisAutoPrepareEnabled
-                              ? "Completed segments will appear here after their shared analysis is prepared."
-                              : "No shared recaps have been prepared for this game yet."}
+                          : "Completed segments will appear here after their scheduled shared analysis is prepared."}
                       </div>
                     ) : null}
-                    {hasPreparedAnalysisSegments && analysisPrewarmPending.length ? (
-                      <div className={styles.analysisPreparedEmpty}>
-                        Preparing {analysisPrewarmPending.length} more shared recap{analysisPrewarmPending.length === 1 ? "" : "s"}...
-                      </div>
-                    ) : null}
-                    {cachedAnalysisSegmentsError || analysisPrewarmError ? (
+                    {cachedAnalysisSegmentsError ? (
                       <div className={styles.analysisPreparedError}>
-                        {cachedAnalysisSegmentsError?.message || analysisPrewarmError}
+                        {cachedAnalysisSegmentsError?.message}
                       </div>
                     ) : null}
                   </div>

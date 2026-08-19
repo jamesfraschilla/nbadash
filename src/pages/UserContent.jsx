@@ -35,6 +35,32 @@ const DEFAULT_NOTE_TAG_OPTIONS = [
 const EMPTY_MATCHUP_PLAYER_IDS = Array(5).fill("");
 const CUSTOM_MATCHUP_PLAYER_VALUE = "__custom__";
 const CURRENT_ROSTER_STALE_TIME_MS = 5 * 60 * 1000;
+const VAULT_RECORD_LIMIT = 200;
+const GRAPHIC_TOOL_RECORD_TYPES = [
+  TOOL_RECORD_TYPES.MATCHUP_GRAPHIC,
+  TOOL_RECORD_TYPES.COVERAGE_GRAPHIC,
+  TOOL_RECORD_TYPES.PREGAME_COURT_TIME_GRAPHIC,
+  TOOL_RECORD_TYPES.PERSONNEL_GRAPHIC,
+  TOOL_RECORD_TYPES.DEPTH_CHART_GRAPHIC,
+];
+const LATE_GAME_TOOL_RECORD_TYPES = [
+  TOOL_RECORD_TYPES.LATE_GAME_FEEDBACK,
+  TOOL_RECORD_TYPES.LATE_GAME_RECOMMENDATION,
+];
+
+function vaultToolRecordTypesForTab(tab, canUseAdminTools) {
+  if (tab === "graphics") return GRAPHIC_TOOL_RECORD_TYPES;
+  if (tab === "rotations") return [TOOL_RECORD_TYPES.ROTATIONS_TOOL];
+  if (tab === "late-game") return LATE_GAME_TOOL_RECORD_TYPES;
+  if (tab === "tools") {
+    return [
+      TOOL_RECORD_TYPES.VISUAL_DRILL_PRESET,
+      TOOL_RECORD_TYPES.GAME_ANALYSIS,
+      ...(canUseAdminTools ? [TOOL_RECORD_TYPES.PREGAME_SCOUTING_PACKET] : []),
+    ];
+  }
+  return [];
+}
 
 function formatTimestamp(value) {
   if (!value) return "Unknown";
@@ -348,32 +374,38 @@ export default function UserContent() {
   const [opponentFilter, setOpponentFilter] = useState("all");
   const [tagFilters, setTagFilters] = useState([]);
   const [deletingKey, setDeletingKey] = useState("");
+  const [contentStatus, setContentStatus] = useState("");
   const [toolExportStatus, setToolExportStatus] = useState("");
   const [toolVaultStatus, setToolVaultStatus] = useState("");
+  const activeToolRecordTypes = useMemo(
+    () => vaultToolRecordTypesForTab(tab, canUseAdminTools),
+    [canUseAdminTools, tab]
+  );
 
   const { data: notes = [], isLoading: loadingNotes } = useQuery({
     queryKey: ["owned-notes", user?.id],
-    queryFn: () => listOwnedNotes(user.id),
+    queryFn: () => listOwnedNotes(user.id, { limit: VAULT_RECORD_LIMIT }),
     enabled: Boolean(user?.id && tab === "notes"),
   });
 
   const { data: drawings = [], isLoading: loadingDrawings } = useQuery({
     queryKey: ["owned-drawings", user?.id],
-    queryFn: () => listOwnedDrawings(user.id),
+    queryFn: () => listOwnedDrawings(user.id, { limit: VAULT_RECORD_LIMIT }),
     enabled: Boolean(user?.id && tab === "drawings"),
   });
 
   const { data: savedTools = [] } = useQuery({
-    queryKey: ["owned-tools", vaultUserId],
-    enabled: Boolean(vaultUserId && canUseTools && ["graphics", "rotations", "tools", "late-game"].includes(tab)),
+    queryKey: ["owned-tools", vaultUserId, activeToolRecordTypes],
+    enabled: Boolean(vaultUserId && canUseTools && activeToolRecordTypes.length),
     queryFn: async () => {
       if (!vaultUserId || !canUseTools) return [];
-      if (!accountsEnabled || !user?.id) return listSavedToolRecords(vaultUserId);
+      const options = { types: activeToolRecordTypes, limit: VAULT_RECORD_LIMIT };
+      if (!accountsEnabled || !user?.id) return listSavedToolRecords(vaultUserId, options);
       try {
-        return await listSavedToolRecordsRemote(user.id);
+        return await listSavedToolRecordsRemote(user.id, options);
       } catch (error) {
         console.error("Failed to load remote tool drafts, falling back to local storage.", error);
-        return listSavedToolRecords(vaultUserId);
+        return listSavedToolRecords(vaultUserId, options);
       }
     },
   });
@@ -564,6 +596,8 @@ export default function UserContent() {
   }, [tagFilters]);
 
   const setTab = (nextTab) => {
+    setContentStatus("");
+    setToolVaultStatus("");
     const nextParams = new URLSearchParams(params);
     nextParams.set("tab", nextTab);
     if (nextTab === TOOL_TABS.GRAPHICS) {
@@ -587,10 +621,15 @@ export default function UserContent() {
     if (!confirmed) return;
     const key = `note:${note.id}`;
     try {
+      setContentStatus("");
       setDeletingKey(key);
       await deleteNoteRecord(note.id, user.id);
       await queryClient.invalidateQueries({ queryKey: ["owned-notes", user.id] });
       await queryClient.invalidateQueries({ queryKey: ["notes"] });
+      setContentStatus("Deleted saved note.");
+    } catch (error) {
+      console.error("Failed to delete saved note.", error);
+      setContentStatus(error?.message || "Unable to delete this saved note. Try again.");
     } finally {
       setDeletingKey("");
     }
@@ -602,10 +641,15 @@ export default function UserContent() {
     if (!confirmed) return;
     const key = `drawing:${drawing.id}`;
     try {
+      setContentStatus("");
       setDeletingKey(key);
       await deleteDrawingRecord(drawing.id, user.id);
       await queryClient.invalidateQueries({ queryKey: ["owned-drawings", user.id] });
       await queryClient.invalidateQueries({ queryKey: ["drawings"] });
+      setContentStatus(`Deleted "${drawing.title || "Untitled"}".`);
+    } catch (error) {
+      console.error("Failed to delete saved drawing.", error);
+      setContentStatus(error?.message || "Unable to delete this saved drawing. Try again.");
     } finally {
       setDeletingKey("");
     }
@@ -747,6 +791,8 @@ export default function UserContent() {
           </button>
         ) : null}
       </div>
+
+      {contentStatus ? <div className={styles.toolToolbarStatus}>{contentStatus}</div> : null}
 
       {tab === "graphics" || tab === "rotations" || tab === "tools" || tab === "late-game" ? null : (
         <section className={styles.filterPanel}>

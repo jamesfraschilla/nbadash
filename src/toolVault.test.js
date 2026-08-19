@@ -87,6 +87,39 @@ test("tool vault reports failed local writes", () => {
   assert.equal(saved, null);
 });
 
+test("tool vault filters local records by type and limit", () => {
+  installMockLocalStorage();
+
+  saveToolRecord("coach", {
+    id: "visual-new",
+    type: TOOL_RECORD_TYPES.VISUAL_DRILL_PRESET,
+    title: "New Visual Drill",
+    payload: {},
+    updatedAt: "2026-08-18T14:00:00.000Z",
+  });
+  saveToolRecord("coach", {
+    id: "matchup",
+    type: TOOL_RECORD_TYPES.MATCHUP_GRAPHIC,
+    title: "Match-Up",
+    payload: {},
+    updatedAt: "2026-08-18T13:00:00.000Z",
+  });
+  saveToolRecord("coach", {
+    id: "visual-old",
+    type: TOOL_RECORD_TYPES.VISUAL_DRILL_PRESET,
+    title: "Old Visual Drill",
+    payload: {},
+    updatedAt: "2026-08-18T12:00:00.000Z",
+  });
+
+  const records = listSavedToolRecords("coach", {
+    types: [TOOL_RECORD_TYPES.VISUAL_DRILL_PRESET],
+    limit: 1,
+  });
+
+  assert.deepEqual(records.map((record) => record.id), ["visual-new"]);
+});
+
 test("a successful remote snapshot replaces stale local records", () => {
   installMockLocalStorage();
   saveToolRecord("coach", {

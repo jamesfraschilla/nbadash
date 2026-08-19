@@ -25,6 +25,11 @@ import {
 } from "../visualDrillGenerator.js";
 import styles from "./VisualDrillGenerator.module.css";
 
+const VISUAL_DRILL_FAVORITE_LIST_OPTIONS = {
+  types: [TOOL_RECORD_TYPES.VISUAL_DRILL_PRESET],
+  limit: 200,
+};
+
 const DEFAULT_CONFIG = {
   backgroundColorCount: 1,
   backgroundColors: ["#000000"],
@@ -292,8 +297,8 @@ export default function VisualDrillGenerator() {
     let records;
     try {
       records = accountsEnabled && user?.id
-        ? await listSavedToolRecordsRemote(user.id)
-        : listSavedToolRecords(vaultUserId);
+        ? await listSavedToolRecordsRemote(user.id, VISUAL_DRILL_FAVORITE_LIST_OPTIONS)
+        : listSavedToolRecords(vaultUserId, VISUAL_DRILL_FAVORITE_LIST_OPTIONS);
     } catch (error) {
       console.error("Failed to load Visual Drill favorites remotely.", error);
       if (accountsEnabled && user?.id) {
@@ -301,7 +306,7 @@ export default function VisualDrillGenerator() {
         setFavoriteStatus(error?.message || "Unable to load account favorites.");
         return;
       }
-      records = listSavedToolRecords(vaultUserId);
+      records = listSavedToolRecords(vaultUserId, VISUAL_DRILL_FAVORITE_LIST_OPTIONS);
       setFavoriteStatus("Showing saved browser favorites.");
     }
     setFavorites(records.filter((record) => record.type === TOOL_RECORD_TYPES.VISUAL_DRILL_PRESET));

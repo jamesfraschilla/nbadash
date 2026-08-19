@@ -304,10 +304,15 @@ export default function Drawing() {
     if (!selectedDrawing) return;
     const confirmed = window.confirm(`Delete "${selectedDrawing.title || "Untitled"}"?`);
     if (!confirmed) return;
-    await deleteDrawingRecord(selectedDrawing.id, user?.id);
-    await invalidateDrawings();
-    startNewBoard();
-    setStatusMessage("Board deleted.");
+    try {
+      setStatusMessage("Deleting...");
+      await deleteDrawingRecord(selectedDrawing.id, user?.id);
+      await invalidateDrawings();
+      startNewBoard();
+      setStatusMessage("Board deleted.");
+    } catch (error) {
+      setStatusMessage(error?.message || "Unable to delete board. Try again.");
+    }
   };
 
   const toolLabel = useMemo(() => (tool === TOOL_PEN ? "Pen" : "Eraser"), [tool]);

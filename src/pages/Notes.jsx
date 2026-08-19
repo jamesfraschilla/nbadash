@@ -64,6 +64,7 @@ export default function Notes() {
   const [editDraft, setEditDraft] = useState({ text: "", tags: [] });
   const [editError, setEditError] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
 
   const { data: notes = [], isLoading, error } = useQuery({
     queryKey: ["notes", gameId],
@@ -100,8 +101,14 @@ export default function Notes() {
   const handleDelete = async (id) => {
     const confirmed = window.confirm("Delete this note?");
     if (!confirmed) return;
-    await deleteNoteRecord(id, user?.id);
-    await invalidateNotes();
+    try {
+      setStatusMessage("");
+      await deleteNoteRecord(id, user?.id);
+      await invalidateNotes();
+      setStatusMessage("Note deleted.");
+    } catch (deleteError) {
+      setStatusMessage(deleteError?.message || "Unable to delete this note. Try again.");
+    }
   };
 
   const openEdit = (note) => {
@@ -154,6 +161,7 @@ export default function Notes() {
       </div>
 
       <h2 className={styles.title}>Notes</h2>
+      {statusMessage ? <div className={styles.statusMessage}>{statusMessage}</div> : null}
 
       <div className={styles.filters}>
         <label className={styles.filterField}>

@@ -1,10 +1,19 @@
 import { supabase } from "./supabaseClient.js";
 import { loadLegacyLocalNotes } from "./notesStorage.js";
 
+const DEFAULT_ACCOUNT_RECORD_LIMIT = 200;
+const MAX_ACCOUNT_RECORD_LIMIT = 500;
+
 function requireSupabase() {
   if (!supabase) {
     throw new Error("Supabase is not configured.");
   }
+}
+
+function normalizeAccountRecordLimit(limit) {
+  const value = Number(limit);
+  if (!Number.isFinite(value) || value <= 0) return DEFAULT_ACCOUNT_RECORD_LIMIT;
+  return Math.min(MAX_ACCOUNT_RECORD_LIMIT, Math.floor(value));
 }
 
 function normalizeTextArray(values) {
@@ -242,13 +251,15 @@ export async function listNotesForGame(gameId, actorId) {
   ));
 }
 
-export async function listOwnedNotes(actorId) {
+export async function listOwnedNotes(actorId, options = {}) {
   requireSupabase();
+  const limit = normalizeAccountRecordLimit(options.limit);
   const { data, error } = await supabase
     .from("user_notes")
     .select("*")
     .eq("owner_id", actorId)
-    .order("updated_at", { ascending: false });
+    .order("updated_at", { ascending: false })
+    .limit(limit);
   if (error) throw error;
   return (data || []).map(normalizeNoteRow);
 }
@@ -425,13 +436,15 @@ export async function listDrawings(gameId = null) {
   return data || [];
 }
 
-export async function listOwnedDrawings(actorId) {
+export async function listOwnedDrawings(actorId, options = {}) {
   requireSupabase();
+  const limit = normalizeAccountRecordLimit(options.limit);
   const { data, error } = await supabase
     .from("user_drawings")
     .select("*")
     .eq("owner_id", actorId)
-    .order("updated_at", { ascending: false });
+    .order("updated_at", { ascending: false })
+    .limit(limit);
   if (error) throw error;
   return data || [];
 }

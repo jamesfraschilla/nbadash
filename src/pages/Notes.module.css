@@ -24,6 +24,12 @@
   color: var(--text);
 }
 
+.statusMessage {
+  margin: -4px 0 16px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .filters {
   display: flex;
   flex-wrap: wrap;

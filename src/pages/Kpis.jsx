@@ -219,6 +219,12 @@ export default function Kpis() {
     const awayTeam = game?.awayTeam;
     return isWashingtonTeam(homeTeam) || isWashingtonTeam(awayTeam) || isCapitalCityTeam(homeTeam) || isCapitalCityTeam(awayTeam);
   }, [game]);
+  const washingtonKpiGame = useMemo(() => {
+    const homeTeam = game?.homeTeam;
+    const awayTeam = game?.awayTeam;
+    return isWashingtonTeam(homeTeam) || isWashingtonTeam(awayTeam);
+  }, [game]);
+  const remoteSyncEnabled = washingtonKpiGame && Number(game?.gameStatus || 0) === 2;
 
   const backUrl = dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`;
   const titleLine = useMemo(() => {
@@ -242,7 +248,7 @@ export default function Kpis() {
   }, [gameId, metricsPayload]);
 
   useEffect(() => {
-    if (!gameId) return undefined;
+    if (!gameId || !remoteSyncEnabled) return undefined;
     let cancelled = false;
 
     const applyIncomingPayload = (incomingPayload) => {
@@ -306,7 +312,7 @@ export default function Kpis() {
       window.clearInterval(intervalId);
       window.removeEventListener("focus", loadRemoteMetrics);
     };
-  }, [gameId]);
+  }, [gameId, remoteSyncEnabled]);
 
   useEffect(() => {
     const updateFullscreenState = () => {
@@ -349,7 +355,7 @@ export default function Kpis() {
   };
 
   useEffect(() => {
-    if (!gameId || !hydratedRef.current) return undefined;
+    if (!gameId || !hydratedRef.current || !remoteSyncEnabled) return undefined;
 
     if (skipNextSaveRef.current) {
       skipNextSaveRef.current = false;
@@ -403,7 +409,7 @@ export default function Kpis() {
     }, KPI_REMOTE_SAVE_DEBOUNCE_MS);
 
     return () => window.clearTimeout(timeoutId);
-  }, [gameId, metricsPayload]);
+  }, [gameId, metricsPayload, remoteSyncEnabled]);
 
   const handleEnterFullscreen = async () => {
     const element = fullscreenRootRef.current;
