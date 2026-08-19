@@ -23,6 +23,7 @@ import {
   saveToolRecordRemote,
   TOOL_RECORD_TYPES,
 } from "../toolVault.js";
+import { createSerialTaskQueue } from "../serialTaskQueue.js";
 import styles from "./Rotations.module.css";
 
 const GAME_STORAGE_PREFIX = "rotations:game:v1:";
@@ -47,6 +48,7 @@ const TOUCH_FILL_MOVE_TOLERANCE_PX = 16;
 const DEPTH_OUT_PRESS_DURATION_MS = 1000;
 const DEPTH_PRESS_RELEASE_LOCK_MS = 120;
 const ROTATIONS_REMOTE_SAVE_DEBOUNCE_MS = 750;
+const ROTATIONS_STANDALONE_VAULT_AUTOSAVE_DEBOUNCE_MS = 900;
 const ROTATIONS_LIVE_REMOTE_POLL_INTERVAL_MS = 5000;
 const ROTATIONS_REMOTE_REFERENCE_STALE_TIME_MS = 60_000;
 const ROTATIONS_TEMPLATE_REMOTE_STALE_TIME_MS = 5 * 60 * 1000;
@@ -592,6 +594,49 @@ function savedLineupsStateKey(lineups) {
 
 function gameStateKey(state) {
   return JSON.stringify(state || {});
+}
+
+function timestampMs(value) {
+  const numericValue = Number(value);
+  if (Number.isFinite(numericValue) && numericValue > 0) return numericValue;
+  const parsedValue = Date.parse(String(value || ""));
+  return Number.isFinite(parsedValue) ? parsedValue : 0;
+}
+
+function chooseNewestToolRecord(firstRecord, secondRecord) {
+  if (!firstRecord) return secondRecord || null;
+  if (!secondRecord) return firstRecord;
+  return timestampMs(secondRecord.updatedAt) > timestampMs(firstRecord.updatedAt)
+    ? secondRecord
+    : firstRecord;
+}
+
+function buildRotationsVaultPayload({
+  opponentLine,
+  teamScope,
+  periodMinutes,
+  players,
+  savedLineups,
+  depthTemplate,
+  gameState,
+}) {
+  const normalizedTeamScope = String(teamScope || "washington").trim() || "washington";
+  const normalizedPeriodMinutes = Number.isFinite(Number(periodMinutes))
+    ? Number(periodMinutes)
+    : DEFAULT_PERIOD_MINUTES;
+  return {
+    opponentLine: String(opponentLine || "VS OPPONENT").trim() || "VS OPPONENT",
+    teamScope: normalizedTeamScope,
+    periodMinutes: normalizedPeriodMinutes,
+    players: normalizePlayers(players, normalizedTeamScope),
+    savedLineups: normalizeSavedLineups(savedLineups),
+    depthTemplate: normalizeDepthChart(depthTemplate, normalizedTeamScope),
+    gameState: normalizeGameState(gameState, normalizedTeamScope, normalizedPeriodMinutes),
+  };
+}
+
+function rotationsVaultPayloadKey(payload) {
+  return JSON.stringify(buildRotationsVaultPayload(payload || {}));
 }
 
 async function fetchLegacyRemotePlayers(teamScope) {
@@ -1570,6 +1615,11 @@ export default function Rotations({ standalone = false }) {
   const savedLineupsStateKeyRef = useRef(savedLineupsStateKey([]));
   const depthTemplateStateKeyRef = useRef(depthChartStateKey(createDefaultDepthChart()));
   const gameStateKeyRef = useRef(gameStateKey(createDefaultGameState()));
+  const standaloneRecordStateKeyRef = useRef("");
+  const standaloneRecordRevisionRef = useRef(0);
+  const standaloneRecordCreatedAtRef = useRef("");
+  const standaloneVaultSaveRunRef = useRef(0);
+  const standaloneVaultSaveQueueRef = useRef(createSerialTaskQueue());
   const skipPlayersSaveRef = useRef(false);
   const skipSavedLineupsSaveRef = useRef(false);
   const skipDepthTemplateSaveRef = useRef(false);
@@ -1771,23 +1821,32 @@ export default function Rotations({ standalone = false }) {
     async function loadStandaloneRecord() {
       if (!rotationParam || !vaultUserId) {
         setStandaloneRecordId("");
+        standaloneRecordStateKeyRef.current = "";
+        standaloneRecordRevisionRef.current = 0;
+        standaloneRecordCreatedAtRef.current = "";
         setVaultStatus("");
         return;
       }
 
       let savedRecord = null;
+      const localSavedRecord = getSavedToolRecord(vaultUserId, rotationParam);
+      let remoteSavedRecord = null;
       try {
-        savedRecord = accountsEnabled && user?.id
+        remoteSavedRecord = accountsEnabled && user?.id
           ? await getSavedToolRecordRemote(user.id, rotationParam)
-          : getSavedToolRecord(vaultUserId, rotationParam);
+          : null;
+        savedRecord = chooseNewestToolRecord(remoteSavedRecord, localSavedRecord);
       } catch (loadError) {
         console.error("Failed to load rotations from My Vault.", loadError);
-        savedRecord = getSavedToolRecord(vaultUserId, rotationParam);
+        savedRecord = localSavedRecord;
       }
 
       if (cancelled) return;
       if (!savedRecord?.payload || savedRecord.type !== TOOL_RECORD_TYPES.ROTATIONS_TOOL) {
         setStandaloneRecordId("");
+        standaloneRecordStateKeyRef.current = "";
+        standaloneRecordRevisionRef.current = 0;
+        standaloneRecordCreatedAtRef.current = "";
         setVaultStatus("Unable to load that Rotations draft.");
         return;
       }
@@ -1797,7 +1856,33 @@ export default function Rotations({ standalone = false }) {
       const nextPlayers = normalizePlayers(savedRecord.payload.players, teamScope);
       const nextSavedLineups = normalizeSavedLineups(savedRecord.payload.savedLineups);
       const nextDepthTemplate = normalizeDepthChart(savedRecord.payload.depthTemplate, teamScope);
-      const nextGameState = normalizeGameState(savedRecord.payload.gameState, teamScope, savedPeriodMinutes);
+      const savedGameState = normalizeGameState(savedRecord.payload.gameState, teamScope, savedPeriodMinutes);
+      const localGamePayload = loadGamePayload(`${STANDALONE_ROTATIONS_GAME_ID}:${rotationParam}`);
+      const useLocalGameState = Boolean(
+        localGamePayload?.state
+          && Number(localGamePayload.updatedAt || 0) > timestampMs(savedRecord.updatedAt)
+      );
+      const nextGameState = useLocalGameState
+        ? normalizeGameState(localGamePayload.state, teamScope, savedPeriodMinutes)
+        : savedGameState;
+      const savedPayloadKey = rotationsVaultPayloadKey({
+        opponentLine: savedRecord.payload.opponentLine,
+        teamScope,
+        periodMinutes: savedPeriodMinutes,
+        players: nextPlayers,
+        savedLineups: nextSavedLineups,
+        depthTemplate: nextDepthTemplate,
+        gameState: savedGameState,
+      });
+      const loadedPayloadKey = rotationsVaultPayloadKey({
+        opponentLine: savedRecord.payload.opponentLine,
+        teamScope,
+        periodMinutes: savedPeriodMinutes,
+        players: nextPlayers,
+        savedLineups: nextSavedLineups,
+        depthTemplate: nextDepthTemplate,
+        gameState: nextGameState,
+      });
 
       setStandaloneRecordId(savedRecord.id);
       setStandaloneOpponentLine(String(savedRecord.payload.opponentLine || "VS OPPONENT").trim() || "VS OPPONENT");
@@ -1813,6 +1898,13 @@ export default function Rotations({ standalone = false }) {
       savedLineupsStateKeyRef.current = savedLineupsStateKey(nextSavedLineups);
       depthTemplateStateKeyRef.current = depthChartStateKey(nextDepthTemplate);
       gameStateKeyRef.current = gameStateKey(nextGameState);
+      standaloneRecordStateKeyRef.current = useLocalGameState ? savedPayloadKey : loadedPayloadKey;
+      standaloneRecordRevisionRef.current = Math.max(
+        Number(savedRecord.revision || 0),
+        Number(remoteSavedRecord?.revision || 0),
+        Number(localSavedRecord?.revision || 0)
+      );
+      standaloneRecordCreatedAtRef.current = savedRecord.createdAt || localSavedRecord?.createdAt || remoteSavedRecord?.createdAt || "";
       skipPlayersSaveRef.current = true;
       skipSavedLineupsSaveRef.current = true;
       skipDepthTemplateSaveRef.current = true;
@@ -1821,7 +1913,7 @@ export default function Rotations({ standalone = false }) {
       setSavedLineupsHydrated(true);
       setDepthTemplateHydrated(true);
       setGameHydrated(true);
-      setVaultStatus(`Loaded ${savedRecord.title || "Rotations draft"}.`);
+      setVaultStatus(useLocalGameState ? "Loaded local unsynced Rotations changes." : `Loaded ${savedRecord.title || "Rotations draft"}.`);
     }
 
     loadStandaloneRecord();
@@ -1937,6 +2029,7 @@ export default function Rotations({ standalone = false }) {
 
   useEffect(() => {
     if (savedLineupsHydrated) return;
+    if (standalone && rotationParam) return;
     if (supabase && !remoteSavedLineupsFetched) return;
 
     if (!monitoredTeamScope) return;
@@ -1961,10 +2054,11 @@ export default function Rotations({ standalone = false }) {
     }
 
     setSavedLineupsHydrated(true);
-  }, [savedLineupsHydrated, remoteSavedLineups, remoteSavedLineupsFetched, monitoredTeamScope]);
+  }, [savedLineupsHydrated, remoteSavedLineups, remoteSavedLineupsFetched, monitoredTeamScope, rotationParam, standalone]);
 
   useEffect(() => {
     if (depthTemplateHydrated) return;
+    if (standalone && rotationParam) return;
     if (supabase && !remoteDepthFetched) return;
 
     if (!monitoredTeamScope) return;
@@ -1992,10 +2086,11 @@ export default function Rotations({ standalone = false }) {
     }
 
     setDepthTemplateHydrated(true);
-  }, [depthTemplateHydrated, remoteDepthTemplate, remoteDepthFetched, monitoredTeamScope]);
+  }, [depthTemplateHydrated, remoteDepthTemplate, remoteDepthFetched, monitoredTeamScope, rotationParam, standalone]);
 
   useEffect(() => {
     if (gameHydrated || !effectiveGameId) return;
+    if (standalone && rotationParam) return;
     if (!standalone && supabase && !remoteGameFetched) return;
     if (!depthTemplateHydrated) return;
 
@@ -2197,13 +2292,15 @@ export default function Rotations({ standalone = false }) {
 
   useEffect(() => {
     if (!savedLineupsHydrated) return;
+    if (standalone && rotationParam) return;
     applyRemoteSavedLineups(remoteSavedLineups);
-  }, [savedLineupsHydrated, remoteSavedLineups]);
+  }, [savedLineupsHydrated, remoteSavedLineups, rotationParam, standalone]);
 
   useEffect(() => {
     if (!depthTemplateHydrated) return;
+    if (standalone && rotationParam) return;
     applyRemoteDepthTemplate(remoteDepthTemplate);
-  }, [depthTemplateHydrated, remoteDepthTemplate]);
+  }, [depthTemplateHydrated, remoteDepthTemplate, rotationParam, standalone]);
 
   useEffect(() => {
     if (standalone || !gameHydrated || !effectiveGameId || !remoteGameState?.state) return;
@@ -2271,6 +2368,104 @@ export default function Rotations({ standalone = false }) {
   );
   const versionOptions = useMemo(() => gameState.versions, [gameState.versions]);
   const sortedPlayers = useMemo(() => players.filter((player) => player.name || player.display), [players]);
+
+  useEffect(() => {
+    if (!standalone || !standaloneRecordId || !vaultUserId) return undefined;
+    if (!playersHydrated || !savedLineupsHydrated || !depthTemplateHydrated || !gameHydrated) return undefined;
+    if (vaultSaving) return undefined;
+    if (typeof window === "undefined") return undefined;
+
+    const payload = buildRotationsVaultPayload({
+      opponentLine,
+      teamScope: monitoredTeamScope || "washington",
+      periodMinutes: periodMinuteCount,
+      players,
+      savedLineups,
+      depthTemplate,
+      gameState,
+    });
+    const nextPayloadKey = rotationsVaultPayloadKey(payload);
+    if (nextPayloadKey === standaloneRecordStateKeyRef.current) return undefined;
+
+    const nowIso = new Date().toISOString();
+    const cachedRecord = getSavedToolRecord(vaultUserId, standaloneRecordId);
+    const record = {
+      id: standaloneRecordId,
+      type: TOOL_RECORD_TYPES.ROTATIONS_TOOL,
+      title: `${exportHeaderLine || "Rotations"} Rotations`,
+      payload,
+      createdAt: standaloneRecordCreatedAtRef.current || cachedRecord?.createdAt || nowIso,
+      updatedAt: nowIso,
+      revision: Math.max(
+        Number(standaloneRecordRevisionRef.current || 0),
+        Number(cachedRecord?.revision || 0)
+      ),
+    };
+    const localRecord = saveToolRecord(vaultUserId, record);
+    if (!localRecord) {
+      setVaultStatus("Rotations draft could not be saved in this browser.");
+      return undefined;
+    }
+    standaloneRecordCreatedAtRef.current = localRecord.createdAt || record.createdAt;
+
+    if (!accountsEnabled || !user?.id) {
+      standaloneRecordStateKeyRef.current = rotationsVaultPayloadKey(localRecord.payload || payload);
+      standaloneRecordRevisionRef.current = Math.max(
+        Number(localRecord.revision || 0),
+        Number(record.revision || 0)
+      );
+      setVaultStatus("Saved in this browser.");
+      void queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] });
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      const runId = standaloneVaultSaveRunRef.current + 1;
+      standaloneVaultSaveRunRef.current = runId;
+
+      setVaultStatus("Saving changes to My Vault...");
+      standaloneVaultSaveQueueRef.current
+        .run(() => saveToolRecordRemote(user.id, localRecord))
+        .then((savedRecord) => {
+          if (runId !== standaloneVaultSaveRunRef.current) return;
+          standaloneRecordStateKeyRef.current = rotationsVaultPayloadKey(savedRecord?.payload || payload);
+          standaloneRecordRevisionRef.current = Math.max(
+            Number(savedRecord?.revision || 0),
+            Number(record.revision || 0)
+          );
+          standaloneRecordCreatedAtRef.current = savedRecord?.createdAt || record.createdAt;
+          setVaultStatus(accountsEnabled && user?.id ? "Saved to My Vault." : "Saved in this browser.");
+          void queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] });
+        })
+        .catch((saveError) => {
+          if (runId !== standaloneVaultSaveRunRef.current) return;
+          console.error("Failed to autosave rotations draft.", saveError);
+          setVaultStatus(saveError?.message || "Unable to save this Rotations draft.");
+        });
+    }, ROTATIONS_STANDALONE_VAULT_AUTOSAVE_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [
+    accountsEnabled,
+    depthTemplate,
+    depthTemplateHydrated,
+    exportHeaderLine,
+    gameHydrated,
+    gameState,
+    monitoredTeamScope,
+    opponentLine,
+    periodMinuteCount,
+    players,
+    playersHydrated,
+    queryClient,
+    savedLineups,
+    savedLineupsHydrated,
+    standalone,
+    standaloneRecordId,
+    user?.id,
+    vaultUserId,
+    vaultSaving,
+  ]);
 
   const updateActiveVersion = (updater) => {
     setGameState((current) => ({
@@ -2833,22 +3028,28 @@ export default function Rotations({ standalone = false }) {
     setVaultStatus("Saving to My Vault...");
     const id = standaloneRecordId || crypto.randomUUID();
     const title = `${exportHeaderLine || "Rotations"} Rotations`;
+    const payload = buildRotationsVaultPayload({
+      opponentLine,
+      teamScope: monitoredTeamScope || "washington",
+      periodMinutes: periodMinuteCount,
+      players,
+      savedLineups,
+      depthTemplate,
+      gameState,
+    });
+    const cachedRecord = getSavedToolRecord(vaultUserId, id);
+    const nowIso = new Date().toISOString();
     const record = {
       id,
       type: TOOL_RECORD_TYPES.ROTATIONS_TOOL,
       title,
-      payload: {
-        opponentLine,
-        teamScope: monitoredTeamScope || "washington",
-        periodMinutes: periodMinuteCount,
-        players,
-        savedLineups,
-        depthTemplate,
-        gameState,
-      },
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      revision: 0,
+      payload,
+      createdAt: standaloneRecordCreatedAtRef.current || cachedRecord?.createdAt || nowIso,
+      updatedAt: nowIso,
+      revision: Math.max(
+        Number(standaloneRecordRevisionRef.current || 0),
+        Number(cachedRecord?.revision || 0)
+      ),
     };
 
     try {
@@ -2857,6 +3058,13 @@ export default function Rotations({ standalone = false }) {
         : saveToolRecord(vaultUserId, record);
       if (!savedRecord) throw new Error("Rotations draft was not saved.");
       setStandaloneRecordId(savedRecord.id);
+      standaloneRecordStateKeyRef.current = rotationsVaultPayloadKey(savedRecord.payload || payload);
+      standaloneRecordRevisionRef.current = Math.max(
+        Number(savedRecord.revision || 0),
+        Number(record.revision || 0)
+      );
+      standaloneRecordCreatedAtRef.current = savedRecord.createdAt || record.createdAt;
+      persistGameState(`${STANDALONE_ROTATIONS_GAME_ID}:${savedRecord.id}`, payload.gameState, timestampMs(savedRecord.updatedAt) || Date.now());
       await queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] });
       const nextParams = new URLSearchParams(params);
       nextParams.set("tab", "rotations");
