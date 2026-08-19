@@ -2,10 +2,9 @@ import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { deleteDrawingRecord, deleteNoteRecord, listOwnedDrawings, listOwnedNotes } from "../accountData.js";
-import { fetchCurrentGLeagueRosters, fetchCurrentNbaRosters, fetchGamesMetadataByIds } from "../api.js";
+import { fetchGamesMetadataByIds } from "../api.js";
 import { useAuth } from "../auth/useAuth.js";
-import MatchupGraphicPreview from "../components/MatchupGraphicPreview.jsx";
-import { GLEAGUE_TEAMS, getLeagueTeam, getNbaTeamRoster, NBA_TEAMS } from "../data/nbaTeams.js";
+import { getLeagueTeam } from "../data/nbaTeams.js";
 import {
   GRAPHIC_TOOL_TABS,
   TOOL_TABS,
@@ -32,9 +31,6 @@ const DEFAULT_NOTE_TAG_OPTIONS = [
   "Misc",
 ];
 
-const EMPTY_MATCHUP_PLAYER_IDS = Array(5).fill("");
-const CUSTOM_MATCHUP_PLAYER_VALUE = "__custom__";
-const CURRENT_ROSTER_STALE_TIME_MS = 5 * 60 * 1000;
 const VAULT_RECORD_LIMIT = 200;
 const GRAPHIC_TOOL_RECORD_TYPES = [
   TOOL_RECORD_TYPES.MATCHUP_GRAPHIC,
@@ -206,103 +202,7 @@ function getSavedGraphicPresentation(toolRecord) {
   };
 }
 
-function normalizeRosterPlayer(player, fallbackTeamId) {
-  return {
-    personId: String(player?.personId || "").trim(),
-    firstName: String(player?.firstName || "").trim(),
-    familyName: String(player?.familyName || "").trim(),
-    fullName: String(player?.fullName || "").trim(),
-    jerseyNum: String(player?.jerseyNum || "").trim(),
-    teamId: String(player?.teamId || fallbackTeamId || "").trim(),
-  };
-}
-
-function buildRosterMapFromPayload(payload, teams, fallbackRosterForTeam = null) {
-  const remoteTeams = payload?.teams && typeof payload.teams === "object" ? payload.teams : {};
-  const next = {};
-  teams.forEach((team) => {
-    const remoteRoster = Array.isArray(remoteTeams?.[team.teamId]?.players)
-      ? remoteTeams[team.teamId].players
-        .map((player) => normalizeRosterPlayer(player, team.teamId))
-        .filter((player) => player.personId && player.fullName)
-      : [];
-    const fallbackRoster = fallbackRosterForTeam ? fallbackRosterForTeam(team.teamId) : [];
-    next[team.teamId] = remoteRoster.length ? remoteRoster : fallbackRoster;
-  });
-  return next;
-}
-
-function buildCustomMatchupPreviewPlayer(customPlayer, index, teamId) {
-  const lastName = String(customPlayer?.lastName || "").trim();
-  if (!lastName) return null;
-  return {
-    personId: `custom-matchup-${teamId || "team"}-${index}`,
-    firstName: "",
-    familyName: lastName,
-    fullName: lastName,
-    jerseyNum: String(customPlayer?.jerseyNum || "").trim(),
-    teamId: String(teamId || "").trim(),
-    headshotDataUrl: String(customPlayer?.headshotDataUrl || "").trim(),
-    headshotUrl: String(customPlayer?.headshotUrl || "").trim(),
-  };
-}
-
-function resolveMatchupPreviewPlayers(playerIds, roster, customPlayers, teamId) {
-  const playersById = new Map((roster || []).map((player) => [String(player.personId), player]));
-  return EMPTY_MATCHUP_PLAYER_IDS.map((_, index) => {
-    const playerId = String(playerIds?.[index] || "").trim();
-    if (playerId === CUSTOM_MATCHUP_PLAYER_VALUE) {
-      return buildCustomMatchupPreviewPlayer(customPlayers?.[index], index, teamId);
-    }
-    return playersById.get(playerId) || null;
-  });
-}
-
-function SavedMatchupGraphicPreview({ toolRecord, nbaRosterMap, gLeagueRosterMap }) {
-  const payload = toolRecord.payload && typeof toolRecord.payload === "object" ? toolRecord.payload : {};
-  const league = String(payload.league || "nba").trim() === "gleague" ? "gleague" : "nba";
-  const rosterMap = league === "gleague" ? gLeagueRosterMap : nbaRosterMap;
-  const leftTeam = getLeagueTeam(payload.leftTeamId, league);
-  const rightTeam = getLeagueTeam(payload.rightTeamId, league);
-  const leftPlayers = resolveMatchupPreviewPlayers(
-    payload.leftPlayerIds,
-    rosterMap[String(payload.leftTeamId || "")] || [],
-    payload.leftCustomPlayers,
-    payload.leftTeamId
-  );
-  const rightPlayers = resolveMatchupPreviewPlayers(
-    payload.rightPlayerIds,
-    rosterMap[String(payload.rightTeamId || "")] || [],
-    payload.rightCustomPlayers,
-    payload.rightTeamId
-  );
-  const isReady = Boolean(
-    leftTeam &&
-    rightTeam &&
-    String(payload.logoTeamId || "").trim() &&
-    leftPlayers.every(Boolean) &&
-    rightPlayers.every(Boolean)
-  );
-
-  return (
-    <MatchupGraphicPreview
-      className={styles.savedGraphicPreview}
-      canvasClassName={styles.savedGraphicPreviewCanvas}
-      statusClassName={styles.previewStatus}
-      league={league}
-      leftPlayers={leftPlayers}
-      rightPlayers={rightPlayers}
-      logoTeamId={payload.logoTeamId}
-      isReady={isReady}
-      unavailableMessage="Preview unavailable until this saved draft has both teams, ten players, and a logo."
-      previewWidth={640}
-      previewHeight={360}
-      lazy
-    />
-  );
-}
-
-function SavedGraphicArea({ title, records, deletingKey, onDelete, renderPreview }) {
+function SavedGraphicArea({ title, records, deletingKey, onDelete }) {
   return (
     <section className={styles.graphicsArea}>
       <div className={styles.graphicsAreaHeader}>
@@ -319,7 +219,7 @@ function SavedGraphicArea({ title, records, deletingKey, onDelete, renderPreview
                 <div className={styles.cardHeader}>
                   <div className={styles.cardTitleGroup}>
                     <div className={styles.cardTitle}>{toolRecord.title || "Untitled"}</div>
-                    {!renderPreview ? <div className={styles.cardMeta}>{presentation.meta}</div> : null}
+                    <div className={styles.cardMeta}>{presentation.meta}</div>
                   </div>
                   <div className={styles.cardActions}>
                     <Link className={styles.cardLink} to={presentation.link}>Open Graphic</Link>
@@ -333,7 +233,7 @@ function SavedGraphicArea({ title, records, deletingKey, onDelete, renderPreview
                     </button>
                   </div>
                 </div>
-                {renderPreview ? renderPreview(toolRecord) : <div className={styles.cardBody}>{presentation.body}</div>}
+                <div className={styles.cardBody}>{presentation.body}</div>
                 <div className={styles.cardFooter}>Updated {formatTimestamp(toolRecord.updatedAt)}</div>
               </article>
             );
@@ -500,57 +400,6 @@ export default function UserContent() {
   const matchupToolRecords = useMemo(
     () => savedTools.filter((record) => record.type === TOOL_RECORD_TYPES.MATCHUP_GRAPHIC),
     [savedTools]
-  );
-  const matchupPreviewLeagueNeeds = useMemo(() => {
-    const needs = { nba: false, gleague: false };
-    matchupToolRecords.forEach((record) => {
-      const league = String(record?.payload?.league || "nba").trim() === "gleague" ? "gleague" : "nba";
-      needs[league] = true;
-    });
-    return needs;
-  }, [matchupToolRecords]);
-  const nbaMatchupPreviewTeamIds = useMemo(() => {
-    const teamIds = new Set();
-    matchupToolRecords.forEach((record) => {
-      const league = String(record?.payload?.league || "nba").trim() === "gleague" ? "gleague" : "nba";
-      if (league !== "nba") return;
-      [record?.payload?.leftTeamId, record?.payload?.rightTeamId].forEach((teamId) => {
-        const safeTeamId = String(teamId || "").trim();
-        if (safeTeamId) teamIds.add(safeTeamId);
-      });
-    });
-    return [...teamIds];
-  }, [matchupToolRecords]);
-  const shouldLoadMatchupPreviewRosters = Boolean(
-    vaultUserId &&
-    canUseTools &&
-    tab === "graphics" &&
-    activeGraphicTab === TOOL_TABS.MATCHUP &&
-    matchupToolRecords.length
-  );
-
-  const { data: remoteNbaRostersPayload } = useQuery({
-    queryKey: ["vault-current-nba-rosters", nbaMatchupPreviewTeamIds],
-    queryFn: ({ signal }) => fetchCurrentNbaRosters({ teamIds: nbaMatchupPreviewTeamIds, signal }),
-    enabled: shouldLoadMatchupPreviewRosters && matchupPreviewLeagueNeeds.nba,
-    staleTime: CURRENT_ROSTER_STALE_TIME_MS,
-    refetchOnWindowFocus: false,
-  });
-
-  const { data: remoteGLeagueRostersPayload } = useQuery({
-    queryKey: ["vault-current-gleague-rosters"],
-    queryFn: ({ signal }) => fetchCurrentGLeagueRosters({ signal }),
-    enabled: shouldLoadMatchupPreviewRosters && matchupPreviewLeagueNeeds.gleague,
-    staleTime: CURRENT_ROSTER_STALE_TIME_MS,
-    refetchOnWindowFocus: false,
-  });
-  const vaultNbaRosterMap = useMemo(
-    () => buildRosterMapFromPayload(remoteNbaRostersPayload, NBA_TEAMS, getNbaTeamRoster),
-    [remoteNbaRostersPayload]
-  );
-  const vaultGLeagueRosterMap = useMemo(
-    () => buildRosterMapFromPayload(remoteGLeagueRostersPayload, GLEAGUE_TEAMS),
-    [remoteGLeagueRostersPayload]
   );
   const personnelToolRecords = useMemo(
     () => savedTools.filter((record) => record.type === TOOL_RECORD_TYPES.PERSONNEL_GRAPHIC),
@@ -1027,13 +876,6 @@ export default function UserContent() {
               records={matchupToolRecords}
               deletingKey={deletingKey}
               onDelete={handleDeleteTool}
-              renderPreview={(toolRecord) => (
-                <SavedMatchupGraphicPreview
-                  toolRecord={toolRecord}
-                  nbaRosterMap={vaultNbaRosterMap}
-                  gLeagueRosterMap={vaultGLeagueRosterMap}
-                />
-              )}
             />
           )}
         </section>

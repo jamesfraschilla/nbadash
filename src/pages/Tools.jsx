@@ -8,7 +8,6 @@ import {
   teamLogoUrl,
 } from "../api.js";
 import { useAuth } from "../auth/useAuth.js";
-import MatchupGraphicPreview from "../components/MatchupGraphicPreview.jsx";
 import {
   deleteGraphicHeadshot,
   getGraphicHeadshotPublicUrl,
@@ -767,13 +766,6 @@ export default function Tools({ section = "tools" }) {
     draft.logoTeamId &&
     selectedLeftPlayers.every(Boolean) &&
     selectedRightPlayers.every(Boolean)
-  );
-  const matchupPreviewReady = Boolean(
-    leftTeam ||
-    rightTeam ||
-    draft.logoTeamId ||
-    selectedLeftPlayers.some(Boolean) ||
-    selectedRightPlayers.some(Boolean)
   );
 
   useEffect(() => {
@@ -1770,20 +1762,6 @@ export default function Tools({ section = "tools" }) {
                 </div>
               ) : null}
             </div>
-
-            <MatchupGraphicPreview
-              className={styles.matchupPreviewPanel}
-              canvasClassName={styles.matchupPreviewCanvas}
-              statusClassName={styles.previewStatus}
-              league={league}
-              leftPlayers={selectedLeftPlayers}
-              rightPlayers={selectedRightPlayers}
-              logoTeamId={draft.logoTeamId}
-              isReady={matchupPreviewReady}
-              unavailableMessage="Preview appears after a team, logo, or player is selected."
-              previewWidth={960}
-              previewHeight={540}
-            />
           </div>
         </section>
       ) : activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.COURT_TIME ? (

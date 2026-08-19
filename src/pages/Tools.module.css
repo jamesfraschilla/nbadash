@@ -126,7 +126,7 @@
 
 .matchupBuilder {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 520px);
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   align-items: start;
 }
@@ -401,30 +401,6 @@
 .statusNote {
   font-size: 0.92rem;
   color: var(--muted);
-}
-
-.matchupPreviewPanel {
-  display: grid;
-  gap: 12px;
-  width: 100%;
-  justify-self: stretch;
-  position: sticky;
-  top: 16px;
-}
-
-.matchupPreviewCanvas {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: #000;
-  box-shadow: var(--shadow-panel);
-}
-
-.previewStatus {
-  color: var(--muted);
-  font-size: 0.88rem;
-  text-align: center;
 }
 
 .inlineStatusLink {
@@ -870,7 +846,6 @@
     grid-template-columns: 1fr;
   }
 
-  .matchupPreviewPanel,
   .depthChartPreviewPanel,
   .coveragePreviewPanel {
     position: static;
