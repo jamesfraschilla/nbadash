@@ -19,6 +19,8 @@ import { supabase } from "../supabaseClient.js";
 import {
   getSavedToolRecord,
   getSavedToolRecordRemote,
+  listSavedToolRecords,
+  listSavedToolRecordsRemote,
   saveToolRecord,
   saveToolRecordRemote,
   TOOL_RECORD_TYPES,
@@ -33,6 +35,7 @@ const ROTATIONS_SCOPE_PLAYERS = "players";
 const ROTATIONS_SCOPE_DEPTH_TEMPLATE = "depth_template";
 const ROTATIONS_SCOPE_GAME = "game";
 const ROTATIONS_SCOPE_SAVED_LINEUPS = "saved_lineups";
+const ROTATIONS_SCOPE_PUBLIC_VERSIONS = "public_versions";
 const FINAL_VERSION_ID = "final";
 const QUARTERS = [1, 2, 3, 4];
 const DEFAULT_PERIOD_MINUTES = 12;
@@ -52,6 +55,12 @@ const ROTATIONS_STANDALONE_VAULT_AUTOSAVE_DEBOUNCE_MS = 900;
 const ROTATIONS_LIVE_REMOTE_POLL_INTERVAL_MS = 5000;
 const ROTATIONS_REMOTE_REFERENCE_STALE_TIME_MS = 60_000;
 const ROTATIONS_TEMPLATE_REMOTE_STALE_TIME_MS = 5 * 60 * 1000;
+const ROTATIONS_PUBLIC_VERSIONS_STALE_TIME_MS = 60_000;
+const ROTATIONS_PUBLIC_VERSION_LIMIT = 100;
+const ROTATIONS_VAULT_VERSION_LIST_OPTIONS = {
+  types: [TOOL_RECORD_TYPES.ROTATIONS_TOOL],
+  limit: 100,
+};
 const STANDALONE_ROTATIONS_GAME_ID = "standalone-rotations";
 const STANDALONE_ROTATIONS_GAME = {
   gameId: STANDALONE_ROTATIONS_GAME_ID,
@@ -219,14 +228,35 @@ function createVersionState({
   options = DEFAULT_VERSION_OPTIONS,
   teamScope = "washington",
   periodMinutes = DEFAULT_PERIOD_MINUTES,
+  visibility = "private",
+  ownerId = "",
+  ownerLabel = "",
+  sourceRecordId = "",
+  sourceVersionId = "",
+  createdAt = "",
+  updatedAt = "",
 }) {
+  const versionId = String(id || (typeof crypto !== "undefined" ? crypto.randomUUID() : `version-${Date.now()}`));
+  const normalizedTeamScope = String(teamScope || "washington").trim() || "washington";
+  const normalizedPeriodMinutes = Number.isFinite(Number(periodMinutes))
+    ? Number(periodMinutes)
+    : DEFAULT_PERIOD_MINUTES;
   return {
-    id: String(id || (typeof crypto !== "undefined" ? crypto.randomUUID() : `version-${Date.now()}`)),
+    id: versionId,
     name: String(name || "Version").trim() || "Version",
-    depthChart: normalizeDepthChart(depthChart, teamScope),
-    lineups: normalizeLineups(lineups, periodMinutes),
+    depthChart: normalizeDepthChart(depthChart, normalizedTeamScope),
+    lineups: normalizeLineups(lineups, normalizedPeriodMinutes),
     inheritDepthTemplate: Boolean(inheritDepthTemplate),
     options: normalizeVersionOptions(options),
+    teamScope: normalizedTeamScope,
+    periodMinutes: normalizedPeriodMinutes,
+    visibility: visibility === "public" ? "public" : "private",
+    ownerId: String(ownerId || "").trim(),
+    ownerLabel: String(ownerLabel || "").trim(),
+    sourceRecordId: String(sourceRecordId || "").trim(),
+    sourceVersionId: String(sourceVersionId || versionId).trim() || versionId,
+    createdAt: String(createdAt || "").trim(),
+    updatedAt: String(updatedAt || "").trim(),
   };
 }
 
@@ -386,6 +416,13 @@ function normalizeGameState(rawState, teamScope = "washington", periodMinutes = 
       options: version?.options,
       teamScope,
       periodMinutes,
+      visibility: version?.visibility,
+      ownerId: version?.ownerId,
+      ownerLabel: version?.ownerLabel,
+      sourceRecordId: version?.sourceRecordId,
+      sourceVersionId: version?.sourceVersionId,
+      createdAt: version?.createdAt,
+      updatedAt: version?.updatedAt,
     }));
 
     const finalVersion = normalizedVersions.find((version) => version.id === FINAL_VERSION_ID)
@@ -639,6 +676,159 @@ function rotationsVaultPayloadKey(payload) {
   return JSON.stringify(buildRotationsVaultPayload(payload || {}));
 }
 
+function publicVersionsScopeKey(teamScope) {
+  return `${globalScopeKey(teamScope || "washington")}:standalone`;
+}
+
+function normalizeSharedRotationVersion(rawVersion, teamScope = "washington", periodMinutes = DEFAULT_PERIOD_MINUTES) {
+  if (!rawVersion || typeof rawVersion !== "object") return null;
+  const id = String(rawVersion.id || rawVersion.sourceVersionId || "").trim();
+  if (!id || id === FINAL_VERSION_ID) return null;
+  const normalizedTeamScope = String(rawVersion.teamScope || teamScope || "washington").trim() || "washington";
+  const normalizedPeriodMinutes = Number.isFinite(Number(rawVersion.periodMinutes))
+    ? Number(rawVersion.periodMinutes)
+    : periodMinutes;
+  return createVersionState({
+    id,
+    name: rawVersion.name,
+    depthChart: rawVersion.depthChart,
+    lineups: rawVersion.lineups,
+    inheritDepthTemplate: false,
+    options: rawVersion.options,
+    teamScope: normalizedTeamScope,
+    periodMinutes: normalizedPeriodMinutes,
+    visibility: rawVersion.visibility === "public" ? "public" : "private",
+    ownerId: rawVersion.ownerId,
+    ownerLabel: rawVersion.ownerLabel,
+    sourceRecordId: rawVersion.sourceRecordId,
+    sourceVersionId: rawVersion.sourceVersionId || id,
+    createdAt: rawVersion.createdAt,
+    updatedAt: rawVersion.updatedAt,
+  });
+}
+
+function mergeRotationVersions(currentState, incomingVersions, teamScope = "washington", periodMinutes = DEFAULT_PERIOD_MINUTES) {
+  const targetTeamScope = String(teamScope || "washington").trim() || "washington";
+  const targetPeriodMinutes = Number.isFinite(Number(periodMinutes))
+    ? Number(periodMinutes)
+    : DEFAULT_PERIOD_MINUTES;
+  const incoming = (Array.isArray(incomingVersions) ? incomingVersions : [])
+    .map((version) => normalizeSharedRotationVersion(version, targetTeamScope, targetPeriodMinutes))
+    .filter((version) => (
+      version
+      && version.teamScope === targetTeamScope
+      && Number(version.periodMinutes) === targetPeriodMinutes
+    ));
+  if (!incoming.length) return currentState;
+
+  let changed = false;
+  const versions = Array.isArray(currentState?.versions) ? currentState.versions : [];
+  const nextVersions = [...versions];
+  const versionIds = new Set(nextVersions.map((version) => String(version.id || "")));
+
+  incoming.forEach((version) => {
+    if (versionIds.has(version.id)) return;
+    versionIds.add(version.id);
+    nextVersions.push(version);
+    changed = true;
+  });
+
+  if (!changed) return currentState;
+  const activeVersionId = nextVersions.some((version) => version.id === currentState?.activeVersionId)
+    ? currentState.activeVersionId
+    : FINAL_VERSION_ID;
+  return { ...currentState, activeVersionId, versions: nextVersions };
+}
+
+function extractRotationVersionsFromToolRecords(records, teamScope = "washington", periodMinutes = DEFAULT_PERIOD_MINUTES, ownerId = "") {
+  const versions = [];
+  const targetTeamScope = String(teamScope || "washington").trim() || "washington";
+  const targetPeriodMinutes = Number.isFinite(Number(periodMinutes))
+    ? Number(periodMinutes)
+    : DEFAULT_PERIOD_MINUTES;
+  (Array.isArray(records) ? records : []).forEach((record) => {
+    if (record?.type !== TOOL_RECORD_TYPES.ROTATIONS_TOOL) return;
+    const payload = record.payload && typeof record.payload === "object" ? record.payload : {};
+    const recordTeamScope = String(payload.teamScope || teamScope || "washington").trim() || "washington";
+    const recordPeriodMinutes = Number(payload.periodMinutes || periodMinutes || DEFAULT_PERIOD_MINUTES);
+    if (recordTeamScope !== targetTeamScope || recordPeriodMinutes !== targetPeriodMinutes) return;
+    const state = normalizeGameState(payload.gameState, recordTeamScope, recordPeriodMinutes);
+    state.versions
+      .filter((version) => version.id !== FINAL_VERSION_ID)
+      .forEach((version) => {
+        versions.push(createVersionState({
+          ...version,
+          visibility: version.visibility === "public" ? "public" : "private",
+          ownerId: version.ownerId || ownerId,
+          sourceRecordId: version.sourceRecordId || record.id,
+          sourceVersionId: version.sourceVersionId || version.id,
+          updatedAt: version.updatedAt || record.updatedAt,
+          createdAt: version.createdAt || record.createdAt,
+          teamScope: recordTeamScope,
+          periodMinutes: recordPeriodMinutes,
+        }));
+      });
+  });
+  return versions;
+}
+
+async function fetchRemotePublicRotationVersions(teamScope, periodMinutes = DEFAULT_PERIOD_MINUTES) {
+  if (!supabase || !teamScope) return [];
+  const { data, error } = await supabase
+    .from(ROTATIONS_TABLE)
+    .select("payload,updated_at")
+    .eq("scope_type", ROTATIONS_SCOPE_PUBLIC_VERSIONS)
+    .eq("scope_key", publicVersionsScopeKey(teamScope))
+    .maybeSingle();
+  if (error || !data?.payload) return [];
+  const parsed = parseSharedStateRow(data);
+  return (Array.isArray(parsed.payload?.versions) ? parsed.payload.versions : [])
+    .map((version) => normalizeSharedRotationVersion(version, teamScope, periodMinutes))
+    .filter(Boolean);
+}
+
+async function publishRemotePublicRotationVersion({
+  teamScope,
+  periodMinutes,
+  version,
+  ownerId,
+  ownerLabel,
+  sourceRecordId,
+  updatedAt = Date.now(),
+}) {
+  if (!supabase || !teamScope || !version || !ownerId) return null;
+  const publicVersion = createVersionState({
+    ...version,
+    visibility: "public",
+    ownerId,
+    ownerLabel,
+    sourceRecordId,
+    sourceVersionId: version.sourceVersionId || version.id,
+    createdAt: version.createdAt || new Date(updatedAt).toISOString(),
+    updatedAt: new Date(updatedAt).toISOString(),
+    teamScope,
+    periodMinutes,
+  });
+  return writeSharedPayloadWithRetry(
+    ROTATIONS_SCOPE_PUBLIC_VERSIONS,
+    publicVersionsScopeKey(teamScope),
+    (currentPayload) => {
+      const existingVersions = (Array.isArray(currentPayload?.versions) ? currentPayload.versions : [])
+        .map((candidate) => normalizeSharedRotationVersion(candidate, teamScope, periodMinutes))
+        .filter(Boolean)
+        .filter((candidate) => candidate.id !== publicVersion.id);
+      return {
+        versions: [publicVersion, ...existingVersions]
+          .sort((a, b) => timestampMs(b.updatedAt) - timestampMs(a.updatedAt))
+          .slice(0, ROTATIONS_PUBLIC_VERSION_LIMIT),
+      };
+    },
+    updatedAt,
+    4,
+    { mergeWithNewerPayload: true },
+  );
+}
+
 async function fetchLegacyRemotePlayers(teamScope) {
   if (!supabase || !teamScope) return null;
   const { data, error } = await supabase
@@ -673,7 +863,14 @@ async function fetchRemoteSavedLineups(teamScope) {
   };
 }
 
-async function writeSharedPayloadWithRetry(scopeType, scopeKey, payloadBuilder, requestedUpdatedAt = Date.now(), maxAttempts = 4) {
+async function writeSharedPayloadWithRetry(
+  scopeType,
+  scopeKey,
+  payloadBuilder,
+  requestedUpdatedAt = Date.now(),
+  maxAttempts = 4,
+  options = {},
+) {
   if (!supabase || !scopeType || !scopeKey) return null;
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -690,7 +887,7 @@ async function writeSharedPayloadWithRetry(scopeType, scopeKey, payloadBuilder, 
       ? currentRow.payload
       : null;
     const currentPayloadUpdatedAt = Number(currentPayload?.updatedAt || 0);
-    if (currentPayloadUpdatedAt > Number(requestedUpdatedAt || 0)) {
+    if (!options.mergeWithNewerPayload && currentPayloadUpdatedAt > Number(requestedUpdatedAt || 0)) {
       return currentPayload;
     }
 
@@ -1582,6 +1779,7 @@ export default function Rotations({ standalone = false }) {
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [createVersionOpen, setCreateVersionOpen] = useState(false);
   const [createVersionName, setCreateVersionName] = useState("");
+  const [createVersionPublic, setCreateVersionPublic] = useState(false);
   const [deleteVersionTarget, setDeleteVersionTarget] = useState(null);
   const [savedLineupMenu, setSavedLineupMenu] = useState(null);
   const [createSavedLineupTarget, setCreateSavedLineupTarget] = useState(null);
@@ -1732,6 +1930,32 @@ export default function Rotations({ standalone = false }) {
     refetchOnWindowFocus: true,
   });
 
+  const { data: ownedRotationRecords = [] } = useQuery({
+    queryKey: ["standalone-rotations-owned-records", vaultUserId],
+    queryFn: async () => {
+      if (!vaultUserId) return [];
+      if (accountsEnabled && user?.id) {
+        try {
+          return await listSavedToolRecordsRemote(user.id, ROTATIONS_VAULT_VERSION_LIST_OPTIONS);
+        } catch (listError) {
+          console.error("Failed to load saved rotations from My Vault.", listError);
+        }
+      }
+      return listSavedToolRecords(vaultUserId, ROTATIONS_VAULT_VERSION_LIST_OPTIONS);
+    },
+    enabled: Boolean(standalone && vaultUserId),
+    staleTime: ROTATIONS_REMOTE_REFERENCE_STALE_TIME_MS,
+    refetchOnWindowFocus: true,
+  });
+
+  const { data: publicRotationVersions = [] } = useQuery({
+    queryKey: ["standalone-rotations-public-versions", monitoredTeamScope, periodMinuteCount],
+    queryFn: () => fetchRemotePublicRotationVersions(monitoredTeamScope, periodMinuteCount),
+    enabled: Boolean(standalone && supabase && monitoredTeamScope),
+    staleTime: ROTATIONS_PUBLIC_VERSIONS_STALE_TIME_MS,
+    refetchOnWindowFocus: true,
+  });
+
   const activeVersion = useMemo(
     () => getVersionById(gameState, gameState.activeVersionId, monitoredTeamScope || "washington", periodMinuteCount),
     [gameState, monitoredTeamScope, periodMinuteCount]
@@ -1791,6 +2015,7 @@ export default function Rotations({ standalone = false }) {
     setPlayerDrafts({});
     setNewPlayerDraft({ name: "", display: "", personId: "" });
     setCreateVersionOpen(false);
+    setCreateVersionPublic(false);
     setDeleteVersionTarget(null);
   }, [effectiveGameId, monitoredTeamScope]);
 
@@ -2307,6 +2532,28 @@ export default function Rotations({ standalone = false }) {
     applyRemoteGameState(remoteGameState);
   }, [gameHydrated, effectiveGameId, remoteGameState, standalone]);
 
+  useEffect(() => {
+    if (!standalone || !gameHydrated || !monitoredTeamScope) return;
+    const ownedVersions = extractRotationVersionsFromToolRecords(
+      ownedRotationRecords,
+      monitoredTeamScope,
+      periodMinuteCount,
+      user?.id || vaultUserId,
+    );
+    const incomingVersions = [...ownedVersions, ...publicRotationVersions];
+    if (!incomingVersions.length) return;
+    setGameState((current) => mergeRotationVersions(current, incomingVersions, monitoredTeamScope, periodMinuteCount));
+  }, [
+    gameHydrated,
+    monitoredTeamScope,
+    ownedRotationRecords,
+    periodMinuteCount,
+    publicRotationVersions,
+    standalone,
+    user?.id,
+    vaultUserId,
+  ]);
+
   const playerOptions = useMemo(() => {
     const unique = new Set();
     players.forEach((player) => {
@@ -2367,6 +2614,7 @@ export default function Rotations({ standalone = false }) {
     [monitoredTeam, opponentLine]
   );
   const versionOptions = useMemo(() => gameState.versions, [gameState.versions]);
+  const canPublishPublicVersions = Boolean(standalone && accountsEnabled && user?.id && supabase);
   const sortedPlayers = useMemo(() => players.filter((player) => player.name || player.display), [players]);
 
   useEffect(() => {
@@ -2416,6 +2664,7 @@ export default function Rotations({ standalone = false }) {
       );
       setVaultStatus("Saved in this browser.");
       void queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] });
+      void queryClient.invalidateQueries({ queryKey: ["standalone-rotations-owned-records", vaultUserId] });
       return undefined;
     }
 
@@ -2436,6 +2685,7 @@ export default function Rotations({ standalone = false }) {
           standaloneRecordCreatedAtRef.current = savedRecord?.createdAt || record.createdAt;
           setVaultStatus(accountsEnabled && user?.id ? "Saved to My Vault." : "Saved in this browser.");
           void queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] });
+          void queryClient.invalidateQueries({ queryKey: ["standalone-rotations-owned-records", vaultUserId] });
         })
         .catch((saveError) => {
           if (runId !== standaloneVaultSaveRunRef.current) return;
@@ -2925,12 +3175,18 @@ export default function Rotations({ standalone = false }) {
   const openCreateVersionModal = () => {
     setVersionMenuOpen(false);
     setCreateVersionName("");
+    setCreateVersionPublic(false);
     setCreateVersionOpen(true);
   };
 
-  const createVersion = (mode) => {
+  const createVersion = async (mode) => {
     const name = String(createVersionName || "").trim();
     if (!name) return;
+    const nowIso = new Date().toISOString();
+    const canPublishPublicVersion = Boolean(createVersionPublic && canPublishPublicVersions);
+    const nextRecordId = standalone
+      ? String(standaloneRecordId || (typeof crypto !== "undefined" ? crypto.randomUUID() : `rotations-${Date.now()}`))
+      : "";
     const nextVersion = createVersionState({
       name,
       depthChart: mode === "copy" ? depthChart : DEPTH_ROW_INDICES.map(() => POSITION_COLUMNS.map(() => "")),
@@ -2939,15 +3195,60 @@ export default function Rotations({ standalone = false }) {
       inheritDepthTemplate: false,
       options: mode === "copy" ? versionDisplayOptions : DEFAULT_VERSION_OPTIONS,
       teamScope: monitoredTeamScope || "washington",
+      visibility: canPublishPublicVersion ? "public" : "private",
+      ownerId: user?.id || "",
+      ownerLabel: user?.email || "",
+      sourceRecordId: nextRecordId,
+      createdAt: nowIso,
+      updatedAt: nowIso,
     });
+    const nextGameState = {
+      ...gameState,
+      activeVersionId: nextVersion.id,
+      versions: [...gameState.versions, nextVersion],
+    };
     lineupHistoryRef.current = [];
     setUndoDepth(0);
-    setGameState((current) => ({
-      ...current,
-      activeVersionId: nextVersion.id,
-      versions: [...current.versions, nextVersion],
-    }));
+    setGameState(nextGameState);
     setCreateVersionOpen(false);
+
+    if (!standalone) return;
+
+    const savedRecord = await saveStandaloneSnapshotToVault({
+      recordId: nextRecordId,
+      snapshotGameState: nextGameState,
+      skipIfSaving: false,
+      statusMessage: canPublishPublicVersion
+        ? "Saving public version to My Vault..."
+        : "Saving version to My Vault...",
+    });
+
+    if (!canPublishPublicVersion) {
+      if (createVersionPublic && !canPublishPublicVersions) {
+        setVaultStatus("Saved private version to My Vault. Sign in to publish versions.");
+      }
+      return;
+    }
+
+    if (!savedRecord) return;
+
+    try {
+      await publishRemotePublicRotationVersion({
+        teamScope: monitoredTeamScope || "washington",
+        periodMinutes: periodMinuteCount,
+        version: nextVersion,
+        ownerId: user.id,
+        ownerLabel: user.email || "",
+        sourceRecordId: savedRecord.id,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["standalone-rotations-public-versions", monitoredTeamScope, periodMinuteCount],
+      });
+      setVaultStatus("Saved public version to My Vault.");
+    } catch (publishError) {
+      console.error("Failed to publish public rotations version.", publishError);
+      setVaultStatus(publishError?.message || "Saved to My Vault, but the public version could not be published.");
+    }
   };
 
   const confirmDeleteVersion = () => {
@@ -3022,20 +3323,29 @@ export default function Rotations({ standalone = false }) {
     window.setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
   };
 
-  const handleSaveToVault = async () => {
-    if (!standalone || !vaultUserId || vaultSaving) return;
+  const saveStandaloneSnapshotToVault = async ({
+    recordId = "",
+    snapshotGameState = gameState,
+    snapshotPlayers = players,
+    snapshotSavedLineups = savedLineups,
+    snapshotDepthTemplate = depthTemplate,
+    skipIfSaving = true,
+    statusMessage = "Saving to My Vault...",
+  } = {}) => {
+    if (!standalone || !vaultUserId) return null;
+    if (skipIfSaving && vaultSaving) return null;
     setVaultSaving(true);
-    setVaultStatus("Saving to My Vault...");
-    const id = standaloneRecordId || crypto.randomUUID();
+    setVaultStatus(statusMessage);
+    const id = String(recordId || standaloneRecordId || (typeof crypto !== "undefined" ? crypto.randomUUID() : `rotations-${Date.now()}`));
     const title = `${exportHeaderLine || "Rotations"} Rotations`;
     const payload = buildRotationsVaultPayload({
       opponentLine,
       teamScope: monitoredTeamScope || "washington",
       periodMinutes: periodMinuteCount,
-      players,
-      savedLineups,
-      depthTemplate,
-      gameState,
+      players: snapshotPlayers,
+      savedLineups: snapshotSavedLineups,
+      depthTemplate: snapshotDepthTemplate,
+      gameState: snapshotGameState,
     });
     const cachedRecord = getSavedToolRecord(vaultUserId, id);
     const nowIso = new Date().toISOString();
@@ -3054,7 +3364,7 @@ export default function Rotations({ standalone = false }) {
 
     try {
       const savedRecord = accountsEnabled && user?.id
-        ? await saveToolRecordRemote(user.id, record)
+        ? await standaloneVaultSaveQueueRef.current.run(() => saveToolRecordRemote(user.id, record))
         : saveToolRecord(vaultUserId, record);
       if (!savedRecord) throw new Error("Rotations draft was not saved.");
       setStandaloneRecordId(savedRecord.id);
@@ -3066,17 +3376,24 @@ export default function Rotations({ standalone = false }) {
       standaloneRecordCreatedAtRef.current = savedRecord.createdAt || record.createdAt;
       persistGameState(`${STANDALONE_ROTATIONS_GAME_ID}:${savedRecord.id}`, payload.gameState, timestampMs(savedRecord.updatedAt) || Date.now());
       await queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] });
+      await queryClient.invalidateQueries({ queryKey: ["standalone-rotations-owned-records", vaultUserId] });
       const nextParams = new URLSearchParams(params);
       nextParams.set("tab", "rotations");
       nextParams.set("rotation", savedRecord.id);
       setParams(nextParams, { replace: true });
       setVaultStatus(`Saved to My Vault as ${savedRecord.title}.`);
+      return savedRecord;
     } catch (saveError) {
       console.error("Failed to save rotations draft.", saveError);
       setVaultStatus(saveError?.message || "Unable to save this Rotations draft.");
+      return null;
     } finally {
       setVaultSaving(false);
     }
+  };
+
+  const handleSaveToVault = () => {
+    void saveStandaloneSnapshotToVault();
   };
 
   const toggleSection = (key) => {
@@ -3352,26 +3669,35 @@ export default function Rotations({ standalone = false }) {
             </button>
             {versionMenuOpen && (
               <div className={styles.versionMenu}>
-                {versionOptions.map((version) => (
-                  <div key={version.id} className={styles.versionMenuRow}>
-                    <button
-                      type="button"
-                      className={`${styles.versionMenuItem} ${version.id === activeVersionId ? styles.versionMenuItemActive : ""}`}
-                      onClick={() => setActiveVersionId(version.id)}
-                    >
-                      {version.name}
-                    </button>
-                    {version.id !== FINAL_VERSION_ID && (
+                {versionOptions.map((version) => {
+                  const isPublicVersion = version.visibility === "public";
+                  const canDeleteVersion = version.id !== FINAL_VERSION_ID
+                    && !isPublicVersion
+                    && (!standalone || !version.sourceRecordId || version.sourceRecordId === standaloneRecordId);
+                  return (
+                    <div key={version.id} className={styles.versionMenuRow}>
                       <button
                         type="button"
-                        className={styles.versionDeleteButton}
-                        onClick={() => setDeleteVersionTarget(version)}
+                        className={`${styles.versionMenuItem} ${version.id === activeVersionId ? styles.versionMenuItemActive : ""}`}
+                        onClick={() => setActiveVersionId(version.id)}
                       >
-                        X
+                        <span className={styles.versionMenuItemContent}>
+                          <span>{version.name}</span>
+                          {isPublicVersion ? <span className={styles.versionBadge}>Public</span> : null}
+                        </span>
                       </button>
-                    )}
-                  </div>
-                ))}
+                      {canDeleteVersion && (
+                        <button
+                          type="button"
+                          className={styles.versionDeleteButton}
+                          onClick={() => setDeleteVersionTarget(version)}
+                        >
+                          X
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
                 <button
                   type="button"
                   className={styles.versionCreateButton}
@@ -3466,7 +3792,7 @@ export default function Rotations({ standalone = false }) {
               <button
                 type="button"
                 className={styles.modalPrimary}
-                onClick={() => createVersion("blank")}
+                onClick={() => void createVersion("blank")}
                 disabled={!createVersionName.trim()}
               >
                 Start From Blank
@@ -3474,12 +3800,23 @@ export default function Rotations({ standalone = false }) {
               <button
                 type="button"
                 className={styles.modalPrimary}
-                onClick={() => createVersion("copy")}
+                onClick={() => void createVersion("copy")}
                 disabled={!createVersionName.trim()}
               >
                 Copy Current Version
               </button>
             </div>
+            {standalone ? (
+              <label className={styles.modalCheckboxRow}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(createVersionPublic && canPublishPublicVersions)}
+                  disabled={!canPublishPublicVersions}
+                  onChange={(event) => setCreateVersionPublic(event.target.checked)}
+                />
+                <span>Public</span>
+              </label>
+            ) : null}
             <button type="button" className={styles.modalSecondary} onClick={() => setCreateVersionOpen(false)}>
               Cancel
             </button>
