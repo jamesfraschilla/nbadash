@@ -6,16 +6,27 @@ import { fetchProfile, touchProfileLastLogin } from "../accountData.js";
 export const AuthContext = createContext(null);
 
 const LAST_LOGIN_TOUCH_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const lastLoginTouchMemory = new Map();
 
 function shouldTouchLastLogin(userId) {
   if (!userId || typeof window === "undefined") return true;
   const storageKey = `nbaDash:lastLoginTouch:${userId}`;
   const now = Date.now();
-  const previous = Number(window.localStorage.getItem(storageKey) || 0);
+  let previous = Number(lastLoginTouchMemory.get(userId) || 0);
+  try {
+    previous = Math.max(previous, Number(window.localStorage.getItem(storageKey) || 0));
+  } catch {
+    // Storage can be unavailable or full; account loading should continue.
+  }
   if (Number.isFinite(previous) && now - previous < LAST_LOGIN_TOUCH_INTERVAL_MS) {
     return false;
   }
-  window.localStorage.setItem(storageKey, String(now));
+  lastLoginTouchMemory.set(userId, now);
+  try {
+    window.localStorage.setItem(storageKey, String(now));
+  } catch {
+    // Keep the in-memory throttle for this page session if persistent storage is full.
+  }
   return true;
 }
 
