@@ -68,6 +68,7 @@ Deno.test("zero-attempt percentages are unknown while true zero percentages rema
   assertEquals(__test__.formatPercentage(null), "N/A");
   assertEquals(__test__.percentage(0, 4), 0);
   assertEquals(__test__.formatPercentage(0), "0%");
+  assertEquals(__test__.formatPercentageWithAttempts(47.8, 11, 23), "47.8% (11/23)");
 });
 
 Deno.test("turnover sanitizer uses committed-fewer language", () => {
@@ -92,4 +93,68 @@ Deno.test("turnover sanitizer uses committed-fewer language", () => {
     __test__.sanitizeTurnoverLanguage("WAS forced fewer turnovers in the quarter.", features as any),
     "WAS committed fewer turnovers (2 to 5) in the quarter.",
   );
+});
+
+Deno.test("analysis language guard rejects bare shooting percentages", () => {
+  const features = {
+    teams: {
+      home: {
+        shooting: { fgPct: 47.8, threePct: 40, rimPct: null, midPct: null, ftPct: null },
+        totals: {
+          fieldGoalsMade: 11,
+          fieldGoalsAttempted: 23,
+          threePointersMade: 4,
+          threePointersAttempted: 10,
+          rimFieldGoalsMade: 0,
+          rimFieldGoalsAttempted: 0,
+          midFieldGoalsMade: 0,
+          midFieldGoalsAttempted: 0,
+          freeThrowsMade: 0,
+          freeThrowsAttempted: 0,
+        },
+      },
+      away: {
+        shooting: { fgPct: 33.3, threePct: 20, rimPct: null, midPct: null, ftPct: null },
+        totals: {
+          fieldGoalsMade: 9,
+          fieldGoalsAttempted: 27,
+          threePointersMade: 2,
+          threePointersAttempted: 10,
+          rimFieldGoalsMade: 0,
+          rimFieldGoalsAttempted: 0,
+          midFieldGoalsMade: 0,
+          midFieldGoalsAttempted: 0,
+          freeThrowsMade: 0,
+          freeThrowsAttempted: 0,
+        },
+      },
+    },
+  };
+
+  assertEquals(
+    __test__.shouldRejectAiAnalysis({
+      headline: "Shooting edge",
+      summary: "WAS shot 47.8% overall with 40% from three.",
+      sections: [],
+    }, features as any),
+    true,
+  );
+  assertEquals(
+    __test__.shouldRejectAiAnalysis({
+      headline: "Shooting edge",
+      summary: "WAS shot 47.8% (11/23) overall with 40% (4/10) from three.",
+      sections: [],
+    }, features as any),
+    false,
+  );
+});
+
+Deno.test("analysis language guard rejects zero lead or zero advantage wording", () => {
+  assertEquals(__test__.hasZeroMarginLanguage("WAS never led, with its largest advantage being 0."), true);
+  assertEquals(__test__.hasZeroMarginLanguage("WAS never led during the span."), false);
+});
+
+Deno.test("analysis language guard rejects all-team-scoring overstatements", () => {
+  assertEquals(__test__.hasOverstatedAllTeamScoring("T. Jones accounted for all of Chicago's scoring in the quarter."), true);
+  assertEquals(__test__.hasOverstatedAllTeamScoring("T. Jones scored 14 of Chicago's 37 points in the quarter."), false);
 });

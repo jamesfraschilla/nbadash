@@ -331,6 +331,32 @@ html[data-theme="dark"] .pbpWheel {
   color: var(--muted);
 }
 
+.analysisPreparedControlRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.analysisPreparedClear {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel-strong);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.analysisPreparedClear:hover,
+.analysisPreparedClear:focus-visible {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
 .analysisPreparedSelect {
   width: 100%;
   border: 1px solid var(--border);

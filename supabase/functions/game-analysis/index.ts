@@ -449,6 +449,10 @@ function formatPercentage(value: unknown) {
   return value == null ? "N/A" : `${value}%`;
 }
 
+function formatPercentageWithAttempts(value: unknown, made: number, attempted: number) {
+  return value == null ? "N/A" : `${value}% (${made}/${attempted})`;
+}
+
 function buildTeamActionTotals(teamId: string) {
   return {
     teamId,
@@ -875,7 +879,7 @@ function buildGameFlowContext(
   const awayLargest = largestLead[awayTeamId];
   let shape = "steady";
   let items = [
-    `${teamLabel(homeTeam)}'s largest lead was ${homeLargest.points} at ${homeLargest.label || "the start of the span"}; ${teamLabel(awayTeam)}'s largest lead was ${awayLargest.points} at ${awayLargest.label || "the start of the span"}.`,
+    `${formatLargestLeadItem(homeTeam, homeLargest)} ${formatLargestLeadItem(awayTeam, awayLargest)}`,
   ];
 
   if (leadChanges >= 3 || (tieMoments >= 2 && homeLargest.points >= 4 && awayLargest.points >= 4)) {
@@ -890,7 +894,7 @@ function buildGameFlowContext(
     const controllingLead = Math.max(homeLargest.points, awayLargest.points);
     items = [
       `${teamLabel(controllingTeam)} created the clearest separation, building a ${controllingLead}-point cushion in this span.`,
-      `${teamLabel(homeTeam)}'s largest lead was ${homeLargest.points}; ${teamLabel(awayTeam)}'s was ${awayLargest.points}.`,
+      `${formatLargestLeadItem(homeTeam, homeLargest)} ${formatLargestLeadItem(awayTeam, awayLargest)}`,
     ];
   }
 
@@ -906,6 +910,7 @@ function buildGameFlowContext(
 
 function buildMomentumBursts(
   scoringEvents: Array<Record<string, unknown>>,
+  rangeStartScore: { home: number; away: number },
   homeTeam: Record<string, unknown>,
   awayTeam: Record<string, unknown>,
   regulationMinutes = 12,
@@ -922,6 +927,8 @@ function buildMomentumBursts(
     endElapsed: number;
     startLabel: string;
     endLabel: string;
+    startMargin: number;
+    endMargin: number;
   }> = {
     [homeTeamId]: null,
     [awayTeamId]: null,
@@ -950,6 +957,14 @@ function buildMomentumBursts(
 
         const previousBest = bestByTeam[teamId];
         if (!previousBest || net > previousBest.net || (net === previousBest.net && teamPoints > previousBest.points)) {
+          const previousEvent = index > 0 ? scoringEvents[index - 1] : null;
+          const startScore = previousEvent
+            ? { home: safeNumber(previousEvent.scoreHome, rangeStartScore.home), away: safeNumber(previousEvent.scoreAway, rangeStartScore.away) }
+            : rangeStartScore;
+          const endScore = {
+            home: safeNumber(nextEvent.scoreHome, rangeStartScore.home),
+            away: safeNumber(nextEvent.scoreAway, rangeStartScore.away),
+          };
           bestByTeam[teamId] = {
             teamId,
             points: teamPoints,
@@ -959,6 +974,8 @@ function buildMomentumBursts(
             endElapsed: safeNumber(nextEvent.elapsed, 0),
             startLabel: formatPointLabel(safeNumber(startEvent.period, 0), startEvent.clock, regulationMinutes, "start"),
             endLabel: formatPointLabel(safeNumber(nextEvent.period, 0), nextEvent.clock, regulationMinutes, "end"),
+            startMargin: scoreMarginForTeam(startScore, teamId, homeTeamId, awayTeamId),
+            endMargin: scoreMarginForTeam(endScore, teamId, homeTeamId, awayTeamId),
           };
         }
       }
@@ -973,6 +990,7 @@ function buildMomentumBursts(
       team: burst!.teamId === homeTeamId ? teamLabel(homeTeam) : teamLabel(awayTeam),
       items: [
         `${burst!.teamId === homeTeamId ? teamLabel(homeTeam) : teamLabel(awayTeam)}'s best push was ${burst!.points}-${burst!.opponentPoints} from ${burst!.startLabel} to ${burst!.endLabel}.`,
+        `That stretch changed the margin for ${burst!.teamId === homeTeamId ? teamLabel(homeTeam) : teamLabel(awayTeam)} from ${describeMarginState(burst!.startMargin)} to ${describeMarginState(burst!.endMargin)}.`,
       ],
       strength: burst!.net,
     }));
@@ -983,7 +1001,7 @@ function buildMomentumBursts(
     .sort((a, b) => a.startElapsed - b.startElapsed || b.net - a.net)
     .map((burst, index) => {
       const sequenceLabel = index === 0 ? "first major push" : "next major push";
-      return `${burst.team}'s ${sequenceLabel} was ${burst.points}-${burst.opponentPoints} from ${burst.startLabel} to ${burst.endLabel}.`;
+      return `${burst.team}'s ${sequenceLabel} was ${burst.points}-${burst.opponentPoints} from ${burst.startLabel} to ${burst.endLabel}, ${describeMarginMovement(burst.startMargin, burst.endMargin)}.`;
     });
 
   const strongestBurst = [...burstSummaries]
@@ -1004,6 +1022,53 @@ function scoreForTeam(score: { home: number; away: number }, teamId: string, hom
 
 function opponentTeamId(teamId: string, homeTeamId: string, awayTeamId: string) {
   return teamId === homeTeamId ? awayTeamId : homeTeamId;
+}
+
+function scoreMarginForTeam(score: { home: number; away: number }, teamId: string, homeTeamId: string, awayTeamId: string) {
+  const teamScore = scoreForTeam(score, teamId, homeTeamId, awayTeamId);
+  const opponentScore = scoreForTeam(score, opponentTeamId(teamId, homeTeamId, awayTeamId), homeTeamId, awayTeamId);
+  return teamScore - opponentScore;
+}
+
+function describeMarginState(margin: number) {
+  if (margin > 0) return `a ${margin}-point lead`;
+  if (margin < 0) return `a ${Math.abs(margin)}-point deficit`;
+  return "a tie";
+}
+
+function describeMarginMovement(startMargin: number, endMargin: number) {
+  if (startMargin === endMargin) return `leaving the margin at ${describeMarginState(endMargin)}`;
+  if (startMargin < 0 && endMargin < 0) {
+    const verb = Math.abs(endMargin) < Math.abs(startMargin) ? "cutting" : "deepening";
+    return `${verb} ${describeMarginState(startMargin)} to ${describeMarginState(endMargin)}`;
+  }
+  if (startMargin < 0 && endMargin === 0) {
+    return `erasing ${describeMarginState(startMargin)} to tie the game`;
+  }
+  if (startMargin < 0 && endMargin > 0) {
+    return `turning ${describeMarginState(startMargin)} into ${describeMarginState(endMargin)}`;
+  }
+  if (startMargin === 0 && endMargin > 0) {
+    return `breaking a tie to take ${describeMarginState(endMargin)}`;
+  }
+  if (startMargin === 0 && endMargin < 0) {
+    return `falling from a tie into ${describeMarginState(endMargin)}`;
+  }
+  if (startMargin > 0 && endMargin > 0) {
+    const verb = endMargin > startMargin ? "stretching" : "trimming";
+    return `${verb} ${describeMarginState(startMargin)} to ${describeMarginState(endMargin)}`;
+  }
+  if (startMargin > 0 && endMargin === 0) {
+    return `losing ${describeMarginState(startMargin)} and ending tied`;
+  }
+  return `swinging from ${describeMarginState(startMargin)} to ${describeMarginState(endMargin)}`;
+}
+
+function formatLargestLeadItem(team: Record<string, unknown>, lead: { points: number; label?: string }) {
+  const teamName = teamLabel(team);
+  const points = safeNumber(lead?.points, 0);
+  if (points <= 0) return `${teamName} never led during this span.`;
+  return `${teamName}'s largest lead was ${points} at ${lead?.label || "the start of the span"}.`;
 }
 
 function buildLateSwingInsight(
@@ -1443,7 +1508,7 @@ function buildFeaturePayload(
   const playerTotals = buildPlayerRangeStats(rangeActions, scoringEvents);
   const runs = buildRunSummary(scoringEvents, homeTeamId, awayTeamId, regulationMinutes);
   const gameFlow = buildGameFlowContext(scoreTimeline, homeTeam, awayTeam);
-  const momentumBursts = buildMomentumBursts(scoringEvents, homeTeam, awayTeam, regulationMinutes);
+  const momentumBursts = buildMomentumBursts(scoringEvents, startScore, homeTeam, awayTeam, regulationMinutes);
   const lateSwing = buildLateSwingInsight(
     actions,
     scoringEvents,
@@ -1616,8 +1681,8 @@ function buildInsightSignals(features: ReturnType<typeof buildFeaturePayload>) {
       title: "Shooting",
       strength: Math.abs(safeNumber(home.shooting.fgPct, 0) - safeNumber(away.shooting.fgPct, 0)) + (margin * 0.5),
       items: [
-        `${home.tricode} shot ${home.totals.fieldGoalsMade}/${home.totals.fieldGoalsAttempted} (${formatPercentage(home.shooting.fgPct)}) versus ${away.tricode} at ${away.totals.fieldGoalsMade}/${away.totals.fieldGoalsAttempted} (${formatPercentage(away.shooting.fgPct)}).`,
-        `${home.tricode} from three: ${home.totals.threePointersMade}/${home.totals.threePointersAttempted}; ${away.tricode}: ${away.totals.threePointersMade}/${away.totals.threePointersAttempted}.`,
+        `${home.tricode} shot ${formatPercentageWithAttempts(home.shooting.fgPct, home.totals.fieldGoalsMade, home.totals.fieldGoalsAttempted)} versus ${away.tricode} at ${formatPercentageWithAttempts(away.shooting.fgPct, away.totals.fieldGoalsMade, away.totals.fieldGoalsAttempted)}.`,
+        `${home.tricode} from three: ${formatPercentageWithAttempts(home.shooting.threePct, home.totals.threePointersMade, home.totals.threePointersAttempted)}; ${away.tricode}: ${formatPercentageWithAttempts(away.shooting.threePct, away.totals.threePointersMade, away.totals.threePointersAttempted)}.`,
       ],
     },
     {
@@ -1766,9 +1831,9 @@ function buildStatOutliers(features: ReturnType<typeof buildFeaturePayload>) {
     notes.push(...features.playerNotes.slice(0, 2));
   }
 
-  notes.push(`${home.tricode} shot ${home.totals.fieldGoalsMade}/${home.totals.fieldGoalsAttempted} (${formatPercentage(home.shooting.fgPct)}) versus ${away.tricode} at ${away.totals.fieldGoalsMade}/${away.totals.fieldGoalsAttempted} (${formatPercentage(away.shooting.fgPct)}).`);
-  notes.push(`${home.tricode} rim scoring was ${home.totals.rimFieldGoalsMade}/${home.totals.rimFieldGoalsAttempted}; ${away.tricode} was ${away.totals.rimFieldGoalsMade}/${away.totals.rimFieldGoalsAttempted}.`);
-  notes.push(`${home.tricode} from three: ${home.totals.threePointersMade}/${home.totals.threePointersAttempted}; ${away.tricode}: ${away.totals.threePointersMade}/${away.totals.threePointersAttempted}.`);
+  notes.push(`${home.tricode} shot ${formatPercentageWithAttempts(home.shooting.fgPct, home.totals.fieldGoalsMade, home.totals.fieldGoalsAttempted)} versus ${away.tricode} at ${formatPercentageWithAttempts(away.shooting.fgPct, away.totals.fieldGoalsMade, away.totals.fieldGoalsAttempted)}.`);
+  notes.push(`${home.tricode} rim scoring was ${formatPercentageWithAttempts(home.shooting.rimPct, home.totals.rimFieldGoalsMade, home.totals.rimFieldGoalsAttempted)}; ${away.tricode} was ${formatPercentageWithAttempts(away.shooting.rimPct, away.totals.rimFieldGoalsMade, away.totals.rimFieldGoalsAttempted)}.`);
+  notes.push(`${home.tricode} from three: ${formatPercentageWithAttempts(home.shooting.threePct, home.totals.threePointersMade, home.totals.threePointersAttempted)}; ${away.tricode}: ${formatPercentageWithAttempts(away.shooting.threePct, away.totals.threePointersMade, away.totals.threePointersAttempted)}.`);
 
   if (home.totals.freeThrowsAttempted !== away.totals.freeThrowsAttempted) {
     notes.push(`${home.tricode} free throws: ${home.totals.freeThrowsMade}/${home.totals.freeThrowsAttempted}; ${away.tricode}: ${away.totals.freeThrowsMade}/${away.totals.freeThrowsAttempted}.`);
@@ -1837,6 +1902,73 @@ function attachResponseMetadata(
   };
 }
 
+function collectAnalysisStrings(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.flatMap((entry) => collectAnalysisStrings(entry));
+  if (value && typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).flatMap((entry) => collectAnalysisStrings(entry));
+  }
+  return [];
+}
+
+function collectKnownShootingPercentages(features: ReturnType<typeof buildFeaturePayload>) {
+  const refs: Array<{ percentageText: string; made: number; attempted: number }> = [];
+  [features.teams.home, features.teams.away].forEach((team) => {
+    [
+      [team.shooting.fgPct, team.totals.fieldGoalsMade, team.totals.fieldGoalsAttempted],
+      [team.shooting.threePct, team.totals.threePointersMade, team.totals.threePointersAttempted],
+      [team.shooting.rimPct, team.totals.rimFieldGoalsMade, team.totals.rimFieldGoalsAttempted],
+      [team.shooting.midPct, team.totals.midFieldGoalsMade, team.totals.midFieldGoalsAttempted],
+      [team.shooting.ftPct, team.totals.freeThrowsMade, team.totals.freeThrowsAttempted],
+    ].forEach(([percentageValue, made, attempted]) => {
+      if (percentageValue == null || !safeNumber(attempted, 0)) return;
+      refs.push({
+        percentageText: formatPercentage(percentageValue),
+        made: safeNumber(made, 0),
+        attempted: safeNumber(attempted, 0),
+      });
+    });
+  });
+  return refs;
+}
+
+function hasBarePercentageReference(text: string, percentageText: string) {
+  let index = text.indexOf(percentageText);
+  while (index !== -1) {
+    const previous = index > 0 ? text[index - 1] : "";
+    const tail = text.slice(index + percentageText.length);
+    if (!/[0-9.]/.test(previous) && !/^\s*\(/.test(tail)) return true;
+    index = text.indexOf(percentageText, index + percentageText.length);
+  }
+  return false;
+}
+
+function hasZeroMarginLanguage(text: string) {
+  return /\b(?:largest\s+)?(?:lead|advantage|deficit|gap|cushion)\s+(?:being|was|of)?\s*0\b/i.test(text)
+    || /\b0[-\s]?point\s+(?:lead|advantage|deficit|gap|cushion)\b/i.test(text);
+}
+
+function hasOverstatedAllTeamScoring(text: string) {
+  return /\baccount(?:ed|ing)\s+for\s+all\s+of\b.*\b(?:scoring|points)\b/i.test(text)
+    || /\bscored\s+all\s+\d+\s+of\b.*\b(?:scoring|points)\b/i.test(text)
+    || /\bscored\s+all\s+of\b.*\b(?:scoring|points)\b/i.test(text);
+}
+
+function shouldRejectAiAnalysis(analysis: Record<string, unknown>, features: ReturnType<typeof buildFeaturePayload>) {
+  const texts = collectAnalysisStrings({
+    headline: analysis.headline,
+    summary: analysis.summary,
+    sections: analysis.sections,
+  });
+  if (texts.some(hasZeroMarginLanguage)) return true;
+  if (texts.some(hasOverstatedAllTeamScoring)) return true;
+
+  const percentages = collectKnownShootingPercentages(features);
+  return texts.some((text) => (
+    percentages.some((reference) => hasBarePercentageReference(text, reference.percentageText))
+  ));
+}
+
 function sanitizeAiHeadline(headline: string, features: ReturnType<typeof buildFeaturePayload>) {
   const trimmed = String(headline || "").trim();
   if (!trimmed) return "";
@@ -1879,6 +2011,11 @@ async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayloa
     "When the data shows a late-game collapse, comeback, or dramatic final-minute swing, make that central to the analysis even if aggregate quarter stats point elsewhere.",
     "Use game-flow context such as lead changes, largest leads, and concentrated momentum bursts to describe how the stretch unfolded, not just who won the box-score categories.",
     "When describing multiple momentum bursts, preserve the chronological order provided in momentumBursts.items; do not describe a later run first and then call an earlier run a response.",
+    "When citing a field-goal, three-point, rim, mid-range, or free-throw percentage, immediately include the made/attempt total in parentheses, for example: 47.8% (11/23).",
+    "Never write a direct shooting percentage without its made/attempt total immediately after it.",
+    "Never describe 0 as a lead, deficit, gap, cushion, or advantage. If a team's largest lead is 0, say that team never led or that the game was tied.",
+    "When describing a run that erased, trimmed, opened, or failed to close a deficit/gap, use the provided startMargin and endMargin context to state the exact margin movement.",
+    "Prefer concrete margin language like 'cut a 13-point deficit to 6' over vague phrases like 'closed the gap' or 'erased a double-digit deficit'.",
     "Do not confuse largest lead within the stretch with the score or margin at the end of the stretch.",
     "The headline follows the same rule: do not use bare 'N-point lead' wording unless N is the actual ending margin of the selected span.",
     "If you say 'by the end of the quarter', 'by the end of the span', or similar, that statement must match score.end exactly.",
@@ -2004,7 +2141,7 @@ export async function handleRequest(req: Request) {
     let analysis = templateAnalysis;
     try {
       const aiAnalysis = await generateAiAnalysis(features);
-      if (aiAnalysis?.headline && aiAnalysis?.summary) {
+      if (aiAnalysis?.headline && aiAnalysis?.summary && !shouldRejectAiAnalysis(aiAnalysis as Record<string, unknown>, features)) {
         analysis = aiAnalysis;
       }
     } catch {
@@ -2058,9 +2195,13 @@ export const __test__ = {
   buildLateSwingInsight,
   buildTemplateAnalysis,
   formatPercentage,
+  formatPercentageWithAttempts,
   handleRequest,
+  hasOverstatedAllTeamScoring,
+  hasZeroMarginLanguage,
   percentage,
   sanitizeTurnoverLanguage,
+  shouldRejectAiAnalysis,
 };
 
 if (import.meta.main) {
