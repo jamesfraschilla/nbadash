@@ -1,9 +1,23 @@
-import { createContext, useEffect, useMemo, useState } from "react";
+import { createContext, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabaseClient.js";
 import { ACCOUNTS_ENABLED, buildAuthRedirectUrl, isAllowedAccountEmail, normalizeAccountEmail } from "../authConfig.js";
 import { fetchProfile, touchProfileLastLogin } from "../accountData.js";
 
 export const AuthContext = createContext(null);
+
+const LAST_LOGIN_TOUCH_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
+function shouldTouchLastLogin(userId) {
+  if (!userId || typeof window === "undefined") return true;
+  const storageKey = `nbaDash:lastLoginTouch:${userId}`;
+  const now = Date.now();
+  const previous = Number(window.localStorage.getItem(storageKey) || 0);
+  if (Number.isFinite(previous) && now - previous < LAST_LOGIN_TOUCH_INTERVAL_MS) {
+    return false;
+  }
+  window.localStorage.setItem(storageKey, String(now));
+  return true;
+}
 
 async function exchangeUrlSession() {
   if (!supabase || typeof window === "undefined") return;
@@ -22,6 +36,8 @@ export function AuthProvider({ children }) {
   const [error, setError] = useState("");
   const [emailSentTo, setEmailSentTo] = useState("");
   const [requiresPasswordReset, setRequiresPasswordReset] = useState(false);
+  const loadedProfileUserIdRef = useRef("");
+  const loadedProfileRef = useRef(null);
 
   useEffect(() => {
     if (!ACCOUNTS_ENABLED || !supabase) {
@@ -31,21 +47,33 @@ export function AuthProvider({ children }) {
 
     let cancelled = false;
 
-    const loadProfile = async (user) => {
+    const loadProfile = async (user, { force = false, touchLogin = false } = {}) => {
       if (!user?.id) {
+        loadedProfileUserIdRef.current = "";
+        loadedProfileRef.current = null;
         if (!cancelled) setProfile(null);
+        return;
+      }
+      if (!force && loadedProfileUserIdRef.current === user.id && loadedProfileRef.current) {
+        if (touchLogin && loadedProfileRef.current.status === "active" && shouldTouchLastLogin(user.id)) {
+          touchProfileLastLogin(user.id).catch(() => {});
+        }
         return;
       }
       try {
         const nextProfile = await fetchProfile(user.id);
         if (cancelled) return;
+        loadedProfileUserIdRef.current = user.id;
+        loadedProfileRef.current = nextProfile || null;
         setProfile(nextProfile || null);
         setError("");
-        if (nextProfile?.status === "active") {
+        if (touchLogin && nextProfile?.status === "active" && shouldTouchLastLogin(user.id)) {
           touchProfileLastLogin(user.id).catch(() => {});
         }
       } catch (profileError) {
         if (!cancelled) {
+          loadedProfileUserIdRef.current = "";
+          loadedProfileRef.current = null;
           setProfile(null);
           setError(profileError?.message || "Unable to load account profile.");
         }
@@ -85,7 +113,10 @@ export function AuthProvider({ children }) {
         setSession(nextSession || null);
         setEmailSentTo("");
         setError("");
-        await loadProfile(nextSession?.user || null);
+        await loadProfile(nextSession?.user || null, {
+          force: event === "SIGNED_IN" || event === "USER_UPDATED" || event === "PASSWORD_RECOVERY",
+          touchLogin: event === "SIGNED_IN",
+        });
       } catch (sessionError) {
         if (!cancelled) {
           setProfile(null);

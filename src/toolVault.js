@@ -12,6 +12,7 @@ const TOOL_VAULT_EVICTION_PREFIXES = [
 const TOOL_VAULT_REMOTE_TIMEOUT_MS = 12_000;
 const TOOL_VAULT_REMOTE_LIST_LIMIT = 200;
 const TOOL_VAULT_REMOTE_MAX_LIST_LIMIT = 500;
+const remoteToolSaveRequests = new Map();
 
 export const TOOL_RECORD_TYPES = {
   MATCHUP_GRAPHIC: "matchup_graphic",
@@ -281,42 +282,60 @@ export async function saveToolRecordRemote(userId, record) {
   await requireSupabase();
   const normalized = normalizeRecord(record);
   if (!normalized) return null;
-  const cached = getSavedToolRecord(userId, normalized.id);
-  const expectedRevision = Math.max(0, Number(normalized.revision || cached?.revision || 0));
-  const payload = {
-    id: normalized.id,
-    type: normalized.type || TOOL_RECORD_TYPES.MATCHUP_GRAPHIC,
-    title: normalized.title,
-    payload: normalized.payload,
-    created_at: normalized.createdAt,
-  };
-  const { data, error } = await runRemoteToolRequest(
-    () => supabase.rpc("save_user_tool_record_atomic", {
-      p_record: payload,
-      p_expected_revision: expectedRevision,
-    }),
-    "Saving this favorite took too long. Check your connection and try again."
-  );
-  if (error) {
-    if (error.code === "40001" || String(error.message || "").includes("TOOL_RECORD_CONFLICT")) {
-      throw new Error("This saved tool changed in another browser. Reload it before saving again.");
+  const requestKey = `${userId}:${normalized.id}`;
+  const activeRequest = remoteToolSaveRequests.get(requestKey);
+  if (activeRequest) return activeRequest;
+
+  const request = (async () => {
+    const cached = getSavedToolRecord(userId, normalized.id);
+    const expectedRevision = Math.max(0, Number(normalized.revision || cached?.revision || 0));
+    const payload = {
+      id: normalized.id,
+      type: normalized.type || TOOL_RECORD_TYPES.MATCHUP_GRAPHIC,
+      title: normalized.title,
+      payload: normalized.payload,
+      created_at: normalized.createdAt,
+    };
+    const { data, error } = await runRemoteToolRequest(
+      () => supabase.rpc("save_user_tool_record_atomic", {
+        p_record: payload,
+        p_expected_revision: expectedRevision,
+      }),
+      "Saving this favorite took too long. Check your connection and try again."
+    );
+    if (error) {
+      if (error.code === "40001" || String(error.message || "").includes("TOOL_RECORD_CONFLICT")) {
+        throw new Error("This saved tool changed in another browser. Reload it before saving again.");
+      }
+      if (error.code === "55P03" || String(error.message || "").includes("TOOL_RECORD_BUSY")) {
+        throw new Error("This saved tool is already saving. Wait a moment and try again.");
+      }
+      if (String(error.message || "").includes("Could not find the function")) {
+        throw new Error("The latest tool-vault Supabase migration has not been applied.");
+      }
+      throw error;
     }
-    if (String(error.message || "").includes("Could not find the function")) {
-      throw new Error("The latest tool-vault Supabase migration has not been applied.");
+    const saved = normalizeRecord({
+      id: data.id,
+      type: data.type,
+      title: data.title,
+      payload: data.payload,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+      revision: data.revision,
+    });
+    saveToolRecord(userId, saved);
+    return saved;
+  })();
+
+  remoteToolSaveRequests.set(requestKey, request);
+  try {
+    return await request;
+  } finally {
+    if (remoteToolSaveRequests.get(requestKey) === request) {
+      remoteToolSaveRequests.delete(requestKey);
     }
-    throw error;
   }
-  const saved = normalizeRecord({
-    id: data.id,
-    type: data.type,
-    title: data.title,
-    payload: data.payload,
-    createdAt: data.created_at,
-    updatedAt: data.updated_at,
-    revision: data.revision,
-  });
-  saveToolRecord(userId, saved);
-  return saved;
 }
 
 export async function deleteSavedToolRecordRemote(userId, recordId) {

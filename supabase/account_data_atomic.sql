@@ -275,10 +275,19 @@ security definer
 set search_path = public
 as $$
 declare
-  actor uuid := auth.uid(); record_id uuid := (p_record ->> 'id')::uuid;
+  actor uuid := auth.uid(); record_id uuid := nullif(p_record ->> 'id', '')::uuid;
   existing public.user_tool_records; saved public.user_tool_records;
 begin
   if actor is null then raise exception 'Authentication required'; end if;
+  if record_id is null then raise exception 'Saved tool id is required'; end if;
+
+  perform set_config('lock_timeout', '1000ms', true);
+  perform set_config('statement_timeout', '8000ms', true);
+
+  if not pg_try_advisory_xact_lock(hashtextextended(record_id::text, 0)) then
+    raise exception using message = 'TOOL_RECORD_BUSY', errcode = '55P03';
+  end if;
+
   select * into existing from public.user_tool_records where id = record_id for update;
   if existing.id is null then
     if coalesce(p_expected_revision, 0) <> 0 then
