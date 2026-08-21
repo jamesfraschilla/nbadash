@@ -117,6 +117,15 @@ function formatPercent(value) {
   return Number.isInteger(rounded) ? `${rounded}%` : `${rounded.toFixed(1)}%`;
 }
 
+function playerContributionTitle(playerName, share, action) {
+  const shareText = formatPercent(share);
+  const periodText = periodLongLabel(action.period);
+  if (parseClockSeconds(action.clock) > 0) {
+    return `${playerName} has contributed to ${shareText} of the team's points so far in the ${periodText}`;
+  }
+  return `${playerName} contributed to ${shareText} of the team's points in the ${periodText}`;
+}
+
 function parseScoreValue(value) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
@@ -499,7 +508,7 @@ function addCreatedShareAlert({
     clock: action.clock,
     elapsed,
     teamId,
-    title: `${player.name} contributed to ${formatPercent(share)} of the team's points in the ${periodLongLabel(action.period)}`,
+    title: playerContributionTitle(player.name, share, action),
     detail: `(${playerPeriod.points} points, ${playerPeriod.assists} assists, ${playerPeriod.assistPoints} points created from assists)`,
   });
   if (added) {

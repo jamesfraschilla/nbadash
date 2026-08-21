@@ -104,10 +104,14 @@ test("buildGameAlerts reports player-created share with assisted points", () => 
     ],
   });
 
-  const shareAlert = alerts.find((alert) => alert.title.includes("John Ukomadu contributed to"));
+  const shareAlert = alerts.find((alert) => alert.title.includes("John Ukomadu has contributed to"));
   assert.ok(shareAlert);
+  assert.equal(
+    shareAlert.title,
+    "John Ukomadu has contributed to 83.3% of the team's points so far in the 1st quarter",
+  );
   assert.equal(shareAlert.detail, "(2 points, 3 assists, 8 points created from assists)");
-  assert.equal(alerts.filter((alert) => alert.title.includes("John Ukomadu contributed to")).length, 1);
+  assert.equal(alerts.filter((alert) => alert.title.includes("John Ukomadu has contributed to")).length, 1);
 });
 
 test("buildGameAlerts reports observed defensive and foul milestones", () => {
