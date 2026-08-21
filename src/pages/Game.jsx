@@ -66,6 +66,7 @@ import TransitionStats from "../components/TransitionStats.jsx";
 import MiscStats from "../components/MiscStats.jsx";
 import CreatingDisruption from "../components/CreatingDisruption.jsx";
 import SegmentSelector from "../components/SegmentSelector.jsx";
+import GameAlerts from "../components/GameAlerts.jsx";
 import LateGameMatrixPanel from "../components/LateGameMatrixPanel.jsx";
 import {
   buildMarginRange,
@@ -74,6 +75,7 @@ import {
   getMarginOptionLabel,
   resolvePossessionDisplay,
 } from "../components/lateGamePanelHelpers.js";
+import { buildGameAlerts } from "../gameAlerts.js";
 import { fetchPublishedOrderForOfficials } from "../officialAssignments.js";
 import {
   fetchRemotePregamePlayers,
@@ -106,6 +108,7 @@ import { readLocalStorage, writeLocalStorage } from "../storage.js";
 import styles from "./Game.module.css";
 
 const SNAPSHOT_STORAGE_PREFIX = "nba-dashboard:snapshots:";
+const ALERTS_PANEL_STORAGE_PREFIX = "nba-dashboard:alerts-panel:";
 const LATE_GAME_PANEL_STORAGE_PREFIX = "nba-dashboard:late-game-panel:";
 const PREPARED_ANALYSIS_SEGMENT_OPTIONS = [
   { key: "q1", label: "Q1" },
@@ -282,6 +285,18 @@ const saveSnapshots = (gameId, snapshots) => {
     `${SNAPSHOT_STORAGE_PREFIX}${gameId}`,
     JSON.stringify((snapshots || []).map(serializeSnapshotEntry))
   );
+};
+
+const loadAlertsPanelCollapsed = (gameId) => {
+  if (typeof window === "undefined" || !gameId) return true;
+  const raw = readLocalStorage(`${ALERTS_PANEL_STORAGE_PREFIX}${gameId}`);
+  if (raw == null) return true;
+  return raw !== "open";
+};
+
+const saveAlertsPanelCollapsed = (gameId, collapsed) => {
+  if (typeof window === "undefined" || !gameId) return;
+  writeLocalStorage(`${ALERTS_PANEL_STORAGE_PREFIX}${gameId}`, collapsed ? "collapsed" : "open");
 };
 
 const loadLateGamePanelCollapsed = (gameId) => {
@@ -569,6 +584,7 @@ export default function Game({ variant = "full" }) {
   const [strategyOverrideDraft, setStrategyOverrideDraft] = useState(() => buildStrategyOverrideDraft(null));
   const [strategyFeedbackSaving, setStrategyFeedbackSaving] = useState(false);
   const [strategyFeedbackStatus, setStrategyFeedbackStatus] = useState("");
+  const [alertsPanelCollapsed, setAlertsPanelCollapsed] = useState(() => loadAlertsPanelCollapsed(gameId));
   const [strategyPanelCollapsed, setStrategyPanelCollapsed] = useState(() => loadLateGamePanelCollapsed(gameId));
   const [strategyFeedbackModalOpen, setStrategyFeedbackModalOpen] = useState(false);
   const [strategyHistoryModalOpen, setStrategyHistoryModalOpen] = useState(false);
@@ -954,10 +970,18 @@ export default function Game({ variant = "full" }) {
     };
   }, [officials]);
 
-  const basePlayers = [
+  const basePlayers = useMemo(() => [
     ...(boxScore?.away?.players || []),
     ...(boxScore?.home?.players || []),
-  ];
+  ], [boxScore?.away?.players, boxScore?.home?.players]);
+
+  const gameAlerts = useMemo(() => buildGameAlerts({
+    game,
+    awayTeam,
+    homeTeam,
+    basePlayers,
+    minutesData,
+  }), [awayTeam, basePlayers, game, homeTeam, minutesData]);
 
   const getRosterForTeam = (team, teamScope, remoteRoster, gameRosterPlayers) => {
     const teamId = String(team?.teamId || "").trim();
@@ -1115,6 +1139,7 @@ export default function Game({ variant = "full" }) {
   }, [awayTeam, awayTeamId, homeTeam, homeTeamId, strategyVantageTeamId]);
 
   useEffect(() => {
+    setAlertsPanelCollapsed(loadAlertsPanelCollapsed(gameId));
     setStrategyPanelCollapsed(loadLateGamePanelCollapsed(gameId));
   }, [gameId]);
 
@@ -2529,6 +2554,14 @@ export default function Game({ variant = "full" }) {
     });
   };
 
+  const toggleAlertsPanel = () => {
+    setAlertsPanelCollapsed((prev) => {
+      const next = !prev;
+      saveAlertsPanelCollapsed(gameId, next);
+      return next;
+    });
+  };
+
   const applyManualSituationOverride = () => {
     setStrategyOverrides((prev) => ({
       ...prev,
@@ -3121,6 +3154,12 @@ export default function Game({ variant = "full" }) {
               )}
             </div>
           </div>
+
+          <GameAlerts
+            alerts={gameAlerts}
+            collapsed={alertsPanelCollapsed}
+            onToggleCollapsed={toggleAlertsPanel}
+          />
 
           <LateGameMatrixPanel
             title="Live Game Situation Matrix"

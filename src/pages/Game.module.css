@@ -1286,6 +1286,90 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   line-height: 1;
 }
 
+.alertsPanel {
+  background:
+    linear-gradient(180deg, rgba(245, 158, 11, 0.08), transparent 30%),
+    var(--panel);
+}
+
+.alertsToggleMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.alertsList {
+  display: grid;
+  gap: 10px;
+  max-height: 520px;
+  overflow-y: auto;
+  padding-right: 3px;
+}
+
+.alertItem {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg) 84%, var(--panel) 16%);
+  padding: 12px;
+}
+
+.alertMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.alertTime {
+  color: var(--highlight-text);
+}
+
+.alertCategory,
+.alertTeam {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 7px;
+  color: var(--muted);
+  background: var(--panel-strong);
+}
+
+.alertTeam {
+  color: var(--text);
+}
+
+.alertTitle {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.alertDetail {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.alertsEmpty {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg) 84%, var(--panel) 16%);
+  color: var(--muted);
+  padding: 14px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
 .strategyPanelBody {
   display: grid;
   gap: 14px;
