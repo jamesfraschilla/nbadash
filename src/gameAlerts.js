@@ -4,8 +4,15 @@ import { normalizeClock } from "./utils.js";
 const RUN_NET_THRESHOLD = 8;
 const RUN_POINTS_THRESHOLD = 8;
 const RUN_MAX_SECONDS = 7 * 60;
+const RUN_ALERT_POINT_STEP = 6;
+const RUN_ALERT_NET_STEP = 6;
 const PLAYER_CREATED_SHARE_THRESHOLD = 60;
-const PLAYER_CREATED_MIN_POINTS = 4;
+const PLAYER_CREATED_MIN_TEAM_POINTS = 12;
+const PLAYER_CREATED_MIN_CREATED_POINTS = 8;
+const PLAYER_CREATED_MIN_PERIOD_SECONDS = 3 * 60;
+const PLAYER_CREATED_REPEAT_CREATED_STEP = 8;
+const PLAYER_CREATED_REPEAT_SHARE_STEP = 15;
+const PLAYER_CREATED_REPEAT_SECONDS = 5 * 60;
 const TEAM_PERIOD_POINTS_THRESHOLD = 36;
 const TEAM_PERIOD_BLOCKS_THRESHOLD = 5;
 const DEFAULT_MAX_ALERTS = 120;
@@ -276,7 +283,7 @@ function addAlert(alerts, seen, alert) {
     alert.title,
     alert.detail,
   ].join(":");
-  if (seen.has(id)) return;
+  if (seen.has(id)) return false;
   seen.add(id);
   alerts.push({
     id,
@@ -288,6 +295,7 @@ function addAlert(alerts, seen, alert) {
     detail: alert.detail || "",
     teamId: alert.teamId || null,
   });
+  return true;
 }
 
 function scoringEventFromAction(action, state, homeTeamId, awayTeamId) {
@@ -329,6 +337,12 @@ function scoringEventFromAction(action, state, homeTeamId, awayTeamId) {
 
 function statCount(stats, field) {
   return safeNumber(stats?.[field], 0);
+}
+
+function isSteppedMilestone(value, minimum, step = 1) {
+  if (value < minimum) return false;
+  if (step <= 1) return true;
+  return value === minimum || (value > minimum && (value - minimum) % step === 0);
 }
 
 function doubleDoubleCategoryCount(player) {
@@ -425,8 +439,9 @@ function addPlayerStatAlert({
   idPrefix,
   gameId,
   verb = "has totaled",
+  step = 1,
 }) {
-  if (value < minimum) return;
+  if (!isSteppedMilestone(value, minimum, step)) return;
   addAlert(alerts, seen, {
     id: `${idPrefix}:${player.personId}:${value}`,
     category,
@@ -446,25 +461,58 @@ function addCreatedShareAlert({
   teamId,
   teamPeriodPoints,
   gameId,
+  createdShareState,
 }) {
   const playerPeriod = getPlayerPeriodStats(player, action.period);
   const createdPoints = playerPeriod.points + playerPeriod.assistPoints;
-  if (teamPeriodPoints < PLAYER_CREATED_MIN_POINTS || createdPoints < PLAYER_CREATED_MIN_POINTS) return;
+  const periodElapsed = periodLengthSeconds(action.period, gameId) - parseClockSeconds(action.clock);
+  if (
+    teamPeriodPoints < PLAYER_CREATED_MIN_TEAM_POINTS ||
+    createdPoints < PLAYER_CREATED_MIN_CREATED_POINTS ||
+    periodElapsed < PLAYER_CREATED_MIN_PERIOD_SECONDS
+  ) {
+    return;
+  }
   const share = teamPeriodPoints > 0 ? (createdPoints / teamPeriodPoints) * 100 : 0;
   if (share < PLAYER_CREATED_SHARE_THRESHOLD) return;
-  addAlert(alerts, seen, {
+
+  const stateKey = `${player.personId}:${action.period}`;
+  const previous = createdShareState.get(stateKey);
+  if (previous) {
+    const createdDelta = createdPoints - previous.createdPoints;
+    const shareDelta = Math.abs(share - previous.share);
+    const elapsedDelta = actionElapsedSeconds(action, gameId) - previous.elapsed;
+    if (
+      createdDelta < PLAYER_CREATED_REPEAT_CREATED_STEP &&
+      shareDelta < PLAYER_CREATED_REPEAT_SHARE_STEP &&
+      !(elapsedDelta >= PLAYER_CREATED_REPEAT_SECONDS && createdDelta >= PLAYER_CREATED_MIN_CREATED_POINTS / 2)
+    ) {
+      return;
+    }
+  }
+
+  const elapsed = actionElapsedSeconds(action, gameId);
+  const added = addAlert(alerts, seen, {
     id: `created-share:${action.actionNumber}:${player.personId}:${Math.round(share * 10)}`,
     category: "Player Impact",
     period: safeNumber(action.period, 0),
     clock: action.clock,
-    elapsed: actionElapsedSeconds(action, gameId),
+    elapsed,
     teamId,
-    title: `${player.name} accounts for ${formatPercent(share)} of the team's points in the ${periodLongLabel(action.period)}`,
+    title: `${player.name} contributed to ${formatPercent(share)} of the team's points in the ${periodLongLabel(action.period)}`,
     detail: `(${playerPeriod.points} points, ${playerPeriod.assists} assists, ${playerPeriod.assistPoints} points created from assists)`,
   });
+  if (added) {
+    createdShareState.set(stateKey, {
+      createdPoints,
+      elapsed,
+      share,
+    });
+  }
 }
 
 function addRunAlerts({ alerts, seen, scoringEvents, teamsById }) {
+  const runAlertState = new Map();
   for (let endIndex = 0; endIndex < scoringEvents.length; endIndex += 1) {
     const endEvent = scoringEvents[endIndex];
     let best = null;
@@ -515,8 +563,17 @@ function addRunAlerts({ alerts, seen, scoringEvents, teamsById }) {
       }
     }
     if (!best) continue;
+    const previous = runAlertState.get(best.endEvent.teamId);
+    const isSameRun = previous && best.startIndex <= previous.endIndex;
+    if (isSameRun) {
+      const pointDelta = best.teamPoints - previous.teamPoints;
+      const netDelta = best.net - previous.net;
+      if (pointDelta < RUN_ALERT_POINT_STEP && netDelta < RUN_ALERT_NET_STEP) {
+        continue;
+      }
+    }
     const team = teamsById.get(best.endEvent.teamId);
-    addAlert(alerts, seen, {
+    const added = addAlert(alerts, seen, {
       id: `run:${best.endEvent.action.actionNumber}:${best.startEvent.action.actionNumber}:${best.teamPoints}:${best.opponentPoints}`,
       category: "Run",
       period: best.endEvent.period,
@@ -526,6 +583,13 @@ function addRunAlerts({ alerts, seen, scoringEvents, teamsById }) {
       title: `${teamLabel(team)} are on a ${best.teamPoints}-${best.opponentPoints} run`,
       detail: `Over the last ${formatDuration(best.duration)} (${clockPeriodLabel(best.startEvent.action)} to ${clockPeriodLabel(best.endEvent.action)}).`,
     });
+    if (added) {
+      runAlertState.set(best.endEvent.teamId, {
+        endIndex,
+        net: best.net,
+        teamPoints: best.teamPoints,
+      });
+    }
   }
 }
 
@@ -741,7 +805,7 @@ function addFirstPointsAlert({ alerts, seen, event, teamsById }) {
 
 function addTeamPeriodPointAlert({ alerts, seen, team, teamId, period, action, periodPoints, gameId }) {
   if (safeNumber(period, 0) < 3) return;
-  if (periodPoints < TEAM_PERIOD_POINTS_THRESHOLD) return;
+  if (!isSteppedMilestone(periodPoints, TEAM_PERIOD_POINTS_THRESHOLD, 4)) return;
   addAlert(alerts, seen, {
     id: `team-period-points:${teamId}:${period}:${periodPoints}`,
     category: "Team Scoring",
@@ -756,6 +820,7 @@ function addTeamPeriodPointAlert({ alerts, seen, team, teamId, period, action, p
 function addPlayerPeriodPointAlert({ alerts, seen, player, action, teamId, periodPoints, gameId }) {
   const periodElapsed = actionElapsedSeconds(action, gameId) - actionElapsedSeconds({ period: action.period, clock: `${Math.floor(periodLengthSeconds(action.period, gameId) / 60)}:00` }, gameId);
   if (periodPoints >= 8 && periodElapsed <= 3 * 60) {
+    if (!isSteppedMilestone(periodPoints, 8, 4)) return;
     addAlert(alerts, seen, {
       id: `player-period-start-points:${player.personId}:${action.period}:${periodPoints}`,
       category: "Player Scoring",
@@ -766,6 +831,7 @@ function addPlayerPeriodPointAlert({ alerts, seen, player, action, teamId, perio
       title: `${player.name} has put up ${periodPoints} points to start the ${periodLongLabel(action.period)}`,
     });
   } else if (periodPoints >= 12) {
+    if (!isSteppedMilestone(periodPoints, 12, 4)) return;
     addAlert(alerts, seen, {
       id: `player-period-points:${player.personId}:${action.period}:${periodPoints}`,
       category: "Player Scoring",
@@ -779,7 +845,7 @@ function addPlayerPeriodPointAlert({ alerts, seen, player, action, teamId, perio
 }
 
 function addTeamPeriodBlockAlert({ alerts, seen, team, teamId, period, action, blocks, gameId }) {
-  if (blocks < TEAM_PERIOD_BLOCKS_THRESHOLD) return;
+  if (!isSteppedMilestone(blocks, TEAM_PERIOD_BLOCKS_THRESHOLD, 2)) return;
   addAlert(alerts, seen, {
     id: `team-period-blocks:${teamId}:${period}:${blocks}`,
     category: "Defense",
@@ -823,6 +889,7 @@ export function buildGameAlerts({
   const cumulativeSnapshotsByPeriod = new Map();
   const teamCumulativeStatsByPeriod = new Map();
   const playerAchievementState = new Map();
+  const createdShareState = new Map();
   const scoreState = {
     gameId: game?.gameId,
     previousHomeScore: 0,
@@ -888,7 +955,7 @@ export function buildGameAlerts({
           }
         }
 
-        if (player.points === 16 || player.points >= 20) {
+        if (player.points === 16 || player.points === 20 || (player.points > 20 && player.points % 5 === 0)) {
           addPlayerStatAlert({
             alerts,
             seen,
@@ -920,6 +987,7 @@ export function buildGameAlerts({
           teamId: scoringEvent.teamId,
           teamPeriodPoints: periodStats.points,
           gameId: game?.gameId,
+          createdShareState,
         });
         addPlayerAchievementAlerts({
           alerts,
@@ -952,6 +1020,7 @@ export function buildGameAlerts({
           teamId: scoringEvent.teamId,
           teamPeriodPoints: periodStats.points,
           gameId: game?.gameId,
+          createdShareState,
         });
         addPlayerStatAlert({
           alerts,
@@ -966,6 +1035,7 @@ export function buildGameAlerts({
           idPrefix: "player-assists",
           gameId: game?.gameId,
           verb: "has dished out",
+          step: 2,
         });
         addPlayerAchievementAlerts({
           alerts,
@@ -1019,6 +1089,7 @@ export function buildGameAlerts({
           minimum: 3,
           idPrefix: "player-blocks",
           gameId: game?.gameId,
+          step: 2,
         });
         addTeamPeriodBlockAlert({
           alerts,
@@ -1070,6 +1141,7 @@ export function buildGameAlerts({
           idPrefix: "player-steals",
           gameId: game?.gameId,
           verb: "has tallied",
+          step: 2,
         });
         addPlayerAchievementAlerts({
           alerts,
@@ -1106,8 +1178,9 @@ export function buildGameAlerts({
         idPrefix: "player-rebounds",
         gameId: game?.gameId,
         verb: "has pulled down",
+        step: 2,
       });
-      if (playerPeriod.rebounds >= 5) {
+      if (isSteppedMilestone(playerPeriod.rebounds, 5, 3)) {
         addAlert(alerts, seen, {
           id: `player-period-rebounds:${player.personId}:${period}:${playerPeriod.rebounds}`,
           category: "Rebounding",
@@ -1144,6 +1217,7 @@ export function buildGameAlerts({
         minimum: 3,
         idPrefix: "player-blocks",
         gameId: game?.gameId,
+        step: 2,
       });
       addTeamPeriodBlockAlert({
         alerts,
@@ -1181,6 +1255,7 @@ export function buildGameAlerts({
         idPrefix: "player-steals",
         gameId: game?.gameId,
         verb: "has tallied",
+        step: 2,
       });
       addPlayerAchievementAlerts({
         alerts,

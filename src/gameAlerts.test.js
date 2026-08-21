@@ -46,6 +46,38 @@ test("buildGameAlerts creates first-score and scoring-run alerts from loaded pla
   assert.ok(alerts.some((alert) => alert.title === "Nets are on a 8-0 run"));
 });
 
+test("buildGameAlerts throttles consecutive alerts for the same scoring run", () => {
+  const game = {
+    gameId: "1522600074",
+    gameStatus: 2,
+    period: 1,
+    gameClock: "PT04M30.00S",
+    playByPlayActions: [
+      scoringAction({ actionNumber: 1, orderNumber: 1, clock: "PT09M40.00S", scoreAway: "2", scoreHome: "0" }),
+      scoringAction({ actionNumber: 2, orderNumber: 2, teamId: HOME.teamId, personId: 201, playerName: "Steven Ashworth", clock: "PT09M10.00S", scoreAway: "2", scoreHome: "2" }),
+      scoringAction({ actionNumber: 3, orderNumber: 3, actionType: "3pt", clock: "PT08M40.00S", scoreAway: "5", scoreHome: "2" }),
+      scoringAction({ actionNumber: 4, orderNumber: 4, clock: "PT08M00.00S", scoreAway: "7", scoreHome: "2" }),
+      scoringAction({ actionNumber: 5, orderNumber: 5, actionType: "3pt", clock: "PT07M20.00S", scoreAway: "10", scoreHome: "2" }),
+      scoringAction({ actionNumber: 6, orderNumber: 6, clock: "PT06M45.00S", scoreAway: "12", scoreHome: "2" }),
+      scoringAction({ actionNumber: 7, orderNumber: 7, clock: "PT06M20.00S", scoreAway: "14", scoreHome: "2" }),
+      scoringAction({ actionNumber: 8, orderNumber: 8, clock: "PT05M55.00S", scoreAway: "16", scoreHome: "2" }),
+    ],
+  };
+
+  const alerts = buildGameAlerts({
+    game,
+    awayTeam: AWAY,
+    homeTeam: HOME,
+    basePlayers: [{ personId: 101, firstName: "John", familyName: "Ukomadu", teamId: AWAY.teamId }],
+  });
+
+  const netsRunAlerts = alerts.filter((alert) => alert.category === "Run" && alert.teamCode === "BKN");
+  assert.deepEqual(netsRunAlerts.map((alert) => alert.title), [
+    "Nets are on a 8-0 run",
+    "Nets are on a 14-0 run",
+  ]);
+});
+
 test("buildGameAlerts reports player-created share with assisted points", () => {
   const game = {
     gameId: "1522600074",
@@ -55,7 +87,10 @@ test("buildGameAlerts reports player-created share with assisted points", () => 
     playByPlayActions: [
       scoringAction({ actionNumber: 1, orderNumber: 1, clock: "PT09M40.00S", scoreAway: "2", scoreHome: "0" }),
       scoringAction({ actionNumber: 2, orderNumber: 2, actionType: "3pt", clock: "PT08M30.00S", personId: 102, playerName: "Dion Brown", assistPersonId: 101, assistPlayerNameI: "J. Ukomadu", scoreAway: "5", scoreHome: "0" }),
-      scoringAction({ actionNumber: 3, orderNumber: 3, teamId: HOME.teamId, personId: 201, playerName: "Steven Ashworth", clock: "PT07M30.00S", scoreAway: "5", scoreHome: "2" }),
+      scoringAction({ actionNumber: 3, orderNumber: 3, clock: "PT07M45.00S", personId: 103, playerName: "Nolan Hickman", scoreAway: "7", scoreHome: "0" }),
+      scoringAction({ actionNumber: 4, orderNumber: 4, actionType: "3pt", clock: "PT07M20.00S", personId: 102, playerName: "Dion Brown", assistPersonId: 101, assistPlayerNameI: "J. Ukomadu", scoreAway: "10", scoreHome: "0" }),
+      scoringAction({ actionNumber: 5, orderNumber: 5, teamId: HOME.teamId, personId: 201, playerName: "Steven Ashworth", clock: "PT06M30.00S", scoreAway: "10", scoreHome: "2" }),
+      scoringAction({ actionNumber: 6, orderNumber: 6, clock: "PT05M50.00S", personId: 103, playerName: "Nolan Hickman", assistPersonId: 101, assistPlayerNameI: "J. Ukomadu", scoreAway: "12", scoreHome: "2" }),
     ],
   };
 
@@ -69,9 +104,10 @@ test("buildGameAlerts reports player-created share with assisted points", () => 
     ],
   });
 
-  const shareAlert = alerts.find((alert) => alert.title.includes("John Ukomadu accounts for"));
+  const shareAlert = alerts.find((alert) => alert.title.includes("John Ukomadu contributed to"));
   assert.ok(shareAlert);
-  assert.equal(shareAlert.detail, "(2 points, 1 assists, 3 points created from assists)");
+  assert.equal(shareAlert.detail, "(2 points, 3 assists, 8 points created from assists)");
+  assert.equal(alerts.filter((alert) => alert.title.includes("John Ukomadu contributed to")).length, 1);
 });
 
 test("buildGameAlerts reports observed defensive and foul milestones", () => {
