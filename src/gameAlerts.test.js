@@ -114,6 +114,81 @@ test("buildGameAlerts reports player-created share with assisted points", () => 
   assert.equal(alerts.filter((alert) => alert.title.includes("John Ukomadu has contributed to")).length, 1);
 });
 
+test("buildGameAlerts adds bounded team trend alerts at period checkpoints", () => {
+  const game = {
+    gameId: "0022600001",
+    gameStatus: 2,
+    period: 2,
+    gameClock: "PT12M00.00S",
+    playByPlayActions: [
+      scoringAction({ actionNumber: 1, orderNumber: 1, clock: "PT11M40.00S", assistPersonId: 101, assistPlayerNameI: "J. Ukomadu", scoreAway: "2", scoreHome: "0" }),
+      scoringAction({ actionNumber: 2, orderNumber: 2, actionType: "3pt", clock: "PT10M40.00S", assistPersonId: 101, assistPlayerNameI: "J. Ukomadu", scoreAway: "5", scoreHome: "0" }),
+      scoringAction({ actionNumber: 3, orderNumber: 3, actionType: "3pt", clock: "PT09M40.00S", assistPersonId: 101, assistPlayerNameI: "J. Ukomadu", scoreAway: "8", scoreHome: "0" }),
+      scoringAction({ actionNumber: 4, orderNumber: 4, clock: "PT08M40.00S", scoreAway: "10", scoreHome: "0" }),
+      scoringAction({ actionNumber: 5, orderNumber: 5, clock: "PT07M40.00S", assistPersonId: 101, assistPlayerNameI: "J. Ukomadu", scoreAway: "12", scoreHome: "0" }),
+      scoringAction({ actionNumber: 6, orderNumber: 6, actionType: "3pt", clock: "PT06M40.00S", assistPersonId: 101, assistPlayerNameI: "J. Ukomadu", scoreAway: "15", scoreHome: "0" }),
+      scoringAction({ actionNumber: 7, orderNumber: 7, actionType: "3pt", clock: "PT05M40.00S", assistPersonId: 101, assistPlayerNameI: "J. Ukomadu", scoreAway: "18", scoreHome: "0" }),
+      scoringAction({ actionNumber: 8, orderNumber: 8, actionType: "3pt", clock: "PT04M40.00S", scoreAway: "21", scoreHome: "0" }),
+    ],
+  };
+
+  const alerts = buildGameAlerts({
+    game,
+    awayTeam: AWAY,
+    homeTeam: HOME,
+    basePlayers: [{ personId: 101, firstName: "John", familyName: "Ukomadu", teamId: AWAY.teamId }],
+  });
+
+  assert.ok(alerts.some((alert) => (
+    alert.category === "Team Trend" &&
+    alert.title === "Nets scored 76.2% of their points from assisted shots through the end of the 1st quarter"
+  )));
+});
+
+test("buildGameAlerts caps full-game output while preserving checkpoint trends", () => {
+  const assistedScoringActions = [
+    scoringAction({ actionNumber: 1, orderNumber: 1, clock: "PT11M40.00S", assistPersonId: 101, assistPlayerNameI: "J. Ukomadu", scoreAway: "2", scoreHome: "0" }),
+    scoringAction({ actionNumber: 2, orderNumber: 2, actionType: "3pt", clock: "PT10M40.00S", assistPersonId: 101, assistPlayerNameI: "J. Ukomadu", scoreAway: "5", scoreHome: "0" }),
+    scoringAction({ actionNumber: 3, orderNumber: 3, actionType: "3pt", clock: "PT09M40.00S", assistPersonId: 101, assistPlayerNameI: "J. Ukomadu", scoreAway: "8", scoreHome: "0" }),
+    scoringAction({ actionNumber: 4, orderNumber: 4, clock: "PT08M40.00S", scoreAway: "10", scoreHome: "0" }),
+    scoringAction({ actionNumber: 5, orderNumber: 5, clock: "PT07M40.00S", assistPersonId: 101, assistPlayerNameI: "J. Ukomadu", scoreAway: "12", scoreHome: "0" }),
+    scoringAction({ actionNumber: 6, orderNumber: 6, actionType: "3pt", clock: "PT06M40.00S", assistPersonId: 101, assistPlayerNameI: "J. Ukomadu", scoreAway: "15", scoreHome: "0" }),
+    scoringAction({ actionNumber: 7, orderNumber: 7, actionType: "3pt", clock: "PT05M40.00S", assistPersonId: 101, assistPlayerNameI: "J. Ukomadu", scoreAway: "18", scoreHome: "0" }),
+    scoringAction({ actionNumber: 8, orderNumber: 8, actionType: "3pt", clock: "PT04M40.00S", scoreAway: "21", scoreHome: "0" }),
+  ];
+  const foulActions = Array.from({ length: 92 }, (_, index) => ({
+    actionNumber: 9 + index,
+    orderNumber: 9 + index,
+    actionType: "foul",
+    subType: "personal",
+    period: 1,
+    clock: `PT${String(Math.max(0, 4 - Math.floor(index / 20))).padStart(2, "0")}M${String(50 - (index % 20)).padStart(2, "0")}.00S`,
+    teamId: AWAY.teamId,
+    personId: 104,
+    playerName: "Foul Player",
+  }));
+
+  const alerts = buildGameAlerts({
+    game: {
+      gameId: "0022600001",
+      gameStatus: 2,
+      period: 2,
+      gameClock: "PT12M00.00S",
+      playByPlayActions: [...assistedScoringActions, ...foulActions],
+    },
+    awayTeam: AWAY,
+    homeTeam: HOME,
+    basePlayers: [
+      { personId: 101, firstName: "John", familyName: "Ukomadu", teamId: AWAY.teamId },
+      { personId: 104, firstName: "Foul", familyName: "Player", teamId: AWAY.teamId },
+    ],
+  });
+
+  assert.equal(alerts.length, 75);
+  assert.ok(alerts.some((alert) => alert.title === "The Nets scored the first points of the game"));
+  assert.ok(alerts.some((alert) => alert.title === "Nets scored 76.2% of their points from assisted shots through the end of the 1st quarter"));
+});
+
 test("buildGameAlerts reports observed defensive and foul milestones", () => {
   const blockActions = [1, 2, 3].map((count) => ({
     actionNumber: count,

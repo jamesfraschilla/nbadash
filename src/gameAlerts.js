@@ -15,7 +15,11 @@ const PLAYER_CREATED_REPEAT_SHARE_STEP = 15;
 const PLAYER_CREATED_REPEAT_SECONDS = 5 * 60;
 const TEAM_PERIOD_POINTS_THRESHOLD = 36;
 const TEAM_PERIOD_BLOCKS_THRESHOLD = 5;
-const DEFAULT_MAX_ALERTS = 120;
+const TEAM_TREND_MAX_ALERTS = 8;
+const TEAM_TREND_MIN_POINTS = 12;
+const TEAM_TREND_MIN_FIELD_GOAL_ATTEMPTS = 10;
+const TEAM_TREND_MIN_THREE_ATTEMPTS = 6;
+const DEFAULT_MAX_ALERTS = 75;
 
 function safeNumber(value, fallback = 0) {
   const numeric = Number(value);
@@ -115,6 +119,11 @@ function formatPercent(value) {
   if (!Number.isFinite(value)) return "0%";
   const rounded = Math.round(value * 10) / 10;
   return Number.isInteger(rounded) ? `${rounded}%` : `${rounded.toFixed(1)}%`;
+}
+
+function formatMadeAttemptPercent(made, attempted) {
+  if (!attempted) return "0% (0/0)";
+  return `${formatPercent((made / attempted) * 100)} (${made}/${attempted})`;
 }
 
 function playerContributionTitle(playerName, share, action) {
@@ -698,6 +707,7 @@ function addPeriodEndAlerts({
 }) {
   const finalCompletedPeriod = completedPeriodLimit(game, scoringEvents);
   if (!finalCompletedPeriod) return;
+  const teamTrendCandidates = [];
 
   for (let period = 1; period <= finalCompletedPeriod; period += 1) {
     const periodEvents = scoringEvents.filter((event) => event.period === period);
@@ -726,49 +736,170 @@ function addPeriodEndAlerts({
     [awayTeam, homeTeam].forEach((team) => {
       const teamId = normalizeTeamId(team?.teamId);
       const periodStats = getTeamPeriodStats(teamPeriodStats, teamId, period);
-      if (periodStats.points > 0) {
-        const twoPointShare = (periodStats.twoPointPoints / periodStats.points) * 100;
-        if (twoPointShare >= 75) {
-          addAlert(alerts, seen, {
-            id: `period-two-point-share:${teamId}:${period}`,
-            category: "Scoring Source",
-            period,
-            clock: "0:00",
-            elapsed: lastPeriodEvent.elapsed + 0.2,
-            teamId,
-            title: `${teamLabel(team)} scored ${formatPercent(twoPointShare)} of their points from 2pt shots in the ${periodLongLabel(period)}`,
-          });
-        }
-      }
-
       const cumulativeStats = teamCumulativeStatsByPeriod.get(`${teamId}:${period}`);
-      if (!cumulativeStats?.points) return;
-      const assistedShare = (cumulativeStats.assistedPoints / cumulativeStats.points) * 100;
-      if (assistedShare >= 75) {
-        addAlert(alerts, seen, {
-          id: `cumulative-assisted-share:${teamId}:${period}`,
-          category: "Scoring Source",
-          period,
-          clock: "0:00",
-          elapsed: lastPeriodEvent.elapsed + 0.3,
-          teamId,
-          title: `${teamLabel(teamsById.get(teamId))} scored ${formatPercent(assistedShare)} of their points from assisted shots through the end of the ${periodLongLabel(period)}`,
-        });
-      }
-      const benchShare = (cumulativeStats.benchPoints / cumulativeStats.points) * 100;
-      if (cumulativeStats.benchKnown && benchShare >= 60) {
-        addAlert(alerts, seen, {
-          id: `cumulative-bench-share:${teamId}:${period}`,
-          category: "Scoring Source",
-          period,
-          clock: "0:00",
-          elapsed: lastPeriodEvent.elapsed + 0.4,
-          teamId,
-          title: `${teamLabel(teamsById.get(teamId))} scored ${formatPercent(benchShare)} of their points from the bench through the end of the ${periodLongLabel(period)}`,
-        });
-      }
+      const candidate = buildBestTeamTrendCandidate({
+        team,
+        teamId,
+        period,
+        periodStats,
+        cumulativeStats,
+        elapsed: lastPeriodEvent.elapsed,
+      });
+      if (candidate) teamTrendCandidates.push(candidate);
     });
   }
+
+  teamTrendCandidates
+    .sort((left, right) => {
+      const strengthDelta = right.strength - left.strength;
+      if (strengthDelta !== 0) return strengthDelta;
+      const periodDelta = left.period - right.period;
+      if (periodDelta !== 0) return periodDelta;
+      return String(left.teamId).localeCompare(String(right.teamId));
+    })
+    .slice(0, TEAM_TREND_MAX_ALERTS)
+    .sort((left, right) => left.elapsed - right.elapsed)
+    .forEach((candidate) => {
+      addAlert(alerts, seen, {
+        id: candidate.id,
+        category: "Team Trend",
+        period: candidate.period,
+        clock: "0:00",
+        elapsed: candidate.elapsed,
+        teamId: candidate.teamId,
+        title: candidate.title,
+        detail: candidate.detail,
+      });
+    });
+}
+
+function addTeamTrendCandidate(candidates, candidate) {
+  if (!candidate?.title) return;
+  candidates.push(candidate);
+}
+
+function buildBestTeamTrendCandidate({
+  team,
+  teamId,
+  period,
+  periodStats,
+  cumulativeStats,
+  elapsed,
+}) {
+  if (!teamId || !periodStats || !cumulativeStats) return null;
+  const candidates = [];
+  const label = teamLabel(team);
+  const periodLabel = periodLongLabel(period);
+  const periodEndLabel = `through the end of the ${periodLabel}`;
+
+  if (cumulativeStats.points >= TEAM_TREND_MIN_POINTS) {
+    const assistedShare = (cumulativeStats.assistedPoints / cumulativeStats.points) * 100;
+    if (assistedShare >= 72) {
+      addTeamTrendCandidate(candidates, {
+        id: `trend-assisted-high:${teamId}:${period}`,
+        period,
+        elapsed: elapsed + 0.3,
+        teamId,
+        strength: assistedShare - 50 + 12,
+        title: `${label} scored ${formatPercent(assistedShare)} of their points from assisted shots ${periodEndLabel}`,
+      });
+    } else if (assistedShare <= 42) {
+      addTeamTrendCandidate(candidates, {
+        id: `trend-assisted-low:${teamId}:${period}`,
+        period,
+        elapsed: elapsed + 0.3,
+        teamId,
+        strength: 50 - assistedShare,
+        title: `${label} scored just ${formatPercent(assistedShare)} of their points from assisted shots ${periodEndLabel}`,
+      });
+    }
+
+    const benchShare = (cumulativeStats.benchPoints / cumulativeStats.points) * 100;
+    if (cumulativeStats.benchKnown && benchShare >= 55) {
+      addTeamTrendCandidate(candidates, {
+        id: `trend-bench-high:${teamId}:${period}`,
+        period,
+        elapsed: elapsed + 0.4,
+        teamId,
+        strength: benchShare - 35,
+        title: `${label} scored ${formatPercent(benchShare)} of their points from the bench ${periodEndLabel}`,
+      });
+    }
+  }
+
+  if (periodStats.points >= TEAM_TREND_MIN_POINTS) {
+    const twoPointShare = (periodStats.twoPointPoints / periodStats.points) * 100;
+    if (twoPointShare >= 75) {
+      addTeamTrendCandidate(candidates, {
+        id: `trend-period-two-point-high:${teamId}:${period}`,
+        period,
+        elapsed: elapsed + 0.2,
+        teamId,
+        strength: twoPointShare - 45,
+        title: `${label} scored ${formatPercent(twoPointShare)} of their points from 2pt shots in the ${periodLabel}`,
+      });
+    }
+  }
+
+  if (periodStats.fieldGoalsAttempted >= TEAM_TREND_MIN_FIELD_GOAL_ATTEMPTS) {
+    const fieldGoalPercent = (periodStats.fieldGoalsMade / periodStats.fieldGoalsAttempted) * 100;
+    if (fieldGoalPercent >= 56) {
+      addTeamTrendCandidate(candidates, {
+        id: `trend-period-fg-high:${teamId}:${period}`,
+        period,
+        elapsed: elapsed + 0.5,
+        teamId,
+        strength: fieldGoalPercent - 34,
+        title: `${label} shot ${formatMadeAttemptPercent(periodStats.fieldGoalsMade, periodStats.fieldGoalsAttempted)} overall in the ${periodLabel}`,
+      });
+    } else if (fieldGoalPercent <= 38) {
+      addTeamTrendCandidate(candidates, {
+        id: `trend-period-fg-low:${teamId}:${period}`,
+        period,
+        elapsed: elapsed + 0.5,
+        teamId,
+        strength: 48 - fieldGoalPercent,
+        title: `${label} shot just ${formatMadeAttemptPercent(periodStats.fieldGoalsMade, periodStats.fieldGoalsAttempted)} overall in the ${periodLabel}`,
+      });
+    }
+
+    const threeAttemptRate = (periodStats.threesAttempted / periodStats.fieldGoalsAttempted) * 100;
+    if (periodStats.threesAttempted >= TEAM_TREND_MIN_THREE_ATTEMPTS && threeAttemptRate >= 45) {
+      addTeamTrendCandidate(candidates, {
+        id: `trend-period-three-volume-high:${teamId}:${period}`,
+        period,
+        elapsed: elapsed + 0.6,
+        teamId,
+        strength: threeAttemptRate - 20,
+        title: `${label} took ${formatPercent(threeAttemptRate)} of their shots from three in the ${periodLabel} (${periodStats.threesAttempted}/${periodStats.fieldGoalsAttempted} FGA)`,
+      });
+    }
+  }
+
+  if (periodStats.threesAttempted >= TEAM_TREND_MIN_THREE_ATTEMPTS) {
+    const threePercent = (periodStats.threesMade / periodStats.threesAttempted) * 100;
+    if (threePercent >= 45) {
+      addTeamTrendCandidate(candidates, {
+        id: `trend-period-three-pct-high:${teamId}:${period}`,
+        period,
+        elapsed: elapsed + 0.7,
+        teamId,
+        strength: threePercent - 25,
+        title: `${label} shot ${formatMadeAttemptPercent(periodStats.threesMade, periodStats.threesAttempted)} from three in the ${periodLabel}`,
+      });
+    } else if (threePercent <= 20) {
+      addTeamTrendCandidate(candidates, {
+        id: `trend-period-three-pct-low:${teamId}:${period}`,
+        period,
+        elapsed: elapsed + 0.7,
+        teamId,
+        strength: 35 - threePercent,
+        title: `${label} shot just ${formatMadeAttemptPercent(periodStats.threesMade, periodStats.threesAttempted)} from three in the ${periodLabel}`,
+      });
+    }
+  }
+
+  return candidates.sort((left, right) => right.strength - left.strength)[0] || null;
 }
 
 function clonePlayerStats(playerStats) {
@@ -791,6 +922,7 @@ function cloneTeamCumulativeStats(teamCumulativeStats, period) {
 }
 
 function updateTeamShootingStats(action, teamStats) {
+  if (!teamStats) return;
   if (action.actionType !== "2pt" && action.actionType !== "3pt") return;
   teamStats.fieldGoalsAttempted += 1;
   if (action.actionType === "3pt") teamStats.threesAttempted += 1;
@@ -866,6 +998,53 @@ function addTeamPeriodBlockAlert({ alerts, seen, team, teamId, period, action, b
   });
 }
 
+function alertPruneScore(alert) {
+  switch (alert?.category) {
+    case "Player Impact":
+      return 90;
+    case "Player Scoring":
+    case "Rebounding":
+    case "Defense":
+    case "Playmaking":
+    case "Foul Trouble":
+      return 75;
+    case "Team Scoring":
+      return 55;
+    case "Run":
+      return 35;
+    case "Team Trend":
+    case "Scoring Source":
+      return 10;
+    case "Milestone":
+      return 5;
+    case "First Score":
+    case "Quarter":
+    case "Halftime":
+      return 0;
+    default:
+      return 50;
+  }
+}
+
+function limitAlertsByPriority(sortedAlerts, maxAlerts) {
+  const limit = Math.max(0, Math.floor(safeNumber(maxAlerts, DEFAULT_MAX_ALERTS)));
+  if (limit <= 0) return [];
+  if (sortedAlerts.length <= limit) return sortedAlerts;
+  const removeCount = sortedAlerts.length - limit;
+  const removalQueue = sortedAlerts
+    .map((alert, index) => ({
+      index,
+      score: alertPruneScore(alert),
+    }))
+    .sort((left, right) => {
+      const scoreDelta = right.score - left.score;
+      if (scoreDelta !== 0) return scoreDelta;
+      return left.index - right.index;
+    });
+  const removeIndexes = new Set(removalQueue.slice(0, removeCount).map((entry) => entry.index));
+  return sortedAlerts.filter((_, index) => !removeIndexes.has(index));
+}
+
 export function buildGameAlerts({
   game,
   awayTeam = game?.awayTeam,
@@ -923,6 +1102,7 @@ export function buildGameAlerts({
     if (teamId && teamCumulativeStats.has(teamId)) {
       const periodStats = getTeamPeriodStats(teamPeriodStats, teamId, period);
       updateTeamShootingStats(action, periodStats);
+      updateTeamShootingStats(action, teamCumulativeStats.get(teamId));
     }
 
     const scoringEvent = scoringEventFromAction(action, scoreState, homeTeamId, awayTeamId);
@@ -1321,13 +1501,13 @@ export function buildGameAlerts({
     teamsById,
   });
 
-  return alerts
-    .sort((a, b) => {
+  const sortedAlerts = alerts.sort((a, b) => {
       const elapsedDelta = a.elapsed - b.elapsed;
       if (elapsedDelta !== 0) return elapsedDelta;
       return String(a.id).localeCompare(String(b.id));
-    })
-    .slice(0, maxAlerts)
+    });
+
+  return limitAlertsByPriority(sortedAlerts, maxAlerts)
     .map((alert, index) => ({
       ...alert,
       sortIndex: index,
