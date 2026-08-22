@@ -71,26 +71,9 @@ function actionElapsedSeconds(action, gameId) {
   return elapsed + Math.max(0, periodLengthSeconds(period, gameId) - parseClockSeconds(action?.clock));
 }
 
-function ordinal(value) {
-  const numeric = safeNumber(value, 0);
-  const mod100 = numeric % 100;
-  if (mod100 >= 11 && mod100 <= 13) return `${numeric}th`;
-  switch (numeric % 10) {
-    case 1:
-      return `${numeric}st`;
-    case 2:
-      return `${numeric}nd`;
-    case 3:
-      return `${numeric}rd`;
-    default:
-      return `${numeric}th`;
-  }
-}
-
-function periodLongLabel(period) {
-  const numeric = safeNumber(period, 0);
-  if (numeric <= 4) return `${ordinal(numeric)} quarter`;
-  return `${ordinal(numeric - 4)} OT`;
+function periodElapsedSeconds(action, gameId) {
+  const period = Math.max(1, safeNumber(action?.period, 1));
+  return Math.max(0, periodLengthSeconds(period, gameId) - parseClockSeconds(action?.clock));
 }
 
 function periodShortLabel(period) {
@@ -104,8 +87,12 @@ function clockLabel(clock) {
   return normalized || "--";
 }
 
+function shortClockLabel(clock) {
+  return clockLabel(clock).replace(/^0+(?=\d:)/, "");
+}
+
 function clockPeriodLabel(action) {
-  return `${clockLabel(action?.clock)}, ${periodLongLabel(action?.period)}`;
+  return `${periodShortLabel(action?.period)} ${shortClockLabel(action?.clock)}`;
 }
 
 function formatDuration(seconds) {
@@ -128,11 +115,11 @@ function formatMadeAttemptPercent(made, attempted) {
 
 function playerContributionTitle(playerName, share, action) {
   const shareText = formatPercent(share);
-  const periodText = periodLongLabel(action.period);
+  const periodText = periodShortLabel(action.period);
   if (parseClockSeconds(action.clock) > 0) {
-    return `${playerName} has contributed to ${shareText} of the team's points so far in the ${periodText}`;
+    return `${playerName} has contributed to ${shareText} of the team's points so far in ${periodText}`;
   }
-  return `${playerName} contributed to ${shareText} of the team's points in the ${periodText}`;
+  return `${playerName} contributed to ${shareText} of the team's points in ${periodText}`;
 }
 
 function parseScoreValue(value) {
@@ -307,6 +294,8 @@ function addAlert(alerts, seen, alert) {
     id,
     elapsed: safeNumber(alert.elapsed, 0),
     category: alert.category || "Alert",
+    period: safeNumber(alert.period, 0),
+    clock: alert.clock || "",
     periodLabel: periodShortLabel(alert.period),
     timeLabel: `${periodShortLabel(alert.period)} ${clockLabel(alert.clock)}`,
     title: alert.title,
@@ -620,7 +609,7 @@ function buildPeriodEndSummary({
 }) {
   const awayScore = parseScoreValue(action?.scoreAway) ?? safeNumber(awayTeam?.score, 0);
   const homeScore = parseScoreValue(action?.scoreHome) ?? safeNumber(homeTeam?.score, 0);
-  const periodText = period === 2 ? "halftime" : `the end of the ${periodLongLabel(period)}`;
+  const periodText = period === 2 ? "halftime" : `the end of ${periodShortLabel(period)}`;
   const awayLabel = teamLabel(awayTeam);
   const homeLabel = teamLabel(homeTeam);
 
@@ -640,7 +629,7 @@ function buildPeriodEndSummary({
   return {
     title: period === 2
       ? `The ${teamLabel(leader)} lead the ${teamLabel(trailer)} at halftime, ${leaderScore}-${trailerScore}`
-      : `At the end of the ${periodLongLabel(period)}, the ${teamLabel(leader)} lead the ${teamLabel(trailer)}, ${leaderScore}-${trailerScore}`,
+      : `At the end of ${periodShortLabel(period)}, the ${teamLabel(leader)} lead the ${teamLabel(trailer)}, ${leaderScore}-${trailerScore}`,
     detail: buildLeaderSummary(cumulativePlayerStats, awayTeam, homeTeam),
   };
 }
@@ -713,6 +702,7 @@ function addPeriodEndAlerts({
     const periodEvents = scoringEvents.filter((event) => event.period === period);
     const lastPeriodEvent = periodEvents[periodEvents.length - 1];
     if (!lastPeriodEvent) continue;
+    const periodEndElapsed = actionElapsedSeconds({ period, clock: "0:00" }, game?.gameId);
 
     if (shouldAddPeriodSummary(period, finalCompletedPeriod)) {
       const summary = buildPeriodEndSummary({
@@ -727,7 +717,7 @@ function addPeriodEndAlerts({
         category: period === 2 ? "Halftime" : "Quarter",
         period,
         clock: "0:00",
-        elapsed: lastPeriodEvent.elapsed + 0.1,
+        elapsed: periodEndElapsed + 0.1,
         title: summary.title,
         detail: summary.detail,
       });
@@ -743,7 +733,7 @@ function addPeriodEndAlerts({
         period,
         periodStats,
         cumulativeStats,
-        elapsed: lastPeriodEvent.elapsed,
+        elapsed: periodEndElapsed,
       });
       if (candidate) teamTrendCandidates.push(candidate);
     });
@@ -789,8 +779,8 @@ function buildBestTeamTrendCandidate({
   if (!teamId || !periodStats || !cumulativeStats) return null;
   const candidates = [];
   const label = teamLabel(team);
-  const periodLabel = periodLongLabel(period);
-  const periodEndLabel = `through the end of the ${periodLabel}`;
+  const periodLabel = periodShortLabel(period);
+  const periodEndLabel = `through the end of ${periodLabel}`;
 
   if (cumulativeStats.points >= TEAM_TREND_MIN_POINTS) {
     const assistedShare = (cumulativeStats.assistedPoints / cumulativeStats.points) * 100;
@@ -836,7 +826,7 @@ function buildBestTeamTrendCandidate({
         elapsed: elapsed + 0.2,
         teamId,
         strength: twoPointShare - 45,
-        title: `${label} scored ${formatPercent(twoPointShare)} of their points from 2pt shots in the ${periodLabel}`,
+        title: `${label} scored ${formatPercent(twoPointShare)} of their points from 2pt shots in ${periodLabel}`,
       });
     }
   }
@@ -850,7 +840,7 @@ function buildBestTeamTrendCandidate({
         elapsed: elapsed + 0.5,
         teamId,
         strength: fieldGoalPercent - 34,
-        title: `${label} shot ${formatMadeAttemptPercent(periodStats.fieldGoalsMade, periodStats.fieldGoalsAttempted)} overall in the ${periodLabel}`,
+        title: `${label} shot ${formatMadeAttemptPercent(periodStats.fieldGoalsMade, periodStats.fieldGoalsAttempted)} overall in ${periodLabel}`,
       });
     } else if (fieldGoalPercent <= 38) {
       addTeamTrendCandidate(candidates, {
@@ -859,7 +849,7 @@ function buildBestTeamTrendCandidate({
         elapsed: elapsed + 0.5,
         teamId,
         strength: 48 - fieldGoalPercent,
-        title: `${label} shot just ${formatMadeAttemptPercent(periodStats.fieldGoalsMade, periodStats.fieldGoalsAttempted)} overall in the ${periodLabel}`,
+        title: `${label} shot just ${formatMadeAttemptPercent(periodStats.fieldGoalsMade, periodStats.fieldGoalsAttempted)} overall in ${periodLabel}`,
       });
     }
 
@@ -871,7 +861,7 @@ function buildBestTeamTrendCandidate({
         elapsed: elapsed + 0.6,
         teamId,
         strength: threeAttemptRate - 20,
-        title: `${label} took ${formatPercent(threeAttemptRate)} of their shots from three in the ${periodLabel} (${periodStats.threesAttempted}/${periodStats.fieldGoalsAttempted} FGA)`,
+        title: `${label} took ${formatPercent(threeAttemptRate)} of their shots from three in ${periodLabel} (${periodStats.threesAttempted}/${periodStats.fieldGoalsAttempted} FGA)`,
       });
     }
   }
@@ -885,7 +875,7 @@ function buildBestTeamTrendCandidate({
         elapsed: elapsed + 0.7,
         teamId,
         strength: threePercent - 25,
-        title: `${label} shot ${formatMadeAttemptPercent(periodStats.threesMade, periodStats.threesAttempted)} from three in the ${periodLabel}`,
+        title: `${label} shot ${formatMadeAttemptPercent(periodStats.threesMade, periodStats.threesAttempted)} from three in ${periodLabel}`,
       });
     } else if (threePercent <= 20) {
       addTeamTrendCandidate(candidates, {
@@ -894,7 +884,7 @@ function buildBestTeamTrendCandidate({
         elapsed: elapsed + 0.7,
         teamId,
         strength: 35 - threePercent,
-        title: `${label} shot just ${formatMadeAttemptPercent(periodStats.threesMade, periodStats.threesAttempted)} from three in the ${periodLabel}`,
+        title: `${label} shot just ${formatMadeAttemptPercent(periodStats.threesMade, periodStats.threesAttempted)} from three in ${periodLabel}`,
       });
     }
   }
@@ -954,12 +944,12 @@ function addTeamPeriodPointAlert({ alerts, seen, team, teamId, period, action, p
     clock: action.clock,
     elapsed: actionElapsedSeconds(action, gameId),
     teamId,
-    title: `${teamLabel(team)} have totaled ${periodPoints} points in the ${periodLongLabel(period)}`,
+    title: `${teamLabel(team)} have totaled ${periodPoints} points in ${periodShortLabel(period)}`,
   });
 }
 
 function addPlayerPeriodPointAlert({ alerts, seen, player, action, teamId, periodPoints, gameId }) {
-  const periodElapsed = actionElapsedSeconds(action, gameId) - actionElapsedSeconds({ period: action.period, clock: `${Math.floor(periodLengthSeconds(action.period, gameId) / 60)}:00` }, gameId);
+  const periodElapsed = periodElapsedSeconds(action, gameId);
   if (periodPoints >= 8 && periodElapsed <= 3 * 60) {
     if (!isSteppedMilestone(periodPoints, 8, 4)) return;
     addAlert(alerts, seen, {
@@ -969,7 +959,7 @@ function addPlayerPeriodPointAlert({ alerts, seen, player, action, teamId, perio
       clock: action.clock,
       elapsed: actionElapsedSeconds(action, gameId),
       teamId,
-      title: `${player.name} has put up ${periodPoints} points to start the ${periodLongLabel(action.period)}`,
+      title: `${player.name} has put up ${periodPoints} points to start ${periodShortLabel(action.period)}`,
     });
   } else if (periodPoints >= 12) {
     if (!isSteppedMilestone(periodPoints, 12, 4)) return;
@@ -980,7 +970,7 @@ function addPlayerPeriodPointAlert({ alerts, seen, player, action, teamId, perio
       clock: action.clock,
       elapsed: actionElapsedSeconds(action, gameId),
       teamId,
-      title: `${player.name} has totaled ${periodPoints} points in the ${periodLongLabel(action.period)}`,
+      title: `${player.name} has totaled ${periodPoints} points in ${periodShortLabel(action.period)}`,
     });
   }
 }
@@ -994,7 +984,7 @@ function addTeamPeriodBlockAlert({ alerts, seen, team, teamId, period, action, b
     clock: action.clock,
     elapsed: actionElapsedSeconds(action, gameId),
     teamId,
-    title: `${teamLabel(team)} have totaled ${blocks} blocks in the ${periodLongLabel(period)}`,
+    title: `${teamLabel(team)} have totaled ${blocks} blocks in ${periodShortLabel(period)}`,
   });
 }
 
@@ -1370,6 +1360,9 @@ export function buildGameAlerts({
         step: 2,
       });
       if (isSteppedMilestone(playerPeriod.rebounds, 5, 3)) {
+        const reboundPeriodText = periodElapsedSeconds(action, game?.gameId) <= 3 * 60
+          ? `to start ${periodShortLabel(period)}`
+          : `in ${periodShortLabel(period)}`;
         addAlert(alerts, seen, {
           id: `player-period-rebounds:${player.personId}:${period}:${playerPeriod.rebounds}`,
           category: "Rebounding",
@@ -1377,7 +1370,7 @@ export function buildGameAlerts({
           clock: action.clock,
           elapsed: actionElapsedSeconds(action, game?.gameId),
           teamId,
-          title: `${player.name} has gathered ${playerPeriod.rebounds} rebounds to start the ${periodLongLabel(period)}`,
+          title: `${player.name} has gathered ${playerPeriod.rebounds} rebounds ${reboundPeriodText}`,
         });
       }
       addPlayerAchievementAlerts({
@@ -1504,6 +1497,10 @@ export function buildGameAlerts({
   const sortedAlerts = alerts.sort((a, b) => {
       const elapsedDelta = a.elapsed - b.elapsed;
       if (elapsedDelta !== 0) return elapsedDelta;
+      const periodDelta = safeNumber(a.period, 0) - safeNumber(b.period, 0);
+      if (periodDelta !== 0) return periodDelta;
+      const clockDelta = parseClockSeconds(b.clock) - parseClockSeconds(a.clock);
+      if (clockDelta !== 0) return clockDelta;
       return String(a.id).localeCompare(String(b.id));
     });
 

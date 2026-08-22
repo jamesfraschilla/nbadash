@@ -108,7 +108,7 @@ test("buildGameAlerts reports player-created share with assisted points", () => 
   assert.ok(shareAlert);
   assert.equal(
     shareAlert.title,
-    "John Ukomadu has contributed to 83.3% of the team's points so far in the 1st quarter",
+    "John Ukomadu has contributed to 83.3% of the team's points so far in Q1",
   );
   assert.equal(shareAlert.detail, "(2 points, 3 assists, 8 points created from assists)");
   assert.equal(alerts.filter((alert) => alert.title.includes("John Ukomadu has contributed to")).length, 1);
@@ -141,8 +141,78 @@ test("buildGameAlerts adds bounded team trend alerts at period checkpoints", () 
 
   assert.ok(alerts.some((alert) => (
     alert.category === "Team Trend" &&
-    alert.title === "Nets scored 76.2% of their points from assisted shots through the end of the 1st quarter"
+    alert.title === "Nets scored 76.2% of their points from assisted shots through the end of Q1"
   )));
+});
+
+test("buildGameAlerts formats run ranges with compact period labels", () => {
+  const game = {
+    gameId: "0022600001",
+    gameStatus: 2,
+    period: 2,
+    gameClock: "PT07M00.00S",
+    playByPlayActions: [
+      scoringAction({ actionNumber: 1, orderNumber: 1, period: 1, clock: "PT01M15.00S", teamId: HOME.teamId, personId: 201, playerName: "Steven Ashworth", scoreAway: "0", scoreHome: "2" }),
+      scoringAction({ actionNumber: 2, orderNumber: 2, period: 2, clock: "PT09M48.00S", teamId: HOME.teamId, personId: 201, playerName: "Steven Ashworth", scoreAway: "0", scoreHome: "4" }),
+      scoringAction({ actionNumber: 3, orderNumber: 3, period: 2, clock: "PT08M40.00S", teamId: HOME.teamId, personId: 201, playerName: "Steven Ashworth", scoreAway: "0", scoreHome: "6" }),
+      scoringAction({ actionNumber: 4, orderNumber: 4, period: 2, clock: "PT07M26.00S", teamId: HOME.teamId, personId: 201, playerName: "Steven Ashworth", scoreAway: "0", scoreHome: "8" }),
+    ],
+  };
+
+  const alerts = buildGameAlerts({
+    game,
+    awayTeam: AWAY,
+    homeTeam: HOME,
+    basePlayers: [{ personId: 201, firstName: "Steven", familyName: "Ashworth", teamId: HOME.teamId }],
+  });
+
+  const runAlert = alerts.find((alert) => alert.category === "Run" && alert.title === "Thunder are on a 8-0 run");
+  assert.ok(runAlert);
+  assert.equal(runAlert.detail, "Over the last 5:49 (Q1 1:15 to Q2 7:26).");
+});
+
+test("buildGameAlerts keeps late-quarter rebound alerts before period-end alerts", () => {
+  const game = {
+    gameId: "0022600001",
+    gameStatus: 2,
+    period: 2,
+    gameClock: "PT12M00.00S",
+    playByPlayActions: [
+      scoringAction({ actionNumber: 1, orderNumber: 1, period: 1, clock: "PT08M00.00S", teamId: HOME.teamId, personId: 201, playerName: "Steven Ashworth", scoreAway: "0", scoreHome: "2" }),
+      ...[
+        "PT07M00.00S",
+        "PT05M00.00S",
+        "PT03M00.00S",
+        "PT01M00.00S",
+        "PT00M25.00S",
+      ].map((clock, index) => ({
+        actionNumber: 2 + index,
+        orderNumber: 2 + index,
+        actionType: "rebound",
+        period: 1,
+        clock,
+        teamId: HOME.teamId,
+        personId: 202,
+        playerName: "Julian Champagnie",
+      })),
+    ],
+  };
+
+  const alerts = buildGameAlerts({
+    game,
+    awayTeam: AWAY,
+    homeTeam: HOME,
+    basePlayers: [
+      { personId: 201, firstName: "Steven", familyName: "Ashworth", teamId: HOME.teamId },
+      { personId: 202, firstName: "Julian", familyName: "Champagnie", teamId: HOME.teamId },
+    ],
+  });
+
+  const reboundIndex = alerts.findIndex((alert) => alert.title === "Julian Champagnie has gathered 5 rebounds in Q1");
+  const periodEndIndex = alerts.findIndex((alert) => alert.category === "Quarter" && alert.timeLabel === "Q1 0:00");
+  assert.notEqual(reboundIndex, -1);
+  assert.notEqual(periodEndIndex, -1);
+  assert.ok(reboundIndex < periodEndIndex);
 });
 
 test("buildGameAlerts caps full-game output while preserving checkpoint trends", () => {
@@ -186,7 +256,7 @@ test("buildGameAlerts caps full-game output while preserving checkpoint trends",
 
   assert.equal(alerts.length, 75);
   assert.ok(alerts.some((alert) => alert.title === "The Nets scored the first points of the game"));
-  assert.ok(alerts.some((alert) => alert.title === "Nets scored 76.2% of their points from assisted shots through the end of the 1st quarter"));
+  assert.ok(alerts.some((alert) => alert.title === "Nets scored 76.2% of their points from assisted shots through the end of Q1"));
 });
 
 test("buildGameAlerts reports observed defensive and foul milestones", () => {

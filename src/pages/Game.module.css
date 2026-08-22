@@ -1346,6 +1346,25 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   color: var(--text);
 }
 
+.alertTeamLogo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel-strong) 82%, white 18%);
+  padding: 3px;
+}
+
+.alertTeamLogo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 .alertTitle {
   color: var(--text);
   font-size: 15px;

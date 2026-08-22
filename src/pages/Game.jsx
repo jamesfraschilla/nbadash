@@ -3157,6 +3157,8 @@ export default function Game({ variant = "full" }) {
 
           <GameAlerts
             alerts={gameAlerts}
+            awayTeam={awayTeam}
+            homeTeam={homeTeam}
             collapsed={alertsPanelCollapsed}
             onToggleCollapsed={toggleAlertsPanel}
           />
