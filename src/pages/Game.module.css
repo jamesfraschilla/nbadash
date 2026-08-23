@@ -1295,14 +1295,15 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 .alertsPanelCompact {
   width: min(100%, 420px);
   margin-bottom: 28px;
-  border-color: transparent;
-  background: color-mix(in srgb, var(--panel) 86%, var(--highlight-text) 14%);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .alertsCompactBody {
   display: grid;
-  gap: 8px;
-  padding: 8px;
+  gap: 6px;
+  padding: 0;
 }
 
 .alertsToggleMeta {
@@ -1421,7 +1422,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   border: 0;
   background: transparent;
   color: var(--text);
-  padding: 2px 6px;
+  padding: 0 6px;
   font-size: 12px;
   font-weight: 800;
   cursor: pointer;
