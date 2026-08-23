@@ -1294,7 +1294,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 
 .alertsPanelCompact {
   width: min(100%, 420px);
-  margin-bottom: 28px;
+  margin: 18px auto 18px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -1336,7 +1336,15 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   min-height: 84px;
   justify-content: center;
   border-radius: 11px;
-  background: color-mix(in srgb, var(--bg) 88%, var(--panel) 12%);
+  background: color-mix(in srgb, var(--bg) 72%, var(--panel) 28%);
+  transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.alertItemCompactGlow {
+  border-color: color-mix(in srgb, var(--highlight-text) 62%, var(--border) 38%);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--highlight-text) 28%, transparent),
+    0 0 18px color-mix(in srgb, var(--highlight-text) 18%, transparent);
 }
 
 .alertMeta {

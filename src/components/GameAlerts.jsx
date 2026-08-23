@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { teamLogoUrl } from "../api.js";
 import styles from "../pages/Game.module.css";
 
@@ -30,13 +31,18 @@ function teamForAlert(alert, awayTeam, homeTeam) {
   return { teamId, teamName: alert?.teamCode || "Team", teamTricode: alert?.teamCode || "" };
 }
 
-function AlertCard({ alert, awayTeam, homeTeam, compact = false }) {
+function AlertCard({ alert, awayTeam, homeTeam, compact = false, glow = false }) {
   const team = teamForAlert(alert, awayTeam, homeTeam);
   const logoUrl = team?.teamId ? teamLogoUrl(team.teamId) : "";
   const logoAlt = team ? `${teamLabel(team)} logo` : "";
+  const cardClassName = [
+    styles.alertItem,
+    compact ? styles.alertItemCompact : "",
+    glow ? styles.alertItemCompactGlow : "",
+  ].filter(Boolean).join(" ");
 
   return (
-    <article className={`${styles.alertItem} ${compact ? styles.alertItemCompact : ""}`}>
+    <article className={cardClassName}>
       <div className={styles.alertMeta}>
         <span className={styles.alertTime}>{alert.timeLabel}</span>
         <span className={styles.alertCategory}>{alert.category}</span>
@@ -63,6 +69,9 @@ export default function GameAlerts({
   collapsed = true,
   onToggleCollapsed = null,
 }) {
+  const [compactAlertGlowing, setCompactAlertGlowing] = useState(false);
+  const hasSeenCompactAlertRef = useRef(false);
+  const lastCompactAlertIdRef = useRef(null);
   const displayedAlerts = alerts
     .map((alert, index) => ({ alert, index }))
     .sort((left, right) => {
@@ -72,6 +81,28 @@ export default function GameAlerts({
     })
     .map(({ alert }) => alert);
   const compactAlert = displayedAlerts.find((alert) => COMPACT_ALERT_CATEGORIES.has(alert?.category));
+  const compactAlertId = compactAlert?.id ?? null;
+
+  useEffect(() => {
+    if (!compactAlertId) return undefined;
+
+    if (!hasSeenCompactAlertRef.current) {
+      hasSeenCompactAlertRef.current = true;
+      lastCompactAlertIdRef.current = compactAlertId;
+      return undefined;
+    }
+
+    if (lastCompactAlertIdRef.current === compactAlertId) return undefined;
+
+    lastCompactAlertIdRef.current = compactAlertId;
+    setCompactAlertGlowing(true);
+
+    const timeoutId = window.setTimeout(() => {
+      setCompactAlertGlowing(false);
+    }, 18000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [compactAlertId]);
 
   if (!alerts.length) return null;
 
@@ -80,7 +111,7 @@ export default function GameAlerts({
       <section className={`${styles.strategyPanel} ${styles.alertsPanel} ${styles.alertsPanelCompact}`} aria-label="Alerts">
         <div className={styles.alertsCompactBody}>
           {compactAlert ? (
-            <AlertCard alert={compactAlert} awayTeam={awayTeam} homeTeam={homeTeam} compact />
+            <AlertCard alert={compactAlert} awayTeam={awayTeam} homeTeam={homeTeam} compact glow={compactAlertGlowing} />
           ) : (
             <div className={`${styles.alertsEmpty} ${styles.alertsCompactEmpty}`}>
               No key alerts yet.
