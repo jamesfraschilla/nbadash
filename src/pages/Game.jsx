@@ -3082,6 +3082,14 @@ export default function Game({ variant = "full" }) {
             </div>
           ) : null}
 
+          <GameAlerts
+            alerts={gameAlerts}
+            awayTeam={awayTeam}
+            homeTeam={homeTeam}
+            collapsed={alertsPanelCollapsed}
+            onToggleCollapsed={toggleAlertsPanel}
+          />
+
           <div className={styles.pbpWheel} ref={pbpWheelRef} onScroll={clearHoldTimer}>
             <div className={styles.pbpWheelInner} ref={pbpWheelInnerRef}>
               {pbpWheelItems.length ? pbpWheelItems.map((action) => {
@@ -3154,14 +3162,6 @@ export default function Game({ variant = "full" }) {
               )}
             </div>
           </div>
-
-          <GameAlerts
-            alerts={gameAlerts}
-            awayTeam={awayTeam}
-            homeTeam={homeTeam}
-            collapsed={alertsPanelCollapsed}
-            onToggleCollapsed={toggleAlertsPanel}
-          />
 
           <LateGameMatrixPanel
             title="Live Game Situation Matrix"

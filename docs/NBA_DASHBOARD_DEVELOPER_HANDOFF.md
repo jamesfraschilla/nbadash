@@ -672,16 +672,18 @@ The live dashboard intentionally keeps the play-by-play wheel and Alerts panel s
 
 The play-by-play wheel is the raw event stream:
 
-- It appears above Alerts on the Game page.
+- It appears below the compact Alerts surface on the Game page.
 - It is horizontal and compact.
 - It gives users quick access to the most recent on-court events.
 - It is useful for answering "what just happened?"
 
 The Alerts panel is the curated interpretation layer:
 
-- It appears below the play-by-play wheel and above the Live Game Situation Matrix.
+- It appears below the scoreboard action row and above the play-by-play wheel.
 - It starts collapsed by default, using `nba-dashboard:alerts-panel:{gameId}` in local storage to preserve panel state.
-- When expanded, it renders alerts newest-first so live users do not need to scroll to the bottom during a game.
+- When collapsed, it shows one latest eligible high-signal alert. Eligible compact categories are `Run`, `Foul Trouble`, `Player Impact`, `Team Trend`, `Quarter`, `Halftime`, `Player Scoring`, and `Milestone`.
+- Lower-priority alert categories such as `Defense`, `Rebounding`, `First Score`, `Playmaking`, and `Team Scoring` remain available only in the expanded list.
+- When expanded, it renders every alert newest-first so live users do not need to scroll to the bottom during a game.
 - It is useful for answering "what matters from what has happened?"
 
 These two surfaces should not be merged unless the product direction changes substantially. They use the same underlying live game feed but serve different scanning behaviors.
