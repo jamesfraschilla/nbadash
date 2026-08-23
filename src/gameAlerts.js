@@ -118,6 +118,11 @@ function lowResultQualifier(value) {
   return safeNumber(value, 0) > 0 ? "just " : "";
 }
 
+function formatStat(value, singularLabel, pluralLabel = singularLabel) {
+  const numeric = safeNumber(value, 0);
+  return `${numeric} ${numeric === 1 ? singularLabel : pluralLabel}`;
+}
+
 function playerContributionTitle(playerName, share, action) {
   const shareText = formatPercent(share);
   const periodText = periodShortLabel(action.period);
@@ -484,6 +489,7 @@ function addPlayerStatAlert({
   teamId,
   category,
   statName,
+  statPlural = statName,
   value,
   minimum,
   idPrefix,
@@ -499,7 +505,7 @@ function addPlayerStatAlert({
     clock: action.clock,
     elapsed: actionElapsedSeconds(action, gameId),
     teamId,
-    title: `${player.name} ${verb} ${value} ${statName}`,
+    title: `${player.name} ${verb} ${formatStat(value, statName, statPlural)}`,
   });
 }
 
@@ -550,7 +556,7 @@ function addCreatedShareAlert({
     elapsed,
     teamId,
     title: playerContributionTitle(player.name, share, action),
-    detail: `${playerPeriod.points} points, ${playerPeriod.assists} assists, ${playerPeriod.assistPoints} points created from assists`,
+    detail: `${formatStat(playerPeriod.points, "Pt", "Pts")}, ${formatStat(playerPeriod.assists, "Ast")} (${formatStat(playerPeriod.assistPoints, "Pt", "Pts")} via Ast)`,
   });
   if (added) {
     createdShareState.set(stateKey, {
@@ -630,8 +636,8 @@ function addRunAlerts({ alerts, seen, scoringEvents, teamsById }) {
       clock: best.endEvent.clock,
       elapsed: best.endEvent.elapsed,
       teamId: best.endEvent.teamId,
-      title: `${teamLabel(team)} are on a ${best.teamPoints}-${best.opponentPoints} run`,
-      detail: `Over the last ${formatDuration(best.duration)} (${clockPeriodLabel(best.startEvent.action)} to ${clockPeriodLabel(best.endEvent.action)}).`,
+      title: `${teamLabel(team)} are on a ${best.teamPoints}-${best.opponentPoints} run over the last ${formatDuration(best.duration)}`,
+      detail: `${clockPeriodLabel(best.startEvent.action)} to ${clockPeriodLabel(best.endEvent.action)}`,
     });
     if (added) {
       runAlertState.set(best.endEvent.teamId, {
@@ -699,11 +705,11 @@ function findTeamLeader(cumulativePlayerStats, teamId) {
 function describeLeader(player, team) {
   if (!player) return "";
   const extras = [];
-  if (player.rebounds >= 3) extras.push(`${player.rebounds} rebounds`);
-  if (player.assists >= 3) extras.push(`${player.assists} assists`);
-  if (player.threes >= 2) extras.push(`${player.threes} three pointers`);
+  if (player.rebounds >= 3) extras.push(formatStat(player.rebounds, "Reb"));
+  if (player.assists >= 3) extras.push(formatStat(player.assists, "Ast"));
+  if (player.threes >= 2) extras.push(`${player.threes} 3PM`);
   const suffix = extras.length ? ` along with ${extras.join(" and ")}` : "";
-  return `${player.name} leads the ${teamLabel(team)} with ${player.points} points${suffix}.`;
+  return `${player.name} leads the ${teamLabel(team)} with ${formatStat(player.points, "Pt", "Pts")}${suffix}.`;
 }
 
 function completedPeriodLimit(game, scoringEvents) {
@@ -1026,7 +1032,7 @@ function addTeamPeriodPointAlert({ alerts, seen, team, teamId, period, action, p
     clock: action.clock,
     elapsed: actionElapsedSeconds(action, gameId),
     teamId,
-    title: `${teamLabel(team)} have totaled ${periodPoints} points in ${periodShortLabel(period)}`,
+    title: `${teamLabel(team)} have totaled ${formatStat(periodPoints, "Pt", "Pts")} in ${periodShortLabel(period)}`,
   });
 }
 
@@ -1041,7 +1047,7 @@ function addPlayerPeriodPointAlert({ alerts, seen, player, action, teamId, perio
       clock: action.clock,
       elapsed: actionElapsedSeconds(action, gameId),
       teamId,
-      title: `${player.name} has put up ${periodPoints} points to start ${periodShortLabel(action.period)}`,
+      title: `${player.name} has put up ${formatStat(periodPoints, "Pt", "Pts")} to start ${periodShortLabel(action.period)}`,
     });
   } else if (periodPoints >= 12) {
     if (!isSteppedMilestone(periodPoints, 12, 4)) return;
@@ -1052,7 +1058,7 @@ function addPlayerPeriodPointAlert({ alerts, seen, player, action, teamId, perio
       clock: action.clock,
       elapsed: actionElapsedSeconds(action, gameId),
       teamId,
-      title: `${player.name} has totaled ${periodPoints} points in ${periodShortLabel(action.period)}`,
+      title: `${player.name} has totaled ${formatStat(periodPoints, "Pt", "Pts")} in ${periodShortLabel(action.period)}`,
     });
   }
 }
@@ -1066,7 +1072,7 @@ function addTeamPeriodBlockAlert({ alerts, seen, team, teamId, period, action, b
     clock: action.clock,
     elapsed: actionElapsedSeconds(action, gameId),
     teamId,
-    title: `${teamLabel(team)} have totaled ${blocks} blocks in ${periodShortLabel(period)}`,
+    title: `${teamLabel(team)} have totaled ${formatStat(blocks, "Blk")} in ${periodShortLabel(period)}`,
   });
 }
 
@@ -1225,7 +1231,8 @@ export function buildGameAlerts({
             action,
             teamId: scoringEvent.teamId,
             category: "Player Scoring",
-            statName: "points",
+            statName: "Pt",
+            statPlural: "Pts",
             value: player.points,
             minimum: player.points,
             idPrefix: "player-points",
@@ -1291,7 +1298,7 @@ export function buildGameAlerts({
           action,
           teamId: scoringEvent.teamId,
           category: "Playmaking",
-          statName: "assists",
+          statName: "Ast",
           value: assister.assists,
           minimum: 10,
           idPrefix: "player-assists",
@@ -1346,7 +1353,7 @@ export function buildGameAlerts({
           action,
           teamId: blockTeamId,
           category: "Defense",
-          statName: "blocks",
+          statName: "Blk",
           value: blocker.blocks,
           minimum: 3,
           idPrefix: "player-blocks",
@@ -1397,7 +1404,7 @@ export function buildGameAlerts({
           action,
           teamId: stealTeamId,
           category: "Defense",
-          statName: "steals",
+          statName: "Stl",
           value: stealer.steals,
           minimum: 3,
           idPrefix: "player-steals",
@@ -1434,7 +1441,7 @@ export function buildGameAlerts({
         action,
         teamId,
         category: "Rebounding",
-        statName: "rebounds",
+        statName: "Reb",
         value: player.rebounds,
         minimum: 14,
         idPrefix: "player-rebounds",
@@ -1453,7 +1460,7 @@ export function buildGameAlerts({
           clock: action.clock,
           elapsed: actionElapsedSeconds(action, game?.gameId),
           teamId,
-          title: `${player.name} has gathered ${playerPeriod.rebounds} rebounds ${reboundPeriodText}`,
+          title: `${player.name} has gathered ${formatStat(playerPeriod.rebounds, "Reb")} ${reboundPeriodText}`,
         });
       }
       addPlayerAchievementAlerts({
@@ -1477,7 +1484,7 @@ export function buildGameAlerts({
         action,
         teamId,
         category: "Defense",
-        statName: "blocks",
+        statName: "Blk",
         value: player.blocks,
         minimum: 3,
         idPrefix: "player-blocks",
@@ -1514,7 +1521,7 @@ export function buildGameAlerts({
         action,
         teamId,
         category: "Defense",
-        statName: "steals",
+        statName: "Stl",
         value: player.steals,
         minimum: 3,
         idPrefix: "player-steals",
@@ -1544,7 +1551,7 @@ export function buildGameAlerts({
           action,
           teamId,
           category: "Foul Trouble",
-          statName: "personal fouls",
+          statName: "PF",
           value: player.fouls,
           minimum: 4,
           idPrefix: "player-fouls",

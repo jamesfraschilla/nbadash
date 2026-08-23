@@ -729,12 +729,14 @@ UI rendering conventions:
 Wording and timestamp conventions:
 
 - Quarter references use compact labels: `Q1`, `Q2`, `Q3`, and `Q4`.
-- Run detail ranges use compact period-clock labels, such as `Q2 2:24 to Q2 0:02`.
+- Run alert titles include the run duration, such as `Timberwolves are on a 23-14 run over the last 6:03`.
+- Run detail ranges use compact period-clock labels only, such as `Q3 0:52 to Q4 6:49`.
 - Period-end alerts are timestamped at the true period end (`0:00`) rather than after the last scoring event. This prevents late non-scoring alerts, such as a rebound at `Q1 0:25`, from appearing after the `Q1 0:00` summary.
 - Period-end tie summaries use direct phrasing such as `At the end of Q1, the Wizards and the Celtics are tied at 24`.
+- Count stats use coach-facing abbreviations: `Pt`/`Pts`, `Ast`, `Reb`, `Stl`, `Blk`, `TO`, `OReb`, and `DReb`.
 - If an alert combines player points and points created by assists, it says the player "contributed to" team points, not "accounts for."
 - If the referenced period is still in progress, contribution alerts use present perfect wording, such as `has contributed to ... so far in Q3`.
-- Player contribution alert details do not wrap the entire second line in parentheses. The detail line should read like `3 points, 2 assists, 5 points created from assists`.
+- Player contribution alert details do not wrap the entire second line in parentheses. The detail line should read like `7 Pts, 1 Ast (3 Pts via Ast)`.
 - Triple-double milestone alerts include the player's relevant near-triple-double stat line, such as `Chris Livingston is approaching a triple-double (12 Pts, 9 Reb, 9 Ast)`.
 - Rebound alerts only use "to start Q1" style wording early in a period. Late-period rebound milestones use plain `in Q1` wording.
 - Assisted-shot team trend alerts use the second line to show assisted field-goal scoring, unassisted field-goal scoring, and free throws.
@@ -812,7 +814,11 @@ The Edge Function prompt and factual context aim to:
 - include made/attempt totals when percentages are mentioned,
 - avoid saying a team had a lead/deficit/advantage of 0,
 - state exact gaps/deficits where possible,
+- use the same stat abbreviations as Alerts: `Pt`/`Pts`, `Ast`, `Reb`, `Stl`, `Blk`, `TO`, `OReb`, and `DReb`,
+- use compact team stat labels such as `Pts off TO`, `paint Pts`, `transition Pts`, and `second-chance Pts`,
 - produce sectioned coach-readable recaps.
+
+The Edge Function also normalizes generated and template text through `sanitizeAnalysisText()`, which combines turnover-language correction with stat-abbreviation cleanup before responses are cached or returned.
 
 If future wording issues appear, the fix usually belongs in the prompt construction and factual context helpers inside `supabase/functions/game-analysis/index.ts`.
 

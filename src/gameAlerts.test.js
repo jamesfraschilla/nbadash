@@ -43,7 +43,7 @@ test("buildGameAlerts creates first-score and scoring-run alerts from loaded pla
   });
 
   assert.ok(alerts.some((alert) => alert.title === "The Nets scored the first points of the game"));
-  assert.ok(alerts.some((alert) => alert.title === "Nets are on a 8-0 run"));
+  assert.ok(alerts.some((alert) => alert.title === "Nets are on a 8-0 run over the last 1:03"));
 });
 
 test("buildGameAlerts throttles consecutive alerts for the same scoring run", () => {
@@ -73,8 +73,8 @@ test("buildGameAlerts throttles consecutive alerts for the same scoring run", ()
 
   const netsRunAlerts = alerts.filter((alert) => alert.category === "Run" && alert.teamCode === "BKN");
   assert.deepEqual(netsRunAlerts.map((alert) => alert.title), [
-    "Nets are on a 8-0 run",
-    "Nets are on a 14-0 run",
+    "Nets are on a 8-0 run over the last 1:20",
+    "Nets are on a 14-0 run over the last 2:45",
   ]);
 });
 
@@ -110,7 +110,7 @@ test("buildGameAlerts reports player-created share with assisted points", () => 
     shareAlert.title,
     "John Ukomadu has contributed to 83.3% of the team's points so far in Q1",
   );
-  assert.equal(shareAlert.detail, "2 points, 3 assists, 8 points created from assists");
+  assert.equal(shareAlert.detail, "2 Pts, 3 Ast (8 Pts via Ast)");
   assert.equal(alerts.filter((alert) => alert.title.includes("John Ukomadu has contributed to")).length, 1);
 });
 
@@ -328,9 +328,9 @@ test("buildGameAlerts formats run ranges with compact period labels", () => {
     basePlayers: [{ personId: 201, firstName: "Steven", familyName: "Ashworth", teamId: HOME.teamId }],
   });
 
-  const runAlert = alerts.find((alert) => alert.category === "Run" && alert.title === "Thunder are on a 8-0 run");
+  const runAlert = alerts.find((alert) => alert.category === "Run" && alert.title === "Thunder are on a 8-0 run over the last 5:49");
   assert.ok(runAlert);
-  assert.equal(runAlert.detail, "Over the last 5:49 (Q1 1:15 to Q2 7:26).");
+  assert.equal(runAlert.detail, "Q1 1:15 to Q2 7:26");
 });
 
 test("buildGameAlerts keeps late-quarter rebound alerts before period-end alerts", () => {
@@ -370,7 +370,7 @@ test("buildGameAlerts keeps late-quarter rebound alerts before period-end alerts
     ],
   });
 
-  const reboundIndex = alerts.findIndex((alert) => alert.title === "Julian Champagnie has gathered 5 rebounds in Q1");
+  const reboundIndex = alerts.findIndex((alert) => alert.title === "Julian Champagnie has gathered 5 Reb in Q1");
   const periodEndIndex = alerts.findIndex((alert) => alert.category === "Quarter" && alert.timeLabel === "Q1 0:00");
   assert.notEqual(reboundIndex, -1);
   assert.notEqual(periodEndIndex, -1);
@@ -532,8 +532,8 @@ test("buildGameAlerts reports observed defensive and foul milestones", () => {
     ],
   });
 
-  assert.ok(alerts.some((alert) => alert.title === "Dain Dainja has totaled 3 blocks"));
-  assert.ok(alerts.some((alert) => alert.title === "Dion Brown has committed 4 personal fouls"));
+  assert.ok(alerts.some((alert) => alert.title === "Dain Dainja has totaled 3 Blk"));
+  assert.ok(alerts.some((alert) => alert.title === "Dion Brown has committed 4 PF"));
 });
 
 test("buildGameAlerts credits linked defensive players on shot and turnover events", () => {
@@ -579,6 +579,6 @@ test("buildGameAlerts credits linked defensive players on shot and turnover even
     ],
   });
 
-  assert.ok(alerts.some((alert) => alert.title === "Dain Dainja has totaled 3 blocks"));
-  assert.ok(alerts.some((alert) => alert.title === "Aaron Scott has tallied 3 steals"));
+  assert.ok(alerts.some((alert) => alert.title === "Dain Dainja has totaled 3 Blk"));
+  assert.ok(alerts.some((alert) => alert.title === "Aaron Scott has tallied 3 Stl"));
 });

@@ -453,6 +453,11 @@ function formatPercentageWithAttempts(value: unknown, made: number, attempted: n
   return value == null ? "N/A" : `${value}% (${made}/${attempted})`;
 }
 
+function formatStatCount(value: number, singularLabel: string, pluralLabel = singularLabel) {
+  const numeric = safeNumber(value, 0);
+  return `${numeric} ${numeric === 1 ? singularLabel : pluralLabel}`;
+}
+
 function buildTeamActionTotals(teamId: string) {
   return {
     teamId,
@@ -621,22 +626,22 @@ function buildPlayerInsights(
       const teamPoints = Math.max(0, teamPointsById[teamId] || 0);
       const pointShare = teamPoints > 0 ? leader.points / teamPoints : 0;
       const statBits = [];
-      if (leader.assists >= 3) statBits.push(`${leader.assists} AST`);
-      if (leader.reboundsTotal >= 4) statBits.push(`${leader.reboundsTotal} REB`);
-      if (leader.steals >= 2) statBits.push(`${leader.steals} STL`);
-      if (leader.blocks >= 2) statBits.push(`${leader.blocks} BLK`);
+      if (leader.assists >= 3) statBits.push(formatStatCount(leader.assists, "Ast"));
+      if (leader.reboundsTotal >= 4) statBits.push(formatStatCount(leader.reboundsTotal, "Reb"));
+      if (leader.steals >= 2) statBits.push(formatStatCount(leader.steals, "Stl"));
+      if (leader.blocks >= 2) statBits.push(formatStatCount(leader.blocks, "Blk"));
 
       const noteStrength = (leader.points * 3) + (pointShare * 10) + leader.assists + leader.reboundsTotal;
       if (leader.points < 6 && !statBits.length) return null;
 
       const detail = statBits.length ? ` with ${statBits.join(", ")}` : "";
       const shareText = teamPoints > 0 && (pointShare >= 0.4 || leader.points >= 10)
-        ? `, accounting for ${leader.points} of ${teamLabel(teamLookup[teamId])}'s ${teamPoints} points`
+        ? `, accounting for ${formatStatCount(leader.points, "Pt", "Pts")} of ${teamLabel(teamLookup[teamId])}'s ${formatStatCount(teamPoints, "Pt", "Pts")}`
         : "";
 
       return {
         strength: noteStrength,
-        note: `${teamLabel(teamLookup[teamId])} player note: ${leader.name} had ${leader.points} PTS${detail}${shareText}.`,
+        note: `${teamLabel(teamLookup[teamId])} player note: ${leader.name} had ${formatStatCount(leader.points, "Pt", "Pts")}${detail}${shareText}.`,
       };
     })
     .filter(Boolean)
@@ -1760,13 +1765,53 @@ function sanitizeTurnoverLanguage(value: unknown, features: ReturnType<typeof bu
     .trim();
 }
 
+function normalizeStatAbbreviations(value: unknown) {
+  let text = String(value || "").trim();
+  if (!text) return text;
+
+  const statReplacement = (rawNumber: string, singularLabel: string, pluralLabel = singularLabel) => {
+    const numeric = Number(rawNumber);
+    return `${rawNumber} ${numeric === 1 ? singularLabel : pluralLabel}`;
+  };
+
+  text = text
+    .replace(/\b(\d+(?:\.\d+)?)\s*points?\s+created\s+from\s+assists?\b/gi, (_match: string, rawNumber: string) => `${statReplacement(rawNumber, "Pt", "Pts")} via Ast`)
+    .replace(/\b(\d+(?:\.\d+)?)\s*points?\s+off\s+turnovers?\b/gi, (_match: string, rawNumber: string) => `${statReplacement(rawNumber, "Pt", "Pts")} off TO`)
+    .replace(/\bpoints?\s+off\s+turnovers?\b/gi, "Pts off TO")
+    .replace(/\bpaint\s+points?\b/gi, "paint Pts")
+    .replace(/\btransition\s+points?\b/gi, "transition Pts")
+    .replace(/\bsecond[-\s]chance\s+points?\b/gi, "second-chance Pts")
+    .replace(/\boffensive\s+rebounds?\b/gi, "OReb")
+    .replace(/\bdefensive\s+rebounds?\b/gi, "DReb")
+    .replace(/\boffensive\s+boards?\b/gi, "OReb")
+    .replace(/\bdefensive\s+boards?\b/gi, "DReb")
+    .replace(/\b(\d+(?:\.\d+)?)\s*(?:PTS?|points?)\b/gi, (_match: string, rawNumber: string) => statReplacement(rawNumber, "Pt", "Pts"))
+    .replace(/\b(\d+(?:\.\d+)?)\s*(?:AST|assists?)\b/gi, (_match: string, rawNumber: string) => statReplacement(rawNumber, "Ast"))
+    .replace(/\b(\d+(?:\.\d+)?)\s*(?:REB|rebounds?)\b/gi, (_match: string, rawNumber: string) => statReplacement(rawNumber, "Reb"))
+    .replace(/\b(\d+(?:\.\d+)?)\s*(?:STL|steals?)\b/gi, (_match: string, rawNumber: string) => statReplacement(rawNumber, "Stl"))
+    .replace(/\b(\d+(?:\.\d+)?)\s*(?:BLK|blocks?)\b/gi, (_match: string, rawNumber: string) => statReplacement(rawNumber, "Blk"))
+    .replace(/\b(\d+(?:\.\d+)?)\s*turnovers?\b/gi, "$1 TO")
+    .replace(/\b(\d+(?:\.\d+)?)\s*TO\b/g, "$1 TO")
+    .replace(/\bturnovers?\b/gi, "TO")
+    .replace(/\bassists?\b/gi, "Ast")
+    .replace(/\brebounds?\b/gi, "Reb")
+    .replace(/\bsteals?\b/gi, "Stl")
+    .replace(/\bblocks?\b/gi, "Blk");
+
+  return text;
+}
+
+function sanitizeAnalysisText(value: unknown, features: ReturnType<typeof buildFeaturePayload>) {
+  return normalizeStatAbbreviations(sanitizeTurnoverLanguage(value, features));
+}
+
 function buildTemplateSections(features: ReturnType<typeof buildFeaturePayload>) {
   return buildInsightSignals(features)
     .sort((a, b) => b.strength - a.strength)
     .slice(0, 3)
     .map((signal) => ({
       title: signal.title,
-      items: signal.items.slice(0, signal.key === "gameFlow" ? 1 : 2),
+      items: signal.items.slice(0, signal.key === "gameFlow" ? 1 : 2).map((item) => sanitizeAnalysisText(item, features)),
     }));
 }
 
@@ -1818,7 +1863,7 @@ function buildSwingFactors(features: ReturnType<typeof buildFeaturePayload>) {
     .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
     .filter((item) => item.value !== 0 && item.text)
     .slice(0, 3)
-    .map((item) => item.text as string);
+    .map((item) => sanitizeAnalysisText(item.text, features));
 
   return factors.slice(0, 4);
 }
@@ -1839,7 +1884,7 @@ function buildStatOutliers(features: ReturnType<typeof buildFeaturePayload>) {
     notes.push(`${home.tricode} free throws: ${home.totals.freeThrowsMade}/${home.totals.freeThrowsAttempted}; ${away.tricode}: ${away.totals.freeThrowsMade}/${away.totals.freeThrowsAttempted}.`);
   }
 
-  return notes.slice(0, 4);
+  return notes.slice(0, 4).map((item) => sanitizeAnalysisText(item, features));
 }
 
 function buildTemplateAnalysis(features: ReturnType<typeof buildFeaturePayload>) {
@@ -1858,16 +1903,16 @@ function buildTemplateAnalysis(features: ReturnType<typeof buildFeaturePayload>)
 
   return {
     source: "template",
-    headline: `${headlineLead}${margin === 0 ? "" : ` by ${margin}`} from ${features.range.startLabel} to ${features.range.endLabel}.`,
-    summary: `${leader.tricode} outscored ${trailer.tricode} ${leaderPoints}-${trailerPoints} over ${features.range.duration}. The score moved from ${features.score.start.away}-${features.score.start.home} to ${features.score.end.away}-${features.score.end.home}.`,
+    headline: sanitizeAnalysisText(`${headlineLead}${margin === 0 ? "" : ` by ${margin}`} from ${features.range.startLabel} to ${features.range.endLabel}.`, features),
+    summary: sanitizeAnalysisText(`${leader.tricode} outscored ${trailer.tricode} ${leaderPoints}-${trailerPoints} over ${features.range.duration}. The score moved from ${features.score.start.away}-${features.score.start.home} to ${features.score.end.away}-${features.score.end.home}.`, features),
     sections,
     uniformDetails: {
       swingFactors,
-      lineupNotes: features.lineupNotes,
+      lineupNotes: features.lineupNotes.map((item) => sanitizeAnalysisText(item, features)),
       statOutliers,
     },
     swingFactors,
-    lineupNotes: features.lineupNotes,
+    lineupNotes: features.lineupNotes.map((item) => sanitizeAnalysisText(item, features)),
     statOutliers,
   };
 }
@@ -2001,10 +2046,12 @@ async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayloa
     "Use only the structured game data provided.",
     "Use player names exactly as provided in the JSON input and do not expand initials into guessed full names.",
     "Do not invent stats, possessions, or player impact claims.",
-    "Do not overstate player scoring share; if a player scored 10 points for a team that scored 38, do not say he scored all of the team's points.",
-    "When citing team edges in categories like paint points or points off turnovers, name the team with the higher value.",
+    "Do not overstate player scoring share; if a player scored 10 Pts for a team that scored 38, do not say he scored all of the team's points.",
+    "When citing team edges in categories like paint Pts or Pts off TO, name the team with the higher value.",
     "For turnovers, lower is better; never say a team won turnovers because it committed more turnovers. Say the lower-turnover team committed fewer turnovers.",
     "Do not write 'forced fewer turnovers'; forced turnovers are opponent turnovers. When comparing the TO column, say committed fewer turnovers.",
+    "Use stat abbreviations exactly as Pt/Pts, Ast, Reb, Stl, Blk, TO, OReb, and DReb when citing count stats.",
+    "Use phrases like Pts off TO, paint Pts, transition Pts, and second-chance Pts for those team stat categories.",
     "Decide what most shaped this selected stretch instead of forcing equal attention to every category.",
     "Vary sentence structure and avoid repeating the same opening pattern from one answer to the next.",
     "If one theme clearly dominates, center the answer on that theme.",
@@ -2066,8 +2113,8 @@ async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayloa
   const parsed = JSON.parse(content);
   return {
     source: "ai",
-    headline: sanitizeTurnoverLanguage(sanitizeAiHeadline(String(parsed?.headline || "").trim(), features), features),
-    summary: sanitizeTurnoverLanguage(parsed?.summary, features),
+    headline: sanitizeAnalysisText(sanitizeAiHeadline(String(parsed?.headline || "").trim(), features), features),
+    summary: sanitizeAnalysisText(parsed?.summary, features),
     sections: Array.isArray(parsed?.sections)
       ? parsed.sections
         .map((section: unknown) => {
@@ -2075,7 +2122,7 @@ async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayloa
           const title = String((section as Record<string, unknown>).title || "").trim();
           const items = Array.isArray((section as Record<string, unknown>).items)
             ? ((section as Record<string, unknown>).items as unknown[])
-              .map((item) => sanitizeTurnoverLanguage(item, features))
+              .map((item) => sanitizeAnalysisText(item, features))
               .filter(Boolean)
               .slice(0, 2)
             : [];
@@ -2086,9 +2133,9 @@ async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayloa
         .slice(0, 3)
       : [],
     uniformDetails: null,
-    swingFactors: Array.isArray(parsed?.swingFactors) ? parsed.swingFactors.map((item: unknown) => sanitizeTurnoverLanguage(item, features)).filter(Boolean) : [],
-    lineupNotes: Array.isArray(parsed?.lineupNotes) ? parsed.lineupNotes.map((item: unknown) => sanitizeTurnoverLanguage(item, features)).filter(Boolean) : [],
-    statOutliers: Array.isArray(parsed?.statOutliers) ? parsed.statOutliers.map((item: unknown) => sanitizeTurnoverLanguage(item, features)).filter(Boolean) : [],
+    swingFactors: Array.isArray(parsed?.swingFactors) ? parsed.swingFactors.map((item: unknown) => sanitizeAnalysisText(item, features)).filter(Boolean) : [],
+    lineupNotes: Array.isArray(parsed?.lineupNotes) ? parsed.lineupNotes.map((item: unknown) => sanitizeAnalysisText(item, features)).filter(Boolean) : [],
+    statOutliers: Array.isArray(parsed?.statOutliers) ? parsed.statOutliers.map((item: unknown) => sanitizeAnalysisText(item, features)).filter(Boolean) : [],
   };
 }
 
@@ -2199,7 +2246,9 @@ export const __test__ = {
   handleRequest,
   hasOverstatedAllTeamScoring,
   hasZeroMarginLanguage,
+  normalizeStatAbbreviations,
   percentage,
+  sanitizeAnalysisText,
   sanitizeTurnoverLanguage,
   shouldRejectAiAnalysis,
 };

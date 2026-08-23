@@ -95,6 +95,37 @@ Deno.test("turnover sanitizer uses committed-fewer language", () => {
   );
 });
 
+Deno.test("analysis text normalizer abbreviates count stats and team stat categories", () => {
+  assertEquals(
+    __test__.normalizeStatAbbreviations("Player had 1 point, 2 assists, 3 rebounds, 4 steals, 5 blocks, 6 turnovers, 2 offensive rebounds, 3 defensive rebounds, 8 points off turnovers, 12 paint points, 7 transition points, and 4 second-chance points."),
+    "Player had 1 Pt, 2 Ast, 3 Reb, 4 Stl, 5 Blk, 6 TO, 2 OReb, 3 DReb, 8 Pts off TO, 12 paint Pts, 7 transition Pts, and 4 second-chance Pts.",
+  );
+});
+
+Deno.test("analysis sanitizer combines turnover correction with stat abbreviations", () => {
+  const features = {
+    teams: {
+      home: {
+        tricode: "WAS",
+        totals: {
+          turnovers: 2,
+        },
+      },
+      away: {
+        tricode: "NYK",
+        totals: {
+          turnovers: 5,
+        },
+      },
+    },
+  };
+
+  assertEquals(
+    __test__.sanitizeAnalysisText("WAS forced fewer turnovers in the quarter and scored 7 points off turnovers.", features as any),
+    "WAS committed fewer TO (2 to 5) in the quarter and scored 7 Pts off TO.",
+  );
+});
+
 Deno.test("analysis language guard rejects bare shooting percentages", () => {
   const features = {
     teams: {
