@@ -113,6 +113,10 @@ function formatMadeAttemptPercent(made, attempted) {
   return `${formatPercent((made / attempted) * 100)} (${made}/${attempted})`;
 }
 
+function lowResultQualifier(value) {
+  return safeNumber(value, 0) > 0 ? "just " : "";
+}
+
 function playerContributionTitle(playerName, share, action) {
   const shareText = formatPercent(share);
   const periodText = periodShortLabel(action.period);
@@ -617,7 +621,7 @@ function buildPeriodEndSummary({
     return {
       title: period === 2
         ? `At halftime, the ${awayLabel} and the ${homeLabel} are tied at ${awayScore}`
-        : `The ${awayLabel} and the ${homeLabel} at ${periodText} are tied at ${awayScore}`,
+        : `At ${periodText}, the ${awayLabel} and the ${homeLabel} are tied at ${awayScore}`,
       detail: buildLeaderSummary(cumulativePlayerStats, awayTeam, homeTeam),
     };
   }
@@ -800,7 +804,7 @@ function buildBestTeamTrendCandidate({
         elapsed: elapsed + 0.3,
         teamId,
         strength: 50 - assistedShare,
-        title: `${label} scored just ${formatPercent(assistedShare)} of their points from assisted shots ${periodEndLabel}`,
+        title: `${label} scored ${lowResultQualifier(assistedShare)}${formatPercent(assistedShare)} of their points from assisted shots ${periodEndLabel}`,
       });
     }
 
@@ -849,7 +853,7 @@ function buildBestTeamTrendCandidate({
         elapsed: elapsed + 0.5,
         teamId,
         strength: 48 - fieldGoalPercent,
-        title: `${label} shot just ${formatMadeAttemptPercent(periodStats.fieldGoalsMade, periodStats.fieldGoalsAttempted)} overall in ${periodLabel}`,
+        title: `${label} shot ${lowResultQualifier(fieldGoalPercent)}${formatMadeAttemptPercent(periodStats.fieldGoalsMade, periodStats.fieldGoalsAttempted)} overall in ${periodLabel}`,
       });
     }
 
@@ -884,7 +888,7 @@ function buildBestTeamTrendCandidate({
         elapsed: elapsed + 0.7,
         teamId,
         strength: 35 - threePercent,
-        title: `${label} shot just ${formatMadeAttemptPercent(periodStats.threesMade, periodStats.threesAttempted)} from three in ${periodLabel}`,
+        title: `${label} shot ${lowResultQualifier(threePercent)}${formatMadeAttemptPercent(periodStats.threesMade, periodStats.threesAttempted)} from three in ${periodLabel}`,
       });
     }
   }

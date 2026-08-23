@@ -145,6 +145,72 @@ test("buildGameAlerts adds bounded team trend alerts at period checkpoints", () 
   )));
 });
 
+test("buildGameAlerts omits just before zero-percent team trend alerts", () => {
+  const noAssistedPointsActions = [
+    scoringAction({ actionNumber: 1, orderNumber: 1, actionType: "3pt", clock: "PT11M00.00S", scoreAway: "3", scoreHome: "0" }),
+    scoringAction({ actionNumber: 2, orderNumber: 2, actionType: "3pt", clock: "PT10M00.00S", scoreAway: "6", scoreHome: "0" }),
+    scoringAction({ actionNumber: 3, orderNumber: 3, actionType: "3pt", clock: "PT09M00.00S", scoreAway: "9", scoreHome: "0" }),
+    scoringAction({ actionNumber: 4, orderNumber: 4, actionType: "3pt", clock: "PT08M00.00S", scoreAway: "12", scoreHome: "0" }),
+  ];
+  const missedThreesActions = [
+    scoringAction({ actionNumber: 1, orderNumber: 1, clock: "PT11M00.00S", scoreAway: "2", scoreHome: "0" }),
+    scoringAction({ actionNumber: 2, orderNumber: 2, clock: "PT10M00.00S", scoreAway: "4", scoreHome: "0" }),
+    scoringAction({ actionNumber: 3, orderNumber: 3, clock: "PT09M00.00S", scoreAway: "6", scoreHome: "0" }),
+    scoringAction({ actionNumber: 4, orderNumber: 4, clock: "PT08M00.00S", scoreAway: "8", scoreHome: "0" }),
+    scoringAction({ actionNumber: 5, orderNumber: 5, clock: "PT07M00.00S", scoreAway: "10", scoreHome: "0" }),
+    ...Array.from({ length: 7 }, (_, index) => scoringAction({
+      actionNumber: 6 + index,
+      orderNumber: 6 + index,
+      shotResult: "Missed",
+      clock: `PT0${6 - Math.floor(index / 2)}M${String(40 - ((index % 2) * 20)).padStart(2, "0")}.00S`,
+      scoreAway: "10",
+      scoreHome: "0",
+    })),
+    ...Array.from({ length: 9 }, (_, index) => scoringAction({
+      actionNumber: 13 + index,
+      orderNumber: 13 + index,
+      actionType: "3pt",
+      shotResult: "Missed",
+      clock: `PT0${3 - Math.floor(index / 3)}M${String(50 - ((index % 3) * 15)).padStart(2, "0")}.00S`,
+      scoreAway: "10",
+      scoreHome: "0",
+    })),
+  ];
+
+  const noAssistedAlerts = buildGameAlerts({
+    game: {
+      gameId: "0022600001",
+      gameStatus: 2,
+      period: 2,
+      gameClock: "PT12M00.00S",
+      playByPlayActions: noAssistedPointsActions,
+    },
+    awayTeam: AWAY,
+    homeTeam: HOME,
+    basePlayers: [{ personId: 101, firstName: "John", familyName: "Ukomadu", teamId: AWAY.teamId }],
+  });
+  const missedThreeAlerts = buildGameAlerts({
+    game: {
+      gameId: "0022600001",
+      gameStatus: 2,
+      period: 2,
+      gameClock: "PT12M00.00S",
+      playByPlayActions: missedThreesActions,
+    },
+    awayTeam: AWAY,
+    homeTeam: HOME,
+    basePlayers: [{ personId: 101, firstName: "John", familyName: "Ukomadu", teamId: AWAY.teamId }],
+  });
+
+  assert.ok(noAssistedAlerts.some((alert) => (
+    alert.title === "Nets scored 0% of their points from assisted shots through the end of Q1"
+  )));
+  assert.ok(missedThreeAlerts.some((alert) => (
+    alert.title === "Nets shot 0% (0/9) from three in Q1"
+  )));
+  assert.ok(![...noAssistedAlerts, ...missedThreeAlerts].some((alert) => /just 0%/.test(alert.title)));
+});
+
 test("buildGameAlerts formats run ranges with compact period labels", () => {
   const game = {
     gameId: "0022600001",

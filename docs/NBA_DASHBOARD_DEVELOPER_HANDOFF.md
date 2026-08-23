@@ -1,6 +1,6 @@
 # NBA Dash Developer Handoff
 
-Generated: 2026-08-21
+Last updated: 2026-08-23
 
 Repository inspected: `nba_dashboard`
 
@@ -612,8 +612,8 @@ It combines:
 - Scoreboard/game state.
 - Segment selector.
 - Team and player stats.
-- Play-by-play context.
-- Alerts.
+- Play-by-play context through a horizontal recent-plays wheel.
+- Alerts as a curated, expandable notable-events feed.
 - Analysis recap generation and shared recaps.
 - Notes.
 - Officials.
@@ -666,6 +666,26 @@ The code refers to these as rotations/tracked games in several places.
 
 Shared analysis and KPI remote sync are intentionally limited to Washington/Capital City contexts to reduce unnecessary backend work.
 
+### 13.5 Play-by-Play Wheel and Alerts
+
+The live dashboard intentionally keeps the play-by-play wheel and Alerts panel separate.
+
+The play-by-play wheel is the raw event stream:
+
+- It appears above Alerts on the Game page.
+- It is horizontal and compact.
+- It gives users quick access to the most recent on-court events.
+- It is useful for answering "what just happened?"
+
+The Alerts panel is the curated interpretation layer:
+
+- It appears below the play-by-play wheel and above the Live Game Situation Matrix.
+- It starts collapsed by default, using `nba-dashboard:alerts-panel:{gameId}` in local storage to preserve panel state.
+- When expanded, it renders alerts newest-first so live users do not need to scroll to the bottom during a game.
+- It is useful for answering "what matters from what has happened?"
+
+These two surfaces should not be merged unless the product direction changes substantially. They use the same underlying live game feed but serve different scanning behaviors.
+
 ## 14. Alerts
 
 Primary files:
@@ -675,6 +695,8 @@ Primary files:
 - `src/components/GameAlerts.jsx`
 
 Alerts are deterministic client-generated notable events based on play-by-play and box score context. They do not require a Supabase function.
+
+`buildGameAlerts()` returns alerts in chronological order with stable `sortIndex` values. The `GameAlerts` component reverses that display order and renders newest-first in the live dashboard. Keeping generation chronological makes testing and capping easier, while rendering newest-first makes live usage more practical.
 
 Alert categories include:
 
@@ -696,10 +718,24 @@ Important constants include:
 - Deduplication/repeat delta thresholds.
 - Maximum alert count.
 
-Recent wording decisions:
+UI rendering conventions:
 
+- The panel header displays the total alert count.
+- Alert cards show time, category, team, title, and optional detail.
+- Team-specific alerts render a small team logo badge using `teamLogoUrl(teamId)`.
+- If a team logo cannot be resolved, the badge falls back to the three-letter team code.
+- Alert team logo badges are size-constrained so image loading does not resize the row.
+
+Wording and timestamp conventions:
+
+- Quarter references use compact labels: `Q1`, `Q2`, `Q3`, and `Q4`.
+- Run detail ranges use compact period-clock labels, such as `Q2 2:24 to Q2 0:02`.
+- Period-end alerts are timestamped at the true period end (`0:00`) rather than after the last scoring event. This prevents late non-scoring alerts, such as a rebound at `Q1 0:25`, from appearing after the `Q1 0:00` summary.
+- Period-end tie summaries use direct phrasing such as `At the end of Q1, the Wizards and the Celtics are tied at 24`.
 - If an alert combines player points and points created by assists, it says the player "contributed to" team points, not "accounts for."
-- If the referenced period is still in progress, the alert uses present perfect wording, such as "has contributed to ... so far in the 3rd quarter."
+- If the referenced period is still in progress, contribution alerts use present perfect wording, such as `has contributed to ... so far in Q3`.
+- Rebound alerts only use "to start Q1" style wording early in a period. Late-period rebound milestones use plain `in Q1` wording.
+- Low-percentage team trend alerts may use "just" for low nonzero values, but never for zero. For example, `Spurs shot 0% (0/9) from three in Q3`, not `Spurs shot just 0%...`.
 - Duplicate or near-duplicate run alerts and contribution alerts are filtered to avoid alert spam.
 
 This system should remain conservative. Adding every possible alert creates noise for coaches and slows scanning.
@@ -2482,6 +2518,8 @@ Examples:
 - `src/analyticsReportPdf.test.js`
 - `src/lateGameStrategy.test.js`
 
+`src/gameAlerts.test.js` is the main regression suite for alert count control, duplicate filtering, chronological generation, display-safe timestamps, and coach-facing wording conventions.
+
 Run:
 
 ```bash
@@ -2737,8 +2775,8 @@ This index is not every line of code, but it gives a rebuild team a practical so
 
 | File | Role |
 | --- | --- |
-| `src/gameAlerts.js` | deterministic alert generation |
-| `src/components/GameAlerts.jsx` | alerts panel |
+| `src/gameAlerts.js` | deterministic alert generation, deduplication, chronological ordering, wording rules |
+| `src/components/GameAlerts.jsx` | alerts panel rendering, newest-first display ordering, team logo badges |
 | `src/gameAnalysis.js` | analysis UI/range helpers |
 | `src/analysisData.js` | calls game-analysis function |
 
@@ -2850,7 +2888,7 @@ Critical functions for current product:
 - `player-headshot`
 - `team-games`
 
-`supabase/DEPLOYMENT.md` lists the minimum SQL and function deployment checklist for recent changes.
+`supabase/DEPLOYMENT.md` lists the minimum SQL and function deployment checklist for the current backend requirements.
 
 ## 50. Product Intent by Tool
 
@@ -2904,4 +2942,3 @@ A new implementation should not start by redesigning UI screens. It should first
 - user profile/permission model.
 
 Once those contracts are stable, the UI can be rebuilt with fewer regressions.
-
