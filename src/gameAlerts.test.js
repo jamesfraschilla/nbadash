@@ -110,7 +110,7 @@ test("buildGameAlerts reports player-created share with assisted points", () => 
     shareAlert.title,
     "John Ukomadu has contributed to 83.3% of the team's points so far in Q1",
   );
-  assert.equal(shareAlert.detail, "(2 points, 3 assists, 8 points created from assists)");
+  assert.equal(shareAlert.detail, "2 points, 3 assists, 8 points created from assists");
   assert.equal(alerts.filter((alert) => alert.title.includes("John Ukomadu has contributed to")).length, 1);
 });
 
@@ -141,7 +141,103 @@ test("buildGameAlerts adds bounded team trend alerts at period checkpoints", () 
 
   assert.ok(alerts.some((alert) => (
     alert.category === "Team Trend" &&
-    alert.title === "Nets scored 76.2% of their points from assisted shots through the end of Q1"
+    alert.title === "Nets scored 76.2% of their points from assisted shots through the end of Q1" &&
+    alert.detail === "Assisted: 6/6 FG (16 Pts), Unassisted: 2/2 FG (5 Pts), FT: 0/0 (0 Pts)"
+  )));
+});
+
+test("buildGameAlerts adds assisted, unassisted, and free-throw detail to assisted-shot trends", () => {
+  const actions = [
+    scoringAction({ actionNumber: 1, orderNumber: 1, clock: "PT11M30.00S", assistPersonId: 101, scoreAway: "2", scoreHome: "0" }),
+    scoringAction({ actionNumber: 2, orderNumber: 2, actionType: "3pt", clock: "PT10M30.00S", assistPersonId: 101, scoreAway: "5", scoreHome: "0" }),
+    scoringAction({ actionNumber: 3, orderNumber: 3, clock: "PT09M30.00S", scoreAway: "7", scoreHome: "0" }),
+    scoringAction({ actionNumber: 4, orderNumber: 4, clock: "PT08M30.00S", scoreAway: "9", scoreHome: "0" }),
+    scoringAction({ actionNumber: 5, orderNumber: 5, clock: "PT07M30.00S", scoreAway: "11", scoreHome: "0" }),
+    scoringAction({ actionNumber: 6, orderNumber: 6, clock: "PT06M30.00S", scoreAway: "13", scoreHome: "0" }),
+    scoringAction({ actionNumber: 7, orderNumber: 7, clock: "PT05M30.00S", scoreAway: "15", scoreHome: "0" }),
+    scoringAction({ actionNumber: 8, orderNumber: 8, actionType: "freethrow", clock: "PT04M30.00S", scoreAway: "16", scoreHome: "0" }),
+    scoringAction({ actionNumber: 9, orderNumber: 9, actionType: "freethrow", clock: "PT03M30.00S", scoreAway: "17", scoreHome: "0" }),
+    scoringAction({ actionNumber: 10, orderNumber: 10, actionType: "freethrow", clock: "PT02M30.00S", scoreAway: "18", scoreHome: "0" }),
+    scoringAction({ actionNumber: 11, orderNumber: 11, actionType: "freethrow", shotResult: "Missed", clock: "PT01M30.00S", scoreAway: "18", scoreHome: "0" }),
+  ];
+
+  const alerts = buildGameAlerts({
+    game: {
+      gameId: "0022600001",
+      gameStatus: 2,
+      period: 2,
+      gameClock: "PT12M00.00S",
+      playByPlayActions: actions,
+    },
+    awayTeam: AWAY,
+    homeTeam: HOME,
+    basePlayers: [{ personId: 101, firstName: "John", familyName: "Ukomadu", teamId: AWAY.teamId }],
+  });
+
+  const assistedTrend = alerts.find((alert) => (
+    alert.category === "Team Trend" &&
+    alert.title === "Nets scored just 27.8% of their points from assisted shots through the end of Q1"
+  ));
+  assert.ok(assistedTrend);
+  assert.equal(
+    assistedTrend.detail,
+    "Assisted: 2/2 FG (5 Pts), Unassisted: 5/5 FG (10 Pts), FT: 3/4 (3 Pts)",
+  );
+});
+
+test("buildGameAlerts labels three-point attempt volume with 3FG", () => {
+  let actionNumber = 0;
+  let scoreAway = 0;
+  const made = (actionType, points, assist = false) => {
+    actionNumber += 1;
+    scoreAway += points;
+    return scoringAction({
+      actionNumber,
+      orderNumber: actionNumber,
+      actionType,
+      clock: `PT${String(Math.max(1, 12 - actionNumber)).padStart(2, "0")}M00.00S`,
+      scoreAway: String(scoreAway),
+      scoreHome: "0",
+      ...(assist ? { assistPersonId: 101, assistPlayerNameI: "J. Ukomadu" } : {}),
+    });
+  };
+  const missed = (actionType) => {
+    actionNumber += 1;
+    return scoringAction({
+      actionNumber,
+      orderNumber: actionNumber,
+      actionType,
+      shotResult: "Missed",
+      clock: `PT00M${String(Math.max(1, 60 - actionNumber)).padStart(2, "0")}.00S`,
+      scoreAway: String(scoreAway),
+      scoreHome: "0",
+    });
+  };
+  const actions = [
+    made("3pt", 3, true),
+    made("3pt", 3, true),
+    made("3pt", 3),
+    ...Array.from({ length: 8 }, (_, index) => made("2pt", 2, index < 3)),
+    ...Array.from({ length: 7 }, () => missed("3pt")),
+    ...Array.from({ length: 4 }, () => missed("2pt")),
+  ];
+
+  const alerts = buildGameAlerts({
+    game: {
+      gameId: "0022600001",
+      gameStatus: 2,
+      period: 2,
+      gameClock: "PT12M00.00S",
+      playByPlayActions: actions,
+    },
+    awayTeam: AWAY,
+    homeTeam: HOME,
+    basePlayers: [{ personId: 101, firstName: "John", familyName: "Ukomadu", teamId: AWAY.teamId }],
+  });
+
+  assert.ok(alerts.some((alert) => (
+    alert.category === "Team Trend" &&
+    alert.title === "Nets took 45.5% of their shots from three in Q1 (10/22 3FG)"
   )));
 });
 
@@ -206,7 +302,7 @@ test("buildGameAlerts omits just before zero-percent team trend alerts", () => {
     alert.title === "Nets scored 0% of their points from assisted shots through the end of Q1"
   )));
   assert.ok(missedThreeAlerts.some((alert) => (
-    alert.title === "Nets shot 0% (0/9) from three in Q1"
+    alert.title === "Nets shot 0% (0/9 3FG) from three in Q1"
   )));
   assert.ok(![...noAssistedAlerts, ...missedThreeAlerts].some((alert) => /just 0%/.test(alert.title)));
 });
@@ -279,6 +375,79 @@ test("buildGameAlerts keeps late-quarter rebound alerts before period-end alerts
   assert.notEqual(reboundIndex, -1);
   assert.notEqual(periodEndIndex, -1);
   assert.ok(reboundIndex < periodEndIndex);
+});
+
+test("buildGameAlerts includes current stats for approaching triple-double alerts", () => {
+  let actionNumber = 0;
+  let scoreAway = 0;
+  const nextActionNumber = () => {
+    actionNumber += 1;
+    return actionNumber;
+  };
+  const rebounds = Array.from({ length: 9 }, (_, index) => {
+    const number = nextActionNumber();
+    return {
+      actionNumber: number,
+      orderNumber: number,
+      actionType: "rebound",
+      period: 4,
+      clock: `PT0${9 - Math.floor(index / 2)}M${String(50 - ((index % 2) * 20)).padStart(2, "0")}.00S`,
+      teamId: AWAY.teamId,
+      personId: 101,
+      playerName: "Chris Livingston",
+    };
+  });
+  const assists = Array.from({ length: 9 }, (_, index) => {
+    const number = nextActionNumber();
+    scoreAway += 2;
+    return scoringAction({
+      actionNumber: number,
+      orderNumber: number,
+      period: 4,
+      clock: `PT0${5 - Math.floor(index / 2)}M${String(50 - ((index % 2) * 20)).padStart(2, "0")}.00S`,
+      personId: 102,
+      playerName: "Teammate Scorer",
+      assistPersonId: 101,
+      assistPlayerNameI: "C. Livingston",
+      scoreAway: String(scoreAway),
+      scoreHome: "0",
+    });
+  });
+  const points = Array.from({ length: 5 }, (_, index) => {
+    const number = nextActionNumber();
+    scoreAway += 2;
+    return scoringAction({
+      actionNumber: number,
+      orderNumber: number,
+      period: 4,
+      clock: `PT02M${String(50 - (index * 20)).padStart(2, "0")}.00S`,
+      personId: 101,
+      playerName: "Chris Livingston",
+      scoreAway: String(scoreAway),
+      scoreHome: "0",
+    });
+  });
+
+  const alerts = buildGameAlerts({
+    game: {
+      gameId: "2042500211",
+      gameStatus: 2,
+      period: 4,
+      gameClock: "PT02M21.00S",
+      playByPlayActions: [...rebounds, ...assists, ...points],
+    },
+    awayTeam: AWAY,
+    homeTeam: HOME,
+    basePlayers: [
+      { personId: 101, firstName: "Chris", familyName: "Livingston", teamId: AWAY.teamId },
+      { personId: 102, firstName: "Teammate", familyName: "Scorer", teamId: AWAY.teamId },
+    ],
+  });
+
+  assert.ok(alerts.some((alert) => (
+    alert.category === "Milestone" &&
+    /^Chris Livingston is approaching a triple-double \(\d+ Pts, 9 Reb, 9 Ast\)$/.test(alert.title)
+  )));
 });
 
 test("buildGameAlerts caps full-game output while preserving checkpoint trends", () => {

@@ -734,8 +734,12 @@ Wording and timestamp conventions:
 - Period-end tie summaries use direct phrasing such as `At the end of Q1, the Wizards and the Celtics are tied at 24`.
 - If an alert combines player points and points created by assists, it says the player "contributed to" team points, not "accounts for."
 - If the referenced period is still in progress, contribution alerts use present perfect wording, such as `has contributed to ... so far in Q3`.
+- Player contribution alert details do not wrap the entire second line in parentheses. The detail line should read like `3 points, 2 assists, 5 points created from assists`.
+- Triple-double milestone alerts include the player's relevant near-triple-double stat line, such as `Chris Livingston is approaching a triple-double (12 Pts, 9 Reb, 9 Ast)`.
 - Rebound alerts only use "to start Q1" style wording early in a period. Late-period rebound milestones use plain `in Q1` wording.
-- Low-percentage team trend alerts may use "just" for low nonzero values, but never for zero. For example, `Spurs shot 0% (0/9) from three in Q3`, not `Spurs shot just 0%...`.
+- Assisted-shot team trend alerts use the second line to show assisted field-goal scoring, unassisted field-goal scoring, and free throws.
+- Field-goal stat references include the relevant shot label when needed: overall field goal alerts use `FG`, and three-point references use `3FG`.
+- Low-percentage team trend alerts may use "just" for low nonzero values, but never for zero. For example, `Spurs shot 0% (0/9 3FG) from three in Q3`, not `Spurs shot just 0%...`.
 - Duplicate or near-duplicate run alerts and contribution alerts are filtered to avoid alert spam.
 
 This system should remain conservative. Adding every possible alert creates noise for coaches and slows scanning.

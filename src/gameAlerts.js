@@ -108,9 +108,10 @@ function formatPercent(value) {
   return Number.isInteger(rounded) ? `${rounded}%` : `${rounded.toFixed(1)}%`;
 }
 
-function formatMadeAttemptPercent(made, attempted) {
-  if (!attempted) return "0% (0/0)";
-  return `${formatPercent((made / attempted) * 100)} (${made}/${attempted})`;
+function formatMadeAttemptPercent(made, attempted, label = "") {
+  const suffix = label ? ` ${label}` : "";
+  if (!attempted) return `0% (0/0${suffix})`;
+  return `${formatPercent((made / attempted) * 100)} (${made}/${attempted}${suffix})`;
 }
 
 function lowResultQualifier(value) {
@@ -124,6 +125,19 @@ function playerContributionTitle(playerName, share, action) {
     return `${playerName} has contributed to ${shareText} of the team's points so far in ${periodText}`;
   }
   return `${playerName} contributed to ${shareText} of the team's points in ${periodText}`;
+}
+
+function formatTripleDoubleStatLine(player) {
+  const stats = [
+    { value: player.points, label: "Pts" },
+    { value: player.rebounds, label: "Reb" },
+    { value: player.assists, label: "Ast" },
+    { value: player.blocks, label: "Blk" },
+    { value: player.steals, label: "Stl" },
+  ]
+    .filter((entry) => safeNumber(entry.value, 0) >= 8)
+    .slice(0, 3);
+  return stats.map((entry) => `${safeNumber(entry.value, 0)} ${entry.label}`).join(", ");
 }
 
 function parseScoreValue(value) {
@@ -248,6 +262,15 @@ function createPeriodStats() {
     points: 0,
     twoPointPoints: 0,
     assistedPoints: 0,
+    assistedFieldGoalsMade: 0,
+    assistedFieldGoalsAttempted: 0,
+    assistedFieldGoalPoints: 0,
+    unassistedFieldGoalsMade: 0,
+    unassistedFieldGoalsAttempted: 0,
+    unassistedFieldGoalPoints: 0,
+    freeThrowsMade: 0,
+    freeThrowsAttempted: 0,
+    freeThrowPoints: 0,
     benchPoints: 0,
     benchKnown: false,
     blocks: 0,
@@ -376,6 +399,19 @@ function thirdDoubleDoubleCategoryValue(player) {
   ].sort((a, b) => b - a)[2] || 0;
 }
 
+function isApproachingTripleDouble(player, categoryCount) {
+  if (categoryCount >= 3) return false;
+  const topThree = [
+    player.points,
+    player.rebounds,
+    player.assists,
+    player.blocks,
+    player.steals,
+  ].map((value) => safeNumber(value, 0)).sort((a, b) => b - a).slice(0, 3);
+  if (topThree.length < 3) return false;
+  return topThree[0] >= 10 && topThree[2] >= 8 && topThree.reduce((sum, value) => sum + value, 0) >= 28;
+}
+
 function hasDoubleDoubleAlert(player, playerAchievementState) {
   return playerAchievementState.get(player.personId)?.doubleDouble;
 }
@@ -404,17 +440,20 @@ function addPlayerAchievementAlerts({
   };
 
   const categoryCount = doubleDoubleCategoryCount(player);
+  const tripleDoubleStatLine = formatTripleDoubleStatLine(player);
+  const nearTripleDouble =
+    (categoryCount === 2 && thirdDoubleDoubleCategoryValue(player) >= 8) ||
+    isApproachingTripleDouble(player, categoryCount);
   if (categoryCount >= 3 && !playerAchievementState.get(player.personId)?.tripleDouble) {
     setPlayerAchievement(player, playerAchievementState, "tripleDouble");
     addAlert(alerts, seen, {
       ...base,
       id: `triple-double:${player.personId}`,
       category: "Milestone",
-      title: `${player.name} has a triple-double`,
+      title: `${player.name} has a triple-double${tripleDoubleStatLine ? ` (${tripleDoubleStatLine})` : ""}`,
     });
   } else if (
-    categoryCount === 2 &&
-    thirdDoubleDoubleCategoryValue(player) >= 8 &&
+    nearTripleDouble &&
     !playerAchievementState.get(player.personId)?.approachingTripleDouble
   ) {
     setPlayerAchievement(player, playerAchievementState, "approachingTripleDouble");
@@ -422,7 +461,7 @@ function addPlayerAchievementAlerts({
       ...base,
       id: `approaching-triple-double:${player.personId}`,
       category: "Milestone",
-      title: `${player.name} is approaching a triple-double`,
+      title: `${player.name} is approaching a triple-double${tripleDoubleStatLine ? ` (${tripleDoubleStatLine})` : ""}`,
     });
   }
 
@@ -511,7 +550,7 @@ function addCreatedShareAlert({
     elapsed,
     teamId,
     title: playerContributionTitle(player.name, share, action),
-    detail: `(${playerPeriod.points} points, ${playerPeriod.assists} assists, ${playerPeriod.assistPoints} points created from assists)`,
+    detail: `${playerPeriod.points} points, ${playerPeriod.assists} assists, ${playerPeriod.assistPoints} points created from assists`,
   });
   if (added) {
     createdShareState.set(stateKey, {
@@ -772,6 +811,14 @@ function addTeamTrendCandidate(candidates, candidate) {
   candidates.push(candidate);
 }
 
+function buildAssistedShotDetail(stats) {
+  return [
+    `Assisted: ${stats.assistedFieldGoalsMade}/${stats.assistedFieldGoalsAttempted} FG (${stats.assistedFieldGoalPoints} Pts)`,
+    `Unassisted: ${stats.unassistedFieldGoalsMade}/${stats.unassistedFieldGoalsAttempted} FG (${stats.unassistedFieldGoalPoints} Pts)`,
+    `FT: ${stats.freeThrowsMade}/${stats.freeThrowsAttempted} (${stats.freeThrowPoints} Pts)`,
+  ].join(", ");
+}
+
 function buildBestTeamTrendCandidate({
   team,
   teamId,
@@ -796,6 +843,7 @@ function buildBestTeamTrendCandidate({
         teamId,
         strength: assistedShare - 50 + 12,
         title: `${label} scored ${formatPercent(assistedShare)} of their points from assisted shots ${periodEndLabel}`,
+        detail: buildAssistedShotDetail(cumulativeStats),
       });
     } else if (assistedShare <= 42) {
       addTeamTrendCandidate(candidates, {
@@ -805,6 +853,7 @@ function buildBestTeamTrendCandidate({
         teamId,
         strength: 50 - assistedShare,
         title: `${label} scored ${lowResultQualifier(assistedShare)}${formatPercent(assistedShare)} of their points from assisted shots ${periodEndLabel}`,
+        detail: buildAssistedShotDetail(cumulativeStats),
       });
     }
 
@@ -844,7 +893,7 @@ function buildBestTeamTrendCandidate({
         elapsed: elapsed + 0.5,
         teamId,
         strength: fieldGoalPercent - 34,
-        title: `${label} shot ${formatMadeAttemptPercent(periodStats.fieldGoalsMade, periodStats.fieldGoalsAttempted)} overall in ${periodLabel}`,
+        title: `${label} shot ${formatMadeAttemptPercent(periodStats.fieldGoalsMade, periodStats.fieldGoalsAttempted, "FG")} overall in ${periodLabel}`,
       });
     } else if (fieldGoalPercent <= 38) {
       addTeamTrendCandidate(candidates, {
@@ -853,7 +902,7 @@ function buildBestTeamTrendCandidate({
         elapsed: elapsed + 0.5,
         teamId,
         strength: 48 - fieldGoalPercent,
-        title: `${label} shot ${lowResultQualifier(fieldGoalPercent)}${formatMadeAttemptPercent(periodStats.fieldGoalsMade, periodStats.fieldGoalsAttempted)} overall in ${periodLabel}`,
+        title: `${label} shot ${lowResultQualifier(fieldGoalPercent)}${formatMadeAttemptPercent(periodStats.fieldGoalsMade, periodStats.fieldGoalsAttempted, "FG")} overall in ${periodLabel}`,
       });
     }
 
@@ -865,7 +914,7 @@ function buildBestTeamTrendCandidate({
         elapsed: elapsed + 0.6,
         teamId,
         strength: threeAttemptRate - 20,
-        title: `${label} took ${formatPercent(threeAttemptRate)} of their shots from three in ${periodLabel} (${periodStats.threesAttempted}/${periodStats.fieldGoalsAttempted} FGA)`,
+        title: `${label} took ${formatPercent(threeAttemptRate)} of their shots from three in ${periodLabel} (${periodStats.threesAttempted}/${periodStats.fieldGoalsAttempted} 3FG)`,
       });
     }
   }
@@ -879,7 +928,7 @@ function buildBestTeamTrendCandidate({
         elapsed: elapsed + 0.7,
         teamId,
         strength: threePercent - 25,
-        title: `${label} shot ${formatMadeAttemptPercent(periodStats.threesMade, periodStats.threesAttempted)} from three in ${periodLabel}`,
+        title: `${label} shot ${formatMadeAttemptPercent(periodStats.threesMade, periodStats.threesAttempted, "3FG")} from three in ${periodLabel}`,
       });
     } else if (threePercent <= 20) {
       addTeamTrendCandidate(candidates, {
@@ -888,7 +937,7 @@ function buildBestTeamTrendCandidate({
         elapsed: elapsed + 0.7,
         teamId,
         strength: 35 - threePercent,
-        title: `${label} shot ${lowResultQualifier(threePercent)}${formatMadeAttemptPercent(periodStats.threesMade, periodStats.threesAttempted)} from three in ${periodLabel}`,
+        title: `${label} shot ${lowResultQualifier(threePercent)}${formatMadeAttemptPercent(periodStats.threesMade, periodStats.threesAttempted, "3FG")} from three in ${periodLabel}`,
       });
     }
   }
@@ -917,12 +966,41 @@ function cloneTeamCumulativeStats(teamCumulativeStats, period) {
 
 function updateTeamShootingStats(action, teamStats) {
   if (!teamStats) return;
+  if (action.actionType === "freethrow") {
+    teamStats.freeThrowsAttempted += 1;
+    if (action.shotResult === "Made") teamStats.freeThrowsMade += 1;
+    return;
+  }
   if (action.actionType !== "2pt" && action.actionType !== "3pt") return;
   teamStats.fieldGoalsAttempted += 1;
   if (action.actionType === "3pt") teamStats.threesAttempted += 1;
+  if (action.assistPersonId) {
+    teamStats.assistedFieldGoalsAttempted += 1;
+  } else {
+    teamStats.unassistedFieldGoalsAttempted += 1;
+  }
   if (action.shotResult !== "Made") return;
   teamStats.fieldGoalsMade += 1;
   if (action.actionType === "3pt") teamStats.threesMade += 1;
+  if (action.assistPersonId) {
+    teamStats.assistedFieldGoalsMade += 1;
+  } else {
+    teamStats.unassistedFieldGoalsMade += 1;
+  }
+}
+
+function updateTeamScoringBreakdown(action, scoringEvent, ...teamStatsList) {
+  teamStatsList.filter(Boolean).forEach((teamStats) => {
+    if (action.actionType === "freethrow") {
+      teamStats.freeThrowPoints += scoringEvent.points;
+    } else if (action.actionType === "2pt" || action.actionType === "3pt") {
+      if (action.assistPersonId) {
+        teamStats.assistedFieldGoalPoints += scoringEvent.points;
+      } else {
+        teamStats.unassistedFieldGoalPoints += scoringEvent.points;
+      }
+    }
+  });
 }
 
 function addFirstPointsAlert({ alerts, seen, event, teamsById }) {
@@ -1110,6 +1188,7 @@ export function buildGameAlerts({
       const cumulativeStats = teamCumulativeStats.get(scoringEvent.teamId);
       periodStats.points += scoringEvent.points;
       cumulativeStats.points += scoringEvent.points;
+      updateTeamScoringBreakdown(action, scoringEvent, periodStats, cumulativeStats);
       if (action.actionType === "2pt") {
         periodStats.twoPointPoints += scoringEvent.points;
         cumulativeStats.twoPointPoints += scoringEvent.points;
