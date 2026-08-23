@@ -63,6 +63,48 @@ Deno.test("feature payload reports missing scoring and lineup data warnings", ()
   assert(features.dataQuality.warnings.some((warning: string) => warning.includes("Lineup/minutes data")));
 });
 
+Deno.test("analysis metadata sanitizer hides diagnostics from non-admin responses", () => {
+  const sanitized = __test__.stripAdminOnlyAnalysisMetadata({
+    headline: "WAS wins Q1",
+    summary: "WAS controlled the segment.",
+    source: "template",
+    dataSignature: "abc123",
+    dataWarnings: ["Lineup/minutes data is unavailable."],
+    dataQuality: { warnings: ["Lineup/minutes data is unavailable."] },
+    ai: { attempted: 2, used: false, rejectionReasons: ["bad score"], error: "" },
+    fallbackReason: "AI rejected: bad score",
+    cache: {
+      segmentKey: "q1",
+      dataSignature: "abc123",
+      generatedAt: "2026-08-23T00:00:00.000Z",
+    },
+  } as Record<string, unknown>);
+
+  assertEquals(sanitized.headline, "WAS wins Q1");
+  assertEquals(sanitized.dataWarnings, ["Lineup/minutes data is unavailable."]);
+  assertEquals(sanitized.source, undefined);
+  assertEquals(sanitized.dataSignature, undefined);
+  assertEquals(sanitized.dataQuality, undefined);
+  assertEquals(sanitized.ai, undefined);
+  assertEquals(sanitized.fallbackReason, undefined);
+  assertEquals((sanitized.cache as Record<string, unknown>).segmentKey, "q1");
+  assertEquals((sanitized.cache as Record<string, unknown>).dataSignature, undefined);
+});
+
+Deno.test("analysis metadata sanitizer keeps diagnostics for admin responses", () => {
+  const payload = {
+    headline: "WAS wins Q1",
+    source: "ai",
+    dataSignature: "abc123",
+    dataQuality: { warnings: [] },
+    ai: { attempted: 1, used: true },
+    fallbackReason: "",
+    cache: { dataSignature: "abc123" },
+  } as Record<string, unknown>;
+
+  assertEquals(__test__.stripAdminOnlyAnalysisMetadata(payload, true), payload);
+});
+
 Deno.test("zero-attempt percentages are unknown while true zero percentages remain displayable", () => {
   assertEquals(__test__.percentage(0, 0), null);
   assertEquals(__test__.formatPercentage(null), "N/A");
@@ -188,4 +230,101 @@ Deno.test("analysis language guard rejects zero lead or zero advantage wording",
 Deno.test("analysis language guard rejects all-team-scoring overstatements", () => {
   assertEquals(__test__.hasOverstatedAllTeamScoring("T. Jones accounted for all of Chicago's scoring in the quarter."), true);
   assertEquals(__test__.hasOverstatedAllTeamScoring("T. Jones scored 14 of Chicago's 37 points in the quarter."), false);
+});
+
+function buildScoreGuardFeatures() {
+  return {
+    range: {
+      startLabel: "Q3 12:00",
+      endLabel: "Q3 0:00",
+      duration: "12:00",
+    },
+    score: {
+      start: { home: 51, away: 52 },
+      end: { home: 74, away: 87 },
+      rangePoints: { home: 23, away: 35 },
+      margin: { home: -12, away: 12 },
+    },
+    teams: {
+      home: {
+        tricode: "WAS",
+        name: "Wizards",
+        shooting: { fgPct: 30.8, threePct: 23.1, rimPct: 45.5, midPct: null, ftPct: null },
+        totals: {
+          fieldGoalsMade: 8,
+          fieldGoalsAttempted: 26,
+          threePointersMade: 3,
+          threePointersAttempted: 13,
+          rimFieldGoalsMade: 5,
+          rimFieldGoalsAttempted: 11,
+          midFieldGoalsMade: 0,
+          midFieldGoalsAttempted: 0,
+          freeThrowsMade: 0,
+          freeThrowsAttempted: 0,
+          turnovers: 7,
+          pointsOffTurnovers: 2,
+        },
+      },
+      away: {
+        tricode: "CHI",
+        name: "Bulls",
+        shooting: { fgPct: 50, threePct: 20, rimPct: 61.1, midPct: null, ftPct: null },
+        totals: {
+          fieldGoalsMade: 13,
+          fieldGoalsAttempted: 26,
+          threePointersMade: 1,
+          threePointersAttempted: 5,
+          rimFieldGoalsMade: 11,
+          rimFieldGoalsAttempted: 18,
+          midFieldGoalsMade: 0,
+          midFieldGoalsAttempted: 0,
+          freeThrowsMade: 0,
+          freeThrowsAttempted: 0,
+          turnovers: 4,
+          pointsOffTurnovers: 11,
+        },
+      },
+    },
+  };
+}
+
+Deno.test("analysis language guard rejects incorrect selected-span score claims", () => {
+  const features = buildScoreGuardFeatures();
+
+  const reasons = __test__.findAiAnalysisRejectReasons({
+    headline: "Bulls dominate Q3",
+    summary: "The Bulls outscored the Wizards 37-23 in Q3.",
+    sections: [],
+  }, features as any);
+
+  assert(reasons.some((reason: string) => reason.includes("span score claim 37-23")));
+  assertEquals(
+    __test__.shouldRejectAiAnalysis({
+      headline: "Bulls win Q3",
+      summary: "The Bulls outscored the Wizards 35-23 in Q3.",
+      sections: [],
+    }, features as any),
+    false,
+  );
+});
+
+Deno.test("analysis language guard rejects incorrect score transition claims", () => {
+  const features = buildScoreGuardFeatures();
+
+  assertEquals(
+    __test__.shouldRejectAiAnalysis({
+      headline: "Bulls create separation",
+      summary: "The score moved from 52-51 to 89-74.",
+      sections: [],
+    }, features as any),
+    true,
+  );
+  assertEquals(
+    __test__.shouldRejectAiAnalysis({
+      headline: "Bulls create separation",
+      summary: "The score moved from 52-51 to 87-74.",
+      sections: [],
+    }, features as any),
+    false,
+  );
 });

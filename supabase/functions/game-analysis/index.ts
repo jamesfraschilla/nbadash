@@ -81,6 +81,52 @@ function requireAdminClient() {
   return supabase;
 }
 
+function bearerTokenFromRequest(req: Request) {
+  const authHeader = req.headers.get("Authorization") || "";
+  const match = /^Bearer\s+(.+)$/i.exec(authHeader);
+  return match ? match[1].trim() : "";
+}
+
+async function isAdminRequest(req: Request) {
+  const token = bearerTokenFromRequest(req);
+  if (!token) return false;
+
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  if (serviceRoleKey && token === serviceRoleKey) return true;
+
+  const supabase = createAdminClient();
+  if (!supabase) return false;
+
+  const { data: userData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !userData?.user?.id) return false;
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("id,role,status")
+    .eq("id", userData.user.id)
+    .maybeSingle();
+
+  return !profileError && profile?.role === "admin" && profile?.status === "active";
+}
+
+function stripAdminOnlyAnalysisMetadata(payload: Record<string, unknown>, isAdmin = false) {
+  if (isAdmin) return payload;
+  const sanitized: Record<string, unknown> = { ...payload };
+  delete sanitized.ai;
+  delete sanitized.fallbackReason;
+  delete sanitized.dataQuality;
+  delete sanitized.dataSignature;
+  delete sanitized.source;
+
+  if (sanitized.cache && typeof sanitized.cache === "object" && !Array.isArray(sanitized.cache)) {
+    const cache = { ...(sanitized.cache as Record<string, unknown>) };
+    delete cache.dataSignature;
+    sanitized.cache = cache;
+  }
+
+  return sanitized;
+}
+
 
 function safeNumber(value: unknown, fallback = 0) {
   const numeric = Number(value);
@@ -258,7 +304,7 @@ function normalizeCacheRequest(value: unknown) {
   };
 }
 
-async function listCachedSegments(gameId: string) {
+async function listCachedSegments(gameId: string, requesterIsAdmin = false) {
   const supabase = requireAdminClient();
 
   const { data, error } = await supabase
@@ -272,20 +318,25 @@ async function listCachedSegments(gameId: string) {
     throw new Error("Unable to load shared analysis recaps.");
   }
 
-  return (Array.isArray(data) ? data : []).map((row) => ({
-    gameId: row.game_id,
-    segmentKey: row.segment_key,
-    segmentLabel: row.segment_label,
-    rangeLabel: row.range_label,
-    analysisResult: row.result,
-    dataSignature: row.data_signature,
-    source: row.source,
-    generatedAt: row.generated_at,
-    updatedAt: row.updated_at,
-  }));
+  return (Array.isArray(data) ? data : []).map((row) => {
+    const record: Record<string, unknown> = {
+      gameId: row.game_id,
+      segmentKey: row.segment_key,
+      segmentLabel: row.segment_label,
+      rangeLabel: row.range_label,
+      analysisResult: stripAdminOnlyAnalysisMetadata(row.result || {}, requesterIsAdmin),
+      generatedAt: row.generated_at,
+      updatedAt: row.updated_at,
+    };
+    if (requesterIsAdmin) {
+      record.dataSignature = row.data_signature;
+      record.source = row.source;
+    }
+    return record;
+  });
 }
 
-async function readCachedSegment(gameId: string, segmentKey: string, dataSignature: string) {
+async function readCachedSegment(gameId: string, segmentKey: string, dataSignature: string, requesterIsAdmin = false) {
   const supabase = requireAdminClient();
 
   const { data, error } = await supabase
@@ -301,7 +352,7 @@ async function readCachedSegment(gameId: string, segmentKey: string, dataSignatu
   }
   if (!data || data.data_signature !== dataSignature || !data.result) return null;
 
-  return {
+  return stripAdminOnlyAnalysisMetadata({
     ...data.result,
     cached: true,
     cache: {
@@ -311,7 +362,7 @@ async function readCachedSegment(gameId: string, segmentKey: string, dataSignatu
       updatedAt: data.updated_at,
       dataSignature: data.data_signature,
     },
-  };
+  }, requesterIsAdmin);
 }
 
 async function writeCachedSegment({
@@ -1462,6 +1513,33 @@ function leaderInfo(features: ReturnType<typeof buildFeaturePayload>) {
   };
 }
 
+function rangeContextLabel(features: ReturnType<typeof buildFeaturePayload>) {
+  const startLabel = String(features.range.startLabel || "");
+  const endLabel = String(features.range.endLabel || "");
+
+  const singleQuarter = /^Q([1-4]) \d{1,2}:\d{2}$/.exec(startLabel);
+  if (singleQuarter && endLabel === `Q${singleQuarter[1]} 0:00`) {
+    return `Q${singleQuarter[1]}`;
+  }
+
+  if (/^Q1 \d{1,2}:\d{2}$/.test(startLabel) && endLabel === "Q2 0:00") return "the first half";
+  if (/^Q3 \d{1,2}:\d{2}$/.test(startLabel) && endLabel === "Q4 0:00") return "the second half";
+  if (/^Q1 \d{1,2}:\d{2}$/.test(startLabel) && endLabel === "Q3 0:00") return "the first three quarters";
+  if (/^Q1 \d{1,2}:\d{2}$/.test(startLabel) && endLabel === "Q4 0:00") return "the full game";
+  return "the selected span";
+}
+
+function formatScoreState(
+  score: { home: number; away: number },
+  features: ReturnType<typeof buildFeaturePayload>,
+) {
+  return `${features.teams.away.tricode} ${score.away}, ${features.teams.home.tricode} ${score.home}`;
+}
+
+function formatRangeScoringFacts(features: ReturnType<typeof buildFeaturePayload>) {
+  return `${features.teams.away.tricode} ${features.score.rangePoints.away}, ${features.teams.home.tricode} ${features.score.rangePoints.home}`;
+}
+
 function buildFeaturePayload(
   game: Record<string, unknown>,
   minutesData: Record<string, unknown> | null,
@@ -1892,19 +1970,27 @@ function buildTemplateAnalysis(features: ReturnType<typeof buildFeaturePayload>)
   const swingFactors = buildSwingFactors(features);
   const statOutliers = buildStatOutliers(features);
   const sections = buildTemplateSections(features);
+  const rangeLabel = rangeContextLabel(features);
   const dominantTitle = sections[0]?.title || "Game Flow";
-  let headlineLead = `${leader.tricode} won the stretch`;
-  if (dominantTitle === "Run") headlineLead = `${leader.tricode} seized the stretch`;
-  if (dominantTitle === "Late Collapse") headlineLead = `${trailer.tricode} stormed back late`;
-  if (dominantTitle === "Late Comeback") headlineLead = `${leader.tricode} rallied late`;
-  if (dominantTitle === "Momentum Swing") headlineLead = `${leader.tricode} changed the quarter with one push`;
-  if (dominantTitle === "Lineups") headlineLead = `${leader.tricode} got the better lineup minutes`;
-  if (dominantTitle === "Shooting") headlineLead = `${leader.tricode} won the shotmaking window`;
+  let headlineDetail = "with the stronger overall stretch";
+  if (dominantTitle === "Run") headlineDetail = "behind the largest unanswered run";
+  if (dominantTitle === "Late Collapse") headlineDetail = "after the late-game swing";
+  if (dominantTitle === "Late Comeback") headlineDetail = "with the late comeback";
+  if (dominantTitle === "Momentum Swing") headlineDetail = "behind the key momentum push";
+  if (dominantTitle === "Lineups") headlineDetail = "behind the better lineup minutes";
+  if (dominantTitle === "Shooting") headlineDetail = "behind the shotmaking edge";
+  if (dominantTitle === "Shot Profile") headlineDetail = "behind the shot-profile edge";
+
+  const summaryParts = [
+    `${leader.tricode} outscored ${trailer.tricode} ${leaderPoints}-${trailerPoints} in ${rangeLabel} over ${features.range.duration}, moving the score from ${formatScoreState(features.score.start, features)} to ${formatScoreState(features.score.end, features)}.`,
+    swingFactors[0],
+    statOutliers[0],
+  ].filter(Boolean);
 
   return {
     source: "template",
-    headline: sanitizeAnalysisText(`${headlineLead}${margin === 0 ? "" : ` by ${margin}`} from ${features.range.startLabel} to ${features.range.endLabel}.`, features),
-    summary: sanitizeAnalysisText(`${leader.tricode} outscored ${trailer.tricode} ${leaderPoints}-${trailerPoints} over ${features.range.duration}. The score moved from ${features.score.start.away}-${features.score.start.home} to ${features.score.end.away}-${features.score.end.home}.`, features),
+    headline: sanitizeAnalysisText(`${leader.tricode} ${margin === 0 ? "played" : "won"} ${rangeLabel} ${leaderPoints}-${trailerPoints} ${headlineDetail}.`, features),
+    summary: sanitizeAnalysisText(summaryParts.join(" "), features),
     sections,
     uniformDetails: {
       swingFactors,
@@ -1999,19 +2085,110 @@ function hasOverstatedAllTeamScoring(text: string) {
     || /\bscored\s+all\s+of\b.*\b(?:scoring|points)\b/i.test(text);
 }
 
-function shouldRejectAiAnalysis(analysis: Record<string, unknown>, features: ReturnType<typeof buildFeaturePayload>) {
+function isSameScorePair(first: number, second: number, expectedFirst: number, expectedSecond: number) {
+  return first === expectedFirst && second === expectedSecond;
+}
+
+function isExpectedRangePointPair(first: number, second: number, features: ReturnType<typeof buildFeaturePayload>) {
+  const homePoints = safeNumber(features?.score?.rangePoints?.home, 0);
+  const awayPoints = safeNumber(features?.score?.rangePoints?.away, 0);
+  return isSameScorePair(first, second, homePoints, awayPoints)
+    || isSameScorePair(first, second, awayPoints, homePoints);
+}
+
+function isExpectedScoreTransition(
+  startFirst: number,
+  startSecond: number,
+  endFirst: number,
+  endSecond: number,
+  features: ReturnType<typeof buildFeaturePayload>,
+) {
+  const startHome = safeNumber(features?.score?.start?.home, 0);
+  const startAway = safeNumber(features?.score?.start?.away, 0);
+  const endHome = safeNumber(features?.score?.end?.home, 0);
+  const endAway = safeNumber(features?.score?.end?.away, 0);
+
+  const awayHomeOrder = isSameScorePair(startFirst, startSecond, startAway, startHome)
+    && isSameScorePair(endFirst, endSecond, endAway, endHome);
+  const homeAwayOrder = isSameScorePair(startFirst, startSecond, startHome, startAway)
+    && isSameScorePair(endFirst, endSecond, endHome, endAway);
+
+  return awayHomeOrder || homeAwayOrder;
+}
+
+function isLikelyWholeSpanScoreClaim(context: string, first: number, second: number, features: ReturnType<typeof buildFeaturePayload>) {
+  const rangeTotal = safeNumber(features?.score?.rangePoints?.home, 0) + safeNumber(features?.score?.rangePoints?.away, 0);
+  const pairTotal = first + second;
+  const totalLooksLikeRange = rangeTotal > 0
+    && pairTotal >= Math.max(1, rangeTotal * 0.85)
+    && pairTotal <= Math.max(1, rangeTotal * 1.15);
+  const hasSegmentContext = /\b(?:quarter|half|period|span|stretch|game|Q[1-4]|OT|overtime|selected range)\b/i.test(context);
+  const hasRunContext = /\b(?:run|burst|push|from\s+(?:Q[1-4]|OT)|to\s+(?:Q[1-4]|OT)|from\s+\d{1,2}:\d{2}|to\s+\d{1,2}:\d{2})\b/i.test(context);
+
+  return totalLooksLikeRange || (hasSegmentContext && !hasRunContext);
+}
+
+function findInvalidSpanScoreClaims(analysis: Record<string, unknown>, features: ReturnType<typeof buildFeaturePayload>) {
+  const reasons = [];
   const texts = collectAnalysisStrings({
     headline: analysis.headline,
     summary: analysis.summary,
     sections: analysis.sections,
   });
-  if (texts.some(hasZeroMarginLanguage)) return true;
-  if (texts.some(hasOverstatedAllTeamScoring)) return true;
+
+  for (const text of texts) {
+    const scoreTransitionPattern = /\bscore\b[^.?!]{0,80}?\bfrom\s+(\d{1,3})\s*[-–]\s*(\d{1,3})\s+to\s+(\d{1,3})\s*[-–]\s*(\d{1,3})/gi;
+    let transitionMatch: RegExpExecArray | null;
+    while ((transitionMatch = scoreTransitionPattern.exec(text))) {
+      const [startFirst, startSecond, endFirst, endSecond] = transitionMatch.slice(1).map((value) => safeNumber(value, -1));
+      if (!isExpectedScoreTransition(startFirst, startSecond, endFirst, endSecond, features)) {
+        reasons.push(`score transition ${startFirst}-${startSecond} to ${endFirst}-${endSecond} does not match ${formatScoreState(features.score.start, features)} to ${formatScoreState(features.score.end, features)}`);
+      }
+    }
+
+    const spanScorePattern = /\b(?:outscored|outscoring|won|winning|took|taking|claimed|controlled|dominated|finished)\b[^.?!]{0,90}?\b(\d{1,3})\s*[-–]\s*(\d{1,3})\b/gi;
+    let spanMatch: RegExpExecArray | null;
+    while ((spanMatch = spanScorePattern.exec(text))) {
+      const first = safeNumber(spanMatch[1], -1);
+      const second = safeNumber(spanMatch[2], -1);
+      if (isExpectedRangePointPair(first, second, features)) continue;
+
+      const contextStart = Math.max(0, spanMatch.index - 100);
+      const contextEnd = Math.min(text.length, spanMatch.index + spanMatch[0].length + 100);
+      const context = text.slice(contextStart, contextEnd);
+      if (isLikelyWholeSpanScoreClaim(context, first, second, features)) {
+        reasons.push(`span score claim ${first}-${second} does not match selected range scoring ${formatRangeScoringFacts(features)}`);
+      }
+    }
+  }
+
+  return reasons;
+}
+
+function findAiAnalysisRejectReasons(analysis: Record<string, unknown>, features: ReturnType<typeof buildFeaturePayload>) {
+  const reasons = [];
+  const texts = collectAnalysisStrings({
+    headline: analysis.headline,
+    summary: analysis.summary,
+    sections: analysis.sections,
+  });
+  if (texts.some(hasZeroMarginLanguage)) reasons.push("uses 0 as a lead, deficit, gap, cushion, or advantage");
+  if (texts.some(hasOverstatedAllTeamScoring)) reasons.push("overstates a player's share of team scoring");
 
   const percentages = collectKnownShootingPercentages(features);
-  return texts.some((text) => (
-    percentages.some((reference) => hasBarePercentageReference(text, reference.percentageText))
-  ));
+  percentages.forEach((reference) => {
+    if (texts.some((text) => hasBarePercentageReference(text, reference.percentageText))) {
+      reasons.push(`cites ${reference.percentageText} without made/attempt total`);
+    }
+  });
+
+  reasons.push(...findInvalidSpanScoreClaims(analysis, features));
+
+  return [...new Set(reasons)];
+}
+
+function shouldRejectAiAnalysis(analysis: Record<string, unknown>, features: ReturnType<typeof buildFeaturePayload>) {
+  return findAiAnalysisRejectReasons(analysis, features).length > 0;
 }
 
 function sanitizeAiHeadline(headline: string, features: ReturnType<typeof buildFeaturePayload>) {
@@ -2037,9 +2214,23 @@ function sanitizeAiHeadline(headline: string, features: ReturnType<typeof buildF
   });
 }
 
-async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayload>) {
+async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayload>, previousRejectReasons: string[] = []) {
   const apiKey = Deno.env.get("OPENAI_API_KEY") || "";
   if (!apiKey) return null;
+
+  const exactScoreFacts = [
+    `Selected range: ${features.range.startLabel} to ${features.range.endLabel} (${features.range.duration}).`,
+    `Start score: ${formatScoreState(features.score.start, features)}.`,
+    `End score: ${formatScoreState(features.score.end, features)}.`,
+    `Selected range scoring: ${formatRangeScoringFacts(features)}.`,
+    "If you describe the selected quarter, half, game, or span score, it must match the selected range scoring exactly.",
+  ];
+  const retryInstructions = previousRejectReasons.length
+    ? [
+      `Previous draft was rejected for: ${previousRejectReasons.join("; ")}.`,
+      "Regenerate the analysis with those issues corrected. Do not repeat any rejected score, percentage, or margin claim.",
+    ]
+    : [];
 
   const systemPrompt = [
     "You are a basketball analyst.",
@@ -2074,6 +2265,8 @@ async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayloa
     "Return compact JSON with keys: headline, summary, sections.",
     "sections must be an array of 1 to 3 objects with keys: title and items.",
     "Use short, natural section titles. Each section should have 1 or 2 concise bullet strings.",
+    ...exactScoreFacts,
+    ...retryInstructions,
   ].join(" ");
 
   const response = await fetch(OPENAI_API_URL, {
@@ -2161,9 +2354,11 @@ export async function handleRequest(req: Request) {
       return jsonResponse(400, { error: "A valid game ID is required." });
     }
 
+    const requesterIsAdmin = await isAdminRequest(req);
+
     if (operation === "list-cached-segments") {
       return jsonResponse(200, {
-        segments: await listCachedSegments(gameId),
+        segments: await listCachedSegments(gameId, requesterIsAdmin),
       });
     }
 
@@ -2179,21 +2374,53 @@ export async function handleRequest(req: Request) {
     const dataSignature = await stableDigest(buildAnalysisDataSignatureInput(features));
 
     if (cacheRequest) {
-      const cached = await readCachedSegment(gameId, cacheRequest.segmentKey, dataSignature);
+      const cached = await readCachedSegment(gameId, cacheRequest.segmentKey, dataSignature, requesterIsAdmin);
       if (cached) {
         return jsonResponse(200, cached);
       }
     }
 
     let analysis = templateAnalysis;
+    let aiAttemptCount = 0;
+    let aiRejectReasons: string[] = [];
+    let aiError = "";
     try {
-      const aiAnalysis = await generateAiAnalysis(features);
-      if (aiAnalysis?.headline && aiAnalysis?.summary && !shouldRejectAiAnalysis(aiAnalysis as Record<string, unknown>, features)) {
-        analysis = aiAnalysis;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        aiAttemptCount = attempt + 1;
+        const aiAnalysis = await generateAiAnalysis(features, aiRejectReasons);
+        if (!aiAnalysis) {
+          aiRejectReasons = ["AI generation is unavailable or not configured"];
+          break;
+        }
+
+        const rejectReasons = findAiAnalysisRejectReasons(aiAnalysis as Record<string, unknown>, features);
+        if (aiAnalysis.headline && aiAnalysis.summary && !rejectReasons.length) {
+          analysis = aiAnalysis;
+          aiRejectReasons = [];
+          break;
+        }
+
+        aiRejectReasons = rejectReasons.length ? rejectReasons : ["AI response was missing required headline or summary"];
       }
-    } catch {
+    } catch (error) {
+      aiError = error instanceof Error ? error.message : "AI generation failed";
       // Keep the deterministic template response when AI is unavailable.
     }
+
+    const usedAi = String((analysis as Record<string, unknown>).source || "") === "ai";
+    const aiMetadata = {
+      attempted: aiAttemptCount,
+      used: usedAi,
+      rejectionReasons: usedAi ? [] : aiRejectReasons,
+      error: usedAi ? "" : aiError,
+    };
+    const fallbackReason = usedAi
+      ? ""
+      : aiError
+        ? `AI error: ${aiError}`
+        : aiRejectReasons.length
+          ? `AI rejected: ${aiRejectReasons.join("; ")}`
+          : "AI unavailable or not configured";
 
     const responsePayload: Record<string, unknown> = attachResponseMetadata(
       analysis as Record<string, unknown>,
@@ -2202,6 +2429,8 @@ export async function handleRequest(req: Request) {
       {
         cached: false,
         dataSignature,
+        ai: aiMetadata,
+        fallbackReason,
       },
     );
 
@@ -2225,9 +2454,7 @@ export async function handleRequest(req: Request) {
       }
     }
 
-    return jsonResponse(200, {
-      ...responsePayload,
-    });
+    return jsonResponse(200, stripAdminOnlyAnalysisMetadata(responsePayload, requesterIsAdmin));
   } catch (error) {
     return jsonResponse(500, {
       error: error instanceof Error ? error.message : "Unable to generate analysis.",
@@ -2243,6 +2470,8 @@ export const __test__ = {
   buildTemplateAnalysis,
   formatPercentage,
   formatPercentageWithAttempts,
+  findAiAnalysisRejectReasons,
+  findInvalidSpanScoreClaims,
   handleRequest,
   hasOverstatedAllTeamScoring,
   hasZeroMarginLanguage,
@@ -2251,6 +2480,7 @@ export const __test__ = {
   sanitizeAnalysisText,
   sanitizeTurnoverLanguage,
   shouldRejectAiAnalysis,
+  stripAdminOnlyAnalysisMetadata,
 };
 
 if (import.meta.main) {
