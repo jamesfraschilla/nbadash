@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import Header from "./components/Header.jsx";
 import AuthGate from "./components/AuthGate.jsx";
 import LegacyNotesImportPrompt from "./components/LegacyNotesImportPrompt.jsx";
@@ -21,6 +21,8 @@ const Kpis = lazy(() => import("./pages/Kpis.jsx"));
 const Admin = lazy(() => import("./pages/Admin.jsx"));
 const UserContent = lazy(() => import("./pages/UserContent.jsx"));
 const Tools = lazy(() => import("./pages/Tools.jsx"));
+// TEMP Coaching Reports Preview: remove this lazy import with src/features/coachingReportsPreview when testing ends.
+const CoachingReportsPreview = lazy(() => import("./features/coachingReportsPreview/CoachingReportsPreview.jsx"));
 
 function getCurrentBundleFingerprint() {
   if (typeof document === "undefined" || typeof window === "undefined") return "";
@@ -62,6 +64,7 @@ export default function App() {
   const [updateFingerprint, setUpdateFingerprint] = useState("");
   const currentFingerprintRef = useRef("");
   const dismissedFingerprintRef = useRef("");
+  const location = useLocation();
   const {
     accountsEnabled,
     loading,
@@ -75,6 +78,8 @@ export default function App() {
     hasFeature,
   } = useAuth();
   const canUseTools = !accountsEnabled || hasFeature("tools");
+  // TEMP Coaching Reports Preview: remove this parent layout exception with the preview route.
+  const isCoachingReportsPreview = location.pathname === "/coaching-reports-preview";
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -269,7 +274,7 @@ export default function App() {
         isAdmin={isAdmin}
         canUseTools={canUseTools}
       />
-      <main>
+      <main style={isCoachingReportsPreview ? { maxWidth: "none", padding: 0 } : undefined}>
         <Suspense fallback={<RouteLoadingFallback />}>
           <Routes>
             <Route path="/" element={<Home />} />
@@ -286,6 +291,8 @@ export default function App() {
               path="/graphics"
               element={canUseTools ? <Tools section="graphics" /> : <AccessRequired>An admin needs to grant the Tools feature flag before you can use this page.</AccessRequired>}
             />
+            {/* TEMP Coaching Reports Preview: remove this route with the Header dropdown entry when testing ends. */}
+            <Route path="/coaching-reports-preview" element={<CoachingReportsPreview />} />
             <Route path="/g/:gameId" element={<Game />} />
             <Route path="/g/:gameId/atc" element={<Game variant="atc" />} />
             <Route path="/g/:gameId/events" element={<PlayByPlay />} />

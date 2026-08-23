@@ -125,6 +125,15 @@ export default function Header({ theme, onToggleTheme, onSignOut, profile, isAdm
                     Tools
                   </Link>
                 ) : null}
+                {/* TEMP Coaching Reports Preview: remove this nav entry when preview testing ends. */}
+                <Link
+                  to="/coaching-reports-preview"
+                  className={styles.dropdownItem}
+                  role="menuitem"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Coaching Reports Preview
+                </Link>
                 {isAdmin ? (
                   <Link
                     to="/admin"
