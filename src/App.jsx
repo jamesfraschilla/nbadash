@@ -21,6 +21,7 @@ const Kpis = lazy(() => import("./pages/Kpis.jsx"));
 const Admin = lazy(() => import("./pages/Admin.jsx"));
 const UserContent = lazy(() => import("./pages/UserContent.jsx"));
 const Tools = lazy(() => import("./pages/Tools.jsx"));
+const Officiating = lazy(() => import("./pages/Officiating.jsx"));
 
 function getCurrentBundleFingerprint() {
   if (typeof document === "undefined" || typeof window === "undefined") return "";
@@ -285,6 +286,10 @@ export default function App() {
             <Route
               path="/graphics"
               element={canUseTools ? <Tools section="graphics" /> : <AccessRequired>An admin needs to grant the Tools feature flag before you can use this page.</AccessRequired>}
+            />
+            <Route
+              path="/officiating"
+              element={canUseTools ? <Officiating /> : <AccessRequired>An admin needs to grant the Tools feature flag before you can use this page.</AccessRequired>}
             />
             <Route path="/g/:gameId" element={<Game />} />
             <Route path="/g/:gameId/atc" element={<Game variant="atc" />} />

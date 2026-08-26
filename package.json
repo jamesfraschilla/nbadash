@@ -11,6 +11,7 @@
     "typecheck": "npm run typecheck:edge-functions",
     "lint": "eslint .",
     "assets:upload-referees": "node scripts/upload-referee-full-assets.mjs",
+    "officiating:backfill:sample": "node scripts/backfill-officiating-2025-26.mjs",
     "schedule:update": "node scripts/update-nba-schedule.mjs",
     "schedule:prewarm:update": "node scripts/update-wizards-analysis-prewarm-schedule.mjs",
     "test": "node --test \"src/**/*.test.js\"",

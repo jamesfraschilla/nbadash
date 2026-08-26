@@ -1,0 +1,220 @@
+.page {
+  display: grid;
+  gap: 18px;
+}
+
+.header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(circle at top right, rgba(96, 165, 250, 0.13), transparent 32%),
+    linear-gradient(145deg, var(--panel), var(--bg));
+}
+
+.header h1 {
+  margin: 4px 0 6px;
+  font-size: clamp(1.8rem, 3vw, 2.45rem);
+  line-height: 1;
+}
+
+.header p {
+  max-width: 74ch;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.98rem;
+  line-height: 1.45;
+}
+
+.kicker,
+.seasonControl span,
+.statLabel {
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.seasonControl {
+  display: grid;
+  gap: 7px;
+  min-width: 150px;
+}
+
+.seasonControl select {
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--input-bg);
+  color: var(--text);
+  padding: 0 12px;
+  font-weight: 800;
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.statCard,
+.emptyPanel,
+.notice,
+.tableWrap {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
+}
+
+.statCard {
+  min-height: 108px;
+  padding: 16px;
+  display: grid;
+  align-content: center;
+  gap: 5px;
+}
+
+.statValue {
+  font-size: 2rem;
+  line-height: 1;
+  font-weight: 900;
+}
+
+.statDetail {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.notice {
+  padding: 12px 14px;
+  color: var(--warning-text);
+  background: var(--warning-bg);
+  font-weight: 750;
+}
+
+.tabBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-muted);
+}
+
+.tabButton {
+  min-height: 40px;
+  padding: 0 15px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 850;
+}
+
+.tabButton:hover {
+  color: var(--text);
+}
+
+.tabButtonActive {
+  border-color: var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.emptyPanel {
+  min-height: 240px;
+  padding: 26px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  text-align: center;
+}
+
+.emptyPanel h2 {
+  margin: 0 0 8px;
+  font-size: 1.35rem;
+}
+
+.emptyPanel p {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.tableWrap {
+  overflow: auto;
+}
+
+.table {
+  width: 100%;
+  min-width: 820px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.table th,
+.table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.table th {
+  background: var(--table-header-bg);
+  color: var(--muted);
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.table td {
+  font-size: 0.94rem;
+}
+
+.table td:not(:first-child),
+.table th:not(:first-child) {
+  text-align: right;
+}
+
+.table td:first-child span {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.table tr:last-child td {
+  border-bottom: 0;
+}
+
+.table a {
+  color: var(--highlight-text);
+  font-weight: 800;
+}
+
+@media (max-width: 980px) {
+  .header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .statsGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .statsGrid {
+    grid-template-columns: 1fr;
+  }
+}

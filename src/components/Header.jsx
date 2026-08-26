@@ -121,6 +121,11 @@ export default function Header({ theme, onToggleTheme, onSignOut, profile, isAdm
                   </Link>
                 ) : null}
                 {canUseTools ? (
+                  <Link to="/officiating" className={styles.dropdownItem} role="menuitem" onClick={() => setIsMenuOpen(false)}>
+                    Officiating Intelligence
+                  </Link>
+                ) : null}
+                {canUseTools ? (
                   <Link to="/tools?tab=visual-drill" className={styles.dropdownItem} role="menuitem" onClick={() => setIsMenuOpen(false)}>
                     Tools
                   </Link>
