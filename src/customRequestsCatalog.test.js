@@ -8,6 +8,10 @@ const functionPath = path.resolve(
   "supabase/functions/custom-requests/index.ts",
 );
 const source = fs.readFileSync(functionPath, "utf8");
+const leagueKillsBySeason = JSON.parse(fs.readFileSync(
+  path.resolve(process.cwd(), "supabase/functions/custom-requests/leagueTeamGameKillsBySeason.json"),
+  "utf8",
+));
 
 function extractArray(name) {
   const start = source.indexOf(`const ${name}`);
@@ -341,6 +345,26 @@ function parseThreshold(prompt) {
   return null;
 }
 
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function parseBareThresholdForMetric(prompt, metric) {
+  if (!metric) return null;
+  const normalizedPrompt = normalizeText(prompt);
+  const metricAliases = buildMetricSearchAliases(metric)
+    .sort((left, right) => right.length - left.length)
+    .slice(0, 18);
+  for (const alias of metricAliases) {
+    const escapedAlias = escapeRegExp(alias);
+    const beforeMetric = new RegExp(`\\b(?:got|had|has|posted|recorded|with)\\s+(\\d+(?:\\.\\d+)?)\\s+${escapedAlias}\\b`);
+    const afterMetric = new RegExp(`\\b${escapedAlias}\\s+(?:of|at|=|equal(?:ed|s)?|was|were)?\\s*(\\d+(?:\\.\\d+)?)\\b`);
+    const match = beforeMetric.exec(normalizedPrompt) || afterMetric.exec(normalizedPrompt);
+    if (match) return safeNumber(match[1], 0);
+  }
+  return null;
+}
+
 function parseImplicitThreshold(prompt, metric) {
   if (!metric) return null;
   const normalizedPrompt = normalizeText(prompt);
@@ -362,6 +386,12 @@ function parseImplicitThreshold(prompt, metric) {
 function isUpperBoundPrompt(prompt) {
   const normalizedPrompt = normalizeText(prompt);
   return /under|below|less than|fewer than|<=|at most|or fewer/.test(normalizedPrompt);
+}
+
+function isLowerBoundPrompt(prompt) {
+  const normalizedPrompt = normalizeText(prompt);
+  return /\+/.test(normalizedPrompt)
+    || /or more|or greater|at least|plus|>=|over|more than/.test(normalizedPrompt);
 }
 
 function isRecordPrompt(prompt) {
@@ -413,6 +443,25 @@ function buildFallbackParse(prompt) {
   };
 }
 
+function parseLeagueConditionalRecordRequest(prompt) {
+  const normalizedPrompt = normalizeText(prompt);
+  if (findTeamFromPrompt(prompt)) return null;
+  if (!isRecordPrompt(prompt)) return null;
+  if (!/\b(all teams|every team|league|nba)\b/.test(normalizedPrompt)) return null;
+
+  const metric = findMetricFromPrompt(prompt);
+  if (!metric) return null;
+
+  const threshold = parseThreshold(prompt) ?? parseBareThresholdForMetric(prompt, metric);
+  if (threshold == null) return null;
+
+  return {
+    metric,
+    threshold,
+    comparator: isUpperBoundPrompt(prompt) ? "lte" : isLowerBoundPrompt(prompt) ? "gte" : "eq",
+  };
+}
+
 test("every custom request metric resolves from its label and aliases", () => {
   metrics.forEach((metric) => {
     const byLabel = findMetricFromPrompt(metric.label);
@@ -461,4 +510,32 @@ test("custom request fallback parser resolves threshold and record prompts", () 
   assert.equal(halftimeParse?.statKey, "first_half_margin");
   assert.equal(halftimeParse?.aggregation, "record_when_gte");
   assert.equal(halftimeParse?.threshold, 1);
+});
+
+test("custom request parser resolves league-wide conditional record prompts", () => {
+  const exactParse = parseLeagueConditionalRecordRequest(
+    "What is the cumulative team record of all teams last season when that team got 6 kills in a single game?",
+  );
+  assert.equal(exactParse?.metric.key, "kills");
+  assert.equal(exactParse?.threshold, 6);
+  assert.equal(exactParse?.comparator, "eq");
+
+  const lowerBoundParse = parseLeagueConditionalRecordRequest(
+    "What is the cumulative team record of all teams last season when that team got 6 or more kills in a single game?",
+  );
+  assert.equal(lowerBoundParse?.metric.key, "kills");
+  assert.equal(lowerBoundParse?.threshold, 6);
+  assert.equal(lowerBoundParse?.comparator, "gte");
+});
+
+test("custom request precomputed kills cache includes the failed 2025-26 league query", () => {
+  const rows = leagueKillsBySeason["2025-26"]?.rows || [];
+  const exactSixRows = rows.filter((row) => row.metrics?.kills === 6);
+  const wins = exactSixRows.filter((row) => row.result === "W").length;
+  const losses = exactSixRows.filter((row) => row.result === "L").length;
+
+  assert.ok(rows.length > 2700);
+  assert.equal(leagueKillsBySeason["2025-26"].skippedGames.length, 0);
+  assert.equal(exactSixRows.length, 439);
+  assert.equal(`${wins}-${losses}`, "198-241");
 });

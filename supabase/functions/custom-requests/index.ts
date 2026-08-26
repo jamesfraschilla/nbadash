@@ -1,4 +1,5 @@
 import rosterSnapshotByTeam from "./rosterSnapshotByTeam.json" with { type: "json" };
+import leagueTeamGameKillsBySeason from "./leagueTeamGameKillsBySeason.json" with { type: "json" };
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const OPENAI_API_URL = "https://api.openai.com/v1/responses";
@@ -107,6 +108,15 @@ type OpponentRelativeRequest = {
 type OpponentRecordRequest = {
   team: (typeof NBA_TEAMS)[number];
   opponents: Array<(typeof NBA_TEAMS)[number]>;
+  seasonScope: QuerySeasonScope;
+  resultFilter: ResultFilter;
+  homeAwayFilter: HomeAwayFilter;
+};
+
+type LeagueConditionalRecordRequest = {
+  metric: MetricDefinition;
+  threshold: number;
+  comparator: "eq" | "gte" | "lte";
   seasonScope: QuerySeasonScope;
   resultFilter: ResultFilter;
   homeAwayFilter: HomeAwayFilter;
@@ -631,6 +641,26 @@ function parseThreshold(prompt: string) {
   return null;
 }
 
+function escapeRegExp(value: string) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function parseBareThresholdForMetric(prompt: string, metric: MetricDefinition | null) {
+  if (!metric) return null;
+  const normalizedPrompt = normalizeText(prompt);
+  const metricAliases = buildMetricSearchAliases(metric)
+    .sort((left, right) => right.length - left.length)
+    .slice(0, 18);
+  for (const alias of metricAliases) {
+    const escapedAlias = escapeRegExp(alias);
+    const beforeMetric = new RegExp(`\\b(?:got|had|has|posted|recorded|with)\\s+(\\d+(?:\\.\\d+)?)\\s+${escapedAlias}\\b`);
+    const afterMetric = new RegExp(`\\b${escapedAlias}\\s+(?:of|at|=|equal(?:ed|s)?|was|were)?\\s*(\\d+(?:\\.\\d+)?)\\b`);
+    const match = beforeMetric.exec(normalizedPrompt) || afterMetric.exec(normalizedPrompt);
+    if (match) return safeNumber(match[1], 0);
+  }
+  return null;
+}
+
 function isLowerBoundPrompt(prompt: string) {
   const normalizedPrompt = normalizeText(prompt);
   return /\+/.test(normalizedPrompt)
@@ -658,7 +688,12 @@ function jsonResponse(status: number, payload: Record<string, unknown>) {
 }
 
 async function requestJson(url: string) {
-  const response = await fetch(url, { headers: { Accept: "application/json" } });
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "Mozilla/5.0 (compatible; NBA Dashboard Custom Requests)",
+    },
+  });
   if (!response.ok) throw new Error(`Request failed (${response.status}) for ${url}`);
   return response.json();
 }
@@ -836,11 +871,10 @@ async function parseExplicitSeasonString(prompt: string, date = new Date()) {
   }
 
   if (/\blast season\b|\blast year\b|\bprevious season\b/.test(normalizedPrompt)) {
-    const defaultSeason = await resolveDefaultSeasonString(date);
-    const defaultStartYear = parseSeasonStartYear(defaultSeason);
-    if (Number.isFinite(defaultStartYear)) {
-      return buildSeasonString((defaultStartYear as number) - 1);
-    }
+    const currentSeasonStartYear = date.getUTCMonth() + 1 >= 7
+      ? date.getUTCFullYear()
+      : date.getUTCFullYear() - 1;
+    return buildSeasonString(currentSeasonStartYear - 1);
   }
 
   if (/\bthis season\b|\bcurrent season\b/.test(normalizedPrompt)) {
@@ -936,6 +970,19 @@ async function fetchGameDetails(gameId: string) {
 async function fetchGameDetailsSafe(gameId: string) {
   try {
     const game = await fetchGameDetails(gameId);
+    return { game, error: null };
+  } catch (error) {
+    console.error(`Skipping game ${gameId} after upstream failure.`, error);
+    return {
+      game: null,
+      error: error instanceof Error ? error.message : "Unknown error.",
+    };
+  }
+}
+
+async function fetchGameDetailsUncachedSafe(gameId: string) {
+  try {
+    const game = await fetchGameDetailsWithRetry(gameId);
     return { game, error: null };
   } catch (error) {
     console.error(`Skipping game ${gameId} after upstream failure.`, error);
@@ -2355,6 +2402,31 @@ function parseOpponentRecordRequest(
     resultFilter: parseResultFilter(prompt),
     homeAwayFilter: parseHomeAwayFilter(prompt),
   } satisfies OpponentRecordRequest;
+}
+
+function parseLeagueConditionalRecordRequest(
+  prompt: string,
+  explicitTeam: (typeof NBA_TEAMS)[number] | null,
+) {
+  const normalizedPrompt = normalizeText(prompt);
+  if (explicitTeam) return null;
+  if (!isRecordPrompt(prompt)) return null;
+  if (!/\b(all teams|every team|league|nba)\b/.test(normalizedPrompt)) return null;
+
+  const metric = findMetricFromPrompt(prompt);
+  if (!metric) return null;
+
+  const threshold = parseThreshold(prompt) ?? parseBareThresholdForMetric(prompt, metric);
+  if (threshold == null) return null;
+
+  return {
+    metric,
+    threshold,
+    comparator: isUpperBoundPrompt(prompt) ? "lte" : isLowerBoundPrompt(prompt) ? "gte" : "eq",
+    seasonScope: parseSeasonScope(prompt),
+    resultFilter: parseResultFilter(prompt),
+    homeAwayFilter: parseHomeAwayFilter(prompt),
+  } satisfies LeagueConditionalRecordRequest;
 }
 
 function parseImplicitThreshold(prompt: string, metric: MetricDefinition | null) {
@@ -3916,75 +3988,61 @@ async function buildLeagueTeamSeasonDataset(season: string) {
   if (!LEAGUE_TEAM_DATASET_CACHE.has(season)) {
     LEAGUE_TEAM_DATASET_CACHE.set(season, (async () => {
       const seasonGames = await fetchSeasonGames(season);
-      const detailedGames = await mapWithConcurrency(
-        seasonGames,
-        (game) => fetchGameDetailsSafe(String((game as AnyRecord).gameId || "")),
-      );
+      const skippedGames: Array<{ gameId: string; gameDate: string; error: string }> = [];
+      const rows: CachedTeamGameRow[] = [];
+      const concurrency = 4;
 
-      const skippedGames = detailedGames
-        .map((entry, index) => (
-          entry.error
-            ? {
-              gameId: String((seasonGames[index] as AnyRecord).gameId || ""),
-              gameDate: String((seasonGames[index] as AnyRecord).gameDate || ""),
-              error: entry.error,
-            }
-            : null
-        ))
-        .filter(Boolean) as Array<{ gameId: string; gameDate: string; error: string }>;
+      for (let index = 0; index < seasonGames.length; index += concurrency) {
+        const batch = seasonGames.slice(index, index + concurrency);
+        const batchRows = await Promise.all(batch.map(async (seasonGame) => {
+          const gameId = String((seasonGame as AnyRecord).gameId || "");
+          const entry = await fetchGameDetailsUncachedSafe(gameId);
+          if (!entry.game) {
+            skippedGames.push({
+              gameId,
+              gameDate: String((seasonGame as AnyRecord).gameDate || ""),
+              error: entry.error || "Unable to load game detail.",
+            });
+            return [];
+          }
 
-      const rows = detailedGames.flatMap((entry, index) => {
-        if (!entry.game) return [];
-        const game = {
-          ...entry.game,
-          gameDate: String((seasonGames[index] as AnyRecord).gameDate || ""),
-        } as AnyRecord;
-        const homeTeamId = String(game?.homeTeam?.teamId || "");
-        const awayTeamId = String(game?.awayTeam?.teamId || "");
-        const homeTeam = NBA_TEAMS.find((team) => team.teamId === homeTeamId) || null;
-        const awayTeam = NBA_TEAMS.find((team) => team.teamId === awayTeamId) || null;
-        const builtRows: CachedTeamGameRow[] = [];
-        const metricContext = buildGameMetricContext(game);
-        if (homeTeam) {
-          const metrics = buildGameMetrics(game, homeTeam.teamId, metricContext);
-          const opponentMetrics = buildGameMetrics(game, metrics.opponent.teamId, metricContext);
-          builtRows.push({
-            teamId: homeTeam.teamId,
-            gameId: String(game.gameId || ""),
-            gameDate: String(game.gameDate || ""),
-            opponent: metrics.opponent,
-            value: 0,
-            result: metrics.result,
-            teamScore: safeNumber(metrics.teamScore, 0),
-            opponentScore: safeNumber(metrics.opponentScore, 0),
-            margin: safeNumber(metrics.margin, 0),
-            isHome: Boolean(metrics.isHome),
-            seasonType: String(metrics.seasonType || ""),
-            metrics: metrics.metrics,
-            opponentMetrics: opponentMetrics.metrics,
+          const game = {
+            ...entry.game,
+            gameDate: String((seasonGame as AnyRecord).gameDate || ""),
+          } as AnyRecord;
+          const homeTeamId = String(game?.homeTeam?.teamId || "");
+          const awayTeamId = String(game?.awayTeam?.teamId || "");
+          const homeTeam = NBA_TEAMS.find((team) => team.teamId === homeTeamId) || null;
+          const awayTeam = NBA_TEAMS.find((team) => team.teamId === awayTeamId) || null;
+          const builtRows: CachedTeamGameRow[] = [];
+          const metricContext = buildGameMetricContext(game);
+
+          [homeTeam, awayTeam].forEach((team) => {
+            if (!team) return;
+            const metrics = buildGameMetrics(game, team.teamId, metricContext);
+            const opponentMetrics = buildGameMetrics(game, metrics.opponent.teamId, metricContext);
+            builtRows.push({
+              teamId: team.teamId,
+              gameId: String(game.gameId || ""),
+              gameDate: String(game.gameDate || ""),
+              opponent: metrics.opponent,
+              value: 0,
+              result: metrics.result,
+              teamScore: safeNumber(metrics.teamScore, 0),
+              opponentScore: safeNumber(metrics.opponentScore, 0),
+              margin: safeNumber(metrics.margin, 0),
+              isHome: Boolean(metrics.isHome),
+              seasonType: String(metrics.seasonType || ""),
+              metrics: metrics.metrics,
+              opponentMetrics: opponentMetrics.metrics,
+            });
           });
-        }
-        if (awayTeam) {
-          const metrics = buildGameMetrics(game, awayTeam.teamId, metricContext);
-          const opponentMetrics = buildGameMetrics(game, metrics.opponent.teamId, metricContext);
-          builtRows.push({
-            teamId: awayTeam.teamId,
-            gameId: String(game.gameId || ""),
-            gameDate: String(game.gameDate || ""),
-            opponent: metrics.opponent,
-            value: 0,
-            result: metrics.result,
-            teamScore: safeNumber(metrics.teamScore, 0),
-            opponentScore: safeNumber(metrics.opponentScore, 0),
-            margin: safeNumber(metrics.margin, 0),
-            isHome: Boolean(metrics.isHome),
-            seasonType: String(metrics.seasonType || ""),
-            metrics: metrics.metrics,
-            opponentMetrics: opponentMetrics.metrics,
-          });
-        }
-        return builtRows;
-      });
+
+          return builtRows;
+        }));
+
+        rows.push(...batchRows.flat());
+      }
 
       return { rows, skippedGames };
     })());
@@ -4005,6 +4063,162 @@ function parseLeagueRankingRequest(prompt: string) {
     : "season_total";
   const seasonScope = parseSeasonScope(prompt);
   return { metric, aggregation, seasonScope } as const;
+}
+
+function getPrecomputedLeagueTeamMetricDataset(season: string, metricKey: string) {
+  if (metricKey !== "kills") return null;
+  const seasonEntry = (leagueTeamGameKillsBySeason as AnyRecord)[season] as AnyRecord | undefined;
+  const rawRows = Array.isArray(seasonEntry?.rows) ? seasonEntry.rows as AnyRecord[] : [];
+  if (!rawRows.length) return null;
+
+  const rows = rawRows
+    .map((row) => ({
+      teamId: String(row.teamId || ""),
+      gameId: String(row.gameId || ""),
+      gameDate: String(row.gameDate || ""),
+      opponent: {
+        teamId: String((row.opponent as AnyRecord | undefined)?.teamId || ""),
+        tricode: String((row.opponent as AnyRecord | undefined)?.tricode || ""),
+        fullName: String((row.opponent as AnyRecord | undefined)?.fullName || ""),
+      },
+      value: 0,
+      result: row.result === "W" ? "W" : "L",
+      teamScore: safeNumber(row.teamScore, 0),
+      opponentScore: safeNumber(row.opponentScore, 0),
+      margin: safeNumber(row.margin, 0),
+      isHome: Boolean(row.isHome),
+      seasonType: String(row.seasonType || ""),
+      metrics: {
+        [metricKey]: safeNumber((row.metrics as AnyRecord | undefined)?.[metricKey], 0),
+      },
+      opponentMetrics: {
+        [metricKey]: safeNumber((row.opponentMetrics as AnyRecord | undefined)?.[metricKey], 0),
+      },
+    }))
+    .filter((row) => row.teamId && row.gameId) as CachedTeamGameRow[];
+
+  return {
+    rows,
+    skippedGames: Array.isArray(seasonEntry?.skippedGames) ? seasonEntry.skippedGames : [],
+  };
+}
+
+function compareMetricToThreshold(value: number, threshold: number, comparator: LeagueConditionalRecordRequest["comparator"]) {
+  if (comparator === "gte") return value >= threshold;
+  if (comparator === "lte") return value <= threshold;
+  return value === threshold;
+}
+
+function comparatorLabel(threshold: number, comparator: LeagueConditionalRecordRequest["comparator"]) {
+  if (comparator === "gte") return `${threshold}+`;
+  if (comparator === "lte") return `${threshold} or fewer`;
+  return `exactly ${threshold}`;
+}
+
+function executeLeagueConditionalRecordQuery(
+  rows: CachedTeamGameRow[],
+  request: LeagueConditionalRecordRequest,
+) {
+  const filteredRows = rows.filter((row) => {
+    if (!matchesSeasonScope(row, request.seasonScope)) return false;
+    if (request.resultFilter === "win" && row.result !== "W") return false;
+    if (request.resultFilter === "loss" && row.result !== "L") return false;
+    if (request.homeAwayFilter === "home" && !row.isHome) return false;
+    if (request.homeAwayFilter === "away" && row.isHome) return false;
+    return true;
+  });
+  const matchingRows = filteredRows
+    .filter((row) => compareMetricToThreshold(
+      safeNumber((row.metrics as Record<string, unknown>)[request.metric.key], 0),
+      request.threshold,
+      request.comparator,
+    ))
+    .map((row) => {
+      const team = NBA_TEAMS.find((entry) => entry.teamId === String((row as Record<string, unknown>).teamId || "")) || null;
+      return {
+        ...row,
+        team,
+        value: safeNumber((row.metrics as Record<string, unknown>)[request.metric.key], 0),
+      };
+    })
+    .sort((left, right) => String(right.gameDate || "").localeCompare(String(left.gameDate || "")));
+
+  const wins = matchingRows.filter((row) => row.result === "W").length;
+  const losses = matchingRows.filter((row) => row.result === "L").length;
+  const byTeam = new Map<string, {
+    team: (typeof NBA_TEAMS)[number];
+    rows: typeof matchingRows;
+  }>();
+  matchingRows.forEach((row) => {
+    if (!row.team) return;
+    if (!byTeam.has(row.team.teamId)) {
+      byTeam.set(row.team.teamId, { team: row.team, rows: [] });
+    }
+    byTeam.get(row.team.teamId)?.rows.push(row);
+  });
+
+  const tableRows = [...byTeam.values()]
+    .map((entry) => {
+      const teamWins = entry.rows.filter((row) => row.result === "W").length;
+      const teamLosses = entry.rows.filter((row) => row.result === "L").length;
+      const total = entry.rows.reduce((sum, row) => sum + row.value, 0);
+      return {
+        team: entry.team.tricode,
+        games: entry.rows.length,
+        record: `${teamWins}-${teamLosses}`,
+        average: entry.rows.length ? formatAverageValue(total / entry.rows.length, request.metric) : formatAverageValue(0, request.metric),
+        total: formatValue(total, request.metric),
+      };
+    })
+    .sort((left, right) => right.games - left.games || left.team.localeCompare(right.team));
+
+  const label = comparatorLabel(request.threshold, request.comparator);
+  return {
+    aggregation: "league_record_when_threshold",
+    value: wins - losses,
+    displayValue: `${wins}-${losses}`,
+    answer: `NBA teams were ${wins}-${losses} cumulatively when posting ${label} ${request.metric.label.toLowerCase()}.`,
+    games: matchingRows.slice(0, 100).map((row) => ({
+      gameId: row.gameId,
+      gameDate: row.gameDate,
+      team: row.team?.tricode || "",
+      opponent: row.opponent,
+      value: row.value,
+      result: row.result,
+      teamScore: row.teamScore,
+      opponentScore: row.opponentScore,
+      margin: row.margin,
+      isHome: row.isHome,
+      seasonType: row.seasonType,
+    })),
+    sampleSize: filteredRows.length,
+    groups: tableRows.map((row) => ({
+      key: row.team,
+      label: row.team,
+      value: row.games,
+      displayValue: row.record,
+      sampleSize: row.games,
+      wins: Number(row.record.split("-")[0]) || 0,
+      losses: Number(row.record.split("-")[1]) || 0,
+      averageDisplayValue: row.average,
+      totalDisplayValue: row.total,
+    })),
+    record: {
+      wins,
+      losses,
+      winPct: matchingRows.length ? (wins / matchingRows.length) * 100 : 0,
+    },
+    table: {
+      columns: [
+        { key: "team", label: "Team" },
+        { key: "games", label: "Games" },
+        { key: "record", label: "Record" },
+        { key: "average", label: "Avg" },
+        { key: "total", label: "Total" },
+      ],
+      rows: tableRows,
+    },
+  };
 }
 
 async function executeComparisonQuery(
@@ -4367,6 +4581,46 @@ Deno.serve(async (request) => {
     if (!prompt) return jsonResponse(400, { error: "Prompt is required." });
     const season = await resolveSeasonStringForPrompt(prompt);
     const explicitTeam = findTeamFromPrompt(prompt);
+    const earlyLeagueConditionalRecordRequest = !explicitTeam && !extractLikelyPlayerName(prompt, null)
+      ? parseLeagueConditionalRecordRequest(prompt, explicitTeam)
+      : null;
+    if (earlyLeagueConditionalRecordRequest) {
+      const dataset = getPrecomputedLeagueTeamMetricDataset(season, earlyLeagueConditionalRecordRequest.metric.key)
+        || await buildLeagueTeamSeasonDataset(season);
+      if (!dataset.rows.length) {
+        return jsonResponse(502, {
+          error: "Unable to load any completed game details for this request.",
+          skippedGames: dataset.skippedGames,
+        });
+      }
+
+      const result = executeLeagueConditionalRecordQuery(dataset.rows, earlyLeagueConditionalRecordRequest);
+      return jsonResponse(200, {
+        prompt,
+        season,
+        team: null,
+        filters: {
+          seasonScope: earlyLeagueConditionalRecordRequest.seasonScope,
+          resultFilter: earlyLeagueConditionalRecordRequest.resultFilter,
+          homeAwayFilter: earlyLeagueConditionalRecordRequest.homeAwayFilter,
+          comparator: earlyLeagueConditionalRecordRequest.comparator,
+          threshold: earlyLeagueConditionalRecordRequest.threshold,
+        },
+        stat: {
+          key: earlyLeagueConditionalRecordRequest.metric.key,
+          label: earlyLeagueConditionalRecordRequest.metric.label,
+        },
+        parsedQuery: {
+          aggregation: "league_record_when_threshold",
+          seasonScope: earlyLeagueConditionalRecordRequest.seasonScope,
+          threshold: earlyLeagueConditionalRecordRequest.threshold,
+          comparator: earlyLeagueConditionalRecordRequest.comparator,
+        },
+        result,
+        skippedGames: dataset.skippedGames,
+        supportedStats: METRICS.map((entry) => ({ key: entry.key, label: entry.label })),
+      });
+    }
     const inferredPlayerTeam = explicitTeam ? null : await inferTeamFromPlayerPrompt(prompt, season).catch(() => null);
     const opponentRecordRequest = parseOpponentRecordRequest(prompt, explicitTeam, inferredPlayerTeam?.team || null);
     if (opponentRecordRequest) {
@@ -4542,6 +4796,7 @@ Deno.serve(async (request) => {
         supportedStats: METRICS.map((entry) => ({ key: entry.key, label: entry.label })),
       });
     }
+
     const leagueRankingRequest = !explicitTeam && !extractLikelyPlayerName(prompt, null)
       ? parseLeagueRankingRequest(prompt)
       : null;
