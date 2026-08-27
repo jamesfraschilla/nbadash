@@ -1,8 +1,9 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth.js";
 import { fetchOfficiatingDashboardData } from "../officiatingData.js";
+import { loadRefereeHeadshotUrl } from "../refereeHeadshots.js";
 import styles from "./Officiating.module.css";
 
 const TABS = [
@@ -18,6 +19,92 @@ const DEFAULT_SEASON = "2025-26";
 function formatRate(value) {
   if (!Number.isFinite(value)) return "0.0%";
   return `${(value * 100).toFixed(1)}%`;
+}
+
+function formatNumber(value, decimals = 0) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return decimals ? "0.0" : "0";
+  return number.toFixed(decimals);
+}
+
+function sortRows(rows, sort, fallbackKey = "") {
+  return [...rows].sort((left, right) => {
+    const direction = sort.direction === "asc" ? 1 : -1;
+    const leftValue = left[sort.key];
+    const rightValue = right[sort.key];
+    const leftNumber = Number(leftValue);
+    const rightNumber = Number(rightValue);
+    if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
+      return (leftNumber - rightNumber) * direction;
+    }
+    const textCompare = String(leftValue || "").localeCompare(String(rightValue || ""));
+    if (textCompare !== 0) return textCompare * direction;
+    return String(left[fallbackKey] || "").localeCompare(String(right[fallbackKey] || ""));
+  });
+}
+
+function SortButton({ label, sortKey, sort, onSort }) {
+  const active = sort.key === sortKey;
+  return (
+    <button
+      type="button"
+      className={styles.sortButton}
+      onClick={() => onSort(sortKey)}
+      aria-label={`Sort by ${label}`}
+    >
+      {label}{active ? (sort.direction === "asc" ? " ^" : " v") : ""}
+    </button>
+  );
+}
+
+function ProfileMetric({ label, value, detail }) {
+  return (
+    <div className={styles.profileMetric}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      {detail ? <em>{detail}</em> : null}
+    </div>
+  );
+}
+
+function TopList({ title, items }) {
+  const entries = Object.entries(items || {})
+    .sort((left, right) => Number(right[1] || 0) - Number(left[1] || 0))
+    .slice(0, 8);
+  if (!entries.length) return null;
+  return (
+    <section className={styles.detailBlock}>
+      <h3>{title}</h3>
+      <div className={styles.splitList}>
+        {entries.map(([label, value]) => (
+          <div key={label}>
+            <span>{label}</span>
+            <strong>{value}</strong>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function RefereeHeadshot({ name }) {
+  const [src, setSrc] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    loadRefereeHeadshotUrl(name).then((url) => {
+      if (!cancelled) setSrc(url || "");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [name]);
+
+  return (
+    <div className={styles.headshot}>
+      {src ? <img src={src} alt="" /> : <span>{String(name || "?").charAt(0)}</span>}
+    </div>
+  );
 }
 
 function StatCard({ label, value, detail }) {
@@ -39,7 +126,7 @@ function EmptyPanel({ title, children }) {
   );
 }
 
-function OfficialsTable({ rows }) {
+function OfficialsTable({ rows, sort, onSort, onSelect }) {
   if (!rows.length) {
     return (
       <EmptyPanel title="No official profiles yet">
@@ -53,28 +140,28 @@ function OfficialsTable({ rows }) {
       <table className={styles.table}>
         <thead>
           <tr>
-            <th>Official</th>
-            <th>Games</th>
-            <th>Calls</th>
-            <th>Fouls</th>
-            <th>Violations</th>
-            <th>Technicals</th>
-            <th>Challenges</th>
-            <th>Overturn Rate</th>
+            <th><SortButton label="Official" sortKey="name" sort={sort} onSort={onSort} /></th>
+            <th><SortButton label="Games" sortKey="games" sort={sort} onSort={onSort} /></th>
+            <th><SortButton label="Calls" sortKey="calls" sort={sort} onSort={onSort} /></th>
+            <th><SortButton label="Calls/G" sortKey="callsPerGame" sort={sort} onSort={onSort} /></th>
+            <th><SortButton label="Fouls" sortKey="fouls" sort={sort} onSort={onSort} /></th>
+            <th><SortButton label="Violations" sortKey="violations" sort={sort} onSort={onSort} /></th>
+            <th><SortButton label="Challenges" sortKey="challenges" sort={sort} onSort={onSort} /></th>
+            <th><SortButton label="Overturn Rate" sortKey="challengeRate" sort={sort} onSort={onSort} /></th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.id}>
+            <tr key={row.id} className={styles.clickableRow} onClick={() => onSelect(row)}>
               <td>
                 <strong>{row.name}</strong>
                 {row.jerseyNumber ? <span>#{row.jerseyNumber}</span> : null}
               </td>
               <td>{row.games}</td>
               <td>{row.calls}</td>
+              <td>{formatNumber(row.callsPerGame, 1)}</td>
               <td>{row.fouls}</td>
               <td>{row.violations}</td>
-              <td>{row.technicals}</td>
               <td>{row.challenges}</td>
               <td>{formatRate(row.challengeRate)}</td>
             </tr>
@@ -85,7 +172,7 @@ function OfficialsTable({ rows }) {
   );
 }
 
-function TeamsTable({ rows }) {
+function TeamsTable({ rows, sort, onSort, onSelect }) {
   if (!rows.length) {
     return (
       <EmptyPanel title="No team profiles yet">
@@ -99,17 +186,17 @@ function TeamsTable({ rows }) {
       <table className={styles.table}>
         <thead>
           <tr>
-            <th>Team</th>
-            <th>Calls Against</th>
-            <th>Calls For</th>
-            <th>Challenges</th>
-            <th>Successful</th>
-            <th>Success Rate</th>
+            <th><SortButton label="Team" sortKey="team" sort={sort} onSort={onSort} /></th>
+            <th><SortButton label="Calls Against" sortKey="callsAgainst" sort={sort} onSort={onSort} /></th>
+            <th><SortButton label="Calls For" sortKey="callsFor" sort={sort} onSort={onSort} /></th>
+            <th><SortButton label="Challenges" sortKey="challenges" sort={sort} onSort={onSort} /></th>
+            <th><SortButton label="Successful" sortKey="successfulChallenges" sort={sort} onSort={onSort} /></th>
+            <th><SortButton label="Success Rate" sortKey="challengeRate" sort={sort} onSort={onSort} /></th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.team}>
+            <tr key={row.team} className={styles.clickableRow} onClick={() => onSelect(row)}>
               <td><strong>{row.team}</strong></td>
               <td>{row.callsAgainst}</td>
               <td>{row.callsFor}</td>
@@ -124,7 +211,7 @@ function TeamsTable({ rows }) {
   );
 }
 
-function ChallengeLog({ rows }) {
+function ChallengeLog({ rows, sort, onSort }) {
   if (!rows.length) {
     return (
       <EmptyPanel title="No challenge log yet">
@@ -138,13 +225,13 @@ function ChallengeLog({ rows }) {
       <table className={styles.table}>
         <thead>
           <tr>
-            <th>Date</th>
+            <th><SortButton label="Date" sortKey="game_date" sort={sort} onSort={onSort} /></th>
             <th>Game</th>
-            <th>Team</th>
-            <th>Clock</th>
-            <th>Type</th>
-            <th>Outcome</th>
-            <th>Official</th>
+            <th><SortButton label="Team" sortKey="challenging_team" sort={sort} onSort={onSort} /></th>
+            <th><SortButton label="Clock" sortKey="period" sort={sort} onSort={onSort} /></th>
+            <th><SortButton label="Type" sortKey="challenge_type" sort={sort} onSort={onSort} /></th>
+            <th><SortButton label="Outcome" sortKey="challenge_outcome" sort={sort} onSort={onSort} /></th>
+            <th><SortButton label="Official" sortKey="whistling_official_name" sort={sort} onSort={onSort} /></th>
             <th>Video</th>
           </tr>
         </thead>
@@ -171,10 +258,122 @@ function ChallengeLog({ rows }) {
   );
 }
 
+function MiniChallengeLog({ rows }) {
+  if (!rows?.length) return <p className={styles.detailEmpty}>No challenge rows in the loaded dataset.</p>;
+  return (
+    <div className={styles.miniTableWrap}>
+      <table className={styles.miniTable}>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Game</th>
+            <th>Clock</th>
+            <th>Type</th>
+            <th>Outcome</th>
+            <th>Video</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, index) => (
+            <tr key={row.id || `${row.game_id}-${row.period}-${row.game_clock}-${index}`}>
+              <td>{row.game_date || "-"}</td>
+              <td>{[row.away_team, row.home_team].filter(Boolean).join(" @ ") || row.game_id}</td>
+              <td>{row.period ? `Q${row.period} ${row.game_clock || ""}` : row.game_clock || "-"}</td>
+              <td>{row.challenge_type || "-"}</td>
+              <td>{row.challenge_outcome || "-"}</td>
+              <td>{row.video_url ? <a href={row.video_url} target="_blank" rel="noreferrer">Watch</a> : "-"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function OfficialProfile({ profile, onClose }) {
+  if (!profile) return null;
+  return (
+    <section className={styles.profilePanel}>
+      <div className={styles.profileHeader}>
+        <RefereeHeadshot name={profile.name} />
+        <div>
+          <div className={styles.kicker}>Referee Profile</div>
+          <h2>{profile.name}</h2>
+          <p>{profile.jerseyNumber ? `#${profile.jerseyNumber}` : "NBA official"}</p>
+        </div>
+        <button type="button" className={styles.closeButton} onClick={onClose}>Close</button>
+      </div>
+      <div className={styles.profileMetrics}>
+        <ProfileMetric label="Games" value={profile.games} />
+        <ProfileMetric label="Calls" value={profile.calls} detail={`Rank ${profile.callsRank || "-"}`} />
+        <ProfileMetric label="Calls/G" value={formatNumber(profile.callsPerGame, 1)} detail={`Rank ${profile.callsPerGameRank || "-"}`} />
+        <ProfileMetric label="Challenges" value={profile.challenges} />
+        <ProfileMetric label="Overturn Rate" value={formatRate(profile.challengeRate)} detail={`Rank ${profile.challengeRateRank || "-"}`} />
+      </div>
+      <div className={styles.detailGrid}>
+        <TopList title="Calls By Team" items={profile.callsByTeam} />
+        <TopList title="Calls By Category" items={profile.callsByCategory} />
+      </div>
+      <section className={styles.detailBlock}>
+        <h3>Season Schedule</h3>
+        <div className={styles.splitList}>
+          {(profile.schedule || []).slice(0, 12).map((row) => (
+            <div key={`${row.game_id}-${row.official_id}-${row.role_key}`}>
+              <span>{row.game_date} - {[row.away_team, row.home_team].filter(Boolean).join(" @ ")}</span>
+              <strong>{row.role_key === "crewChief" ? "Crew Chief" : `Official ${row.assignment_order || ""}`}</strong>
+            </div>
+          ))}
+        </div>
+      </section>
+      <section className={styles.detailBlock}>
+        <h3>Challenge Log</h3>
+        <MiniChallengeLog rows={profile.challengeLog || []} />
+      </section>
+    </section>
+  );
+}
+
+function TeamProfile({ profile, onClose }) {
+  if (!profile) return null;
+  return (
+    <section className={styles.profilePanel}>
+      <div className={styles.profileHeader}>
+        <div className={styles.teamMark}>{profile.team}</div>
+        <div>
+          <div className={styles.kicker}>Team Profile</div>
+          <h2>{profile.team}</h2>
+          <p>Challenge profile, call trends, and recent event log.</p>
+        </div>
+        <button type="button" className={styles.closeButton} onClick={onClose}>Close</button>
+      </div>
+      <div className={styles.profileMetrics}>
+        <ProfileMetric label="Calls Against" value={profile.callsAgainst} detail={`Rank ${profile.callsAgainstRank || "-"}`} />
+        <ProfileMetric label="Calls For" value={profile.callsFor} />
+        <ProfileMetric label="Challenges" value={profile.challenges} detail={`Rank ${profile.challengesRank || "-"}`} />
+        <ProfileMetric label="Successful" value={profile.successfulChallenges} />
+        <ProfileMetric label="Success Rate" value={formatRate(profile.challengeRate)} detail={`Rank ${profile.challengeRateRank || "-"}`} />
+      </div>
+      <div className={styles.detailGrid}>
+        <TopList title="Calls By Official" items={profile.callsByOfficial} />
+        <TopList title="Calls By Category" items={profile.callsByCategory} />
+      </div>
+      <section className={styles.detailBlock}>
+        <h3>Challenge Log</h3>
+        <MiniChallengeLog rows={profile.challengeLog || []} />
+      </section>
+    </section>
+  );
+}
+
 export default function Officiating() {
   const [params, setParams] = useSearchParams();
   const { isAdmin } = useAuth();
   const selectedTab = params.get("tab") || "tonight";
+  const [officialSort, setOfficialSort] = useState({ key: "calls", direction: "desc" });
+  const [teamSort, setTeamSort] = useState({ key: "challenges", direction: "desc" });
+  const [challengeSort, setChallengeSort] = useState({ key: "game_date", direction: "desc" });
+  const [selectedOfficial, setSelectedOfficial] = useState(null);
+  const [selectedTeam, setSelectedTeam] = useState(null);
   const activeTab = TABS.some((tab) => tab.key === selectedTab) && (selectedTab !== "review" || isAdmin)
     ? selectedTab
     : "tonight";
@@ -192,6 +391,25 @@ export default function Officiating() {
     [isAdmin]
   );
   const overview = data?.overview || {};
+  const sortedOfficials = useMemo(
+    () => sortRows(data?.officialProfiles || [], officialSort, "name"),
+    [data?.officialProfiles, officialSort]
+  );
+  const sortedTeams = useMemo(
+    () => sortRows(data?.teamProfiles || [], teamSort, "team"),
+    [data?.teamProfiles, teamSort]
+  );
+  const sortedChallenges = useMemo(
+    () => sortRows(data?.challengeLog || [], challengeSort, "game_id"),
+    [data?.challengeLog, challengeSort]
+  );
+
+  const toggleSort = (setter) => (key) => {
+    setter((current) => ({
+      key,
+      direction: current.key === key && current.direction === "desc" ? "asc" : "desc",
+    }));
+  };
 
   const setTab = (tab) => {
     const nextParams = new URLSearchParams(params);
@@ -261,11 +479,27 @@ export default function Officiating() {
           This report will use Wizards game-day assignments once the ingestion job has populated official profiles.
         </EmptyPanel>
       ) : activeTab === "officials" ? (
-        <OfficialsTable rows={data?.officialProfiles || []} />
+        <>
+          <OfficialsTable
+            rows={sortedOfficials}
+            sort={officialSort}
+            onSort={toggleSort(setOfficialSort)}
+            onSelect={setSelectedOfficial}
+          />
+          <OfficialProfile profile={selectedOfficial} onClose={() => setSelectedOfficial(null)} />
+        </>
       ) : activeTab === "teams" ? (
-        <TeamsTable rows={data?.teamProfiles || []} />
+        <>
+          <TeamsTable
+            rows={sortedTeams}
+            sort={teamSort}
+            onSort={toggleSort(setTeamSort)}
+            onSelect={setSelectedTeam}
+          />
+          <TeamProfile profile={selectedTeam} onClose={() => setSelectedTeam(null)} />
+        </>
       ) : activeTab === "challenge-log" ? (
-        <ChallengeLog rows={data?.challengeLog || []} />
+        <ChallengeLog rows={sortedChallenges} sort={challengeSort} onSort={toggleSort(setChallengeSort)} />
       ) : (
         <EmptyPanel title="Review Queue">
           Low-confidence official matches and challenge matches will appear here for admin review.

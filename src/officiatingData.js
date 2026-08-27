@@ -113,6 +113,11 @@ function buildOfficialProfiles(callEvents, challengeEvents, assignments) {
         technicals: 0,
         challenges: 0,
         successfulChallenges: 0,
+        callsByTeam: {},
+        callsByCategory: {},
+        schedule: [],
+        recentCalls: [],
+        challengeLog: [],
       });
     }
     return profiles.get(id);
@@ -121,6 +126,7 @@ function buildOfficialProfiles(callEvents, challengeEvents, assignments) {
   assignments.forEach((assignment) => {
     const profile = ensure(getOfficialKey(assignment), assignment);
     if (assignment.game_id) profile.games.add(assignment.game_id);
+    profile.schedule.push(assignment);
   });
 
   callEvents.forEach((event) => {
@@ -131,6 +137,10 @@ function buildOfficialProfiles(callEvents, challengeEvents, assignments) {
     if (category === "foul") profile.fouls += 1;
     else if (category === "violation") profile.violations += 1;
     else if (category === "technical") profile.technicals += 1;
+    const team = String(event.charged_team || event.team_tricode || "Unknown").trim();
+    profile.callsByTeam[team] = (profile.callsByTeam[team] || 0) + 1;
+    profile.callsByCategory[category || "unknown"] = (profile.callsByCategory[category || "unknown"] || 0) + 1;
+    profile.recentCalls.push(event);
   });
 
   challengeEvents.forEach((event) => {
@@ -147,16 +157,33 @@ function buildOfficialProfiles(callEvents, challengeEvents, assignments) {
       if (event.game_id) profile.games.add(event.game_id);
       profile.challenges += 1;
       if (normalizeStatus(event.challenge_outcome) === "successful") profile.successfulChallenges += 1;
+      profile.challengeLog.push(event);
     });
   });
 
-  return [...profiles.values()]
+  const rows = [...profiles.values()]
     .map((profile) => ({
       ...profile,
       games: profile.games.size,
+      callsPerGame: safeRate(profile.calls, profile.games.size),
       challengeRate: safeRate(profile.successfulChallenges, profile.challenges),
+      schedule: profile.schedule
+        .sort((left, right) => String(right.game_date || "").localeCompare(String(left.game_date || "")))
+        .slice(0, 20),
+      recentCalls: profile.recentCalls
+        .sort((left, right) => String(right.game_date || "").localeCompare(String(left.game_date || "")))
+        .slice(0, 20),
+      challengeLog: profile.challengeLog
+        .sort((left, right) => String(right.game_date || "").localeCompare(String(left.game_date || "")))
+        .slice(0, 20),
     }))
     .sort((a, b) => b.calls - a.calls || b.challenges - a.challenges || a.name.localeCompare(b.name));
+
+  return addRanks(rows, [
+    ["callsRank", "calls"],
+    ["callsPerGameRank", "callsPerGame"],
+    ["challengeRateRank", "challengeRate"],
+  ]);
 }
 
 function buildTeamProfiles(callEvents, challengeEvents) {
@@ -170,6 +197,10 @@ function buildTeamProfiles(callEvents, challengeEvents) {
         callsFor: 0,
         challenges: 0,
         successfulChallenges: 0,
+        callsByOfficial: {},
+        callsByCategory: {},
+        challengeLog: [],
+        recentCalls: [],
       });
     }
     return teams.get(key);
@@ -180,20 +211,52 @@ function buildTeamProfiles(callEvents, challengeEvents) {
     const benefitingTeam = String(event.benefiting_team || "").trim();
     if (chargedTeam) ensure(chargedTeam).callsAgainst += 1;
     if (benefitingTeam) ensure(benefitingTeam).callsFor += 1;
+    [chargedTeam, benefitingTeam].filter(Boolean).forEach((team) => {
+      const profile = ensure(team);
+      const official = String(event.official_name || "Unknown").trim();
+      const category = normalizeStatus(event.primary_category) || "unknown";
+      profile.callsByOfficial[official] = (profile.callsByOfficial[official] || 0) + 1;
+      profile.callsByCategory[category] = (profile.callsByCategory[category] || 0) + 1;
+      profile.recentCalls.push(event);
+    });
   });
 
   challengeEvents.forEach((event) => {
     const team = ensure(event.challenging_team);
     team.challenges += 1;
     if (normalizeStatus(event.challenge_outcome) === "successful") team.successfulChallenges += 1;
+    team.challengeLog.push(event);
   });
 
-  return [...teams.values()]
+  const rows = [...teams.values()]
     .map((team) => ({
       ...team,
       challengeRate: safeRate(team.successfulChallenges, team.challenges),
+      challengeLog: team.challengeLog
+        .sort((left, right) => String(right.game_date || "").localeCompare(String(left.game_date || "")))
+        .slice(0, 40),
+      recentCalls: team.recentCalls
+        .sort((left, right) => String(right.game_date || "").localeCompare(String(left.game_date || "")))
+        .slice(0, 20),
     }))
     .sort((a, b) => b.challenges - a.challenges || b.callsAgainst - a.callsAgainst || a.team.localeCompare(b.team));
+
+  return addRanks(rows, [
+    ["callsAgainstRank", "callsAgainst"],
+    ["challengeRateRank", "challengeRate"],
+    ["challengesRank", "challenges"],
+  ]);
+}
+
+function addRanks(rows, fields) {
+  fields.forEach(([rankKey, valueKey]) => {
+    [...rows]
+      .sort((left, right) => Number(right[valueKey] || 0) - Number(left[valueKey] || 0))
+      .forEach((row, index) => {
+        row[rankKey] = index + 1;
+      });
+  });
+  return rows;
 }
 
 function buildOverview(callEvents, challengeEvents, assignments) {
