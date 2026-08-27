@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { enrichChallengeEventsWithOfficials } from "../src/officiatingChallengeMatcher.js";
 import { detectCoachChallengeActions, extractOfficialCallEvents } from "../src/officiatingParser.js";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
@@ -255,12 +256,17 @@ function toChallengeRow(event) {
     challenging_team: event.challengingTeam,
     period: event.period,
     game_clock: event.gameClock,
+    crew_chief_id: event.crew_chief_id,
+    crew_chief_name: event.crew_chief_name,
+    whistling_official_id: event.whistling_official_id,
+    whistling_official_name: event.whistling_official_name,
     challenge_outcome: event.challengeOutcome,
-    matched_action_number: event.matchedActionNumber,
-    match_confidence: event.matchConfidence,
-    match_reason: event.matchReason,
+    matched_action_number: event.matched_action_number ?? event.matchedActionNumber,
+    match_confidence: event.match_confidence ?? event.matchConfidence,
+    match_reason: event.match_reason ?? event.matchReason,
+    review_status: event.review_status || "auto",
     source: event.source,
-    source_payload: event.sourcePayload,
+    source_payload: event.source_payload || event.sourcePayload,
   };
 }
 
@@ -297,8 +303,9 @@ function buildIngestSql({ gameIds, assignmentRows, callRows, challengeRows }) {
   ];
   const challengeColumns = [
     "season", "season_type", "game_id", "game_date", "home_team", "away_team", "challenging_team", "period",
-    "game_clock", "challenge_outcome", "matched_action_number", "match_confidence", "match_reason", "source",
-    "source_payload",
+    "game_clock", "crew_chief_id", "crew_chief_name", "whistling_official_id", "whistling_official_name",
+    "challenge_outcome", "matched_action_number", "match_confidence", "match_reason", "review_status",
+    "source", "source_payload",
   ];
   const commonTypes = {
     season: "text",
@@ -367,10 +374,15 @@ function buildIngestSql({ gameIds, assignmentRows, callRows, challengeRows }) {
         challenging_team: "text",
         period: "integer",
         game_clock: "text",
+        crew_chief_id: "text",
+        crew_chief_name: "text",
+        whistling_official_id: "text",
+        whistling_official_name: "text",
         challenge_outcome: "text",
         matched_action_number: "integer",
         match_confidence: "numeric",
         match_reason: "text",
+        review_status: "text",
         source: "text",
       },
       rows: challengeRows,
@@ -445,11 +457,12 @@ async function main() {
     seasonType: gameRef.seasonType,
     gameDate: gameRef.gameDate,
   }).map(toCallRow));
-  const challengeRows = loadedGames.flatMap(({ game, gameRef }) => detectCoachChallengeActions(game, {
+  const detectedChallengeRows = loadedGames.flatMap(({ game, gameRef }) => detectCoachChallengeActions(game, {
     season,
     seasonType: gameRef.seasonType,
     gameDate: gameRef.gameDate,
   }).map(toChallengeRow));
+  const challengeRows = enrichChallengeEventsWithOfficials(detectedChallengeRows, callRows, assignmentRows);
   const processedGameIds = loadedGames.map(({ gameRef }) => gameRef.gameId);
   let generatedSqlChunks = [];
   if (sqlOutputDir) {

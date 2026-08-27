@@ -2,12 +2,23 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { enrichChallengeEventsWithOfficials } from "../src/officiatingChallengeMatcher.js";
+import { extractOfficialCallEvents } from "../src/officiatingParser.js";
 
+const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const OFFICIAL_PAGE_URL = "https://official.nba.com/2025-26-nba-coachs-challenge-reviews/";
 const REGULAR_SEASON_PDF_URL = "https://ak-static.cms.nba.com/wp-content/uploads/sites/4/2026/07/2025-26-NBA-Coachs-Challenges-04-13-26.pdf";
 const PLAYOFFS_PDF_URL = "https://ak-static.cms.nba.com/wp-content/uploads/sites/4/2026/06/2025-26-NBA-Coachs-Challenges-06-15-26.pdf";
 const DEFAULT_SEASON = "2025-26";
 const SOURCE = "nba_official_challenge_pdf";
+const NBA_REQUEST_HEADERS = {
+  "Accept-Language": "en-US,en;q=0.9",
+  Origin: "https://www.nba.com",
+  Referer: "https://www.nba.com/",
+  "User-Agent": "Mozilla/5.0 (compatible; NBA Dashboard Officiating Importer)",
+  "x-nba-stats-origin": "stats",
+  "x-nba-stats-token": "true",
+};
 
 function readArg(name) {
   const prefix = `--${name}=`;
@@ -15,15 +26,121 @@ function readArg(name) {
   return match ? match.slice(prefix.length).trim() : "";
 }
 
+function hasFlag(name) {
+  return process.argv.includes(`--${name}`);
+}
+
 function readIntegerArg(name, fallback) {
   const value = Number(readArg(name));
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
+async function fetchJson(url, options = {}) {
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      Accept: "application/json, text/plain, */*",
+      ...(options.headers || {}),
+    },
+  });
+  if (!response.ok) throw new Error(`${url} failed (${response.status})`);
+  return response.json();
 }
 
 function readListArg(name, fallback = []) {
   const value = readArg(name);
   if (!value) return fallback;
   return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+async function fetchGame(gameId) {
+  try {
+    return await fetchJson(`${API_BASE}/games/${encodeURIComponent(gameId)}`);
+  } catch (cloudfrontError) {
+    try {
+      const [boxscorePayload, playByPlayPayload] = await Promise.all([
+        fetchJson(`https://cdn.nba.com/static/json/liveData/boxscore/boxscore_${encodeURIComponent(gameId)}.json`, {
+          headers: NBA_REQUEST_HEADERS,
+        }),
+        fetchJson(`https://cdn.nba.com/static/json/liveData/playbyplay/playbyplay_${encodeURIComponent(gameId)}.json`, {
+          headers: NBA_REQUEST_HEADERS,
+        }),
+      ]);
+      return {
+        ...(boxscorePayload.game || {}),
+        gameId,
+        playByPlayActions: playByPlayPayload.game?.actions || [],
+        source: "nba_live_data",
+      };
+    } catch (liveDataError) {
+      const firstMessage = cloudfrontError instanceof Error ? cloudfrontError.message : "CloudFront fetch failed";
+      const secondMessage = liveDataError instanceof Error ? liveDataError.message : "NBA live-data fetch failed";
+      throw new Error(`${firstMessage}; fallback failed: ${secondMessage}`);
+    }
+  }
+}
+
+async function mapWithConcurrency(items, concurrency, mapper) {
+  const results = new Array(items.length);
+  let index = 0;
+  async function worker() {
+    while (index < items.length) {
+      const currentIndex = index;
+      index += 1;
+      results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+  return results;
+}
+
+function normalizedSeasonType(game, fallback = "") {
+  return String(game.seasonType || fallback || "").replace(/^playoffs$/i, "Playoffs");
+}
+
+function normalizedGameDate(game, fallback = "") {
+  return String(game.gameDate || game.gameEt || game.gameTimeUTC || fallback || "").slice(0, 10) || null;
+}
+
+function buildAssignmentRows(game, discovered = {}) {
+  const officials = Array.isArray(game.officials) ? game.officials : [];
+  return officials.map((official, index) => ({
+    season: String(game.seasonYear || discovered.season || DEFAULT_SEASON),
+    season_type: normalizedSeasonType(game, discovered.seasonType),
+    game_id: String(game.gameId || discovered.gameId || ""),
+    game_date: normalizedGameDate(game, discovered.gameDate),
+    home_team: String(game.homeTeam?.teamTricode || discovered.homeTeam || ""),
+    away_team: String(game.awayTeam?.teamTricode || discovered.awayTeam || ""),
+    official_id: String(official.personId || official.officialId || ""),
+    official_name: [official.firstName, official.familyName || official.lastName].filter(Boolean).join(" ").trim(),
+    jersey_number: String(official.jerseyNum || official.jerseyNumber || "").trim(),
+    role_key: index === 0 ? "crewChief" : "",
+    assignment_order: index + 1,
+    is_alternate: officials.length === 4 && index === 3,
+    source: "game_metadata",
+    source_payload: official,
+  })).filter((row) => row.game_id && row.official_name);
+}
+
+function toCallRow(event) {
+  return {
+    season: event.season || DEFAULT_SEASON,
+    season_type: event.seasonType,
+    game_id: event.gameId,
+    game_date: event.gameDate ? event.gameDate.slice(0, 10) : null,
+    home_team: event.homeTeam,
+    away_team: event.awayTeam,
+    period: event.period,
+    game_clock: event.gameClock,
+    action_number: event.actionNumber,
+    action_type: event.actionType,
+    description: event.description,
+    official_id: event.officialId,
+    official_name: event.officialName,
+    primary_category: event.primaryCategory,
+    charged_team: event.chargedTeam,
+    benefiting_team: event.benefitingTeam,
+  };
 }
 
 function safeIdentifierToken(value) {
@@ -150,7 +267,8 @@ function insertFromJson(rows) {
   const columns = [
     "season", "season_type", "game_id", "game_date", "home_team", "away_team", "challenging_team", "period",
     "game_clock", "challenge_type", "initial_call", "call_ruling", "ruling_outcome", "challenge_outcome",
-    "video_url", "match_confidence", "match_reason", "review_status", "source", "source_payload",
+    "video_url", "crew_chief_id", "crew_chief_name", "whistling_official_id", "whistling_official_name",
+    "matched_action_number", "match_confidence", "match_reason", "review_status", "source", "source_payload",
   ];
   const types = {
     season: "text",
@@ -168,6 +286,11 @@ function insertFromJson(rows) {
     ruling_outcome: "text",
     challenge_outcome: "text",
     video_url: "text",
+    crew_chief_id: "text",
+    crew_chief_name: "text",
+    whistling_official_id: "text",
+    whistling_official_name: "text",
+    matched_action_number: "integer",
     match_confidence: "numeric",
     match_reason: "text",
     review_status: "text",
@@ -254,9 +377,38 @@ function summarize(rows, generatedSqlChunks) {
     wizardsGameChallenges: wizardsGameRows.length,
     wizardsChallenges: wizardsChallengedRows.length,
     wizardsSuccessfulChallenges: wizardsChallengedRows.filter((row) => row.challenge_outcome === "successful").length,
+    rowsWithCrewChief: rows.filter((row) => row.crew_chief_name).length,
+    rowsWithWhistlingOfficial: rows.filter((row) => row.whistling_official_name).length,
+    rowsNeedingReview: rows.filter((row) => row.review_status === "needs_review").length,
     rowsMissingGameId: rows.filter((row) => !row.game_id).length,
     generatedSqlChunks,
   };
+}
+
+async function enrichOfficialRows(challengeRows, { season, concurrency }) {
+  const gameIds = [...new Set(challengeRows.map((row) => row.game_id).filter(Boolean))];
+  const loadedGames = await mapWithConcurrency(gameIds, concurrency, async (gameId) => {
+    try {
+      const game = await fetchGame(gameId);
+      return { gameId, game };
+    } catch (error) {
+      console.warn(`Could not enrich ${gameId}: ${error instanceof Error ? error.message : "unknown error"}`);
+      return null;
+    }
+  });
+  const games = loadedGames.filter(Boolean);
+  const assignmentRows = games.flatMap(({ game, gameId }) => buildAssignmentRows(game, {
+    season,
+    gameId,
+    seasonType: challengeRows.find((row) => row.game_id === gameId)?.season_type,
+    gameDate: challengeRows.find((row) => row.game_id === gameId)?.game_date,
+  }));
+  const callRows = games.flatMap(({ game, gameId }) => extractOfficialCallEvents(game, {
+    season,
+    seasonType: challengeRows.find((row) => row.game_id === gameId)?.season_type,
+    gameDate: challengeRows.find((row) => row.game_id === gameId)?.game_date,
+  }).map(toCallRow));
+  return enrichChallengeEventsWithOfficials(challengeRows, callRows, assignmentRows);
 }
 
 async function main() {
@@ -273,12 +425,16 @@ async function main() {
   const sqlOut = readArg("sql-out");
   const sqlDir = readArg("sql-dir");
   const sqlChunkSize = readIntegerArg("sql-chunk-size", 250);
+  const enrichmentConcurrency = readIntegerArg("enrichment-concurrency", 4);
 
   const extractedRows = await runPythonExtractor(pdfPath);
-  const challengeRows = applyFilters(
+  const baseChallengeRows = applyFilters(
     extractedRows.map((row) => toChallengeRow(row, { season, pdfUrl })),
     { seasonTypes, gameIdPrefixes }
   );
+  const challengeRows = hasFlag("skip-official-enrichment")
+    ? baseChallengeRows
+    : await enrichOfficialRows(baseChallengeRows, { season, concurrency: enrichmentConcurrency });
   let generatedSqlChunks = [];
   if (sqlOut) {
     await mkdir(path.dirname(sqlOut), { recursive: true });

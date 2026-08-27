@@ -133,6 +133,13 @@ The NBA official day-by-day full-season challenge logs are not daily feeds. They
 - Weekly PDF imports must only refresh official PDF rows. They must preserve provisional PBP rows so we can audit source coverage and use them later for referee/call-event matching.
 - Run the challenge coverage audit after weekly imports to identify PBP-detected events missing from the official log and official events missing from the PBP feed.
 
+Challenge-to-official enrichment should run before league-wide backfills:
+
+- Crew chief attribution comes from that game's official assignment row and should be available for nearly every challenge with a matched `game_id`.
+- Whistling-official attribution comes from matching the challenge to an official-attributed PBP call in the same game, period, and nearby clock with a compatible call category.
+- If the challenged call was erased or rewritten after an overturn, PBP may not contain the original call/official token. Keep those rows with `review_status = 'needs_review'` rather than guessing.
+- Confidence and match reason should be stored on every challenge row so low-confidence matching can be audited later.
+
 ## Data Sources
 
 Primary public sources:
