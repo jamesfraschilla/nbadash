@@ -1,9 +1,10 @@
 import { supabase } from "./supabaseClient.js";
 
 const DEFAULT_SEASON = "2025-26";
-const CALL_EVENT_LIMIT = 3000;
-const CHALLENGE_LIMIT = 1000;
-const ASSIGNMENT_LIMIT = 1200;
+const SUPABASE_PAGE_SIZE = 1000;
+const CALL_EVENT_LIMIT = 5000;
+const CHALLENGE_LIMIT = 2000;
+const ASSIGNMENT_LIMIT = 2000;
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -22,15 +23,22 @@ function isMissingTableError(error) {
   return error?.code === "42P01" || message.includes("does not exist") || message.includes("schema cache");
 }
 
-async function selectTable(table, queryBuilder) {
+async function selectTable(table, queryBuilder, { maxRows = SUPABASE_PAGE_SIZE } = {}) {
   if (!supabase) return { data: [], unavailable: true };
-  const query = queryBuilder(supabase.from(table));
-  const { data, error } = await query;
-  if (error) {
-    if (isMissingTableError(error)) return { data: [], unavailable: true };
-    throw error;
+  const rows = [];
+  for (let from = 0; from < maxRows; from += SUPABASE_PAGE_SIZE) {
+    const to = Math.min(from + SUPABASE_PAGE_SIZE - 1, maxRows - 1);
+    const query = queryBuilder(supabase.from(table)).range(from, to);
+    const { data, error } = await query;
+    if (error) {
+      if (isMissingTableError(error)) return { data: [], unavailable: true };
+      throw error;
+    }
+    const page = asArray(data);
+    rows.push(...page);
+    if (page.length < SUPABASE_PAGE_SIZE) break;
   }
-  return { data: asArray(data), unavailable: false };
+  return { data: rows, unavailable: false };
 }
 
 function getOfficialKey(row) {
@@ -161,18 +169,15 @@ export async function fetchOfficiatingDashboardData({ season = DEFAULT_SEASON } 
     selectTable("nba_official_call_events", (query) => query
       .select("*")
       .eq("season", season)
-      .order("game_date", { ascending: false })
-      .limit(CALL_EVENT_LIMIT)),
+      .order("game_date", { ascending: false }), { maxRows: CALL_EVENT_LIMIT }),
     selectTable("nba_coach_challenge_events", (query) => query
       .select("*")
       .eq("season", season)
-      .order("game_date", { ascending: false })
-      .limit(CHALLENGE_LIMIT)),
+      .order("game_date", { ascending: false }), { maxRows: CHALLENGE_LIMIT }),
     selectTable("nba_official_game_assignments", (query) => query
       .select("*")
       .eq("season", season)
-      .order("game_date", { ascending: false })
-      .limit(ASSIGNMENT_LIMIT)),
+      .order("game_date", { ascending: false }), { maxRows: ASSIGNMENT_LIMIT }),
   ]);
 
   const callEvents = callEventsResult.data;

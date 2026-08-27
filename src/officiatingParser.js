@@ -4,6 +4,16 @@ function cleanText(value) {
   return String(value || "").trim();
 }
 
+function otherTeam(team, context = {}) {
+  const current = cleanText(team);
+  const home = cleanText(context.homeTeam);
+  const away = cleanText(context.awayTeam);
+  if (!current) return "";
+  if (current === home) return away;
+  if (current === away) return home;
+  return "";
+}
+
 export function normalizeOfficialKey(value) {
   return cleanText(value)
     .normalize("NFKD")
@@ -141,6 +151,7 @@ export function buildOfficialCallEvent(action = {}, context = {}) {
   const official = match.official;
   const categories = classifyOfficialAction(action);
   const officialName = official ? getOfficialName(official) : "";
+  const teamTricode = cleanText(action.teamTricode);
 
   return {
     season: cleanText(context.season),
@@ -161,11 +172,13 @@ export function buildOfficialCallEvent(action = {}, context = {}) {
     officialId: cleanText(official?.personId || official?.officialId),
     officialName,
     teamId: cleanText(action.teamId),
-    teamTricode: cleanText(action.teamTricode),
+    teamTricode,
     playerId: cleanText(action.personId),
     playerName: cleanText(action.playerName),
     primaryCategory: categories.primaryCategory,
     secondaryCategory: categories.secondaryCategory,
+    chargedTeam: teamTricode,
+    benefitingTeam: otherTeam(teamTricode, context),
     confidence: match.confidence,
     confidenceReason: match.reason,
     sourcePayload: action,

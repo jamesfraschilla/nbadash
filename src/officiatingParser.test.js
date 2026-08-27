@@ -71,6 +71,8 @@ test("buildOfficialCallEvent preserves raw action fields and matched official me
   assert.equal(event.primaryCategory, "violation");
   assert.equal(event.secondaryCategory, "delay_of_game");
   assert.equal(event.description, "CELTICS Violation: Delay Of Game (T.Maddox)");
+  assert.equal(event.chargedTeam, "BOS");
+  assert.equal(event.benefitingTeam, "PHI");
   assert.equal(event.sourcePayload.actionNumber, 123);
 });
 
