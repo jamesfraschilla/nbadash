@@ -122,6 +122,17 @@ Filterable league-wide table:
 - video link,
 - confidence/review status.
 
+## Regular-Season Data Cadence
+
+The NBA official day-by-day full-season challenge logs are not daily feeds. They are typically refreshed about once every seven days, so the application needs two challenge-ingestion modes:
+
+- Daily provisional mode: ingest coach's challenge markers from play-by-play/game metadata after each game. These rows use `source = 'play_by_play'` and should be treated as current but provisional.
+- Weekly reconciliation mode: when the NBA posts an updated official challenge PDF, import those rows with `source = 'nba_official_challenge_pdf'`. These rows become the authoritative challenge log for covered games.
+- Dashboard reads must dedupe challenge events by game, challenging team, period, and clock. When both sources exist for the same event, prefer the official NBA PDF row.
+- Daily backfills must only refresh provisional `play_by_play` challenge rows. They must not delete official PDF rows that were imported during weekly reconciliation.
+- Weekly PDF imports must only refresh official PDF rows. They must preserve provisional PBP rows so we can audit source coverage and use them later for referee/call-event matching.
+- Run the challenge coverage audit after weekly imports to identify PBP-detected events missing from the official log and official events missing from the PBP feed.
+
 ## Data Sources
 
 Primary public sources:
@@ -488,4 +499,3 @@ First usable version should:
 - Do not build a separate standalone app.
 - Do not depend on screenshots as data sources.
 - Do not fetch league-wide play-by-play from the browser.
-

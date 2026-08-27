@@ -8,7 +8,6 @@ const REGULAR_SEASON_PDF_URL = "https://ak-static.cms.nba.com/wp-content/uploads
 const PLAYOFFS_PDF_URL = "https://ak-static.cms.nba.com/wp-content/uploads/sites/4/2026/06/2025-26-NBA-Coachs-Challenges-06-15-26.pdf";
 const DEFAULT_SEASON = "2025-26";
 const SOURCE = "nba_official_challenge_pdf";
-const REPLACE_SOURCES = [SOURCE, "play_by_play"];
 
 function readArg(name) {
   const prefix = `--${name}=`;
@@ -190,7 +189,7 @@ function buildIngestSql(rows) {
     "begin;",
     `delete from public.nba_coach_challenge_events`,
     `where game_id = any(${toSqlArray(gameIds)})`,
-    `  and source = any(${toSqlArray(REPLACE_SOURCES)});`,
+    `  and source = ${toSqlString(SOURCE)};`,
     insertFromJson(rows),
     "commit;",
   ].join("\n\n");

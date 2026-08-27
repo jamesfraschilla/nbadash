@@ -218,12 +218,24 @@ export function detectCoachChallengeActions(game = {}, context = {}) {
   const homeTeam = cleanText(game.homeTeam?.teamTricode || game.homeTeam?.tricode || context.homeTeam);
   const awayTeam = cleanText(game.awayTeam?.teamTricode || game.awayTeam?.tricode || context.awayTeam);
 
-  return actions
-    .filter((action) => (
-      cleanText(action.actionType).toLowerCase() === "instantreplay" &&
-      cleanText(action.subType).toLowerCase() === "challenge"
-    ))
+  const challengeActionsByClock = new Map();
+  actions
+    .filter((action) => cleanText(action.subType).toLowerCase() === "challenge")
+    .forEach((action) => {
+      const key = [
+        cleanText(action.teamTricode),
+        cleanText(action.period),
+        cleanText(action.clock),
+      ].join("|");
+      const existing = challengeActionsByClock.get(key);
+      if (!existing || cleanText(action.actionType).toLowerCase() === "instantreplay") {
+        challengeActionsByClock.set(key, action);
+      }
+    });
+
+  return [...challengeActionsByClock.values()]
     .map((action) => {
+      const actionType = cleanText(action.actionType).toLowerCase();
       const descriptor = cleanText(action.descriptor).toLowerCase();
       return {
         season: cleanText(game.seasonYear || context.season),
@@ -237,8 +249,10 @@ export function detectCoachChallengeActions(game = {}, context = {}) {
         gameClock: cleanText(action.clock),
         challengeOutcome: descriptor === "overturned" ? "successful" : descriptor ? "unsuccessful" : "",
         matchedActionNumber: Number.isFinite(Number(action.actionNumber)) ? Number(action.actionNumber) : null,
-        matchConfidence: 0.72,
-        matchReason: "detected-pbp-instantreplay-challenge",
+        matchConfidence: actionType === "instantreplay" ? 0.72 : 0.58,
+        matchReason: actionType === "instantreplay"
+          ? "detected-pbp-instantreplay-challenge"
+          : `detected-pbp-${actionType || "unknown"}-challenge`,
         source: "play_by_play",
         sourcePayload: action,
       };

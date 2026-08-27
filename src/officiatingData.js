@@ -18,6 +18,53 @@ function normalizeStatus(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function clockSeconds(value) {
+  const text = String(value || "").trim();
+  const iso = /^PT(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$/.exec(text);
+  if (iso) return Number(iso[1] || 0) * 60 + Number(iso[2] || 0);
+  const mmss = /^(\d+):(\d+(?:\.\d+)?)$/.exec(text);
+  if (mmss) return Number(mmss[1]) * 60 + Number(mmss[2]);
+  return NaN;
+}
+
+function normalizedClockKey(value) {
+  const seconds = clockSeconds(value);
+  return Number.isFinite(seconds) ? String(Math.round(seconds * 10) / 10) : String(value || "").trim();
+}
+
+function challengeIdentity(event) {
+  return [
+    String(event.game_id || "").trim(),
+    String(event.challenging_team || "").trim(),
+    String(event.period ?? "").trim(),
+    normalizedClockKey(event.game_clock),
+  ].join("|");
+}
+
+function challengeSourceRank(event) {
+  if (event.source === "nba_official_challenge_pdf") return 3;
+  if (event.source === "play_by_play") return 2;
+  return 1;
+}
+
+export function preferAuthoritativeChallengeEvents(challengeEvents) {
+  const byIdentity = new Map();
+  asArray(challengeEvents).forEach((event) => {
+    const identity = challengeIdentity(event);
+    const existing = byIdentity.get(identity);
+    if (!existing || challengeSourceRank(event) > challengeSourceRank(existing)) {
+      byIdentity.set(identity, event);
+    }
+  });
+  return [...byIdentity.values()].sort((left, right) => {
+    const dateCompare = String(right.game_date || "").localeCompare(String(left.game_date || ""));
+    if (dateCompare !== 0) return dateCompare;
+    const gameCompare = String(right.game_id || "").localeCompare(String(left.game_id || ""));
+    if (gameCompare !== 0) return gameCompare;
+    return (Number(right.period) || 0) - (Number(left.period) || 0);
+  });
+}
+
 function isMissingTableError(error) {
   const message = String(error?.message || error?.details || "").toLowerCase();
   return error?.code === "42P01" || message.includes("does not exist") || message.includes("schema cache");
@@ -181,7 +228,7 @@ export async function fetchOfficiatingDashboardData({ season = DEFAULT_SEASON } 
   ]);
 
   const callEvents = callEventsResult.data;
-  const challengeEvents = challengeEventsResult.data;
+  const challengeEvents = preferAuthoritativeChallengeEvents(challengeEventsResult.data);
   const assignments = assignmentsResult.data;
 
   return {

@@ -312,7 +312,7 @@ function buildIngestSql({ gameIds, assignmentRows, callRows, challengeRows }) {
 
   return [
     "begin;",
-    `delete from public.nba_coach_challenge_events where game_id = any(${gameIdArray});`,
+    `delete from public.nba_coach_challenge_events where game_id = any(${gameIdArray}) and source = 'play_by_play';`,
     `delete from public.nba_official_call_events where game_id = any(${gameIdArray});`,
     `delete from public.nba_official_game_assignments where game_id = any(${gameIdArray});`,
     insertFromJson({

@@ -95,7 +95,7 @@ test("extractOfficialCallEvents returns every official-attributed play-by-play a
   assert.deepEqual(events.map((event) => event.officialName), ["Tre Maddox", "Scott Foster"]);
 });
 
-test("detectCoachChallengeActions extracts replay challenge rows from play-by-play", () => {
+test("detectCoachChallengeActions extracts challenge rows from play-by-play", () => {
   const challenges = detectCoachChallengeActions({
     gameId: "0042500131",
     seasonYear: "2025-26",
@@ -104,12 +104,16 @@ test("detectCoachChallengeActions extracts replay challenge rows from play-by-pl
     awayTeam: { teamTricode: "TOR" },
     playByPlayActions: [
       { actionNumber: 195, actionType: "instantreplay", subType: "challenge", descriptor: "support", period: 2, clock: "PT11M24.00S", teamTricode: "CLE" },
+      { actionNumber: 196, actionType: "timeout", subType: "challenge", period: 2, clock: "PT11M24.00S", teamTricode: "CLE" },
       { actionNumber: 618, actionType: "instantreplay", subType: "challenge", descriptor: "overturned", period: 4, clock: "PT06M24.00S", teamTricode: "TOR" },
+      { actionNumber: 620, actionType: "timeout", subType: "challenge", period: 4, clock: "PT05M24.00S", teamTricode: "CLE" },
     ],
   });
 
-  assert.equal(challenges.length, 2);
+  assert.equal(challenges.length, 3);
   assert.equal(challenges[0].challengingTeam, "CLE");
   assert.equal(challenges[0].challengeOutcome, "unsuccessful");
   assert.equal(challenges[1].challengeOutcome, "successful");
+  assert.equal(challenges[2].matchReason, "detected-pbp-timeout-challenge");
+  assert.equal(challenges[2].challengeOutcome, "");
 });
