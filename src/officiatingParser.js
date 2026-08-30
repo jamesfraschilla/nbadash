@@ -14,6 +14,33 @@ function otherTeam(team, context = {}) {
   return "";
 }
 
+function compactActionPayload(action = {}) {
+  return {
+    actionNumber: action.actionNumber ?? null,
+    orderNumber: action.orderNumber ?? null,
+    period: action.period ?? null,
+    clock: action.clock ?? "",
+    timeActual: action.timeActual ?? "",
+    actionType: action.actionType ?? "",
+    subType: action.subType ?? "",
+    descriptor: action.descriptor ?? "",
+    description: action.description ?? "",
+    officialId: action.officialId ?? "",
+    teamId: action.teamId ?? "",
+    teamTricode: action.teamTricode ?? "",
+    personId: action.personId ?? "",
+    playerName: action.playerName ?? "",
+    foulDrawnPersonId: action.foulDrawnPersonId ?? "",
+    foulDrawnPlayerName: action.foulDrawnPlayerName ?? "",
+    foulPersonalTotal: action.foulPersonalTotal ?? null,
+    foulTechnicalTotal: action.foulTechnicalTotal ?? null,
+    turnoverTotal: action.turnoverTotal ?? null,
+    side: action.side ?? "",
+    xLegacy: action.xLegacy ?? null,
+    yLegacy: action.yLegacy ?? null,
+  };
+}
+
 export function normalizeOfficialKey(value) {
   return cleanText(value)
     .normalize("NFKD")
@@ -27,6 +54,35 @@ function getOfficialName(official) {
   const last = cleanText(official?.familyName || official?.lastName);
   const combined = `${first} ${last}`.trim();
   return combined || cleanText(official?.name || official?.fullName || official?.displayName || official?.officialName);
+}
+
+function getOfficialId(official) {
+  return cleanText(official?.personId || official?.officialId || official?.id);
+}
+
+function officialNameFromContext(officialId, context = {}) {
+  const cleanId = cleanText(officialId);
+  if (!cleanId) return "";
+  const direct = context.officialNameById instanceof Map
+    ? context.officialNameById.get(cleanId)
+    : context.officialNameById?.[cleanId];
+  return cleanText(direct);
+}
+
+function matchOfficialId(officialId, officials = []) {
+  const cleanId = cleanText(officialId);
+  if (!cleanId) {
+    return { official: null, confidence: 0, reason: "missing-official-id" };
+  }
+  const matches = (Array.isArray(officials) ? officials : [])
+    .filter((official) => getOfficialId(official) === cleanId);
+  if (matches.length === 1) {
+    return { official: matches[0], confidence: 1, reason: "exact-official-id" };
+  }
+  if (matches.length > 1) {
+    return { official: null, confidence: 0.45, reason: "ambiguous-official-id" };
+  }
+  return { official: null, confidence: 0.86, reason: "unassigned-structured-official-id" };
 }
 
 function splitToken(token) {
@@ -136,21 +192,49 @@ export function classifyOfficialAction(action = {}) {
     secondaryCategory = [descriptor, subType].filter(Boolean).join("_") || "foul";
   } else if (primaryCategory === "instant_replay") {
     secondaryCategory = [subType, descriptor].filter(Boolean).join("_") || "instant_replay";
+  } else if (primaryCategory === "turnover") {
+    secondaryCategory = [descriptor, subType].filter(Boolean).join("_") || "turnover";
   }
 
   return {
     primaryCategory,
-    secondaryCategory: secondaryCategory || "",
+    secondaryCategory: cleanText(secondaryCategory).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "",
   };
+}
+
+function isOfficialAttributedAction(action = {}) {
+  const categories = classifyOfficialAction(action);
+  const actionType = cleanText(action.actionType).toLowerCase();
+  const subType = cleanText(action.subType).toLowerCase();
+  if (actionType === "turnover" && subType.includes("offensive foul")) return false;
+  return ["foul", "violation", "technical", "ejection", "turnover"].includes(categories.primaryCategory);
 }
 
 export function buildOfficialCallEvent(action = {}, context = {}) {
   const token = extractOfficialToken(action.description);
-  if (!token) return null;
-  const match = matchOfficialToken(token, context.officials);
+  const structuredOfficialId = cleanText(action.officialId);
+  if (!token && !structuredOfficialId) return null;
+  if (!isOfficialAttributedAction(action)) return null;
+
+  const match = structuredOfficialId
+    ? matchOfficialId(structuredOfficialId, context.officials)
+    : matchOfficialToken(token, context.officials);
   const official = match.official;
   const categories = classifyOfficialAction(action);
-  const officialName = official ? getOfficialName(official) : "";
+  const officialName = official
+    ? getOfficialName(official)
+    : officialNameFromContext(structuredOfficialId, context);
+  const officialId = structuredOfficialId || getOfficialId(official);
+  const confidence = official
+    ? match.confidence
+    : officialName
+      ? Math.max(match.confidence, 0.92)
+      : match.confidence;
+  const confidenceReason = official
+    ? match.reason
+    : officialName
+      ? `${match.reason}+context-official-name`
+      : match.reason;
   const teamTricode = cleanText(action.teamTricode);
 
   return {
@@ -169,7 +253,7 @@ export function buildOfficialCallEvent(action = {}, context = {}) {
     descriptor: cleanText(action.descriptor),
     description: cleanText(action.description),
     officialToken: token,
-    officialId: cleanText(official?.personId || official?.officialId),
+    officialId,
     officialName,
     teamId: cleanText(action.teamId),
     teamTricode,
@@ -179,9 +263,9 @@ export function buildOfficialCallEvent(action = {}, context = {}) {
     secondaryCategory: categories.secondaryCategory,
     chargedTeam: teamTricode,
     benefitingTeam: otherTeam(teamTricode, context),
-    confidence: match.confidence,
-    confidenceReason: match.reason,
-    sourcePayload: action,
+    confidence,
+    confidenceReason,
+    sourcePayload: compactActionPayload(action),
   };
 }
 
@@ -254,7 +338,7 @@ export function detectCoachChallengeActions(game = {}, context = {}) {
           ? "detected-pbp-instantreplay-challenge"
           : `detected-pbp-${actionType || "unknown"}-challenge`,
         source: "play_by_play",
-        sourcePayload: action,
+        sourcePayload: compactActionPayload(action),
       };
     });
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { preferAuthoritativeChallengeEvents } from "./officiatingData.js";
+import { buildOfficialProfiles, buildTeamProfiles, preferAuthoritativeChallengeEvents, specificCallCategory } from "./officiatingData.js";
 
 test("preferAuthoritativeChallengeEvents keeps daily PBP rows until weekly official rows arrive", () => {
   const events = preferAuthoritativeChallengeEvents([
@@ -36,4 +36,109 @@ test("preferAuthoritativeChallengeEvents keeps daily PBP rows until weekly offic
   assert.equal(events.length, 2);
   assert.equal(events.find((event) => event.game_id === "0022500109").source, "nba_official_challenge_pdf");
   assert.equal(events.find((event) => event.game_id === "0022500123").source, "play_by_play");
+});
+
+test("specificCallCategory displays detailed foul and violation types", () => {
+  assert.equal(specificCallCategory({
+    primary_category: "foul",
+    descriptor: "shooting",
+    sub_type: "personal",
+    description: "J.Tatum S.FOUL (S.Foster)",
+  }), "Shooting Foul");
+
+  assert.equal(specificCallCategory({
+    primary_category: "foul",
+    descriptor: "loose_ball",
+    sub_type: "personal",
+    description: "J.Tatum L.B.FOUL (S.Foster)",
+  }), "Loose Ball Foul");
+
+  assert.equal(specificCallCategory({
+    primary_category: "foul",
+    descriptor: "personal",
+    description: "J.Tatum P.FOUL (S.Foster)",
+  }), "Foul on Floor");
+
+  assert.equal(specificCallCategory({
+    primary_category: "violation",
+    secondary_category: "delay_of_game",
+    description: "CELTICS Violation: Delay Of Game (T.Maddox)",
+  }), "Delay Of Game");
+});
+
+test("official challenge logs prefer whistle label while counting dual crew-chief role", () => {
+  const [profile] = buildOfficialProfiles([], [
+    {
+      id: "challenge-1",
+      game_id: "0022500001",
+      game_date: "2026-01-01",
+      away_team: "WAS",
+      home_team: "BOS",
+      period: 2,
+      game_clock: "04:22.0",
+      challenge_type: "Foul",
+      challenge_outcome: "unsuccessful",
+      crew_chief_id: "25",
+      crew_chief_name: "Scott Foster",
+      whistling_official_id: "25",
+      whistling_official_name: "Scott Foster",
+    },
+  ], [{
+    game_id: "0022500001",
+    game_date: "2026-01-01",
+    official_id: "25",
+    official_name: "Scott Foster",
+    role_key: "crewChief",
+  }]);
+
+  assert.equal(profile.name, "Scott Foster");
+  assert.equal(profile.whistleChallenges, 1);
+  assert.equal(profile.crewChiefChallenges, 1);
+  assert.equal(profile.successfulWhistleChallenges, 0);
+  assert.equal(profile.successfulCrewChiefChallenges, 0);
+  assert.equal(profile.challengeLog.length, 1);
+  assert.equal(profile.challengeLog[0].profileChallengeRole, "whistle");
+});
+
+test("team calls by official uses games the official worked for that team", () => {
+  const [profile] = buildTeamProfiles([
+    {
+      game_id: "game-1",
+      game_date: "2026-01-01",
+      away_team: "WAS",
+      home_team: "BOS",
+      charged_team: "BOS",
+      benefiting_team: "WAS",
+      official_name: "Tyler Ford",
+      primary_category: "foul",
+      descriptor: "shooting",
+    },
+    {
+      game_id: "game-2",
+      game_date: "2026-01-03",
+      away_team: "WAS",
+      home_team: "NYK",
+      charged_team: "NYK",
+      benefiting_team: "WAS",
+      official_name: "Tyler Ford",
+      primary_category: "foul",
+      descriptor: "personal",
+    },
+    {
+      game_id: "game-3",
+      game_date: "2026-01-05",
+      away_team: "WAS",
+      home_team: "PHI",
+      charged_team: "PHI",
+      benefiting_team: "WAS",
+      official_name: "Other Official",
+      primary_category: "violation",
+      secondary_category: "traveling",
+    },
+  ], []).filter((row) => row.team === "WAS");
+
+  assert.equal(profile.games, 3);
+  assert.equal(profile.netCallsFor, 1);
+  assert.equal(profile.callsByOfficial["Tyler Ford"], 1);
+  assert.equal(profile.callsByOfficial["Other Official"], 1);
 });

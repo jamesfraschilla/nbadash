@@ -12,12 +12,16 @@ function clockSeconds(value) {
 }
 
 function normalizedCategory(value) {
-  const text = cleanText(value).toLowerCase();
+  const text = cleanText(value).toLowerCase().replace(/[_-]+/g, " ");
   if (text.includes("foul")) return "foul";
   if (text.includes("goaltending") || text.includes("basket interference")) return "violation";
   if (text.includes("violation")) return "violation";
-  if (text.includes("oob") || text.includes("out of bounds") || text.includes("team ball")) return "turnover";
+  if (text.includes("turnover") || text.includes("oob") || text.includes("out of bounds") || text.includes("team ball")) return "turnover";
   return "";
+}
+
+function challengeCategory(challenge) {
+  return normalizedCategory(`${challenge.challenge_type || ""} ${challenge.initial_call || ""}`);
 }
 
 function findCrewChief(assignments, gameId) {
@@ -31,14 +35,21 @@ function findCrewChief(assignments, gameId) {
 }
 
 function isCompatibleCall(challenge, call) {
-  const challengeCategory = normalizedCategory(`${challenge.challenge_type || ""} ${challenge.initial_call || ""}`);
-  if (!challengeCategory) return true;
+  const category = challengeCategory(challenge);
+  if (!category) return true;
 
-  const callCategory = normalizedCategory(`${call.primary_category || ""} ${call.action_type || ""} ${call.description || ""}`);
-  if (challengeCategory === "turnover") {
+  const callCategory = normalizedCategory([
+    call.primary_category,
+    call.secondary_category,
+    call.action_type,
+    call.sub_type,
+    call.descriptor,
+    call.description,
+  ].filter(Boolean).join(" "));
+  if (category === "turnover") {
     return callCategory === "turnover" || callCategory === "violation";
   }
-  return callCategory === challengeCategory;
+  return callCategory === category;
 }
 
 function candidateScore(challenge, call, toleranceSeconds) {
@@ -54,6 +65,18 @@ function candidateScore(challenge, call, toleranceSeconds) {
   if (!isCompatibleCall(challenge, call)) return null;
 
   let score = 1 - (clockDelta / Math.max(toleranceSeconds, 1)) * 0.2;
+  const category = challengeCategory(challenge);
+  const callText = [
+    call.primary_category,
+    call.secondary_category,
+    call.action_type,
+    call.sub_type,
+    call.descriptor,
+    call.description,
+  ].filter(Boolean).join(" ").toLowerCase().replace(/[_-]+/g, " ");
+  if (category === "turnover" && callText.includes("out of bounds")) {
+    score += 0.08;
+  }
   if (cleanText(call.charged_team || call.chargedTeam) === cleanText(challenge.challenging_team || challenge.challengingTeam)) {
     score += 0.05;
   }
@@ -63,27 +86,53 @@ function candidateScore(challenge, call, toleranceSeconds) {
   return Math.min(score, 0.99);
 }
 
-function findMatchingCall(challenge, calls, toleranceSeconds) {
+function findMatchingCall(challenge, calls, toleranceSeconds, reasonSuffix = "at-clock") {
   const candidates = calls
     .map((call) => ({ call, score: candidateScore(challenge, call, toleranceSeconds) }))
     .filter((candidate) => candidate.score !== null)
     .sort((left, right) => right.score - left.score);
-  if (!candidates.length) return { call: null, confidence: 0, reason: "no-compatible-call-at-clock" };
+  if (!candidates.length) return { call: null, confidence: 0, reason: `no-compatible-call-${reasonSuffix}` };
   if (candidates.length > 1 && Math.abs(candidates[0].score - candidates[1].score) < 0.01) {
-    return { call: candidates[0].call, confidence: 0.62, reason: "ambiguous-compatible-call-at-clock" };
+    return { call: candidates[0].call, confidence: 0.62, reason: `ambiguous-compatible-call-${reasonSuffix}` };
   }
-  return { call: candidates[0].call, confidence: candidates[0].score, reason: "matched-compatible-call-at-clock" };
+  return { call: candidates[0].call, confidence: candidates[0].score, reason: `matched-compatible-call-${reasonSuffix}` };
+}
+
+function findSecondPassMatchingCall(challenge, calls, toleranceSeconds) {
+  const category = challengeCategory(challenge);
+  if (!category) {
+    return { call: null, confidence: 0, reason: "second-pass-skipped-low-whistle-signal-category" };
+  }
+  const adjustedTolerance = category === "turnover" ? Math.min(toleranceSeconds, 4) : toleranceSeconds;
+  return findMatchingCall(challenge, calls, adjustedTolerance, "second-pass-window");
+}
+
+function mergeMatchReason(existingReason, nextReason) {
+  return [...new Set([
+    ...cleanText(existingReason || "challenge-source").split(";"),
+    cleanText(nextReason),
+  ].map(cleanText).filter(Boolean))].join(";");
 }
 
 export function enrichChallengeEventsWithOfficials(challenges, calls, assignments, options = {}) {
   const toleranceSeconds = Number(options.clockToleranceSeconds) || 2;
+  const secondPassToleranceSeconds = Number(options.secondPassClockToleranceSeconds) || 12;
+  const secondPassMinConfidence = Number(options.secondPassMinConfidence) || 0.76;
   return challenges.map((challenge) => {
     const gameId = cleanText(challenge.game_id || challenge.gameId);
     const crewChief = findCrewChief(assignments, gameId);
-    const match = findMatchingCall(challenge, calls, toleranceSeconds);
+    const firstPass = findMatchingCall(challenge, calls, toleranceSeconds);
+    const secondPass = firstPass.call
+      ? firstPass
+      : findSecondPassMatchingCall(challenge, calls, secondPassToleranceSeconds);
+    const match = secondPass.call && secondPass.confidence >= secondPassMinConfidence
+      ? secondPass
+      : firstPass;
     const call = match.call;
+    const existingWhistle = cleanText(challenge.whistling_official_id || challenge.whistling_official_name);
+    const existingStatus = cleanText(challenge.review_status || challenge.reviewStatus);
     const confidence = call
-      ? Math.min(Number(challenge.match_confidence || challenge.matchConfidence || 0.55) + match.confidence, 1.95) / 2
+      ? Math.max(Number(challenge.match_confidence || challenge.matchConfidence || 0), match.confidence)
       : Number(challenge.match_confidence || challenge.matchConfidence || 0.55);
 
     return {
@@ -93,11 +142,16 @@ export function enrichChallengeEventsWithOfficials(challenges, calls, assignment
       whistling_official_id: cleanText(challenge.whistling_official_id || call?.official_id || call?.officialId),
       whistling_official_name: cleanText(challenge.whistling_official_name || call?.official_name || call?.officialName),
       matched_action_number: challenge.matched_action_number ?? challenge.matchedActionNumber ?? call?.action_number ?? call?.actionNumber ?? null,
+      matched_call_event_id: challenge.matched_call_event_id || challenge.matchedCallEventId || call?.id || null,
       match_confidence: confidence,
       match_reason: call
-        ? `${cleanText(challenge.match_reason || challenge.matchReason || "challenge-source")};${match.reason}`
+        ? mergeMatchReason(challenge.match_reason || challenge.matchReason, match.reason)
         : cleanText(challenge.match_reason || challenge.matchReason || match.reason),
-      review_status: call ? cleanText(challenge.review_status || "auto") : "needs_review",
+      review_status: call
+        ? existingStatus && existingStatus !== "needs_review" ? existingStatus : "auto"
+        : existingWhistle
+          ? existingStatus || "auto"
+          : "needs_review",
       source_payload: {
         ...(challenge.source_payload || challenge.sourcePayload || {}),
         officialMatcher: {

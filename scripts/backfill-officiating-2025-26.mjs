@@ -10,6 +10,13 @@ const WIZARDS_TEAM_ID = "1610612764";
 const DEFAULT_SEASON = "2025-26";
 const DEFAULT_GAME_IDS = ["0042500131"];
 const DEFAULT_SEASON_TYPES = ["Regular Season", "Playoffs"];
+const NBA_TEAM_IDS = [
+  "1610612737", "1610612738", "1610612751", "1610612766", "1610612741", "1610612739",
+  "1610612742", "1610612743", "1610612765", "1610612744", "1610612745", "1610612754",
+  "1610612746", "1610612747", "1610612763", "1610612748", "1610612749", "1610612750",
+  "1610612740", "1610612752", "1610612760", "1610612753", "1610612755", "1610612756",
+  "1610612757", "1610612758", "1610612759", "1610612761", "1610612762", "1610612764",
+];
 const NBA_REQUEST_HEADERS = {
   "Accept-Language": "en-US,en;q=0.9",
   Origin: "https://www.nba.com",
@@ -40,6 +47,50 @@ function readIntegerArg(name, fallback) {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
 }
 
+function seasonStartTwoDigit(season) {
+  const startYear = String(season || "").split("-")[0] || "";
+  return startYear.slice(-2);
+}
+
+function gameId(prefix, season, number) {
+  return `${prefix}${seasonStartTwoDigit(season)}${String(number).padStart(5, "0")}`;
+}
+
+function inferSeasonTypeFromGameId(value) {
+  const id = String(value || "");
+  if (id.startsWith("001")) return "Preseason";
+  if (id.startsWith("002")) return "Regular Season";
+  if (id.startsWith("004")) return "Playoffs";
+  if (id.startsWith("005")) return "Play-In";
+  return "";
+}
+
+function generatedLeagueGameRefs({ season, seasonTypes, maxGames }) {
+  const wanted = new Set(seasonTypes.map((seasonType) => String(seasonType).toLowerCase()));
+  const includeRegular = wanted.size === 0 || wanted.has("regular season");
+  const includePlayoffs = wanted.size === 0 || wanted.has("playoffs");
+  const includePlayIn = wanted.has("play in") || wanted.has("play-in") || wanted.has("play-in tournament");
+  const refs = [];
+
+  if (includeRegular) {
+    for (let number = 1; number <= 1230; number += 1) {
+      refs.push({ gameId: gameId("002", season, number), seasonType: "Regular Season", gameDate: "", matchup: "" });
+    }
+  }
+  if (includePlayIn) {
+    for (let number = 1; number <= 99; number += 1) {
+      refs.push({ gameId: gameId("005", season, number), seasonType: "Play-In", gameDate: "", matchup: "" });
+    }
+  }
+  if (includePlayoffs) {
+    for (let number = 1; number <= 499; number += 1) {
+      refs.push({ gameId: gameId("004", season, number), seasonType: "Playoffs", gameDate: "", matchup: "" });
+    }
+  }
+
+  return maxGames ? refs.slice(0, maxGames) : refs;
+}
+
 async function writeJsonFile(filePath, payload) {
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, JSON.stringify(payload, null, 2));
@@ -50,18 +101,52 @@ async function writeTextFile(filePath, payload) {
   await writeFile(filePath, payload);
 }
 
-async function fetchJson(url, options = {}) {
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      Accept: "application/json, text/plain, */*",
-      ...(options.headers || {}),
-    },
-  });
-  if (!response.ok) {
-    throw new Error(`${url} failed (${response.status})`);
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchJsonOnce(url, options = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs || 20_000);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: options.signal || controller.signal,
+      headers: {
+        Accept: "application/json, text/plain, */*",
+        ...(options.headers || {}),
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`${url} failed (${response.status})`);
+    }
+    return response.json();
+  } finally {
+    clearTimeout(timeout);
   }
-  return response.json();
+}
+
+async function fetchJson(url, options = {}) {
+  const retries = Number.isFinite(options.retries) ? options.retries : 2;
+  let lastError;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      return await fetchJsonOnce(url, options);
+    } catch (error) {
+      lastError = error;
+      if (attempt >= retries) break;
+      await sleep(750 * (attempt + 1));
+    }
+  }
+  throw lastError;
+}
+
+async function fetchStatsPlayByPlayActions(gameId) {
+  const payload = await fetchJson(
+    `https://stats.nba.com/stats/playbyplayv3?GameID=${encodeURIComponent(gameId)}&StartPeriod=0&EndPeriod=0`,
+    { headers: NBA_REQUEST_HEADERS, timeoutMs: 20_000, retries: 2 }
+  );
+  return Array.isArray(payload?.game?.actions) ? payload.game.actions : [];
 }
 
 function parseRowSet(payload) {
@@ -85,6 +170,8 @@ async function fetchSeasonTypeRows({ season, seasonType, teamId }) {
 
   const payload = await fetchJson(url.toString(), {
     headers: NBA_REQUEST_HEADERS,
+    timeoutMs: 30_000,
+    retries: 3,
   });
 
   return parseRowSet(payload).map((row) => ({ ...row, seasonType }));
@@ -121,27 +208,64 @@ async function discoverTeamGameIds({ season, seasonTypes, teamId, maxGames }) {
   return games;
 }
 
-async function fetchGame(gameId) {
+async function discoverLeagueGameIds({ season, seasonTypes, teamIds, maxGames, concurrency }) {
+  const teamGames = await mapWithConcurrency(teamIds, concurrency, async (teamId) => (
+    discoverTeamGameIds({ season, seasonTypes, teamId, maxGames: 0 }).catch((error) => {
+      console.warn(`Could not discover games for ${teamId}: ${error.message}`);
+      return [];
+    })
+  ));
+  const byGameId = new Map();
+  teamGames.flat().forEach((game) => {
+    if (!game.gameId || byGameId.has(game.gameId)) return;
+    byGameId.set(game.gameId, game);
+  });
+  const games = [...byGameId.values()].sort((left, right) => {
+    const dateCompare = String(left.gameDate || "").localeCompare(String(right.gameDate || ""));
+    if (dateCompare !== 0) return dateCompare;
+    return String(left.gameId || "").localeCompare(String(right.gameId || ""));
+  });
+  return maxGames ? games.slice(0, maxGames) : games;
+}
+
+async function fetchGame(gameId, options = {}) {
   try {
-    return await fetchJson(`${API_BASE}/games/${encodeURIComponent(gameId)}`);
+    const game = await fetchJson(`${API_BASE}/games/${encodeURIComponent(gameId)}`, {
+      timeoutMs: 12_000,
+      retries: 1,
+    });
+    const statsActions = options.skipStatsPlayByPlay ? [] : await fetchStatsPlayByPlayActions(gameId).catch(() => []);
+    return {
+      ...game,
+      playByPlayActions: statsActions.length ? statsActions : game.playByPlayActions,
+      source: statsActions.length ? `${game.source || "cloudfront"}+stats_playbyplayv3` : game.source,
+    };
   } catch (cloudfrontError) {
+    const firstMessage = cloudfrontError instanceof Error ? cloudfrontError.message : "CloudFront fetch failed";
+    if (firstMessage.includes("failed (404)")) {
+      throw new Error(firstMessage);
+    }
     try {
-      const [boxscorePayload, playByPlayPayload] = await Promise.all([
+      const [boxscorePayload, livePlayByPlayPayload, statsActions] = await Promise.all([
         fetchJson(`https://cdn.nba.com/static/json/liveData/boxscore/boxscore_${encodeURIComponent(gameId)}.json`, {
           headers: NBA_REQUEST_HEADERS,
+          timeoutMs: 12_000,
+          retries: 1,
         }),
         fetchJson(`https://cdn.nba.com/static/json/liveData/playbyplay/playbyplay_${encodeURIComponent(gameId)}.json`, {
           headers: NBA_REQUEST_HEADERS,
+          timeoutMs: 12_000,
+          retries: 1,
         }),
+        options.skipStatsPlayByPlay ? Promise.resolve([]) : fetchStatsPlayByPlayActions(gameId).catch(() => []),
       ]);
       return {
         ...(boxscorePayload.game || {}),
         gameId,
-        playByPlayActions: playByPlayPayload.game?.actions || [],
-        source: "nba_live_data",
+        playByPlayActions: statsActions.length ? statsActions : livePlayByPlayPayload.game?.actions || [],
+        source: statsActions.length ? "nba_live_data+stats_playbyplayv3" : "nba_live_data",
       };
     } catch (liveDataError) {
-      const firstMessage = cloudfrontError instanceof Error ? cloudfrontError.message : "CloudFront fetch failed";
       const secondMessage = liveDataError instanceof Error ? liveDataError.message : "NBA live-data fetch failed";
       throw new Error(`${firstMessage}; fallback failed: ${secondMessage}`);
     }
@@ -206,7 +330,7 @@ function buildAssignmentRows(game, discovered = {}) {
     jersey_number: String(official.jerseyNum || official.jerseyNumber || "").trim(),
     role_key: index === 0 ? "crewChief" : "",
     assignment_order: index + 1,
-    is_alternate: officials.length === 4 && index === 3,
+    is_alternate: false,
     source: "game_metadata",
     source_payload: official,
   })).filter((row) => row.game_id && row.official_name);
@@ -404,6 +528,95 @@ function rowsForGameIds(rows, gameIds) {
   return rows.filter((row) => allowed.has(row.game_id));
 }
 
+function groupBy(rows, keyFn) {
+  return rows.reduce((groups, row) => {
+    const key = keyFn(row);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+    return groups;
+  }, new Map());
+}
+
+function officialKey(row) {
+  return String(row.official_id || row.official_name || "").trim();
+}
+
+function markAlternateAssignments(assignmentRows, callRows) {
+  const assignmentsByGame = groupBy(assignmentRows, (row) => row.game_id);
+  const callsByGame = groupBy(callRows, (row) => row.game_id);
+
+  assignmentsByGame.forEach((assignments, gameId) => {
+    if (assignments.length <= 3) return;
+    const calls = callsByGame.get(gameId) || [];
+    const callCounts = calls.reduce((counts, row) => {
+      const key = officialKey(row);
+      if (!key) return counts;
+      counts[key] = (counts[key] || 0) + 1;
+      return counts;
+    }, {});
+    const zeroCallAssignments = assignments.filter((assignment) => (
+      !callCounts[officialKey(assignment)] && !callCounts[assignment.official_name]
+    ));
+    const alternatesNeeded = assignments.length - 3;
+    zeroCallAssignments.slice(0, alternatesNeeded).forEach((assignment) => {
+      assignment.is_alternate = true;
+    });
+  });
+
+  return assignmentRows;
+}
+
+function buildGameAuditRows({ loadedGames, assignmentRows, callRows, challengeRows }) {
+  const assignmentsByGame = groupBy(assignmentRows, (row) => row.game_id);
+  const callsByGame = groupBy(callRows, (row) => row.game_id);
+  const challengesByGame = groupBy(challengeRows, (row) => row.game_id);
+
+  return loadedGames.map(({ gameRef, game }) => {
+    const gameId = String(gameRef.gameId || game.gameId || "");
+    const assignments = assignmentsByGame.get(gameId) || [];
+    const calls = callsByGame.get(gameId) || [];
+    const challenges = challengesByGame.get(gameId) || [];
+    const nonAlternateAssignments = assignments.filter((row) => !row.is_alternate);
+    const crewChiefs = assignments.filter((row) => row.role_key === "crewChief");
+    const callsByOfficial = calls.reduce((counts, row) => {
+      const key = officialKey(row);
+      if (!key) return counts;
+      counts[key] = (counts[key] || 0) + 1;
+      return counts;
+    }, {});
+    const assignedOfficialCallCounts = nonAlternateAssignments.map((assignment) => ({
+      official_id: assignment.official_id,
+      official_name: assignment.official_name,
+      calls: callsByOfficial[officialKey(assignment)] || callsByOfficial[assignment.official_name] || 0,
+    }));
+    const flags = [];
+    if (nonAlternateAssignments.length < 3 || nonAlternateAssignments.length > 4) {
+      flags.push(`expected-3-or-4-officials-found-${nonAlternateAssignments.length}`);
+    }
+    if (crewChiefs.length !== 1) flags.push(`expected-1-crew-chief-found-${crewChiefs.length}`);
+    if (calls.length < 20) flags.push(`low-game-call-count-${calls.length}`);
+    assignedOfficialCallCounts
+      .filter((official) => official.calls === 0)
+      .forEach((official) => flags.push(`zero-calls-${official.official_name || official.official_id}`));
+
+    return {
+      gameId,
+      gameDate: normalizedGameDate(game, gameRef.gameDate),
+      matchup: gameRef.matchup,
+      seasonType: normalizedSeasonType(game, gameRef.seasonType),
+      source: game.source || "",
+      officials: nonAlternateAssignments.length,
+      crewChiefs: crewChiefs.length,
+      officialCallEvents: calls.length,
+      challengeReplayEvents: challenges.length,
+      matchedWhistleChallenges: challenges.filter((row) => row.whistling_official_name).length,
+      matchedCrewChiefChallenges: challenges.filter((row) => row.crew_chief_name).length,
+      assignedOfficialCallCounts,
+      flags,
+    };
+  });
+}
+
 async function writeSqlChunks({ outputDir, chunkSize, gameIds, assignmentRows, callRows, challengeRows }) {
   await mkdir(outputDir, { recursive: true });
   const chunks = chunkArray(gameIds, chunkSize);
@@ -426,6 +639,8 @@ async function writeSqlChunks({ outputDir, chunkSize, gameIds, assignmentRows, c
 async function main() {
   const season = readArg("season") || DEFAULT_SEASON;
   const teamId = readArg("team-id") || WIZARDS_TEAM_ID;
+  const league = hasFlag("league");
+  const teamIds = readListArg("team-ids", league ? NBA_TEAM_IDS : [teamId]);
   const seasonTypes = readListArg("season-types", DEFAULT_SEASON_TYPES);
   const gameIdsArg = readListArg("game-ids");
   const maxGames = readIntegerArg("max-games", 0);
@@ -434,18 +649,38 @@ async function main() {
   const sqlOutputPath = readArg("sql-out");
   const sqlOutputDir = readArg("sql-dir");
   const sqlChunkSize = readIntegerArg("sql-chunk-size", 12);
+  const discoverConcurrency = readIntegerArg("discover-concurrency", 2);
+  const gameIdSource = readArg("game-id-source") || (league ? "generated" : "stats");
+  const skipStatsPlayByPlay = hasFlag("skip-stats-playbyplay");
   const discover = hasFlag("discover") || !gameIdsArg.length;
 
-  const discoveredGames = discover
-    ? await discoverTeamGameIds({ season, seasonTypes, teamId, maxGames })
-    : gameIdsArg.map((gameId) => ({ gameId, seasonType: "", gameDate: "", matchup: "" }));
+  const discoveredGames = discover && gameIdSource === "generated"
+    ? generatedLeagueGameRefs({ season, seasonTypes, maxGames })
+    : discover
+      ? await discoverLeagueGameIds({ season, seasonTypes, teamIds, maxGames, concurrency: discoverConcurrency })
+      : gameIdsArg.map((nextGameId) => ({
+        gameId: nextGameId,
+        seasonType: inferSeasonTypeFromGameId(nextGameId),
+        gameDate: "",
+        matchup: "",
+      }));
   const gameRefs = discoveredGames.length ? discoveredGames : DEFAULT_GAME_IDS.map((gameId) => ({ gameId, seasonType: "", gameDate: "", matchup: "" }));
+  console.error(`Discovered ${gameRefs.length} games for ${league ? "league" : teamId} via ${gameIdSource}.`);
   const errors = [];
+  let processedCount = 0;
   const games = await mapWithConcurrency(gameRefs, concurrency, async (gameRef) => {
     try {
-      return { gameRef, game: await fetchGame(gameRef.gameId) };
+      const loaded = { gameRef, game: await fetchGame(gameRef.gameId, { skipStatsPlayByPlay }) };
+      processedCount += 1;
+      const completed = processedCount;
+      if (completed % 25 === 0 || completed === gameRefs.length) {
+        console.error(`Processed ${completed}/${gameRefs.length} games...`);
+      }
+      return loaded;
     } catch (error) {
       errors.push({ gameId: gameRef.gameId, message: error instanceof Error ? error.message : "unknown" });
+      processedCount += 1;
+      console.error(`Failed ${gameRef.gameId}: ${error instanceof Error ? error.message : "unknown"}`);
       return null;
     }
   });
@@ -457,6 +692,7 @@ async function main() {
     seasonType: gameRef.seasonType,
     gameDate: gameRef.gameDate,
   }).map(toCallRow));
+  markAlternateAssignments(assignmentRows, callRows);
   const detectedChallengeRows = loadedGames.flatMap(({ game, gameRef }) => detectCoachChallengeActions(game, {
     season,
     seasonType: gameRef.seasonType,
@@ -464,6 +700,8 @@ async function main() {
   }).map(toChallengeRow));
   const challengeRows = enrichChallengeEventsWithOfficials(detectedChallengeRows, callRows, assignmentRows);
   const processedGameIds = loadedGames.map(({ gameRef }) => gameRef.gameId);
+  const gameAudits = buildGameAuditRows({ loadedGames, assignmentRows, callRows, challengeRows });
+  const flaggedGames = gameAudits.filter((row) => row.flags.length);
   let generatedSqlChunks = [];
   if (sqlOutputDir) {
     generatedSqlChunks = await writeSqlChunks({
@@ -477,7 +715,8 @@ async function main() {
   }
   const report = {
     season,
-    teamId,
+    teamId: league ? "league" : teamId,
+    teamIds: league ? teamIds : [teamId],
     seasonTypes,
     gamesRequested: gameRefs.length,
     gamesProcessed: loadedGames.length,
@@ -485,6 +724,16 @@ async function main() {
     assignments: assignmentRows.length,
     officialCallEvents: callRows.length,
     challengeReplayEvents: challengeRows.length,
+    flaggedGames: flaggedGames.length,
+    auditSummary: {
+      lowGameCallCount: flaggedGames.filter((row) => row.flags.some((flag) => flag.startsWith("low-game-call-count"))).length,
+      missingThreeOfficials: flaggedGames.filter((row) => row.flags.some((flag) => flag.startsWith("expected-3-officials"))).length,
+      missingCrewChief: flaggedGames.filter((row) => row.flags.some((flag) => flag.startsWith("expected-1-crew-chief"))).length,
+      zeroCallOfficials: flaggedGames.reduce((total, row) => total + row.flags.filter((flag) => flag.startsWith("zero-calls")).length, 0),
+      unmatchedWhistleChallenges: challengeRows.filter((row) => !row.whistling_official_name).length,
+      unmatchedCrewChiefChallenges: challengeRows.filter((row) => !row.crew_chief_name).length,
+    },
+    flaggedGameSamples: flaggedGames.slice(0, 20),
     categoryCounts: categoryCounts(callRows),
     confidenceCounts: confidenceCounts(callRows),
     generatedSql: sqlOutputPath || null,
@@ -500,12 +749,14 @@ async function main() {
       assignments: assignmentRows.slice(0, 5),
       officialCallEvents: callRows.slice(0, 5),
       challengeReplayEvents: challengeRows.slice(0, 5),
+      gameAudits: gameAudits.slice(0, 5),
     },
   };
 
   if (outputPath) {
     await writeJsonFile(outputPath, {
       report,
+      gameAudits,
       assignmentRows,
       callRows,
       challengeRows,

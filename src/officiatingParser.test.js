@@ -76,6 +76,63 @@ test("buildOfficialCallEvent preserves raw action fields and matched official me
   assert.equal(event.sourcePayload.actionNumber, 123);
 });
 
+test("buildOfficialCallEvent uses cdnnba officialId without requiring a description token", () => {
+  const event = buildOfficialCallEvent({
+    actionNumber: 401,
+    orderNumber: 4010000,
+    actionType: "turnover",
+    subType: "out-of-bounds",
+    descriptor: "bad pass",
+    description: "Harden Bad Pass Turnover Out of Bounds",
+    period: 3,
+    clock: "PT04M22.00S",
+    teamTricode: "LAC",
+    officialId: 2,
+  }, {
+    officials,
+    gameId: "0022500111",
+    season: "2025-26",
+    seasonType: "Regular Season",
+    homeTeam: "LAC",
+    awayTeam: "WAS",
+  });
+
+  assert.equal(event.officialName, "Tre Maddox");
+  assert.equal(event.officialId, "2");
+  assert.equal(event.primaryCategory, "turnover");
+  assert.equal(event.secondaryCategory, "bad_pass_out_of_bounds");
+  assert.equal(event.confidenceReason, "exact-official-id");
+  assert.equal(event.sourcePayload.officialId, 2);
+});
+
+test("buildOfficialCallEvent can preserve a cdnnba officialId using a context name map", () => {
+  const event = buildOfficialCallEvent({
+    actionNumber: 512,
+    actionType: "violation",
+    subType: "defensive goaltending",
+    description: "A. Drummond Violation: Defensive Goaltending",
+    period: 2,
+    clock: "PT07M21.00S",
+    teamTricode: "PHI",
+    officialId: "1627523",
+  }, {
+    officials: [],
+    officialNameById: new Map([["1627523", "Scott Foster"]]),
+    gameId: "0022500112",
+    season: "2025-26",
+    seasonType: "Regular Season",
+    homeTeam: "PHI",
+    awayTeam: "BOS",
+  });
+
+  assert.equal(event.officialName, "Scott Foster");
+  assert.equal(event.officialId, "1627523");
+  assert.equal(event.primaryCategory, "violation");
+  assert.equal(event.secondaryCategory, "defensive_goaltending");
+  assert.equal(event.confidence, 0.92);
+  assert.match(event.confidenceReason, /context-official-name/);
+});
+
 test("extractOfficialCallEvents returns every official-attributed play-by-play action", () => {
   const events = extractOfficialCallEvents({
     gameId: "0042500111",
@@ -88,11 +145,12 @@ test("extractOfficialCallEvents returns every official-attributed play-by-play a
       { actionNumber: 1, actionType: "2pt", description: "Brown 7' Driving Floating Shot" },
       { actionNumber: 2, actionType: "violation", description: "CELTICS Violation: Delay Of Game (T.Maddox)" },
       { actionNumber: 3, actionType: "foul", description: "Hauser S.FOUL (P2.T3) (S.Foster)" },
+      { actionNumber: 4, actionType: "turnover", subType: "traveling", description: "Traveling Turnover", officialId: 3 },
     ],
   });
 
-  assert.equal(events.length, 2);
-  assert.deepEqual(events.map((event) => event.officialName), ["Tre Maddox", "Scott Foster"]);
+  assert.equal(events.length, 3);
+  assert.deepEqual(events.map((event) => event.officialName), ["Tre Maddox", "Scott Foster", "Pat Fraher"]);
 });
 
 test("detectCoachChallengeActions extracts challenge rows from play-by-play", () => {

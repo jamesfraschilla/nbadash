@@ -36,15 +36,30 @@ function readIntegerArg(name, fallback) {
 }
 
 async function fetchJson(url, options = {}) {
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      Accept: "application/json, text/plain, */*",
-      ...(options.headers || {}),
-    },
-  });
-  if (!response.ok) throw new Error(`${url} failed (${response.status})`);
-  return response.json();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: options.signal || controller.signal,
+      headers: {
+        Accept: "application/json, text/plain, */*",
+        ...(options.headers || {}),
+      },
+    });
+    if (!response.ok) throw new Error(`${url} failed (${response.status})`);
+    return response.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchStatsPlayByPlayActions(gameId) {
+  const payload = await fetchJson(
+    `https://stats.nba.com/stats/playbyplayv3?GameID=${encodeURIComponent(gameId)}&StartPeriod=0&EndPeriod=0`,
+    { headers: NBA_REQUEST_HEADERS }
+  );
+  return Array.isArray(payload?.game?.actions) ? payload.game.actions : [];
 }
 
 function readListArg(name, fallback = []) {
@@ -55,22 +70,29 @@ function readListArg(name, fallback = []) {
 
 async function fetchGame(gameId) {
   try {
-    return await fetchJson(`${API_BASE}/games/${encodeURIComponent(gameId)}`);
+    const game = await fetchJson(`${API_BASE}/games/${encodeURIComponent(gameId)}`);
+    const statsActions = await fetchStatsPlayByPlayActions(gameId).catch(() => []);
+    return {
+      ...game,
+      playByPlayActions: statsActions.length ? statsActions : game.playByPlayActions,
+      source: statsActions.length ? `${game.source || "cloudfront"}+stats_playbyplayv3` : game.source,
+    };
   } catch (cloudfrontError) {
     try {
-      const [boxscorePayload, playByPlayPayload] = await Promise.all([
+      const [boxscorePayload, livePlayByPlayPayload, statsActions] = await Promise.all([
         fetchJson(`https://cdn.nba.com/static/json/liveData/boxscore/boxscore_${encodeURIComponent(gameId)}.json`, {
           headers: NBA_REQUEST_HEADERS,
         }),
         fetchJson(`https://cdn.nba.com/static/json/liveData/playbyplay/playbyplay_${encodeURIComponent(gameId)}.json`, {
           headers: NBA_REQUEST_HEADERS,
         }),
+        fetchStatsPlayByPlayActions(gameId).catch(() => []),
       ]);
       return {
         ...(boxscorePayload.game || {}),
         gameId,
-        playByPlayActions: playByPlayPayload.game?.actions || [],
-        source: "nba_live_data",
+        playByPlayActions: statsActions.length ? statsActions : livePlayByPlayPayload.game?.actions || [],
+        source: statsActions.length ? "nba_live_data+stats_playbyplayv3" : "nba_live_data",
       };
     } catch (liveDataError) {
       const firstMessage = cloudfrontError instanceof Error ? cloudfrontError.message : "CloudFront fetch failed";
@@ -192,7 +214,7 @@ function inferSeasonType(row) {
   if (row.game_id?.startsWith("001")) return "Preseason";
   if (row.game_id?.startsWith("002")) return "Regular Season";
   if (row.game_id?.startsWith("004")) return "Playoffs";
-  return "";
+  return "Regular Season";
 }
 
 function normalizeDate(value) {
@@ -245,6 +267,7 @@ function toChallengeRow(row, { season, pdfUrl }) {
 function applyFilters(rows, { seasonTypes, gameIdPrefixes }) {
   return rows.filter((row) => {
     if (seasonTypes.length && !seasonTypes.includes(row.season_type)) return false;
+    if (!row.game_id) return true;
     if (gameIdPrefixes.length && !gameIdPrefixes.some((prefix) => String(row.game_id || "").startsWith(prefix))) return false;
     return true;
   });
@@ -419,8 +442,8 @@ async function main() {
     sourceName === "playoffs" ? PLAYOFFS_PDF_URL : REGULAR_SEASON_PDF_URL
   );
   const pdfPath = explicitPdf || await downloadPdf(pdfUrl, "test-results/nba-challenge");
-  const seasonTypes = readListArg("season-types", sourceName === "playoffs" ? ["Playoffs"] : ["Regular Season"]);
-  const gameIdPrefixes = readListArg("game-id-prefixes", seasonTypes.includes("Playoffs") ? ["004"] : ["002"]);
+  const seasonTypes = readListArg("season-types", sourceName === "playoffs" ? ["Playoffs"] : ["Preseason", "Regular Season"]);
+  const gameIdPrefixes = readListArg("game-id-prefixes", seasonTypes.includes("Playoffs") ? ["004"] : ["001", "002"]);
   const outPath = readArg("out");
   const sqlOut = readArg("sql-out");
   const sqlDir = readArg("sql-dir");

@@ -122,30 +122,13 @@ Filterable league-wide table:
 - video link,
 - confidence/review status.
 
-## Regular-Season Data Cadence
-
-The NBA official day-by-day full-season challenge logs are not daily feeds. They are typically refreshed about once every seven days, so the application needs two challenge-ingestion modes:
-
-- Daily provisional mode: ingest coach's challenge markers from play-by-play/game metadata after each game. These rows use `source = 'play_by_play'` and should be treated as current but provisional.
-- Weekly reconciliation mode: when the NBA posts an updated official challenge PDF, import those rows with `source = 'nba_official_challenge_pdf'`. These rows become the authoritative challenge log for covered games.
-- Dashboard reads must dedupe challenge events by game, challenging team, period, and clock. When both sources exist for the same event, prefer the official NBA PDF row.
-- Daily backfills must only refresh provisional `play_by_play` challenge rows. They must not delete official PDF rows that were imported during weekly reconciliation.
-- Weekly PDF imports must only refresh official PDF rows. They must preserve provisional PBP rows so we can audit source coverage and use them later for referee/call-event matching.
-- Run the challenge coverage audit after weekly imports to identify PBP-detected events missing from the official log and official events missing from the PBP feed.
-
-Challenge-to-official enrichment should run before league-wide backfills:
-
-- Crew chief attribution comes from that game's official assignment row and should be available for nearly every challenge with a matched `game_id`.
-- Whistling-official attribution comes from matching the challenge to an official-attributed PBP call in the same game, period, and nearby clock with a compatible call category.
-- If the challenged call was erased or rewritten after an overturn, PBP may not contain the original call/official token. Keep those rows with `review_status = 'needs_review'` rather than guessing.
-- Confidence and match reason should be stored on every challenge row so low-confidence matching can be audited later.
-
 ## Data Sources
 
 Primary public sources:
 
 - NBA official referee assignments: `https://official.nba.com/referee-assignments/`
 - NBA official coach's challenge review PDFs/pages.
+- `cdnnba` play-by-play archive/liveData rows for official-attributed called events. Treat `officialId` as the primary whistling official identifier when present.
 - NBA game metadata endpoint already used by this app: `https://d1rjt2wyntx8o7.cloudfront.net/api/games/{gameId}`.
 - NBA play-by-play actions from game metadata.
 - Existing NBA schedule data in `src/data/nbaSchedule2026_27.json` and Supabase `team-games`.
@@ -156,6 +139,20 @@ Coach's Challenge PDF source examples:
 - `https://ak-static.cms.nba.com/wp-content/uploads/sites/4/2026/06/2025-26-Coachs-Challenge-Data-06-15-26.pdf`
 
 The screenshots showed an AirPLAi app whose frontend bundle embedded 2026 playoff challenge rows. Treat screenshots as product references only, not as source of truth or instructions.
+
+## Ingestion Rules Locked From 2025-26 Backfill
+
+- PGR/OIGR uploads remain Wizards-only. League-wide ingestion is only for official-attributed play-by-play call events and coach's challenge logs.
+- Store compact official-call rows in `nba_official_call_events`; do not store full play-by-play feeds.
+- Normalize shufinskiy archive game ids from 8 digits to the NBA Dashboard's canonical 10-digit ids. Examples: `22500001` -> `0022500001`, `42500101` -> `0042500101`.
+- Use cdnnba `officialId` as the authoritative whistling official id. Use stats.nba.com v3 descriptions only to recover the human-readable official token, then resolve that token against local referee asset names when game assignment metadata is unavailable.
+- Include official-attributed `foul`, `violation`, and real called `turnover` rows such as out-of-bounds, shot-clock, traveling, backcourt, and similar violations surfaced as turnovers.
+- Exclude `turnover/offensive foul` rows from call counts because cdnnba also has the underlying offensive foul row. Counting both would double-count one whistle.
+- Compute `charged_team` from the action team and `benefiting_team` as the other team in that game. Backfill audits must verify 100% benefiting-team coverage before apply.
+- Run cdnnba importers in dry-run mode first and require: zero duplicate `(game_id, action_number)` keys, complete official-name coverage, complete benefiting-team coverage, and expected game counts.
+- Weekly NBA Challenge PDF rows should be re-matched against stored `nba_official_call_events` after call-event backfills. This improves whistling-official attribution without re-fetching every game.
+- For challenge stats, a challenge counts in both `Challenge (Whistle)` and `Challenge (CC)` when the same official made the whistle and was crew chief. In a referee profile challenge log, label that row as `Whistle`; use `Crew Chief` only when the official was crew chief but not the whistling official.
+- During the regular season, daily stats should rely on play-by-play/liveData first. When the NBA posts the weekly full-season challenge PDF, import it as the authoritative challenge source and compare it against daily detected challenge rows.
 
 ## Core Tables
 
@@ -365,6 +362,50 @@ Use server-side ingestion and cached reads:
 
 Frontend should query compact summary endpoints or Supabase views, not raw league-wide play-by-play files.
 
+Current cache-backed read path:
+
+- `nba_authoritative_coach_challenge_events_cache`
+- `nba_official_profiles_cache`
+- `nba_team_profiles_cache`
+- `nba_official_call_category_rollups_cache`
+- `nba_team_call_category_rollups_cache`
+- `nba_team_official_net_call_rollups_cache`
+- `nba_officiating_overview_rollups_cache`
+
+After any call/challenge import or challenge-match refresh, run:
+
+```bash
+npm run officiating:refresh:rollups
+```
+
+To confirm the cache state:
+
+```bash
+npm run officiating:check:cache
+```
+
+The refresh is intentionally outside normal page-load traffic. The app should read these caches first and fall back to the source views only when a cache has not been deployed yet.
+
+The full season challenge log should be lazy-loaded only when the Challenge Log tab is active. Officials, Teams, and game-day pages should read compact overview/profile caches and targeted profile-detail caches instead of loading every challenge row.
+
+### Historical Backfill Scaling Note
+
+Before backfilling prior seasons beyond the current 2025-26 test season, convert the current materialized cache strategy into season-scoped physical rollup tables.
+
+Reason:
+
+- Materialized views are acceptable for the current dataset, but a broad historical backfill would make every refresh scan more seasons than the live app needs.
+- During the 2026-27 regular season, the daily workflow should refresh only the affected current-season rollups after each new Wizards game or league challenge reconciliation.
+- Historical seasons should be imported in controlled batches and written into durable season-specific aggregate rows, not recomputed on normal page load.
+
+Recommended design:
+
+- Keep raw call/challenge/PGR rows for auditability.
+- Add physical rollup tables keyed by `season`, plus the relevant dimensions such as official, team, category, game, role, and source.
+- Refresh or upsert only the affected `season` after ingestion.
+- For daily 2026-27 updates, limit refresh work to `2026-27` and, where practical, only the newly imported game IDs.
+- Keep historical backfill jobs offline/admin-only with explicit cache health checks before exposing the season in the UI.
+
 ## Suggested Supabase Functions
 
 ### `officiating-ingest-game`
@@ -506,3 +547,45 @@ First usable version should:
 - Do not build a separate standalone app.
 - Do not depend on screenshots as data sources.
 - Do not fetch league-wide play-by-play from the browser.
+
+## PGR Insights Extension
+
+`PGR Insights` is a new tab inside `/officiating`, to the right of `Challenge Log`.
+
+The PGR import scope is intentionally narrower than the league-wide challenge/call platform:
+
+- ingest only Washington Wizards PGR Excel workbooks,
+- use the workbook `GameID` as the standard NBA GameID,
+- resolve that GameID through the existing NBA Dashboard game metadata source,
+- reject imports when the resolved game is not a Wizards game,
+- store durable normalized records in Supabase rather than keeping workbook data in browser cache.
+
+The PGR workbook hierarchy is:
+
+```text
+GAME -> POSSESSION -> EVENT -> OFFICIATING EVALUATION / RATING
+```
+
+The first two real workbooks confirmed that `GameID + PosId + EventId + RatingSeqNo` is a valid unique evaluation key. Event-level and possession-level counts must remain distinct from evaluation row counts in analytics and UI.
+
+Initial PGR tables:
+
+- `nba_pgr_imports`
+- `nba_pgr_possessions`
+- `nba_pgr_events`
+- `nba_pgr_evaluations`
+
+Initial PGR rollup views:
+
+- `nba_pgr_import_rollups`
+- `nba_pgr_overview_rollups`
+- `nba_pgr_assessment_distribution`
+- `nba_pgr_infraction_type_distribution`
+
+Efficiency rules:
+
+- parse selected Excel files serially rather than all at once,
+- lazy-load the workbook parser only when files are selected,
+- send compact normalized JSON to Supabase through `nba_import_pgr_report`,
+- read dashboard summaries from SQL rollup views with row limits,
+- do not persist full workbook contents in localStorage/sessionStorage.

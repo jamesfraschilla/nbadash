@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import Header from "./components/Header.jsx";
 import AuthGate from "./components/AuthGate.jsx";
 import LegacyNotesImportPrompt from "./components/LegacyNotesImportPrompt.jsx";
@@ -59,6 +59,7 @@ function scheduleIdleWork(callback, timeout = 5000) {
 }
 
 export default function App() {
+  const location = useLocation();
   const [theme, setTheme] = useState(() => readLocalStorage("theme") || "light");
   const [updateFingerprint, setUpdateFingerprint] = useState("");
   const currentFingerprintRef = useRef("");
@@ -76,6 +77,7 @@ export default function App() {
     hasFeature,
   } = useAuth();
   const canUseTools = !accountsEnabled || hasFeature("tools");
+  const isOfficiatingRoute = location.pathname === "/officiating";
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -270,7 +272,7 @@ export default function App() {
         isAdmin={isAdmin}
         canUseTools={canUseTools}
       />
-      <main>
+      <main className={isOfficiatingRoute ? "officiating-shell" : undefined}>
         <Suspense fallback={<RouteLoadingFallback />}>
           <Routes>
             <Route path="/" element={<Home />} />

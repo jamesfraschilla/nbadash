@@ -121,7 +121,7 @@ export default function Header({ theme, onToggleTheme, onSignOut, profile, isAdm
                   </Link>
                 ) : null}
                 {canUseTools ? (
-                  <Link to="/officiating" className={styles.dropdownItem} role="menuitem" onClick={() => setIsMenuOpen(false)}>
+                  <Link to="/officiating?tab=officials" className={styles.dropdownItem} role="menuitem" onClick={() => setIsMenuOpen(false)}>
                     Officiating Intelligence
                   </Link>
                 ) : null}
