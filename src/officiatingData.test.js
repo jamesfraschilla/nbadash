@@ -64,6 +64,28 @@ test("specificCallCategory displays detailed foul and violation types", () => {
     secondary_category: "delay_of_game",
     description: "CELTICS Violation: Delay Of Game (T.Maddox)",
   }), "Delay Of Game");
+
+  assert.equal(specificCallCategory({
+    primary_category: "turnover",
+    secondary_category: "3_second_violation",
+    sub_type: "3-second-violation",
+    description: "D. Lively II 3-second-violation TURNOVER (2 TO)",
+  }), "Offensive 3 Second Violation");
+
+  assert.equal(specificCallCategory({
+    primary_category: "foul",
+    secondary_category: "defensive_3_second_technical",
+    descriptor: "defensive-3-second",
+    sub_type: "technical",
+    description: "A. Sarr defensive-3-second technical FOUL (1 Tech)",
+  }), "Defensive 3 Second Violation");
+
+  assert.equal(specificCallCategory({
+    primary_category: "turnover",
+    secondary_category: "lost_ball",
+    sub_type: "lost ball",
+    description: "J. Butler III lost ball TURNOVER (1 TO)",
+  }), "Lost Ball Turnover");
 });
 
 test("official challenge logs prefer whistle label while counting dual crew-chief role", () => {

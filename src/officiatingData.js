@@ -72,18 +72,23 @@ function cleanCategoryPart(value) {
     "awayfrom play": "away from play",
     clearpath: "clear path",
     defense3second: "defense 3 second",
+    defensive3second: "defense 3 second",
     defensivethreesecond: "defense 3 second",
+    "3secondviolation": "3 second violation",
+    threesecondviolation: "3 second violation",
+    lostball: "lost ball",
     flagranttype1: "flagrant type 1",
     flagranttype2: "flagrant type 2",
     looseball: "loose ball",
     personaltake: "personal take",
     transitiontake: "transition take",
-  }[cleaned.replace(/\s+/g, "")] || cleaned;
+  }[cleaned.replace(/[^a-z0-9]+/g, "")] || cleaned;
 }
 
 function normalizedFoulCategory(parts) {
   const uniqueParts = [...new Set(parts.filter(Boolean).filter((part) => part !== "foul"))];
   const partSet = new Set(uniqueParts);
+  if (partSet.has("defense 3 second")) return "Defensive 3 Second Violation";
   if (partSet.has("technical")) return "Technical Foul";
   if (partSet.has("shooting")) return "Shooting Foul";
   if (partSet.has("loose ball")) return "Loose Ball Foul";
@@ -110,12 +115,20 @@ export function specificCallCategory(event) {
   if (primary === "violation") {
     const violationMatch = /violation:\s*([^()]+)/i.exec(description);
     const violation = cleanCategoryPart(violationMatch?.[1] || secondary || descriptor || subType);
+    if (violation === "3 second violation") return "Offensive 3 Second Violation";
+    if (violation === "defense 3 second") return "Defensive 3 Second Violation";
     return violation ? titleCaseCategory(violation) : "Violation";
   }
 
   if (primary === "foul" || primary === "technical") {
     if (primary === "technical") return "Technical Foul";
     return normalizedFoulCategory([descriptor, subType]);
+  }
+
+  if (primary === "turnover") {
+    const turnover = cleanCategoryPart(secondary || descriptor || subType);
+    if (turnover === "3 second violation") return "Offensive 3 Second Violation";
+    if (turnover === "lost ball") return "Lost Ball Turnover";
   }
 
   if (secondary && secondary !== primary) return titleCaseCategory(secondary);

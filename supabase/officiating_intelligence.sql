@@ -861,6 +861,10 @@ categorized_calls as (
     max(official_name) over (partition by season, coalesce(nullif(official_id, ''), official_name)) as official_name,
     game_id,
     case
+      when category_key like '%defensive3second%' then 'Defensive 3 Second Violation'
+      when primary_category in ('turnover', 'violation') and category_key like '%3secondviolation%' then 'Offensive 3 Second Violation'
+      when primary_category = 'turnover' and category_key like '%lostballoutofbounds%' then 'Lost Ball Out Of Bounds'
+      when primary_category = 'turnover' and category_key like '%lostball%' then 'Lost Ball Turnover'
       when primary_category = 'technical' or secondary_category = 'technical' then 'Technical Foul'
       when primary_category = 'foul' and category_key like '%shooting%' then 'Shooting Foul'
       when primary_category = 'foul' and category_key like '%looseball%' then 'Loose Ball Foul'
@@ -964,6 +968,10 @@ categorized_calls as (
     coalesce(charged_team, team_tricode, benefiting_team) as team,
     game_id,
     case
+      when category_key like '%defensive3second%' then 'Defensive 3 Second Violation'
+      when primary_category in ('turnover', 'violation') and category_key like '%3secondviolation%' then 'Offensive 3 Second Violation'
+      when primary_category = 'turnover' and category_key like '%lostballoutofbounds%' then 'Lost Ball Out Of Bounds'
+      when primary_category = 'turnover' and category_key like '%lostball%' then 'Lost Ball Turnover'
       when primary_category = 'technical' or secondary_category = 'technical' then 'Technical Foul'
       when primary_category = 'foul' and category_key like '%shooting%' then 'Shooting Foul'
       when primary_category = 'foul' and category_key like '%looseball%' then 'Loose Ball Foul'
