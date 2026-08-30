@@ -126,6 +126,7 @@ function SortableTopList({
   valueHeader = "Value",
   onSelectLabel,
   valueFormatter = (value) => formatNumber(value, 1),
+  defaultOpen = false,
 }) {
   const [sort, setSort] = useState({ key: "value", direction: "desc" });
   const entries = useMemo(() => {
@@ -149,7 +150,7 @@ function SortableTopList({
   };
   if (!entries.length) return null;
   return (
-    <details className={styles.detailBlock} open>
+    <details className={styles.detailBlock} open={defaultOpen}>
       <summary>{title}</summary>
       <div className={styles.profileListScroll}>
         <table className={styles.profileListTable}>
