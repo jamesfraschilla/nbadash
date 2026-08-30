@@ -99,9 +99,9 @@ function SortButton({ label, sortKey, sort, onSort }) {
   );
 }
 
-function ProfileMetric({ label, value, detail }) {
+function ProfileMetric({ label, value, detail, style }) {
   return (
-    <div className={styles.profileMetric}>
+    <div className={styles.profileMetric} style={style}>
       <span>{label}</span>
       <strong>{value}</strong>
       {detail ? <em>{detail}</em> : null}
@@ -548,7 +548,7 @@ function ChallengeLog({ rows, filteredRows, filters, filterOptions, onFilterChan
   );
 }
 
-function MiniChallengeLog({ rows, isLoading = false }) {
+function MiniChallengeLog({ rows, isLoading = false, officialColumn = "role" }) {
   if (!rows?.length) {
     return (
       <p className={styles.detailEmpty}>
@@ -567,7 +567,7 @@ function MiniChallengeLog({ rows, isLoading = false }) {
             <th>Clock</th>
             <th>Type</th>
             <th>Outcome</th>
-            <th>Role</th>
+            <th>{officialColumn === "crewChief" ? "Crew Chief" : "Role"}</th>
             <th>Video</th>
           </tr>
         </thead>
@@ -588,7 +588,11 @@ function MiniChallengeLog({ rows, isLoading = false }) {
               <td>{row.game_clock || "-"}</td>
               <td>{row.challenge_type || "-"}</td>
               <td><OutcomeBadge value={row.challenge_outcome} /></td>
-              <td>{row.profileChallengeRole === "crewChief" ? "Crew Chief" : row.profileChallengeRole === "whistle" ? "Whistle" : "-"}</td>
+              <td>
+                {officialColumn === "crewChief"
+                  ? row.crew_chief_name || "-"
+                  : row.profileChallengeRole === "crewChief" ? "Crew Chief" : row.profileChallengeRole === "whistle" ? "Whistle" : "-"}
+              </td>
               <td>{row.video_url ? <a href={row.video_url} target="_blank" rel="noreferrer">Watch</a> : "-"}</td>
             </tr>
           ))}
@@ -637,7 +641,12 @@ function OfficialProfile({ profile, isLoading, onClose, onSelectTeam }) {
       </div>
       <div className={styles.profileMetrics}>
         <ProfileMetric label="Games" value={profile.games} />
-        <ProfileMetric label="Calls/G" value={formatNumber(profile.callsPerGame, 1)} detail={`Rank ${profile.callsPerGameRank || "-"}`} />
+        <ProfileMetric
+          label="Calls/G"
+          value={formatNumber(profile.callsPerGame, 1)}
+          detail={`Rank ${profile.callsPerGameRank || "-"}`}
+          style={profile.callsPerGameRank ? metricToneStyle(profile.callsPerGameRank, 81) : undefined}
+        />
         <ChallengeVisualMetric
           label="Challenges (Whistle)"
           successes={profile.successfulWhistleChallenges}
@@ -712,10 +721,16 @@ function TeamProfile({ profile, isLoading, onClose, onSelectOfficial }) {
           label="Net Calls For"
           value={formatSignedDecimal(profile.netCallsFor)}
           detail={`Rank ${profile.netCallsForRank || "-"}`}
+          style={profile.netCallsForRank ? successRateStyle(profile.netCallsForRank) : undefined}
         />
         <ProfileMetric label="Challenges" value={profile.challenges} detail={`Rank ${profile.challengesRank || "-"}`} />
         <ProfileMetric label="Successful" value={profile.successfulChallenges} />
-        <ProfileMetric label="Success Rate" value={formatRate(profile.challengeRate)} detail={`Rank ${profile.challengeRateRank || "-"}`} />
+        <ProfileMetric
+          label="Success Rate"
+          value={formatRate(profile.challengeRate)}
+          detail={`Rank ${profile.challengeRateRank || "-"}`}
+          style={profile.challengeRateRank ? successRateStyle(profile.challengeRateRank) : undefined}
+        />
       </div>
       <div className={styles.detailGrid}>
         {isLoading ? <p className={styles.detailEmpty}>Loading profile details...</p> : null}
@@ -737,7 +752,7 @@ function TeamProfile({ profile, isLoading, onClose, onSelectOfficial }) {
       </div>
       <details className={styles.detailBlock} open>
         <summary>Challenge Log</summary>
-        <MiniChallengeLog rows={profile.challengeLog || []} isLoading={isLoading} />
+        <MiniChallengeLog rows={profile.challengeLog || []} isLoading={isLoading} officialColumn="crewChief" />
       </details>
     </ProfileModal>
   );
@@ -1243,7 +1258,7 @@ export default function Officiating() {
   const [params, setParams] = useSearchParams();
   const { accountsEnabled, isAdmin } = useAuth();
   const selectedTab = params.get("tab") || "officials";
-  const [officialSort, setOfficialSort] = useState({ key: "callsPerGame", direction: "desc" });
+  const [officialSort, setOfficialSort] = useState({ key: "games", direction: "desc" });
   const [teamSort, setTeamSort] = useState({ key: "challengeRate", direction: "desc" });
   const [challengeSort, setChallengeSort] = useState({ key: "game_date", direction: "desc" });
   const [challengeFilters, setChallengeFilters] = useState({
