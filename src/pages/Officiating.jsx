@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { createPortal } from "react-dom";
 import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth.js";
 import {
@@ -875,7 +876,7 @@ function ProfileModal({ children, onClose, label }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
-  return (
+  return createPortal(
     <div className={styles.modalOverlay} role="presentation" onMouseDown={onClose}>
       <section
         className={styles.profileModal}
@@ -886,7 +887,8 @@ function ProfileModal({ children, onClose, label }) {
       >
         {children}
       </section>
-    </div>
+    </div>,
+    document.body
   );
 }
 
