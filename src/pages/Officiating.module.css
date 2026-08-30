@@ -783,6 +783,10 @@
   gap: 12px;
 }
 
+.detailGridCategoryWide {
+  grid-template-columns: minmax(220px, 0.58fr) minmax(0, 1.42fr);
+}
+
 .detailLauncher {
   min-height: 96px;
   min-width: 0;
@@ -946,6 +950,144 @@
 
 .profileListTable strong {
   color: var(--oi-text);
+}
+
+.categoryBreakdownBlock {
+  min-width: 0;
+}
+
+.categoryBreakdownGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.categoryColumn {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 8px;
+  background: #080d14;
+}
+
+.categoryColumnHeader {
+  min-height: 42px;
+  padding: 9px 10px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  background: #151b27;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.categoryColumnHeader span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--oi-text);
+  font-size: 0.78rem;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.categoryColumnHeader strong {
+  color: var(--oi-text);
+  font-size: 1rem;
+  font-weight: 950;
+}
+
+.categorySubhead,
+.categoryRow,
+.categorySubRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 88px;
+  align-items: center;
+  gap: 8px;
+}
+
+.categorySubhead {
+  height: 31px;
+  padding: 0 8px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.categorySubhead .sortButton {
+  justify-content: flex-start;
+  color: var(--oi-muted);
+  font-size: 0.62rem;
+}
+
+.categorySubhead .sortButton:last-child {
+  text-align: right;
+}
+
+.categoryRows {
+  display: grid;
+}
+
+.categoryRow {
+  width: 100%;
+  min-height: 34px;
+  padding: 0 9px;
+  border: 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+  background: transparent;
+  color: var(--oi-text);
+  cursor: default;
+  font: inherit;
+  text-align: left;
+}
+
+.categoryRow:disabled {
+  opacity: 1;
+}
+
+.expandableCategoryRow {
+  cursor: pointer;
+}
+
+.expandableCategoryRow:hover {
+  background: rgba(79, 153, 255, 0.08);
+}
+
+.categoryRow span,
+.categorySubRow span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.categoryRow span {
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.categoryRow strong,
+.categorySubRow strong {
+  color: var(--oi-text);
+  font-size: 0.8rem;
+  font-weight: 950;
+  text-align: right;
+}
+
+.categorySubRows {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+  background: rgba(148, 163, 184, 0.04);
+}
+
+.categorySubRow {
+  min-height: 30px;
+  padding: 0 9px 0 22px;
+  color: var(--oi-muted);
+}
+
+.categorySubRow span {
+  font-size: 0.72rem;
+  font-weight: 800;
 }
 
 .splitList {
@@ -1115,10 +1257,15 @@
   .statsGrid,
   .profileMetrics,
   .detailGrid,
+  .detailGridCategoryWide,
   .pgrGrid,
   .pgrSmartTables,
   .filterBar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .categoryBreakdownGrid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1126,6 +1273,7 @@
   .statsGrid,
   .profileMetrics,
   .detailGrid,
+  .detailGridCategoryWide,
   .pgrGrid,
   .pgrAccuracyGrid,
   .pgrSmartTables,

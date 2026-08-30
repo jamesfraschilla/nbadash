@@ -76,6 +76,7 @@ function cleanCategoryPart(value) {
     defensivethreesecond: "defense 3 second",
     "3secondviolation": "3 second violation",
     threesecondviolation: "3 second violation",
+    jumpball: "jump ball",
     lostball: "lost ball",
     flagranttype1: "flagrant type 1",
     flagranttype2: "flagrant type 2",
@@ -125,10 +126,15 @@ export function specificCallCategory(event) {
     return normalizedFoulCategory([descriptor, subType]);
   }
 
+  if (primary === "jump ball") return "Jump Ball";
+
   if (primary === "turnover") {
     const turnover = cleanCategoryPart(secondary || descriptor || subType);
     if (turnover === "3 second violation") return "Offensive 3 Second Violation";
-    if (turnover === "lost ball") return "Lost Ball Turnover";
+    if (turnover === "lost ball") return "Out Of Bounds";
+    if (turnover === "bad pass") return "Out Of Bounds";
+    if (turnover === "step out of bounds") return "Out Of Bounds";
+    if (turnover === "jump ball") return "Jump Ball";
   }
 
   if (secondary && secondary !== primary) return titleCaseCategory(secondary);

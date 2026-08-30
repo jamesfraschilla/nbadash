@@ -85,7 +85,21 @@ test("specificCallCategory displays detailed foul and violation types", () => {
     secondary_category: "lost_ball",
     sub_type: "lost ball",
     description: "J. Butler III lost ball TURNOVER (1 TO)",
-  }), "Lost Ball Turnover");
+  }), "Out Of Bounds");
+
+  assert.equal(specificCallCategory({
+    primary_category: "turnover",
+    secondary_category: "bad_pass",
+    sub_type: "bad pass",
+    description: "A. Reaves bad pass TURNOVER (3 TO)",
+  }), "Out Of Bounds");
+
+  assert.equal(specificCallCategory({
+    primary_category: "jump_ball",
+    secondary_category: "",
+    sub_type: "jump ball",
+    description: "Jumpball violation",
+  }), "Jump Ball");
 });
 
 test("official challenge logs prefer whistle label while counting dual crew-chief role", () => {

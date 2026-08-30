@@ -127,6 +127,8 @@ function SortableTopList({
   onSelectLabel,
   valueFormatter = (value) => formatNumber(value, 1),
   defaultOpen = false,
+  open,
+  onOpenChange,
 }) {
   const [sort, setSort] = useState({ key: "value", direction: "desc" });
   const entries = useMemo(() => {
@@ -149,8 +151,14 @@ function SortableTopList({
     }));
   };
   if (!entries.length) return null;
+  const detailProps = {
+    className: styles.detailBlock,
+    onToggle: onOpenChange ? (event) => onOpenChange(event.currentTarget.open) : undefined,
+  };
+  if (open === undefined) detailProps.open = defaultOpen;
+  else detailProps.open = open;
   return (
-    <details className={styles.detailBlock} open={defaultOpen}>
+    <details {...detailProps}>
       <summary>{title}</summary>
       <div className={styles.profileListScroll}>
         <table className={styles.profileListTable}>
@@ -180,6 +188,262 @@ function SortableTopList({
           </tbody>
         </table>
       </div>
+    </details>
+  );
+}
+
+const CALL_CATEGORY_GROUPS = [
+  {
+    key: "fouls",
+    title: "Fouls",
+    types: [
+      { label: "Shooting Foul", labels: ["Shooting Foul"] },
+      { label: "Offensive Foul", labels: ["Offensive Foul"] },
+      {
+        label: "Foul on Floor",
+        labels: ["Foul on Floor", "Away From Play Foul", "Loose Ball Foul"],
+        subTypes: [
+          { label: "Foul on Floor", labels: ["Foul on Floor"] },
+          { label: "Away From the Play Foul", labels: ["Away From Play Foul"] },
+          { label: "Loose Ball Foul", labels: ["Loose Ball Foul"] },
+        ],
+      },
+      {
+        label: "Transition Foul",
+        labels: ["Transition Take Foul", "Clear Path Foul"],
+        subTypes: [
+          { label: "Transition Take Foul", labels: ["Transition Take Foul"] },
+          { label: "Clear Path Foul", labels: ["Clear Path Foul"] },
+        ],
+      },
+      {
+        label: "Flagrant Foul",
+        labels: ["Flagrant Type 1 Foul", "Flagrant Type 2 Foul"],
+        subTypes: [
+          { label: "Flagrant Type 1 Foul", labels: ["Flagrant Type 1 Foul"] },
+          { label: "Flagrant Type 2 Foul", labels: ["Flagrant Type 2 Foul"] },
+        ],
+      },
+      {
+        label: "Administrative Foul",
+        labels: ["Technical Foul", "Delay Of Game"],
+        subTypes: [
+          { label: "Technical Foul", labels: ["Technical Foul"] },
+          { label: "Delay of Game", labels: ["Delay Of Game"] },
+        ],
+      },
+    ],
+  },
+  {
+    key: "violations",
+    title: "Violations",
+    types: [
+      {
+        label: "Handling Violation",
+        labels: ["Traveling", "Double Dribble", "Palming", "Discontinued Dribble", "Backcourt", "Offensive Goaltending"],
+        subTypes: [
+          { label: "Traveling", labels: ["Traveling"] },
+          { label: "Double Dribble", labels: ["Double Dribble"] },
+          { label: "Palming", labels: ["Palming", "Discontinued Dribble"] },
+          { label: "Backcourt", labels: ["Backcourt"] },
+          { label: "Offensive Goaltending", labels: ["Offensive Goaltending"] },
+        ],
+      },
+      {
+        label: "Timing Violation",
+        labels: ["8 Second Violation", "5 Second Violation", "Offensive 3 Second Violation", "Shot Clock Violation"],
+        subTypes: [
+          { label: "8 Second Violation", labels: ["8 Second Violation"] },
+          { label: "5 Second Violation", labels: ["5 Second Violation"] },
+          { label: "Offensive 3 Second Violation", labels: ["Offensive 3 Second Violation"] },
+          { label: "Shot Clock Violation", labels: ["Shot Clock Violation"] },
+        ],
+      },
+      {
+        label: "Goaltending",
+        labels: ["Offensive Goaltending", "Defensive Goaltending"],
+        subTypes: [
+          { label: "Offensive Goaltending", labels: ["Offensive Goaltending"] },
+          { label: "Defensive Goaltending", labels: ["Defensive Goaltending"] },
+        ],
+      },
+      {
+        label: "Defensive Violation",
+        labels: ["Defensive Goaltending", "Defensive 3 Second Violation", "Kicked Ball"],
+        subTypes: [
+          { label: "Defensive Goaltending", labels: ["Defensive Goaltending"] },
+          { label: "Defensive 3 Second Violation", labels: ["Defensive 3 Second Violation"] },
+          { label: "Kicked Ball", labels: ["Kicked Ball"] },
+        ],
+      },
+      {
+        label: "Misc Violations",
+        labels: ["Inbound", "Lane", "Jump Ball", "Jumpball"],
+        subTypes: [
+          { label: "Inbound", labels: ["Inbound"] },
+          { label: "Lane", labels: ["Lane"] },
+          { label: "Jump Ball", labels: ["Jump Ball", "Jumpball"] },
+        ],
+      },
+      {
+        label: "Out of Bounds",
+        labels: ["Out Of Bounds", "Bad Pass Out Of Bounds", "Bad Pass", "Lost Ball Out Of Bounds", "Lost Ball Turnover", "Step Out Of Bounds"],
+      },
+    ],
+  },
+];
+
+function itemValue(items, labels = []) {
+  return labels.reduce((total, label) => {
+    const raw = items?.[label];
+    const value = typeof raw === "object" && raw !== null ? raw.value : raw;
+    return total + (Number(value) || 0);
+  }, 0);
+}
+
+function itemRank(items, labels = []) {
+  return labels.reduce((bestRank, label) => {
+    const raw = items?.[label];
+    const rank = typeof raw === "object" && raw !== null ? Number(raw.rank) || null : null;
+    if (!rank) return bestRank;
+    return bestRank ? Math.min(bestRank, rank) : rank;
+  }, null);
+}
+
+function uniqueLabelValue(items, groups) {
+  const labels = new Set();
+  groups.forEach((group) => group.labels.forEach((label) => labels.add(label)));
+  return itemValue(items, [...labels]);
+}
+
+function formatCategoryMetric(value, rank) {
+  return `${formatNumber(value, 1)}${rank ? ` (${ordinal(rank)})` : ""}`;
+}
+
+function CategoryColumn({ group, items, sort, onSort, expanded, onToggle }) {
+  const rows = useMemo(() => {
+    const direction = sort.direction === "asc" ? 1 : -1;
+    return group.types
+      .map((type) => ({
+        ...type,
+        value: itemValue(items, type.labels),
+        rank: itemRank(items, type.labels),
+        subTypes: (type.subTypes || []).map((subType) => ({
+          ...subType,
+          value: itemValue(items, subType.labels),
+          rank: itemRank(items, subType.labels),
+        })).filter((subType) => subType.value > 0),
+      }))
+      .filter((type) => type.value > 0)
+      .sort((left, right) => {
+        if (sort.key === "label") {
+          const compare = left.label.localeCompare(right.label, undefined, { numeric: true });
+          if (compare !== 0) return compare * direction;
+        } else {
+          const compare = left.value - right.value;
+          if (compare !== 0) return compare * direction;
+        }
+        return left.label.localeCompare(right.label, undefined, { numeric: true });
+      });
+  }, [group, items, sort]);
+  const total = uniqueLabelValue(items, group.types);
+  const totalRank = itemRank(items, group.labels || []);
+
+  return (
+    <section className={styles.categoryColumn}>
+      <div className={styles.categoryColumnHeader}>
+        <span>{group.title}</span>
+        <strong>{formatCategoryMetric(total, totalRank)}</strong>
+      </div>
+      <div className={styles.categorySubhead}>
+        <SortButton label="Call" sortKey="label" sort={sort} onSort={onSort} />
+        <SortButton label="Calls/G" sortKey="value" sort={sort} onSort={onSort} />
+      </div>
+      <div className={styles.categoryRows}>
+        {rows.map((row) => {
+          const rowKey = `${group.key}:${row.label}`;
+          const isExpanded = expanded.has(rowKey);
+          const canExpand = row.subTypes.length > 0;
+          return (
+            <div key={rowKey} className={styles.categoryRowGroup}>
+              <button
+                type="button"
+                className={`${styles.categoryRow} ${canExpand ? styles.expandableCategoryRow : ""}`}
+                onClick={() => canExpand && onToggle(rowKey)}
+                disabled={!canExpand}
+              >
+                <span>{canExpand ? (isExpanded ? "- " : "+ ") : ""}{row.label}</span>
+                <strong>{formatCategoryMetric(row.value, row.rank)}</strong>
+              </button>
+              {canExpand && isExpanded ? (
+                <div className={styles.categorySubRows}>
+                  {row.subTypes.map((subType) => (
+                    <div key={`${rowKey}:${subType.label}`} className={styles.categorySubRow}>
+                      <span>{subType.label}</span>
+                      <strong>{formatCategoryMetric(subType.value, subType.rank)}</strong>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function CallsByCategoryBreakdown({ items, open, onOpenChange }) {
+  const [sorts, setSorts] = useState(() => Object.fromEntries(
+    CALL_CATEGORY_GROUPS.map((group) => [group.key, { key: "value", direction: "desc" }])
+  ));
+  const [expanded, setExpanded] = useState(() => new Set());
+  const hasData = CALL_CATEGORY_GROUPS.some((group) => uniqueLabelValue(items, group.types) > 0);
+  const handleSort = (groupKey, key) => {
+    setSorts((current) => {
+      const groupSort = current[groupKey] || { key: "value", direction: "desc" };
+      return {
+        ...current,
+        [groupKey]: {
+          key,
+          direction: groupSort.key === key && groupSort.direction === "desc" ? "asc" : "desc",
+        },
+      };
+    });
+  };
+  const handleToggle = (rowKey) => {
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(rowKey)) next.delete(rowKey);
+      else next.add(rowKey);
+      return next;
+    });
+  };
+
+  return (
+    <details
+      className={`${styles.detailBlock} ${styles.categoryBreakdownBlock}`}
+      open={open}
+      onToggle={onOpenChange ? (event) => onOpenChange(event.currentTarget.open) : undefined}
+    >
+      <summary>Calls By Category</summary>
+      {hasData ? (
+        <div className={styles.categoryBreakdownGrid}>
+          {CALL_CATEGORY_GROUPS.map((group) => (
+            <CategoryColumn
+              key={group.key}
+              group={group}
+              items={items}
+              sort={sorts[group.key] || { key: "value", direction: "desc" }}
+              onSort={(key) => handleSort(group.key, key)}
+              expanded={expanded}
+              onToggle={handleToggle}
+            />
+          ))}
+        </div>
+      ) : (
+        <p className={styles.detailEmpty}>No mapped category rows in the loaded dataset.</p>
+      )}
     </details>
   );
 }
@@ -627,6 +891,7 @@ function ProfileModal({ children, onClose, label }) {
 }
 
 function OfficialProfile({ profile, isLoading, onClose, onSelectTeam }) {
+  const [detailSectionsOpen, setDetailSectionsOpen] = useState(false);
   if (!profile) return null;
   return (
     <ProfileModal label={`${profile.name} referee profile`} onClose={onClose}>
@@ -660,7 +925,7 @@ function OfficialProfile({ profile, isLoading, onClose, onSelectTeam }) {
           rank={profile.crewChiefChallengeRateRank}
         />
       </div>
-      <div className={styles.detailGrid}>
+      <div className={`${styles.detailGrid} ${styles.detailGridCategoryWide}`}>
         {isLoading ? <p className={styles.detailEmpty}>Loading profile details...</p> : null}
         <SortableTopList
           title="Calls By Team"
@@ -669,13 +934,13 @@ function OfficialProfile({ profile, isLoading, onClose, onSelectTeam }) {
           valueHeader="Net Calls For"
           onSelectLabel={onSelectTeam}
           valueFormatter={formatSignedDecimal}
+          open={detailSectionsOpen}
+          onOpenChange={setDetailSectionsOpen}
         />
-        <SortableTopList
-          title="Calls By Category"
+        <CallsByCategoryBreakdown
           items={profile.callsByCategory}
-          labelHeader="Category"
-          valueHeader="Calls/G"
-          valueFormatter={(value) => formatNumber(value, 1)}
+          open={detailSectionsOpen}
+          onOpenChange={setDetailSectionsOpen}
         />
       </div>
       <details className={`${styles.detailBlock} ${styles.scrollBlock}`} open>
@@ -704,6 +969,7 @@ function OfficialProfile({ profile, isLoading, onClose, onSelectTeam }) {
 }
 
 function TeamProfile({ profile, isLoading, onClose, onSelectOfficial }) {
+  const [detailSectionsOpen, setDetailSectionsOpen] = useState(false);
   if (!profile) return null;
   return (
     <ProfileModal label={`${profile.team} team profile`} onClose={onClose}>
@@ -732,7 +998,7 @@ function TeamProfile({ profile, isLoading, onClose, onSelectOfficial }) {
           style={profile.challengeRateRank ? successRateStyle(profile.challengeRateRank) : undefined}
         />
       </div>
-      <div className={styles.detailGrid}>
+      <div className={`${styles.detailGrid} ${styles.detailGridCategoryWide}`}>
         {isLoading ? <p className={styles.detailEmpty}>Loading profile details...</p> : null}
         <SortableTopList
           title="Calls By Official"
@@ -741,13 +1007,13 @@ function TeamProfile({ profile, isLoading, onClose, onSelectOfficial }) {
           valueHeader="Net Calls For"
           onSelectLabel={onSelectOfficial}
           valueFormatter={formatSignedDecimal}
+          open={detailSectionsOpen}
+          onOpenChange={setDetailSectionsOpen}
         />
-        <SortableTopList
-          title="Calls By Category"
+        <CallsByCategoryBreakdown
           items={profile.callsByCategory}
-          labelHeader="Category"
-          valueHeader="Calls/G"
-          valueFormatter={(value) => formatNumber(value, 1)}
+          open={detailSectionsOpen}
+          onOpenChange={setDetailSectionsOpen}
         />
       </div>
       <details className={styles.detailBlock} open>
