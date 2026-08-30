@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import Header from "./components/Header.jsx";
 import AuthGate from "./components/AuthGate.jsx";
 import LegacyNotesImportPrompt from "./components/LegacyNotesImportPrompt.jsx";
@@ -21,6 +21,7 @@ const Kpis = lazy(() => import("./pages/Kpis.jsx"));
 const Admin = lazy(() => import("./pages/Admin.jsx"));
 const UserContent = lazy(() => import("./pages/UserContent.jsx"));
 const Tools = lazy(() => import("./pages/Tools.jsx"));
+const Officiating = lazy(() => import("./pages/Officiating.jsx"));
 
 function getCurrentBundleFingerprint() {
   if (typeof document === "undefined" || typeof window === "undefined") return "";
@@ -58,6 +59,7 @@ function scheduleIdleWork(callback, timeout = 5000) {
 }
 
 export default function App() {
+  const location = useLocation();
   const [theme, setTheme] = useState(() => readLocalStorage("theme") || "light");
   const [updateFingerprint, setUpdateFingerprint] = useState("");
   const currentFingerprintRef = useRef("");
@@ -75,6 +77,7 @@ export default function App() {
     hasFeature,
   } = useAuth();
   const canUseTools = !accountsEnabled || hasFeature("tools");
+  const isOfficiatingRoute = location.pathname === "/officiating";
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -269,7 +272,7 @@ export default function App() {
         isAdmin={isAdmin}
         canUseTools={canUseTools}
       />
-      <main>
+      <main className={isOfficiatingRoute ? "officiating-shell" : undefined}>
         <Suspense fallback={<RouteLoadingFallback />}>
           <Routes>
             <Route path="/" element={<Home />} />
@@ -285,6 +288,10 @@ export default function App() {
             <Route
               path="/graphics"
               element={canUseTools ? <Tools section="graphics" /> : <AccessRequired>An admin needs to grant the Tools feature flag before you can use this page.</AccessRequired>}
+            />
+            <Route
+              path="/officiating"
+              element={canUseTools ? <Officiating /> : <AccessRequired>An admin needs to grant the Tools feature flag before you can use this page.</AccessRequired>}
             />
             <Route path="/g/:gameId" element={<Game />} />
             <Route path="/g/:gameId/atc" element={<Game variant="atc" />} />

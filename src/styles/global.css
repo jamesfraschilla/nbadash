@@ -186,6 +186,12 @@ main {
   margin: 0 auto;
 }
 
+main.officiating-shell {
+  max-width: none;
+  min-height: calc(100vh - 88px);
+  background: #060a0f;
+}
+
 @media (max-width: 768px) {
   main {
     padding: 16px 12px 32px;

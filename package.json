@@ -11,6 +11,14 @@
     "typecheck": "npm run typecheck:edge-functions",
     "lint": "eslint .",
     "assets:upload-referees": "node scripts/upload-referee-full-assets.mjs",
+    "officiating:backfill:sample": "node scripts/backfill-officiating-2025-26.mjs",
+    "officiating:audit:challenges": "node scripts/audit-nba-challenge-coverage.mjs",
+    "officiating:import:challenges": "node scripts/import-nba-challenge-log.mjs",
+    "officiating:import:cdn-calls": "node scripts/import-cdnnba-official-calls.mjs",
+    "officiating:refresh:challenge-links": "node scripts/refresh-challenge-official-links.mjs",
+    "officiating:refresh:rollups": "node scripts/refresh-officiating-rollups.mjs",
+    "officiating:check:cache": "node scripts/check-officiating-cache-health.mjs",
+    "officiating:import:pgr": "node scripts/import-pgr-workbooks.mjs",
     "schedule:update": "node scripts/update-nba-schedule.mjs",
     "schedule:prewarm:update": "node scripts/update-wizards-analysis-prewarm-schedule.mjs",
     "test": "node --test \"src/**/*.test.js\"",
@@ -29,7 +37,8 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router": "^6.30.4",
-    "react-router-dom": "^6.30.4"
+    "react-router-dom": "^6.30.4",
+    "read-excel-file": "^9.3.10"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.4.2",

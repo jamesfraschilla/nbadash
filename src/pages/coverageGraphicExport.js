@@ -1,9 +1,11 @@
 import fistIconUrl from "../assets/coverage/fist.png";
+import clampIconUrl from "../assets/coverage/clamp.png";
 import mixIconUrl from "../assets/coverage/mix.png";
 import odbIconUrl from "../assets/coverage/odb.png";
 import redIconUrl from "../assets/coverage/red.png";
 import showIconUrl from "../assets/coverage/show.png";
 import thruIconUrl from "../assets/coverage/thru.png";
+import topIconUrl from "../assets/coverage/top.png";
 import volOneIconUrl from "../assets/coverage/vol-1.png";
 import volTwoIconUrl from "../assets/coverage/vol-2.png";
 import volThreeIconUrl from "../assets/coverage/vol-3.png";
@@ -42,8 +44,10 @@ export const COVERAGE_ICON_OPTIONS = Object.freeze([
   Object.freeze({ key: "show", label: "Show", url: showIconUrl }),
   Object.freeze({ key: "thru", label: "Thru", url: thruIconUrl }),
   Object.freeze({ key: "mix", label: "Mix", url: mixIconUrl }),
+  Object.freeze({ key: "top", label: "Top", url: topIconUrl }),
   Object.freeze({ key: "odb", label: "ODB", url: odbIconUrl }),
   Object.freeze({ key: "white", label: "White", url: whiteIconUrl }),
+  Object.freeze({ key: "clamp", label: "Clamp", url: clampIconUrl }),
   Object.freeze({ key: "fist", label: "Fist", url: fistIconUrl }),
 ]);
 
