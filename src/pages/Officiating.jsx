@@ -893,7 +893,7 @@ function ProfileModal({ children, onClose, label }) {
 }
 
 function OfficialProfile({ profile, isLoading, onClose, onSelectTeam }) {
-  const [detailSectionsOpen, setDetailSectionsOpen] = useState(false);
+  const [detailSectionsOpen, setDetailSectionsOpen] = useState(true);
   if (!profile) return null;
   return (
     <ProfileModal label={`${profile.name} referee profile`} onClose={onClose}>
@@ -971,7 +971,7 @@ function OfficialProfile({ profile, isLoading, onClose, onSelectTeam }) {
 }
 
 function TeamProfile({ profile, isLoading, onClose, onSelectOfficial }) {
-  const [detailSectionsOpen, setDetailSectionsOpen] = useState(false);
+  const [detailSectionsOpen, setDetailSectionsOpen] = useState(true);
   if (!profile) return null;
   return (
     <ProfileModal label={`${profile.team} team profile`} onClose={onClose}>
