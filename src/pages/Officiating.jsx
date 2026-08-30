@@ -24,7 +24,6 @@ const TABS = [
   { key: "teams", label: "Teams" },
   { key: "challenge-log", label: "Challenge Log" },
   { key: "pgr-insights", label: "PGR Insights" },
-  { key: "review", label: "Review" },
 ];
 
 const DEFAULT_SEASON = "2025-26";
@@ -1258,7 +1257,7 @@ export default function Officiating() {
   const [selectedTeam, setSelectedTeam] = useState(null);
   const [loadingOfficialDetails, setLoadingOfficialDetails] = useState(false);
   const [loadingTeamDetails, setLoadingTeamDetails] = useState(false);
-  const activeTab = TABS.some((tab) => tab.key === selectedTab) && (selectedTab !== "review" || isAdmin)
+  const activeTab = TABS.some((tab) => tab.key === selectedTab)
     ? selectedTab
     : "tonight";
   const season = params.get("season") || DEFAULT_SEASON;
@@ -1284,10 +1283,7 @@ export default function Officiating() {
     retry: 1,
   });
 
-  const visibleTabs = useMemo(
-    () => TABS.filter((tab) => tab.key !== "review" || isAdmin),
-    [isAdmin]
-  );
+  const visibleTabs = TABS;
   const sortedOfficials = useMemo(
     () => sortRows(data?.officialProfiles || [], officialSort, "name"),
     [data?.officialProfiles, officialSort]
@@ -1485,11 +1481,7 @@ export default function Officiating() {
         )
       ) : activeTab === "pgr-insights" ? (
         <PgrInsights season={season} canImport={canImportPgr} />
-      ) : (
-        <EmptyPanel title="Review Queue">
-          Low-confidence official matches and challenge matches will appear here for admin review.
-        </EmptyPanel>
-      )}
+      ) : null}
       <OfficialProfile
         profile={selectedOfficial}
         isLoading={loadingOfficialDetails}
