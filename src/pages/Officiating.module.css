@@ -622,16 +622,18 @@
   position: fixed;
   inset: 0;
   z-index: 1000;
-  padding: 28px;
+  padding: 24px 28px 32px;
   display: grid;
-  place-items: center;
+  align-items: start;
+  justify-items: center;
+  overflow: auto;
   background: rgba(0, 0, 0, 0.76);
   backdrop-filter: blur(10px);
 }
 
 .profileModal {
   width: min(1040px, 100%);
-  max-height: min(86vh, 920px);
+  max-height: calc(100vh - 56px);
   position: relative;
   display: grid;
   gap: 16px;
