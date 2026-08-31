@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { assertOutsideWizardsGameWindow } from "./lib/game-window-guard.mjs";
 import { enrichChallengeEventsWithOfficials } from "../src/officiatingChallengeMatcher.js";
 import { detectCoachChallengeActions, extractOfficialCallEvents } from "../src/officiatingParser.js";
 
@@ -637,6 +638,7 @@ async function writeSqlChunks({ outputDir, chunkSize, gameIds, assignmentRows, c
 }
 
 async function main() {
+  await assertOutsideWizardsGameWindow("officiating backfill");
   const season = readArg("season") || DEFAULT_SEASON;
   const teamId = readArg("team-id") || WIZARDS_TEAM_ID;
   const league = hasFlag("league");

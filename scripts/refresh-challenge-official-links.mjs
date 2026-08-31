@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
+import { assertOutsideWizardsGameWindow } from "./lib/game-window-guard.mjs";
 import { enrichChallengeEventsWithOfficials } from "../src/officiatingChallengeMatcher.js";
 
 const DEFAULT_SEASON = "2025-26";
@@ -121,6 +122,7 @@ async function applyUpdates(supabase, rows) {
 }
 
 async function main() {
+  await assertOutsideWizardsGameWindow("challenge official-link refresh");
   await loadLocalEnv();
   const supabase = createSupabaseClient();
   const season = readArg("season") || DEFAULT_SEASON;

@@ -2,6 +2,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { assertOutsideWizardsGameWindow } from "./lib/game-window-guard.mjs";
 import { enrichChallengeEventsWithOfficials } from "../src/officiatingChallengeMatcher.js";
 import { extractOfficialCallEvents } from "../src/officiatingParser.js";
 
@@ -435,6 +436,7 @@ async function enrichOfficialRows(challengeRows, { season, concurrency }) {
 }
 
 async function main() {
+  await assertOutsideWizardsGameWindow("NBA challenge-log import");
   const season = readArg("season") || DEFAULT_SEASON;
   const sourceName = readArg("source");
   const explicitPdf = readArg("pdf");

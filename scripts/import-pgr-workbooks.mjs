@@ -4,6 +4,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
+import { assertOutsideWizardsGameWindow } from "./lib/game-window-guard.mjs";
 import { parsePgrWorkbook, summarizePgrEvaluations } from "../src/pgrWorkbook.js";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
@@ -384,6 +385,7 @@ async function importFile(supabase, filePath, { season, mode, dryRun }) {
 }
 
 async function main() {
+  await assertOutsideWizardsGameWindow("PGR workbook import");
   await loadLocalEnv();
   const season = readArg("season") || DEFAULT_SEASON;
   const mode = hasFlag("replace") ? "replace" : "create";

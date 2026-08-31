@@ -33,6 +33,14 @@ async function selectTable(table, queryBuilder, fallback = []) {
   return { data: asArray(data), unavailable: false };
 }
 
+async function selectPreferredTable(preferredTable, fallbackTable, queryBuilder, options = {}) {
+  const { allowFallback = false, fallback = [] } = options;
+  const preferredResult = await selectTable(preferredTable, queryBuilder, fallback);
+  if (!preferredResult.unavailable) return preferredResult;
+  if (!allowFallback) return preferredResult;
+  return selectTable(fallbackTable, queryBuilder, fallback);
+}
+
 async function safeSelectTable(table, queryBuilder, fallback = []) {
   try {
     return await selectTable(table, queryBuilder, fallback);
@@ -414,9 +422,9 @@ async function fetchPgrContextRows(season, imports) {
 
 export async function fetchPgrInsightsData({ season = "2025-26" } = {}) {
   const [overviewResult, importsResult, accuracyResult] = await Promise.all([
-    selectTable("nba_pgr_overview_rollups", (query) => query.select("*").eq("season", season).limit(1)),
-    selectTable("nba_pgr_import_rollups", (query) => query.select("*").eq("season", season).order("game_date", { ascending: false }).limit(100)),
-    safeSelectTable("nba_pgr_accuracy_rollups", (query) => query.select("*").eq("season", season)),
+    selectPreferredTable("nba_pgr_overview_rollups_cache", "nba_pgr_overview_rollups", (query) => query.select("*").eq("season", season).limit(1)),
+    selectPreferredTable("nba_pgr_import_rollups_cache", "nba_pgr_import_rollups", (query) => query.select("*").eq("season", season).order("game_date", { ascending: false }).limit(100)),
+    safeSelectTable("nba_pgr_accuracy_rollups_cache", (query) => query.select("*").eq("season", season)),
   ]);
 
   const overviewRow = overviewResult.data[0] || {};
@@ -464,7 +472,7 @@ export async function fetchPgrInsightsData({ season = "2025-26" } = {}) {
 }
 
 export async function fetchPgrSmartInsightsRows({ season = "2025-26" } = {}) {
-  const importsResult = await selectTable("nba_pgr_import_rollups", (query) => query
+  const importsResult = await selectPreferredTable("nba_pgr_import_rollups_cache", "nba_pgr_import_rollups", (query) => query
     .select("*")
     .eq("season", season)
     .order("game_date", { ascending: false })

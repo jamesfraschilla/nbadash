@@ -291,9 +291,11 @@ async function selectTable(table, queryBuilder, { maxRows = SUPABASE_PAGE_SIZE }
 }
 
 async function selectPreferredTable(preferredTable, fallbackTable, queryBuilder, options = {}) {
-  const preferredResult = await selectTable(preferredTable, queryBuilder, options);
+  const { allowFallback = false, ...selectOptions } = options;
+  const preferredResult = await selectTable(preferredTable, queryBuilder, selectOptions);
   if (!preferredResult.unavailable) return preferredResult;
-  return selectTable(fallbackTable, queryBuilder, options);
+  if (!allowFallback) return preferredResult;
+  return selectTable(fallbackTable, queryBuilder, selectOptions);
 }
 
 function getOfficialKey(row) {

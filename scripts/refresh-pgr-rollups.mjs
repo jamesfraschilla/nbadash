@@ -6,33 +6,21 @@ import { assertOutsideWizardsGameWindow } from "./lib/game-window-guard.mjs";
 const execFileAsync = promisify(execFile);
 
 const ROLLUP_CACHES = [
-  "nba_authoritative_coach_challenge_events_cache",
-  "nba_official_call_category_rollups_cache",
-  "nba_team_call_category_rollups_cache",
-  "nba_team_official_net_call_rollups_cache",
-  "nba_officiating_overview_rollups_cache",
-  "nba_official_profiles_cache",
-  "nba_team_profiles_cache",
+  "nba_pgr_import_rollups_cache",
+  "nba_pgr_overview_rollups_cache",
+  "nba_pgr_accuracy_rollups_cache",
 ];
-
-async function refreshView(view) {
-  const startedAt = Date.now();
-  await execFileAsync("npx", [
-    "supabase",
-    "db",
-    "query",
-    "--linked",
-    `refresh materialized view public.${view};`,
-  ], {
-    maxBuffer: 1024 * 1024 * 8,
-  });
-  return ((Date.now() - startedAt) / 1000).toFixed(1);
-}
 
 async function runSql(sql) {
   await execFileAsync("npx", ["supabase", "db", "query", "--linked", sql], {
     maxBuffer: 1024 * 1024 * 8,
   });
+}
+
+async function refreshView(view) {
+  const startedAt = Date.now();
+  await runSql(`refresh materialized view public.${view};`);
+  return Date.now() - startedAt;
 }
 
 async function recordRefresh({ view, durationMs, status, errorMessage = "" }) {
@@ -53,19 +41,15 @@ async function recordRefresh({ view, durationMs, status, errorMessage = "" }) {
 }
 
 async function main() {
-  await assertOutsideWizardsGameWindow("officiating rollup refresh");
+  await assertOutsideWizardsGameWindow("PGR rollup refresh");
   const startedAt = Date.now();
   for (const view of ROLLUP_CACHES) {
     process.stdout.write(`Refreshing ${view}... `);
     const viewStartedAt = Date.now();
     try {
-      const seconds = await refreshView(view);
-      await recordRefresh({
-        view,
-        durationMs: Date.now() - viewStartedAt,
-        status: "success",
-      });
-      process.stdout.write(`${seconds}s\n`);
+      const durationMs = await refreshView(view);
+      await recordRefresh({ view, durationMs, status: "success" });
+      process.stdout.write(`${(durationMs / 1000).toFixed(1)}s\n`);
     } catch (error) {
       await recordRefresh({
         view,
@@ -76,8 +60,7 @@ async function main() {
       throw error;
     }
   }
-  const totalSeconds = ((Date.now() - startedAt) / 1000).toFixed(1);
-  console.log(`Refreshed ${ROLLUP_CACHES.length} officiating rollup caches in ${totalSeconds}s.`);
+  console.log(`Refreshed ${ROLLUP_CACHES.length} PGR rollup caches in ${((Date.now() - startedAt) / 1000).toFixed(1)}s.`);
 }
 
 main().catch((error) => {

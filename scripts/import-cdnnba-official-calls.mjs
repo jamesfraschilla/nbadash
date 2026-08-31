@@ -5,6 +5,7 @@ import { existsSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
+import { assertOutsideWizardsGameWindow } from "./lib/game-window-guard.mjs";
 import { buildOfficialCallEvent, extractOfficialToken, matchOfficialToken } from "../src/officiatingParser.js";
 
 const DEFAULT_SEASON = "2025-26";
@@ -552,6 +553,7 @@ async function archiveExists(archivePath) {
 }
 
 async function main() {
+  await assertOutsideWizardsGameWindow("cdnnba official-call import");
   await loadLocalEnv();
   const season = readArg("season") || DEFAULT_SEASON;
   const seasonStart = readArg("season-start") || splitSeasonStart(season);
