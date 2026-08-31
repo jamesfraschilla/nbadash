@@ -218,3 +218,8 @@
 .dropdownItemButton:hover {
   background: var(--header-button-hover);
 }
+
+.dropdownItemButton:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}

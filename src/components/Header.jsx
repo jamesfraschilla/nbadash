@@ -13,6 +13,7 @@ export default function Header({ theme, onToggleTheme, onSignOut, profile, isAdm
   const menuRef = useRef(null);
   const [isOpen, setIsOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   const dateParam = params.get("d");
   const dateInput = dateParam || formatDateInputInTimeZone(new Date(), "America/New_York");
@@ -144,12 +145,19 @@ export default function Header({ theme, onToggleTheme, onSignOut, profile, isAdm
                   type="button"
                   className={styles.dropdownItemButton}
                   role="menuitem"
-                  onClick={() => {
+                  disabled={isSigningOut}
+                  onClick={async () => {
+                    if (isSigningOut) return;
                     setIsMenuOpen(false);
-                    onSignOut();
+                    setIsSigningOut(true);
+                    try {
+                      await onSignOut();
+                    } finally {
+                      setIsSigningOut(false);
+                    }
                   }}
                 >
-                  Sign Out
+                  {isSigningOut ? "Signing Out..." : "Sign Out"}
                 </button>
               </div>
             ) : null}

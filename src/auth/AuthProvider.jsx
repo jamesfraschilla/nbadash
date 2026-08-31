@@ -1,5 +1,5 @@
 import { createContext, useEffect, useMemo, useRef, useState } from "react";
-import { supabase } from "../supabaseClient.js";
+import { clearSupabaseAuthStorage, supabase } from "../supabaseClient.js";
 import { ACCOUNTS_ENABLED, buildAuthRedirectUrl, isAllowedAccountEmail, normalizeAccountEmail } from "../authConfig.js";
 import { fetchProfile, touchProfileLastLogin } from "../accountData.js";
 
@@ -74,9 +74,16 @@ export function AuthProvider({ children }) {
       try {
         const nextProfile = await fetchProfile(user.id);
         if (cancelled) return;
+        if (!nextProfile) {
+          loadedProfileUserIdRef.current = "";
+          loadedProfileRef.current = null;
+          setProfile(null);
+          setError("Your login succeeded, but this account does not have an active NBA Dashboard profile. Ask an admin to create or repair the profile.");
+          return;
+        }
         loadedProfileUserIdRef.current = user.id;
-        loadedProfileRef.current = nextProfile || null;
-        setProfile(nextProfile || null);
+        loadedProfileRef.current = nextProfile;
+        setProfile(nextProfile);
         setError("");
         if (touchLogin && nextProfile?.status === "active" && shouldTouchLastLogin(user.id)) {
           touchProfileLastLogin(user.id).catch(() => {});
@@ -212,11 +219,20 @@ export function AuthProvider({ children }) {
     },
     async signOut() {
       if (!supabase) return;
-      const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
-      if (signOutError) throw signOutError;
       setProfile(null);
       setSession(null);
       setRequiresPasswordReset(false);
+      setEmailSentTo("");
+      setError("");
+      loadedProfileUserIdRef.current = "";
+      loadedProfileRef.current = null;
+      try {
+        await supabase.auth.signOut();
+      } catch {
+        // Local auth state is already cleared; a remote sign-out failure should not trap the user.
+      } finally {
+        clearSupabaseAuthStorage();
+      }
     },
     async completePasswordReset(nextPassword) {
       if (!supabase) throw new Error("Supabase is not configured.");

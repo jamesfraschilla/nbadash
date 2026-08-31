@@ -18,6 +18,15 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.warn("Supabase env vars are missing. Highlights will be disabled.");
 }
 
+function safeListStorageKeys(storage) {
+  if (!storage) return [];
+  try {
+    return Array.from({ length: storage.length }, (_, index) => storage.key(index)).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 function safeReadStorage(storage, key) {
   if (!storage) return null;
   try {
@@ -113,6 +122,15 @@ const browserStorage = typeof window !== "undefined"
     },
   }
   : undefined;
+
+export function clearSupabaseAuthStorage() {
+  if (typeof window === "undefined") return;
+  [window.localStorage, window.sessionStorage].forEach((storage) => {
+    safeListStorageKeys(storage)
+      .filter((key) => key === AUTH_STORAGE_KEY || key.includes("auth-token"))
+      .forEach((key) => safeRemoveStorage(storage, key));
+  });
+}
 
 export const supabase = supabaseUrl && supabaseAnonKey
   ? createClient(supabaseUrl, supabaseAnonKey, {
