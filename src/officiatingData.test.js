@@ -136,6 +136,109 @@ test("official challenge logs prefer whistle label while counting dual crew-chie
   assert.equal(profile.challengeLog[0].profileChallengeRole, "whistle");
 });
 
+test("official profiles exclude preseason calls, assignments, and challenges from cumulative stats", () => {
+  const [profile] = buildOfficialProfiles([
+    {
+      game_id: "0012500001",
+      season_type: "Preseason",
+      official_id: "25",
+      official_name: "Scott Foster",
+      primary_category: "foul",
+    },
+    {
+      game_id: "0022500001",
+      season_type: "Regular Season",
+      official_id: "25",
+      official_name: "Scott Foster",
+      primary_category: "foul",
+    },
+  ], [
+    {
+      id: "preseason-challenge",
+      game_id: "0012500001",
+      season_type: "Preseason",
+      challenge_outcome: "successful",
+      crew_chief_id: "25",
+      crew_chief_name: "Scott Foster",
+    },
+    {
+      id: "regular-challenge",
+      game_id: "0022500001",
+      season_type: "Regular Season",
+      challenge_outcome: "unsuccessful",
+      crew_chief_id: "25",
+      crew_chief_name: "Scott Foster",
+    },
+  ], [
+    {
+      game_id: "0012500001",
+      season_type: "Preseason",
+      official_id: "25",
+      official_name: "Scott Foster",
+    },
+    {
+      game_id: "0022500001",
+      season_type: "Regular Season",
+      official_id: "25",
+      official_name: "Scott Foster",
+    },
+  ]);
+
+  assert.equal(profile.games, 1);
+  assert.equal(profile.calls, 1);
+  assert.equal(profile.crewChiefChallenges, 1);
+  assert.equal(profile.successfulCrewChiefChallenges, 0);
+  assert.equal(profile.challengeLog.length, 1);
+  assert.equal(profile.challengeLog[0].id, "regular-challenge");
+});
+
+test("team profiles exclude preseason calls and challenges from cumulative stats", () => {
+  const [profile] = buildTeamProfiles([
+    {
+      game_id: "0012500001",
+      season_type: "Preseason",
+      away_team: "WAS",
+      home_team: "BOS",
+      charged_team: "BOS",
+      benefiting_team: "WAS",
+      official_name: "Scott Foster",
+      primary_category: "foul",
+    },
+    {
+      game_id: "0022500001",
+      season_type: "Regular Season",
+      away_team: "WAS",
+      home_team: "BOS",
+      charged_team: "WAS",
+      benefiting_team: "BOS",
+      official_name: "Scott Foster",
+      primary_category: "foul",
+    },
+  ], [
+    {
+      id: "preseason-challenge",
+      game_id: "0012500001",
+      season_type: "Preseason",
+      challenging_team: "WAS",
+      challenge_outcome: "successful",
+    },
+    {
+      id: "regular-challenge",
+      game_id: "0022500001",
+      season_type: "Regular Season",
+      challenging_team: "WAS",
+      challenge_outcome: "unsuccessful",
+    },
+  ]).filter((row) => row.team === "WAS");
+
+  assert.equal(profile.games, 1);
+  assert.equal(profile.netCallsFor, -1);
+  assert.equal(profile.challenges, 1);
+  assert.equal(profile.successfulChallenges, 0);
+  assert.equal(profile.challengeLog.length, 1);
+  assert.equal(profile.challengeLog[0].id, "regular-challenge");
+});
+
 test("team calls by official uses games the official worked for that team", () => {
   const [profile] = buildTeamProfiles([
     {

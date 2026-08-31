@@ -345,6 +345,9 @@ async function importFile(supabase, filePath, { season, mode, dryRun }) {
   if (!game.is_wizards_game) {
     throw new Error(`${report.game_id} is not a Wizards game (${game.matchup || "unknown matchup"}).`);
   }
+  if (String(report.game_id || "").startsWith("001") || String(game.season_type || "").trim().toLowerCase() === "preseason") {
+    throw new Error(`${report.game_id} is a preseason game. PGR imports exclude preseason games.`);
+  }
 
   const result = {
     filename,

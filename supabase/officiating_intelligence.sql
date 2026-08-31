@@ -558,6 +558,10 @@ begin
     raise exception 'PGR imports are restricted to Washington Wizards games.';
   end if;
 
+  if game_id_value like '001%' or lower(coalesce(report_payload->'game'->>'season_type', '')) = 'preseason' then
+    raise exception 'PGR imports exclude preseason games.';
+  end if;
+
   select * into existing_import
   from public.nba_pgr_imports
   where file_hash = report_payload->>'file_hash'
@@ -833,6 +837,7 @@ select
   end as violations_per_game
 from public.nba_official_call_events
 where coalesce(official_name, '') <> ''
+  and lower(coalesce(season_type, '')) <> 'preseason'
 group by season, season_type, official_id, official_name;
 
 create or replace view public.nba_official_call_category_rollups as
@@ -845,11 +850,13 @@ with official_games as (
     select season, official_id, official_name, game_id
     from public.nba_official_game_assignments
     where coalesce(official_id, official_name, '') <> ''
+      and lower(coalesce(season_type, '')) <> 'preseason'
       and is_alternate = false
     union
     select season, official_id, official_name, game_id
     from public.nba_official_call_events
     where coalesce(official_id, official_name, '') <> ''
+      and lower(coalesce(season_type, '')) <> 'preseason'
   ) source
   group by season, coalesce(nullif(official_id, ''), official_name)
 ),
@@ -895,6 +902,7 @@ categorized_calls as (
     from public.nba_official_call_events
   ) calls
   where coalesce(official_id, official_name, '') <> ''
+    and lower(coalesce(season_type, '')) <> 'preseason'
 ),
 category_counts as (
   select
@@ -949,18 +957,22 @@ with team_games as (
     select season, away_team as team, game_id
     from public.nba_official_call_events
     where coalesce(away_team, '') <> ''
+      and lower(coalesce(season_type, '')) <> 'preseason'
     union
     select season, home_team as team, game_id
     from public.nba_official_call_events
     where coalesce(home_team, '') <> ''
+      and lower(coalesce(season_type, '')) <> 'preseason'
     union
     select season, coalesce(charged_team, team_tricode) as team, game_id
     from public.nba_official_call_events
     where coalesce(charged_team, team_tricode, '') <> ''
+      and lower(coalesce(season_type, '')) <> 'preseason'
     union
     select season, benefiting_team as team, game_id
     from public.nba_official_call_events
     where coalesce(benefiting_team, '') <> ''
+      and lower(coalesce(season_type, '')) <> 'preseason'
   ) games_source
   group by season, team
 ),
@@ -1004,6 +1016,7 @@ categorized_calls as (
     from public.nba_official_call_events
   ) calls
   where coalesce(charged_team, team_tricode, benefiting_team, '') <> ''
+    and lower(coalesce(season_type, '')) <> 'preseason'
 ),
 category_counts as (
   select
@@ -1063,6 +1076,7 @@ with official_team_games as (
     where is_alternate = false
       and coalesce(official_id, official_name, '') <> ''
       and coalesce(away_team, '') <> ''
+      and lower(coalesce(season_type, '')) <> 'preseason'
     union
     select
       season,
@@ -1075,6 +1089,7 @@ with official_team_games as (
     where is_alternate = false
       and coalesce(official_id, official_name, '') <> ''
       and coalesce(home_team, '') <> ''
+      and lower(coalesce(season_type, '')) <> 'preseason'
     union
     select
       season,
@@ -1086,6 +1101,7 @@ with official_team_games as (
     from public.nba_official_call_events
     where coalesce(official_id, official_name, '') <> ''
       and coalesce(away_team, '') <> ''
+      and lower(coalesce(season_type, '')) <> 'preseason'
     union
     select
       season,
@@ -1097,6 +1113,7 @@ with official_team_games as (
     from public.nba_official_call_events
     where coalesce(official_id, official_name, '') <> ''
       and coalesce(home_team, '') <> ''
+      and lower(coalesce(season_type, '')) <> 'preseason'
   ) games_source
   group by season, official_key, team
 ),
@@ -1118,6 +1135,7 @@ net_calls as (
     from public.nba_official_call_events
     where coalesce(official_id, official_name, '') <> ''
       and coalesce(charged_team, team_tricode, '') <> ''
+      and lower(coalesce(season_type, '')) <> 'preseason'
     union all
     select
       season,
@@ -1128,6 +1146,7 @@ net_calls as (
     from public.nba_official_call_events
     where coalesce(official_id, official_name, '') <> ''
       and coalesce(benefiting_team, '') <> ''
+      and lower(coalesce(season_type, '')) <> 'preseason'
   ) call_source
   group by season, coalesce(nullif(official_id, ''), official_name), team
 )
@@ -1168,6 +1187,7 @@ select
   count(distinct game_id)::integer as games
 from public.nba_official_call_events
 where coalesce(charged_team, team_tricode, '') <> ''
+  and lower(coalesce(season_type, '')) <> 'preseason'
 group by season, season_type, coalesce(charged_team, team_tricode);
 
 create or replace view public.nba_officiating_overview_rollups as
@@ -1177,6 +1197,7 @@ with challenge_counts as (
     count(*)::integer as challenges,
     count(*) filter (where challenge_outcome = 'successful')::integer as successful_challenges
   from public.nba_authoritative_coach_challenge_events
+  where lower(coalesce(season_type, '')) <> 'preseason'
   group by season
 ),
 call_counts as (
@@ -1186,6 +1207,7 @@ call_counts as (
     count(distinct coalesce(official_id, official_name))::integer as officials,
     count(distinct coalesce(charged_team, team_tricode, benefiting_team))::integer as call_teams
   from public.nba_official_call_events
+  where lower(coalesce(season_type, '')) <> 'preseason'
   group by season
 ),
 assignment_counts as (
@@ -1194,6 +1216,7 @@ assignment_counts as (
     count(distinct coalesce(official_id, official_name))::integer as assignment_officials
   from public.nba_official_game_assignments
   where is_alternate = false
+    and lower(coalesce(season_type, '')) <> 'preseason'
   group by season
 ),
 team_counts as (
@@ -1202,10 +1225,12 @@ team_counts as (
     select season, coalesce(charged_team, team_tricode) as team
     from public.nba_official_call_events
     where coalesce(charged_team, team_tricode, '') <> ''
+      and lower(coalesce(season_type, '')) <> 'preseason'
     union
     select season, challenging_team as team
     from public.nba_authoritative_coach_challenge_events
     where coalesce(challenging_team, '') <> ''
+      and lower(coalesce(season_type, '')) <> 'preseason'
   ) source
   group by season
 )
@@ -1232,18 +1257,22 @@ with official_keys as (
   from public.nba_official_game_assignments
   where coalesce(official_id, official_name, '') <> ''
     and is_alternate = false
+    and lower(coalesce(season_type, '')) <> 'preseason'
   union
   select season, coalesce(nullif(official_id, ''), official_name) as official_key
   from public.nba_official_call_events
   where coalesce(official_id, official_name, '') <> ''
+    and lower(coalesce(season_type, '')) <> 'preseason'
   union
   select season, coalesce(nullif(crew_chief_id, ''), crew_chief_name) as official_key
   from public.nba_authoritative_coach_challenge_events
   where coalesce(crew_chief_id, crew_chief_name, '') <> ''
+    and lower(coalesce(season_type, '')) <> 'preseason'
   union
   select season, coalesce(nullif(whistling_official_id, ''), whistling_official_name) as official_key
   from public.nba_authoritative_coach_challenge_events
   where coalesce(whistling_official_id, whistling_official_name, '') <> ''
+    and lower(coalesce(season_type, '')) <> 'preseason'
 ),
 assignment_rollups as (
   select
@@ -1256,6 +1285,7 @@ assignment_rollups as (
   from public.nba_official_game_assignments
   where coalesce(official_id, official_name, '') <> ''
     and is_alternate = false
+    and lower(coalesce(season_type, '')) <> 'preseason'
   group by season, coalesce(nullif(official_id, ''), official_name)
 ),
 call_rollups as (
@@ -1271,6 +1301,7 @@ call_rollups as (
     count(*) filter (where primary_category = 'technical')::integer as technicals
   from public.nba_official_call_events
   where coalesce(official_id, official_name, '') <> ''
+    and lower(coalesce(season_type, '')) <> 'preseason'
   group by season, coalesce(nullif(official_id, ''), official_name)
 ),
 whistle_challenge_rollups as (
@@ -1281,6 +1312,7 @@ whistle_challenge_rollups as (
     count(*) filter (where challenge_outcome = 'successful')::integer as successful_whistle_challenges
   from public.nba_authoritative_coach_challenge_events
   where coalesce(whistling_official_id, whistling_official_name, '') <> ''
+    and lower(coalesce(season_type, '')) <> 'preseason'
   group by season, coalesce(nullif(whistling_official_id, ''), whistling_official_name)
 ),
 crew_challenge_rollups as (
@@ -1291,6 +1323,7 @@ crew_challenge_rollups as (
     count(*) filter (where challenge_outcome = 'successful')::integer as successful_crew_chief_challenges
   from public.nba_authoritative_coach_challenge_events
   where coalesce(crew_chief_id, crew_chief_name, '') <> ''
+    and lower(coalesce(season_type, '')) <> 'preseason'
   group by season, coalesce(nullif(crew_chief_id, ''), crew_chief_name)
 ),
 unique_challenge_rollups as (
@@ -1305,10 +1338,12 @@ unique_challenge_rollups as (
       select id, season, challenge_outcome, coalesce(nullif(crew_chief_id, ''), crew_chief_name) as official_key
       from public.nba_authoritative_coach_challenge_events
       where coalesce(crew_chief_id, crew_chief_name, '') <> ''
+        and lower(coalesce(season_type, '')) <> 'preseason'
       union all
       select id, season, challenge_outcome, coalesce(nullif(whistling_official_id, ''), whistling_official_name) as official_key
       from public.nba_authoritative_coach_challenge_events
       where coalesce(whistling_official_id, whistling_official_name, '') <> ''
+        and lower(coalesce(season_type, '')) <> 'preseason'
     ) challenge_officials
   ) unique_challenges
   group by season, official_key
@@ -1367,14 +1402,17 @@ with teams as (
   select season, coalesce(charged_team, team_tricode) as team
   from public.nba_official_call_events
   where coalesce(charged_team, team_tricode, '') <> ''
+    and lower(coalesce(season_type, '')) <> 'preseason'
   union
   select season, benefiting_team as team
   from public.nba_official_call_events
   where coalesce(benefiting_team, '') <> ''
+    and lower(coalesce(season_type, '')) <> 'preseason'
   union
   select season, challenging_team as team
   from public.nba_authoritative_coach_challenge_events
   where coalesce(challenging_team, '') <> ''
+    and lower(coalesce(season_type, '')) <> 'preseason'
 ),
 calls_against as (
   select
@@ -1383,6 +1421,7 @@ calls_against as (
     count(*)::integer as calls_against
   from public.nba_official_call_events
   where coalesce(charged_team, team_tricode, '') <> ''
+    and lower(coalesce(season_type, '')) <> 'preseason'
   group by season, coalesce(charged_team, team_tricode)
 ),
 calls_for as (
@@ -1392,6 +1431,7 @@ calls_for as (
     count(*)::integer as calls_for
   from public.nba_official_call_events
   where coalesce(benefiting_team, '') <> ''
+    and lower(coalesce(season_type, '')) <> 'preseason'
   group by season, benefiting_team
 ),
 team_games as (
@@ -1400,18 +1440,22 @@ team_games as (
     select season, away_team as team, game_id
     from public.nba_official_call_events
     where coalesce(away_team, '') <> ''
+      and lower(coalesce(season_type, '')) <> 'preseason'
     union
     select season, home_team as team, game_id
     from public.nba_official_call_events
     where coalesce(home_team, '') <> ''
+      and lower(coalesce(season_type, '')) <> 'preseason'
     union
     select season, coalesce(charged_team, team_tricode) as team, game_id
     from public.nba_official_call_events
     where coalesce(charged_team, team_tricode, '') <> ''
+      and lower(coalesce(season_type, '')) <> 'preseason'
     union
     select season, benefiting_team as team, game_id
     from public.nba_official_call_events
     where coalesce(benefiting_team, '') <> ''
+      and lower(coalesce(season_type, '')) <> 'preseason'
   ) games_source
   group by season, team
 ),
@@ -1423,6 +1467,7 @@ challenge_rollups as (
     count(*) filter (where challenge_outcome = 'successful')::integer as successful_challenges
   from public.nba_authoritative_coach_challenge_events
   where coalesce(challenging_team, '') <> ''
+    and lower(coalesce(season_type, '')) <> 'preseason'
   group by season, challenging_team
 )
 select
@@ -1508,7 +1553,8 @@ select
     when imports.row_count > 0 then coalesce((imports.summary_payload->'all'->>'calls')::numeric, 0) / imports.row_count
     else 0
   end as call_rate
-from public.nba_pgr_imports imports;
+from public.nba_pgr_imports imports
+where imports.game_id not like '001%';
 
 create or replace view public.nba_pgr_overview_rollups as
 select
@@ -1530,6 +1576,7 @@ select
     else 0
   end as call_rate
 from public.nba_pgr_imports
+where game_id not like '001%'
 group by season;
 
 create or replace view public.nba_pgr_accuracy_rollups as
@@ -1549,6 +1596,7 @@ scoped as (
     coalesce((imports.summary_payload->scopes.scope->>'missed_potential_infractions')::integer, 0) as missed_potential_infractions
   from public.nba_pgr_imports imports
   cross join scopes
+  where imports.game_id not like '001%'
 )
 select
   season,
@@ -1602,6 +1650,7 @@ select
   end as call_rate
 from public.nba_pgr_evaluations
 where coalesce(player_action_code, '') <> ''
+  and game_id not like '001%'
 group by season, player_action_code;
 
 create or replace view public.nba_pgr_infraction_type_distribution as
@@ -1618,6 +1667,7 @@ select
   end as infraction_rate
 from public.nba_pgr_evaluations
 where coalesce(infraction_type_name, '') <> ''
+  and game_id not like '001%'
 group by season, infraction_type_name;
 
 create or replace function public.nba_pgr_smart_insights(filters jsonb default '{}'::jsonb)
@@ -1640,6 +1690,7 @@ imports as (
   select imports.*
   from public.nba_pgr_imports imports
   join params on params.season = imports.season
+  where imports.game_id not like '001%'
 ),
 recent_games as (
   select game_id
@@ -1655,6 +1706,7 @@ crew_by_game as (
   from public.nba_official_game_assignments
   where season = (select season from params)
     and is_alternate = false
+    and lower(coalesce(season_type, '')) <> 'preseason'
   order by
     game_id,
     case when lower(coalesce(role_key, '')) in ('crewchief', 'crew_chief') then 0 else 1 end,
@@ -1695,6 +1747,7 @@ context_rows as (
     from public.nba_official_call_events calls
     where calls.season = evaluations.season
       and calls.game_id = evaluations.game_id
+      and lower(coalesce(calls.season_type, '')) <> 'preseason'
       and (
         calls.action_number::text = evaluations.event_id
         or (calls.action_number + 100000)::text = evaluations.event_id

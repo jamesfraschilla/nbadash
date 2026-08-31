@@ -11,6 +11,7 @@ const WIZARDS_TEAM_ID = "1610612764";
 const DEFAULT_SEASON = "2025-26";
 const DEFAULT_GAME_IDS = ["0042500131"];
 const DEFAULT_SEASON_TYPES = ["Regular Season", "Playoffs"];
+const EXCLUDED_STAT_SEASON_TYPES = new Set(["preseason"]);
 const NBA_TEAM_IDS = [
   "1610612737", "1610612738", "1610612751", "1610612766", "1610612741", "1610612739",
   "1610612742", "1610612743", "1610612765", "1610612744", "1610612745", "1610612754",
@@ -311,6 +312,10 @@ function confidenceCounts(events) {
 
 function normalizedSeasonType(game, fallback = "") {
   return String(game.seasonType || fallback || "").replace(/^playoffs$/i, "Playoffs");
+}
+
+function isIncludedStatSeasonType(seasonType) {
+  return !EXCLUDED_STAT_SEASON_TYPES.has(String(seasonType || "").trim().toLowerCase());
 }
 
 function normalizedGameDate(game, fallback = "") {
@@ -643,7 +648,11 @@ async function main() {
   const teamId = readArg("team-id") || WIZARDS_TEAM_ID;
   const league = hasFlag("league");
   const teamIds = readListArg("team-ids", league ? NBA_TEAM_IDS : [teamId]);
-  const seasonTypes = readListArg("season-types", DEFAULT_SEASON_TYPES);
+  const requestedSeasonTypes = readListArg("season-types", DEFAULT_SEASON_TYPES);
+  const seasonTypes = requestedSeasonTypes.filter(isIncludedStatSeasonType);
+  if (seasonTypes.length !== requestedSeasonTypes.length) {
+    console.error("Ignoring preseason for officiating stat backfill. Preseason challenges can be imported through import-nba-challenge-log.");
+  }
   const gameIdsArg = readListArg("game-ids");
   const maxGames = readIntegerArg("max-games", 0);
   const concurrency = readIntegerArg("concurrency", 4);
@@ -666,7 +675,8 @@ async function main() {
         gameDate: "",
         matchup: "",
       }));
-  const gameRefs = discoveredGames.length ? discoveredGames : DEFAULT_GAME_IDS.map((gameId) => ({ gameId, seasonType: "", gameDate: "", matchup: "" }));
+  const gameRefs = (discoveredGames.length ? discoveredGames : DEFAULT_GAME_IDS.map((gameId) => ({ gameId, seasonType: "", gameDate: "", matchup: "" })))
+    .filter((gameRef) => isIncludedStatSeasonType(gameRef.seasonType || inferSeasonTypeFromGameId(gameRef.gameId)));
   console.error(`Discovered ${gameRefs.length} games for ${league ? "league" : teamId} via ${gameIdSource}.`);
   const errors = [];
   let processedCount = 0;

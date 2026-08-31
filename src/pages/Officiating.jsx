@@ -42,7 +42,7 @@ function formatRateRecord(successes, attempts) {
 
 function formatNumber(value, decimals = 0) {
   const number = Number(value);
-  if (!Number.isFinite(number)) return decimals ? "0.0" : "0";
+  if (!Number.isFinite(number)) return decimals ? (0).toFixed(decimals) : "0";
   return number.toFixed(decimals);
 }
 
@@ -126,7 +126,7 @@ function SortableTopList({
   labelHeader = "Category",
   valueHeader = "Value",
   onSelectLabel,
-  valueFormatter = (value) => formatNumber(value, 1),
+  valueFormatter = (value) => formatNumber(value, 2),
   defaultOpen = false,
   open,
   onOpenChange,
@@ -318,7 +318,7 @@ function uniqueLabelValue(items, groups) {
 }
 
 function formatCategoryMetric(value, rank) {
-  return `${formatNumber(value, 1)}${rank ? ` (${ordinal(rank)})` : ""}`;
+  return `${formatNumber(value, 2)}${rank ? ` (${ordinal(rank)})` : ""}`;
 }
 
 function CategoryColumn({ group, items, sort, onSort, expanded, onToggle }) {
@@ -478,9 +478,9 @@ function TeamLogo({ team, teamId, className = "" }) {
   );
 }
 
-function formatSignedDecimal(value, decimals = 1) {
+function formatSignedDecimal(value, decimals = 2) {
   const number = Number(value);
-  if (!Number.isFinite(number)) return decimals ? "0.0" : "0";
+  if (!Number.isFinite(number)) return decimals ? (0).toFixed(decimals) : "0";
   return `${number > 0 ? "+" : ""}${number.toFixed(decimals)}`;
 }
 
@@ -544,7 +544,7 @@ function sortedDisplayRank(rows, sort, row, index) {
   return topIsRankOne ? index + 1 : rows.length - index;
 }
 
-function RankedMetric({ value, rankInfo, rowId, formatter = (metric) => formatNumber(metric, 1) }) {
+function RankedMetric({ value, rankInfo, rowId, formatter = (metric) => formatNumber(metric, 2) }) {
   const rank = rankInfo.ranks.get(rowId);
   return (
     <span className={styles.metricPill} style={rank ? metricToneStyle(rank, rankInfo.total) : undefined}>
@@ -910,7 +910,7 @@ function OfficialProfile({ profile, isLoading, onClose, onSelectTeam }) {
         <ProfileMetric label="Games" value={profile.games} />
         <ProfileMetric
           label="Calls/G"
-          value={formatNumber(profile.callsPerGame, 1)}
+          value={formatNumber(profile.callsPerGame, 2)}
           detail={`Rank ${profile.callsPerGameRank || "-"}`}
           style={profile.callsPerGameRank ? metricToneStyle(profile.callsPerGameRank, 81) : undefined}
         />

@@ -133,6 +133,9 @@ function payloadForImport(report, { filename, fileHash, season, game, mode = "cr
 export async function importPgrReport(report, { filename, fileHash, season, game, mode = "create" } = {}) {
   if (!supabase) throw new Error("Supabase is not configured.");
   if (!game?.is_wizards_game) throw new Error("PGR imports are restricted to Washington Wizards games.");
+  if (String(report?.game_id || game?.game_id || "").startsWith("001") || String(game?.season_type || "").trim().toLowerCase() === "preseason") {
+    throw new Error("PGR imports exclude preseason games.");
+  }
   if (report.errors?.length) throw new Error(report.errors.join(" "));
   const { data, error } = await supabase.rpc("nba_import_pgr_report", {
     report_payload: payloadForImport(report, { filename, fileHash, season, game, mode }),
@@ -394,20 +397,27 @@ function accuracyFromRows(rows) {
 }
 
 async function fetchPgrContextRows(season, imports) {
-  const gameIds = uniqueValues(imports, (row) => row.game_id);
+  const gameIds = uniqueValues(imports, (row) => row.game_id)
+    .filter((gameId) => !String(gameId).startsWith("001"));
+  if (!gameIds.length) {
+    return { unavailable: false, rows: [] };
+  }
   const [evaluationsResult, assignmentsResult, callsResult] = await Promise.all([
     selectPagedTable("nba_pgr_evaluations", (query) => query
       .select("id,season,game_id,pos_id,event_id,rating_seq_no,period,period_name,game_clock,call_type_name,play_type_name,infraction_type_name,player_name,player_team,opponent_name,opponent_team,player_action_code,player_action_label,infraction_rating_name,call_or_no_call,call_or_no_call_label,video_url")
       .eq("season", season)
+      .in("game_id", gameIds)
       .order("game_id", { ascending: false }), { maxRows: PGR_ROW_LIMIT }),
-    gameIds.length ? selectPagedTable("nba_official_game_assignments", (query) => query
+    selectPagedTable("nba_official_game_assignments", (query) => query
       .select("game_id,official_id,official_name,role_key,assignment_order")
       .eq("season", season)
-      .in("game_id", gameIds), { maxRows: 1000 }) : { data: [] },
-    gameIds.length ? selectPagedTable("nba_official_call_events", (query) => query
+      .not("season_type", "ilike", "Preseason")
+      .in("game_id", gameIds), { maxRows: 1000 }),
+    selectPagedTable("nba_official_call_events", (query) => query
       .select("game_id,action_number,official_id,official_name,confidence")
       .eq("season", season)
-      .in("game_id", gameIds), { maxRows: 10000 }) : { data: [] },
+      .not("season_type", "ilike", "Preseason")
+      .in("game_id", gameIds), { maxRows: 10000 }),
   ]);
   return {
     unavailable: evaluationsResult.unavailable,

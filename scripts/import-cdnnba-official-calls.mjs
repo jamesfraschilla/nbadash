@@ -562,6 +562,10 @@ async function main() {
   const apply = hasFlag("apply");
   const officialAssetNames = await loadOfficialAssetNames();
   const liveGameIds = readListArg("live-game-ids").map(normalizeGameId);
+  const regularLiveGameIds = liveGameIds.filter((gameId) => !gameId.startsWith("001"));
+  if (regularLiveGameIds.length !== liveGameIds.length) {
+    console.warn("Ignoring preseason live game IDs for official-call import.");
+  }
   const sets = [
     {
       seasonType: "Regular Season",
@@ -635,9 +639,9 @@ async function main() {
     });
   }
 
-  if (liveGameIds.length) {
-    console.log(`Reading ${liveGameIds.length} live cdnnba games...`);
-    const liveEvents = await loadLiveCalledEvents({ gameIds: liveGameIds, season });
+  if (regularLiveGameIds.length) {
+    console.log(`Reading ${regularLiveGameIds.length} live cdnnba games...`);
+    const liveEvents = await loadLiveCalledEvents({ gameIds: regularLiveGameIds, season });
     const liveRows = liveEvents.map(toCallRow);
     allRows.push(...liveRows);
     audit.push({
