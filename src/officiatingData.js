@@ -85,17 +85,33 @@ function cleanCategoryPart(value) {
     lostball: "lost ball",
     flagranttype1: "flagrant type 1",
     flagranttype2: "flagrant type 2",
+    doubletechnical: "double technical",
+    delaytechnical: "delay technical",
+    floppingtechnical: "flopping technical",
+    nonunsportsmanliketechnical: "non unsportsmanlike technical",
     looseball: "loose ball",
     personaltake: "personal take",
     transitiontake: "transition take",
   }[cleaned.replace(/[^a-z0-9]+/g, "")] || cleaned;
 }
 
+function isCountedTechnicalCategory(value) {
+  const category = cleanCategoryPart(value);
+  return category === "technical" || category === "double technical";
+}
+
+function isCountedTechnicalEvent(event) {
+  return cleanCategoryPart(event.primary_category) === "technical" || isCountedTechnicalCategory(event.secondary_category);
+}
+
 function normalizedFoulCategory(parts) {
   const uniqueParts = [...new Set(parts.filter(Boolean).filter((part) => part !== "foul"))];
   const partSet = new Set(uniqueParts);
   if (partSet.has("defense 3 second")) return "Defensive 3 Second Violation";
-  if (partSet.has("technical")) return "Technical Foul";
+  if (partSet.has("delay technical") || partSet.has("delay")) return "Delay Of Game";
+  if (partSet.has("flopping technical")) return "Flopping Technical";
+  if (partSet.has("non unsportsmanlike technical")) return "Non Unsportsmanlike Technical";
+  if (uniqueParts.some(isCountedTechnicalCategory)) return "Technical Foul";
   if (partSet.has("shooting")) return "Shooting Foul";
   if (partSet.has("loose ball")) return "Loose Ball Foul";
   if (partSet.has("flagrant type 1")) return "Flagrant Type 1 Foul";
@@ -128,7 +144,7 @@ export function specificCallCategory(event) {
 
   if (primary === "foul" || primary === "technical") {
     if (primary === "technical") return "Technical Foul";
-    return normalizedFoulCategory([descriptor, subType]);
+    return normalizedFoulCategory([secondary, descriptor, subType]);
   }
 
   if (primary === "jump ball") return "Jump Ball";
@@ -490,7 +506,7 @@ export function buildOfficialProfiles(callEvents, challengeEvents, assignments) 
     const categoryLabel = specificCallCategory(event);
     if (category === "foul") profile.fouls += 1;
     else if (category === "violation") profile.violations += 1;
-    else if (category === "technical") profile.technicals += 1;
+    if (isCountedTechnicalEvent(event)) profile.technicals += 1;
     const chargedTeam = String(event.charged_team || event.team_tricode || "").trim();
     const benefitingTeam = String(event.benefiting_team || "").trim();
     addMapValue(profile.callsByTeam, chargedTeam, -1);

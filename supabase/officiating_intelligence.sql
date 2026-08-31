@@ -826,7 +826,7 @@ select
   count(distinct game_id)::integer as games,
   count(*) filter (where primary_category = 'foul')::integer as fouls,
   count(*) filter (where primary_category = 'violation')::integer as violations,
-  count(*) filter (where primary_category = 'technical')::integer as technicals,
+  count(*) filter (where primary_category = 'technical' or secondary_category in ('technical', 'double_technical'))::integer as technicals,
   case
     when count(distinct game_id) > 0 then count(*) filter (where primary_category = 'foul')::numeric / count(distinct game_id)
     else 0
@@ -874,7 +874,8 @@ categorized_calls as (
       when primary_category = 'turnover' and category_key like '%badpass%' then 'Out Of Bounds'
       when primary_category = 'turnover' and category_key like '%lostball%' then 'Out Of Bounds'
       when primary_category = 'jump_ball' or category_key like '%jumpball%' then 'Jump Ball'
-      when primary_category = 'technical' or secondary_category = 'technical' then 'Technical Foul'
+      when primary_category = 'technical' or secondary_category in ('technical', 'double_technical') then 'Technical Foul'
+      when secondary_category = 'delay_technical' then 'Delay Of Game'
       when primary_category = 'foul' and category_key like '%shooting%' then 'Shooting Foul'
       when primary_category = 'foul' and category_key like '%looseball%' then 'Loose Ball Foul'
       when primary_category = 'foul' and category_key like '%flagranttype1%' then 'Flagrant Type 1 Foul'
@@ -988,7 +989,8 @@ categorized_calls as (
       when primary_category = 'turnover' and category_key like '%badpass%' then 'Out Of Bounds'
       when primary_category = 'turnover' and category_key like '%lostball%' then 'Out Of Bounds'
       when primary_category = 'jump_ball' or category_key like '%jumpball%' then 'Jump Ball'
-      when primary_category = 'technical' or secondary_category = 'technical' then 'Technical Foul'
+      when primary_category = 'technical' or secondary_category in ('technical', 'double_technical') then 'Technical Foul'
+      when secondary_category = 'delay_technical' then 'Delay Of Game'
       when primary_category = 'foul' and category_key like '%shooting%' then 'Shooting Foul'
       when primary_category = 'foul' and category_key like '%looseball%' then 'Loose Ball Foul'
       when primary_category = 'foul' and category_key like '%flagranttype1%' then 'Flagrant Type 1 Foul'
@@ -1298,7 +1300,7 @@ call_rollups as (
     count(distinct game_id)::integer as call_games,
     count(*) filter (where primary_category = 'foul')::integer as fouls,
     count(*) filter (where primary_category = 'violation')::integer as violations,
-    count(*) filter (where primary_category = 'technical')::integer as technicals
+    count(*) filter (where primary_category = 'technical' or secondary_category in ('technical', 'double_technical'))::integer as technicals
   from public.nba_official_call_events
   where coalesce(official_id, official_name, '') <> ''
     and lower(coalesce(season_type, '')) <> 'preseason'

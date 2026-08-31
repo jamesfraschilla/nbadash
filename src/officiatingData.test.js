@@ -81,6 +81,30 @@ test("specificCallCategory displays detailed foul and violation types", () => {
   }), "Defensive 3 Second Violation");
 
   assert.equal(specificCallCategory({
+    primary_category: "foul",
+    secondary_category: "double_technical",
+    descriptor: "double",
+    sub_type: "technical",
+    description: "A. Gordon double technical FOUL (1 Tech)",
+  }), "Technical Foul");
+
+  assert.equal(specificCallCategory({
+    primary_category: "foul",
+    secondary_category: "delay_technical",
+    descriptor: "delay",
+    sub_type: "technical",
+    description: "TEAM foul technical",
+  }), "Delay Of Game");
+
+  assert.notEqual(specificCallCategory({
+    primary_category: "foul",
+    secondary_category: "flopping_technical",
+    descriptor: "flopping",
+    sub_type: "technical",
+    description: "R. Holland II flopping technical FOUL (1 Tech)",
+  }), "Technical Foul");
+
+  assert.equal(specificCallCategory({
     primary_category: "turnover",
     secondary_category: "lost_ball",
     sub_type: "lost ball",
@@ -134,6 +158,75 @@ test("official challenge logs prefer whistle label while counting dual crew-chie
   assert.equal(profile.successfulCrewChiefChallenges, 0);
   assert.equal(profile.challengeLog.length, 1);
   assert.equal(profile.challengeLog[0].profileChallengeRole, "whistle");
+});
+
+test("official technical counts include standard and double technicals only", () => {
+  const [profile] = buildOfficialProfiles([
+    {
+      game_id: "0022500001",
+      season_type: "Regular Season",
+      official_id: "25",
+      official_name: "Scott Foster",
+      primary_category: "foul",
+      secondary_category: "technical",
+      sub_type: "technical",
+    },
+    {
+      game_id: "0022500001",
+      season_type: "Regular Season",
+      official_id: "25",
+      official_name: "Scott Foster",
+      primary_category: "foul",
+      secondary_category: "double_technical",
+      descriptor: "double",
+      sub_type: "technical",
+    },
+    {
+      game_id: "0022500001",
+      season_type: "Regular Season",
+      official_id: "25",
+      official_name: "Scott Foster",
+      primary_category: "foul",
+      secondary_category: "defensive_3_second_technical",
+      descriptor: "defensive-3-second",
+      sub_type: "technical",
+    },
+    {
+      game_id: "0022500001",
+      season_type: "Regular Season",
+      official_id: "25",
+      official_name: "Scott Foster",
+      primary_category: "foul",
+      secondary_category: "delay_technical",
+      descriptor: "delay",
+      sub_type: "technical",
+    },
+    {
+      game_id: "0022500001",
+      season_type: "Regular Season",
+      official_id: "25",
+      official_name: "Scott Foster",
+      primary_category: "foul",
+      secondary_category: "flopping_technical",
+      descriptor: "flopping",
+      sub_type: "technical",
+    },
+    {
+      game_id: "0022500001",
+      season_type: "Regular Season",
+      official_id: "25",
+      official_name: "Scott Foster",
+      primary_category: "foul",
+      secondary_category: "non_unsportsmanlike_technical",
+      descriptor: "non-unsportsmanlike",
+      sub_type: "technical",
+    },
+  ], [], []);
+
+  assert.equal(profile.technicals, 2);
+  assert.equal(profile.callsByCategory["Technical Foul"].value, 2);
+  assert.equal(profile.callsByCategory["Defensive 3 Second Violation"].value, 1);
+  assert.equal(profile.callsByCategory["Delay Of Game"].value, 1);
 });
 
 test("official profiles exclude preseason calls, assignments, and challenges from cumulative stats", () => {
