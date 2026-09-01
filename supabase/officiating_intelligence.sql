@@ -598,6 +598,8 @@ begin
   on conflict (challenge_event_id, tag_id) do nothing;
 
   return jsonb_build_object(
+    'challengeEventIds',
+    coalesce(to_jsonb(sibling_event_ids), '[]'::jsonb),
     'options',
     coalesce((
       select jsonb_agg(jsonb_build_object('id', id::text, 'label', label) order by label)

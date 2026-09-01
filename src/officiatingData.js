@@ -8,7 +8,7 @@ const CHALLENGE_LIMIT = 5000;
 const ASSIGNMENT_LIMIT = 2000;
 const PROFILE_LIMIT = 500;
 const PROFILE_DETAIL_LIMIT = 5000;
-const CONTEXT_TAG_PAGE_SIZE = 750;
+const CONTEXT_TAG_PAGE_SIZE = 100;
 const EXCLUDED_STAT_SEASON_TYPES = new Set(["preseason"]);
 const NBA_TEAM_ID_BY_TRICODE = {
   ATL: "1610612737",
@@ -916,6 +916,10 @@ function normalizeContextTagRows(rows) {
   })).filter((tag) => tag.id && tag.label);
 }
 
+function normalizeIdRows(rows) {
+  return asArray(rows).map((id) => String(id || "").trim()).filter(Boolean);
+}
+
 export async function saveChallengeContextTags({ challengeEventId, selectedTagIds = [], newTagLabels = [] } = {}) {
   if (!supabase) throw new Error("Supabase is not configured.");
   const eventId = String(challengeEventId || "").trim();
@@ -933,6 +937,7 @@ export async function saveChallengeContextTags({ challengeEventId, selectedTagId
   });
   if (!rpcResult.error) {
     return {
+      challengeEventIds: normalizeIdRows(rpcResult.data?.challengeEventIds || rpcResult.data?.challenge_event_ids),
       options: normalizeContextTagRows(rpcResult.data?.options),
       selected: normalizeContextTagRows(rpcResult.data?.selected),
     };
@@ -976,5 +981,5 @@ export async function saveChallengeContextTags({ challengeEventId, selectedTagId
   }
   const options = await fetchChallengeContextTagOptions();
   const selected = options.filter((tag) => selectedIds.includes(tag.id));
-  return { options, selected };
+  return { challengeEventIds: [eventId], options, selected };
 }

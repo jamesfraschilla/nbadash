@@ -678,6 +678,29 @@ function contextTagFilterValues(row) {
   return contextTagLabels(row).map(optionValue);
 }
 
+function normalizedChallengeClockKey(value) {
+  const text = String(value || "").trim();
+  const iso = /^PT(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$/.exec(text);
+  if (iso) return String(Math.round((Number(iso[1] || 0) * 60 + Number(iso[2] || 0)) * 10) / 10);
+  const mmss = /^(\d+):(\d+(?:\.\d+)?)$/.exec(text);
+  if (mmss) return String(Math.round((Number(mmss[1]) * 60 + Number(mmss[2])) * 10) / 10);
+  return text;
+}
+
+function challengeContextKey(row) {
+  if (!row) return "";
+  return [
+    row.season || row.seasonYear || "",
+    row.game_id || row.gameId || "",
+    row.game_date || row.gameDate || "",
+    row.away_team || row.awayTeam || "",
+    row.home_team || row.homeTeam || "",
+    row.challenging_team || row.challengingTeam || "",
+    row.period ?? "",
+    normalizedChallengeClockKey(row.game_clock || row.gameClock),
+  ].map((value) => String(value ?? "").trim()).join("|");
+}
+
 function ContextCell({ row, onEditContext }) {
   const labels = contextTagLabels(row);
   return (
@@ -690,6 +713,7 @@ function ContextCell({ row, onEditContext }) {
 function ContextTagEditor({ row, options, onClose, onSave, isSaving, error }) {
   const [selected, setSelected] = useState(() => new Set((row?.context_tags || row?.contextTags || []).map((tag) => String(tag.id || "").trim()).filter(Boolean)));
   const [newTag, setNewTag] = useState("");
+  const challengeEventId = String(row?.id || "").trim();
   const toggle = (id) => {
     setSelected((current) => {
       const next = new Set(current);
@@ -726,9 +750,9 @@ function ContextTagEditor({ row, options, onClose, onSave, isSaving, error }) {
           <button
             type="button"
             className={styles.closeButton}
-            disabled={isSaving}
+            disabled={isSaving || !challengeEventId}
             onClick={() => onSave({
-              challengeEventId: row.id,
+              challengeEventId,
               selectedTagIds: [...selected],
               newTagLabels: newTag.trim() ? [newTag.trim()] : [],
             })}
@@ -1736,9 +1760,16 @@ export default function Officiating() {
     const profile = teamProfilesByName.get(String(team || "").trim().toLowerCase());
     openTeamProfile(profile);
   };
-  const patchChallengeContextTags = (challengeEventId, selectedTags) => {
+  const patchChallengeContextTags = (challengeEventId, selectedTags, editedRow = null, siblingIds = []) => {
+    const idsToPatch = new Set([challengeEventId, ...siblingIds].map((id) => String(id || "").trim()).filter(Boolean));
+    const editedKey = challengeContextKey(editedRow);
+    const shouldPatchRow = (row) => {
+      const rowId = String(row?.id || "").trim();
+      if (rowId && idsToPatch.has(rowId)) return true;
+      return Boolean(editedKey && challengeContextKey(row) === editedKey);
+    };
     const patchRows = (rows = []) => rows.map((row) => (
-      String(row.id || "") === String(challengeEventId)
+      shouldPatchRow(row)
         ? { ...row, context_tags: selectedTags, contextTags: selectedTags }
         : row
     ));
@@ -1766,7 +1797,7 @@ export default function Officiating() {
       })),
     } : current);
     setContextEditorRow((current) => (
-      current && String(current.id || "") === String(challengeEventId)
+      current && shouldPatchRow(current)
         ? { ...current, context_tags: selectedTags, contextTags: selectedTags }
         : current
     ));
@@ -1775,8 +1806,9 @@ export default function Officiating() {
     setIsSavingContext(true);
     setContextSaveError(null);
     try {
+      const editedRow = contextEditorRow;
       const result = await saveChallengeContextTags(payload);
-      patchChallengeContextTags(payload.challengeEventId, result.selected);
+      patchChallengeContextTags(payload.challengeEventId, result.selected, editedRow, result.challengeEventIds);
       queryClient.setQueryData(["challenge-context-tags"], result.options);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["officiating-dashboard", season] }),
