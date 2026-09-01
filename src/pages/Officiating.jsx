@@ -78,10 +78,20 @@ function challengeClockLabel(row) {
 }
 
 function challengePbpVideoUrl(row) {
-  const actionNumber = row?.matched_action_number ?? row?.matchedActionNumber;
   const matcherPayload = row?.source_payload?.officialMatcher || row?.sourcePayload?.officialMatcher || {};
   const matchedCall = matcherPayload.matchedCall || {};
-  const title = matchedCall.description || row?.description || row?.initial_call || row?.initialCall || row?.challenge_type || row?.challengeType;
+  const nearbyLocationContext = matcherPayload.nearbyLocationContext || {};
+  const actionNumber = row?.matched_action_number
+    ?? row?.matchedActionNumber
+    ?? nearbyLocationContext.actionNumber
+    ?? nearbyLocationContext.action_number;
+  const title = matchedCall.description
+    || nearbyLocationContext.description
+    || row?.description
+    || row?.initial_call
+    || row?.initialCall
+    || row?.challenge_type
+    || row?.challengeType;
   return nbaEventVideoUrl({
     gameId: row?.game_id || row?.gameId,
     actionNumber,
@@ -664,6 +674,10 @@ function contextTagLabels(row) {
     .filter(Boolean);
 }
 
+function contextTagFilterValues(row) {
+  return contextTagLabels(row).map(optionValue);
+}
+
 function ContextCell({ row, onEditContext }) {
   const labels = contextTagLabels(row);
   return (
@@ -742,6 +756,8 @@ function ChallengeLog({ rows, filteredRows, filters, filterOptions, onFilterChan
         <ChallengeFilter label="Team" value={filters.team} options={filterOptions.teams} allLabel="All teams" onChange={(value) => onFilterChange("team", value)} />
         <ChallengeFilter label="Period" value={filters.period} options={filterOptions.periods} allLabel="All periods" onChange={(value) => onFilterChange("period", value)} />
         <ChallengeFilter label="Type" value={filters.type} options={filterOptions.types} allLabel="All types" onChange={(value) => onFilterChange("type", value)} />
+        <ChallengeFilter label="Sub Type" value={filters.subType} options={filterOptions.subTypes} allLabel="All sub types" onChange={(value) => onFilterChange("subType", value)} />
+        <ChallengeFilter label="Context" value={filters.context} options={filterOptions.contexts} allLabel="All contexts" onChange={(value) => onFilterChange("context", value)} />
         <ChallengeFilter label="Outcome" value={filters.outcome} options={filterOptions.outcomes} allLabel="All outcomes" onChange={(value) => onFilterChange("outcome", value)} />
         <ChallengeFilter label="Whistle" value={filters.whistle} options={filterOptions.whistles} allLabel="All whistles" onChange={(value) => onFilterChange("whistle", value)} />
         <ChallengeFilter label="Crew Chief" value={filters.crewChief} options={filterOptions.crewChiefs} allLabel="All crew chiefs" onChange={(value) => onFilterChange("crewChief", value)} />
@@ -1560,6 +1576,8 @@ export default function Officiating() {
     team: "",
     period: "",
     type: "",
+    subType: "",
+    context: "",
     outcome: "",
     whistle: "",
     crewChief: "",
@@ -1625,6 +1643,11 @@ export default function Officiating() {
       periods: periodOptions,
       types: uniqueOptions(challengeLogRows, (row) => row.challenge_type)
         .map((value) => ({ value, label: value })),
+      subTypes: uniqueOptions(challengeLogRows, (row) => row.challenge_sub_type)
+        .map((value) => ({ value, label: value })),
+      contexts: [...new Set(challengeLogRows.flatMap(contextTagFilterValues))]
+        .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }))
+        .map((value) => ({ value, label: value })),
       outcomes: uniqueOptions(challengeLogRows, (row) => row.challenge_outcome || row.call_ruling)
         .map((value) => ({ value, label: value })),
       whistles: uniqueOptions(challengeLogRows, (row) => row.whistling_official_name)
@@ -1638,6 +1661,8 @@ export default function Officiating() {
       if (challengeFilters.team && optionValue(row.challenging_team) !== challengeFilters.team) return false;
       if (challengeFilters.period && optionValue(row.period) !== challengeFilters.period) return false;
       if (challengeFilters.type && optionValue(row.challenge_type) !== challengeFilters.type) return false;
+      if (challengeFilters.subType && optionValue(row.challenge_sub_type) !== challengeFilters.subType) return false;
+      if (challengeFilters.context && !contextTagFilterValues(row).includes(challengeFilters.context)) return false;
       if (challengeFilters.outcome && optionValue(row.challenge_outcome || row.call_ruling) !== challengeFilters.outcome) return false;
       if (challengeFilters.whistle && optionValue(row.whistling_official_name) !== challengeFilters.whistle) return false;
       if (challengeFilters.crewChief && optionValue(row.crew_chief_name) !== challengeFilters.crewChief) return false;
@@ -1719,11 +1744,26 @@ export default function Officiating() {
     ));
     setSelectedOfficial((current) => current ? {
       ...current,
-      challengeLog: patchRows(current.challengeLog),
+      challengeLog: Array.isArray(current.challengeLog) ? patchRows(current.challengeLog) : current.challengeLog,
     } : current);
     setSelectedTeam((current) => current ? {
       ...current,
-      challengeLog: patchRows(current.challengeLog),
+      challengeLog: Array.isArray(current.challengeLog) ? patchRows(current.challengeLog) : current.challengeLog,
+    } : current);
+    queryClient.setQueryData(["officiating-challenge-log", season], (currentRows) => (
+      Array.isArray(currentRows) ? patchRows(currentRows) : currentRows
+    ));
+    queryClient.setQueryData(["officiating-dashboard", season], (current) => current ? {
+      ...current,
+      challengeLog: Array.isArray(current.challengeLog) ? patchRows(current.challengeLog) : current.challengeLog,
+      officialProfiles: (current.officialProfiles || []).map((profile) => ({
+        ...profile,
+        challengeLog: Array.isArray(profile.challengeLog) ? patchRows(profile.challengeLog) : profile.challengeLog,
+      })),
+      teamProfiles: (current.teamProfiles || []).map((profile) => ({
+        ...profile,
+        challengeLog: Array.isArray(profile.challengeLog) ? patchRows(profile.challengeLog) : profile.challengeLog,
+      })),
     } : current);
     setContextEditorRow((current) => (
       current && String(current.id || "") === String(challengeEventId)
