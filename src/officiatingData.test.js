@@ -136,6 +136,13 @@ test("specificCallCategory displays detailed foul and violation types", () => {
   }), "Out Of Bounds");
 
   assert.equal(specificCallCategory({
+    primary_category: "turnover",
+    secondary_category: "bad_pass_out_of_bounds",
+    sub_type: "bad pass out of bounds",
+    description: "A. Reaves bad pass out of bounds TURNOVER (3 TO)",
+  }), "Out Of Bounds");
+
+  assert.equal(specificCallCategory({
     primary_category: "foul",
     secondary_category: "looseball_personal",
     descriptor: "looseball",
@@ -199,6 +206,39 @@ test("specificCallCategory displays detailed foul and violation types", () => {
     descriptor: "offensive",
     area: "Left Corner 3",
   }), "3-Pt");
+
+  assert.equal(challengeFoulSubtype({
+    challenge_type: "Foul",
+    initial_call: "Defensive Foul",
+  }, {
+    action_type: "3pt",
+    area: "Right Corner 3",
+    description: "MISS 24' 3PT",
+  }), "3-Pt");
+
+  assert.equal(challengeFoulSubtype({
+    challenge_type: "Foul",
+    initial_call: "Defensive Foul",
+  }, {
+    action_type: "2pt",
+    area: "Restricted Area",
+    area_detail: "0-8 Center",
+    description: "MISS running DUNK",
+  }), "Restricted Area");
+
+  assert.equal(challengeFoulSubtype({}, {
+    primary_category: "foul",
+    secondary_category: "loose_ball_personal",
+    descriptor: "loose ball",
+  }), "Loose Ball Foul");
+
+  assert.equal(challengeFoulSubtype({
+    initial_call: "Home Team Ball",
+  }), "Out Of Bounds");
+
+  assert.equal(challengeFoulSubtype({
+    initial_call: "Basket Interference",
+  }), "Basket Interference");
 });
 
 test("official challenge logs prefer whistle label while counting dual crew-chief role", () => {

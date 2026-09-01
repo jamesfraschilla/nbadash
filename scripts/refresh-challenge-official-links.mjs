@@ -5,11 +5,13 @@ import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import { assertOutsideWizardsGameWindow } from "./lib/game-window-guard.mjs";
 import { enrichChallengeEventsWithOfficials } from "../src/officiatingChallengeMatcher.js";
+import { proximateAutoTagChallengeIds } from "../src/officiatingChallengeContextRules.js";
 
 const DEFAULT_SEASON = "2025-26";
 const PAGE_SIZE = 1000;
 const GAME_ID_CHUNK_SIZE = 50;
-const UPDATE_BATCH_SIZE = 250;
+const LIVE_CONTEXT_CONCURRENCY = 4;
+const UPDATE_BATCH_SIZE = 25;
 
 function readArg(name) {
   const prefix = `--${name}=`;
@@ -75,6 +77,70 @@ function cleanText(value) {
   return String(value || "").trim();
 }
 
+async function fetchJson(url) {
+  const response = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0",
+      Referer: "https://www.nba.com/",
+    },
+  });
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  return response.json();
+}
+
+function isFoulChallenge(row) {
+  return `${row.challenge_type || ""} ${row.initial_call || ""}`.toLowerCase().includes("foul");
+}
+
+async function loadLiveLocationContextForGame(gameId) {
+  try {
+    const payload = await fetchJson(`https://cdn.nba.com/static/json/liveData/playbyplay/playbyplay_${encodeURIComponent(gameId)}.json`);
+    const actions = Array.isArray(payload?.game?.actions) ? payload.game.actions : [];
+    return actions
+      .filter((action) => ["2pt", "3pt"].includes(cleanText(action.actionType).toLowerCase()))
+      .filter((action) => cleanText(action.area || action.areaDetail))
+      .map((action) => ({
+        game_id: gameId,
+        period: action.period,
+        game_clock: action.clock,
+        action_number: action.actionNumber,
+        order_number: action.orderNumber,
+        action_type: action.actionType,
+        sub_type: action.subType,
+        descriptor: action.descriptor,
+        description: action.description,
+        area: action.area,
+        area_detail: action.areaDetail,
+        source_payload: {
+          area: action.area,
+          areaDetail: action.areaDetail,
+          xLegacy: action.xLegacy,
+          yLegacy: action.yLegacy,
+          x: action.x,
+          y: action.y,
+          side: action.side,
+          ingestSource: "cdnnba_live_context",
+        },
+      }));
+  } catch (error) {
+    console.warn(`Skipping live location context for ${gameId}: ${error instanceof Error ? error.message : String(error)}`);
+    return [];
+  }
+}
+
+async function loadLiveLocationContext(gameIds) {
+  const uniqueGameIds = [...new Set(gameIds.filter(Boolean))];
+  const rows = [];
+  for (let index = 0; index < uniqueGameIds.length; index += LIVE_CONTEXT_CONCURRENCY) {
+    const chunk = uniqueGameIds.slice(index, index + LIVE_CONTEXT_CONCURRENCY);
+    const chunkRows = await Promise.all(chunk.map(loadLiveLocationContextForGame));
+    rows.push(...chunkRows.flat());
+    process.stdout.write(`Loaded live location context ${Math.min(index + chunk.length, uniqueGameIds.length)}/${uniqueGameIds.length}\r`);
+  }
+  if (uniqueGameIds.length) process.stdout.write("\n");
+  return rows;
+}
+
 function rowChanged(before, after) {
   return [
     "crew_chief_id",
@@ -118,7 +184,7 @@ function chunkArray(items, size) {
 async function applyUpdates(supabase, rows) {
   let updated = 0;
   for (const chunk of chunkArray(rows, UPDATE_BATCH_SIZE)) {
-    await Promise.all(chunk.map(async (row) => {
+    for (const row of chunk) {
       const updateRow = toUpdateRow(row);
       const { id, ...payload } = updateRow;
       const { error } = await supabase
@@ -126,10 +192,58 @@ async function applyUpdates(supabase, rows) {
         .update(payload)
         .eq("id", id);
       if (error) throw new Error(`Failed updating challenge row ${id}: ${error.message}`);
-    }));
+    }
     updated += chunk.length;
+    process.stdout.write(`Updated ${updated}/${rows.length}\r`);
   }
+  if (rows.length) process.stdout.write("\n");
   return updated;
+}
+
+async function ensureContextTag(supabase, label) {
+  const { data: existingRows, error: selectError } = await supabase
+    .from("nba_challenge_context_tags")
+    .select("id,label")
+    .eq("label", label)
+    .limit(1);
+  if (selectError) throw new Error(`Failed loading context tag ${label}: ${selectError.message}`);
+  if (existingRows?.[0]?.id) return existingRows[0];
+
+  const { data, error } = await supabase
+    .from("nba_challenge_context_tags")
+    .insert({ label })
+    .select("id,label")
+    .single();
+  if (error) throw new Error(`Failed creating context tag ${label}: ${error.message}`);
+  return data;
+}
+
+async function applyAutoProximateTags(supabase, challenges, calls) {
+  const challengeIds = proximateAutoTagChallengeIds(challenges, calls);
+  if (!challengeIds.length) return { eligible: 0, inserted: 0 };
+
+  const tag = await ensureContextTag(supabase, "Proximate");
+  const { data: existingRows, error: existingError } = await supabase
+    .from("nba_challenge_context_event_tags")
+    .select("challenge_event_id")
+    .eq("tag_id", tag.id)
+    .in("challenge_event_id", challengeIds);
+  if (existingError) throw new Error(`Failed loading existing Proximate event tags: ${existingError.message}`);
+
+  const existingIds = new Set((existingRows || []).map((row) => cleanText(row.challenge_event_id)));
+  const rowsToInsert = challengeIds
+    .filter((challengeId) => !existingIds.has(challengeId))
+    .map((challengeId) => ({
+      challenge_event_id: challengeId,
+      tag_id: tag.id,
+    }));
+  if (!rowsToInsert.length) return { eligible: challengeIds.length, inserted: 0 };
+
+  const { error } = await supabase
+    .from("nba_challenge_context_event_tags")
+    .insert(rowsToInsert);
+  if (error) throw new Error(`Failed applying automatic Proximate tags: ${error.message}`);
+  return { eligible: challengeIds.length, inserted: rowsToInsert.length };
 }
 
 async function main() {
@@ -158,7 +272,13 @@ async function main() {
       .order("id", { ascending: true })),
   ]);
 
-  const enriched = enrichChallengeEventsWithOfficials(challenges, calls, assignments);
+  const contextGameIds = challenges
+    .filter((row) => isFoulChallenge(row))
+    .filter((row) => !cleanText(row.matched_call_event_id || row.matchedCallEventId))
+    .map((row) => row.game_id);
+  const contextActions = await loadLiveLocationContext(contextGameIds);
+
+  const enriched = enrichChallengeEventsWithOfficials(challenges, calls, assignments, { contextActions });
   const changedRows = enriched.filter((row, index) => rowChanged(challenges[index], row));
   const summary = {
     season,
@@ -183,6 +303,11 @@ async function main() {
   } else if (!apply) {
     console.log("Dry run only. Re-run with --apply to write challenge official links.");
   }
+
+  const autoProximateTags = apply
+    ? await applyAutoProximateTags(supabase, enriched, calls)
+    : { eligible: proximateAutoTagChallengeIds(enriched, calls).length, inserted: 0 };
+  console.log(JSON.stringify({ autoProximateTags }, null, 2));
 }
 
 main().catch((error) => {

@@ -13,6 +13,17 @@ function clockSeconds(value) {
   return NaN;
 }
 
+function callClockDelta(challenge, call) {
+  if (cleanText(call.game_id || call.gameId) !== cleanText(challenge.game_id || challenge.gameId)) return null;
+  if (Number(call.period) !== Number(challenge.period)) return null;
+
+  const challengeClock = clockSeconds(challenge.game_clock || challenge.gameClock);
+  const callClock = clockSeconds(call.game_clock || call.gameClock);
+  if (!Number.isFinite(challengeClock) || !Number.isFinite(callClock)) return null;
+
+  return Math.abs(challengeClock - callClock);
+}
+
 function normalizedCategory(value) {
   const text = cleanText(value).toLowerCase().replace(/[_-]+/g, " ");
   if (text.includes("foul")) return "foul";
@@ -55,14 +66,8 @@ function isCompatibleCall(challenge, call) {
 }
 
 function candidateScore(challenge, call, toleranceSeconds) {
-  if (cleanText(call.game_id || call.gameId) !== cleanText(challenge.game_id || challenge.gameId)) return null;
-  if (Number(call.period) !== Number(challenge.period)) return null;
-
-  const challengeClock = clockSeconds(challenge.game_clock || challenge.gameClock);
-  const callClock = clockSeconds(call.game_clock || call.gameClock);
-  if (!Number.isFinite(challengeClock) || !Number.isFinite(callClock)) return null;
-
-  const clockDelta = Math.abs(challengeClock - callClock);
+  const clockDelta = callClockDelta(challenge, call);
+  if (clockDelta === null) return null;
   if (clockDelta > toleranceSeconds) return null;
   if (!isCompatibleCall(challenge, call)) return null;
 
@@ -86,6 +91,41 @@ function candidateScore(challenge, call, toleranceSeconds) {
     score += 0.05;
   }
   return Math.min(score, 0.99);
+}
+
+function isLocationContextAction(action) {
+  const type = cleanText(action.action_type || action.actionType || action.primary_category || action.primaryCategory).toLowerCase();
+  return type === "2pt" || type === "3pt";
+}
+
+function hasAreaSignal(action) {
+  const payload = action.source_payload || action.sourcePayload || {};
+  return Boolean(cleanText(action.area || action.area_detail || action.areaDetail || payload.area || payload.area_detail || payload.areaDetail));
+}
+
+function findNearbyLocationContext(challenge, actions, toleranceSeconds) {
+  if (challengeCategory(challenge) !== "foul") return null;
+  const challengeClock = clockSeconds(challenge.game_clock || challenge.gameClock);
+  if (!Number.isFinite(challengeClock)) return null;
+
+  const candidates = actions
+    .filter((action) => cleanText(action.game_id || action.gameId) === cleanText(challenge.game_id || challenge.gameId))
+    .filter((action) => Number(action.period) === Number(challenge.period))
+    .filter((action) => isLocationContextAction(action) && hasAreaSignal(action))
+    .map((action) => {
+      const actionClock = clockSeconds(action.game_clock || action.gameClock);
+      if (!Number.isFinite(actionClock)) return null;
+      const clockDelta = actionClock - challengeClock;
+      if (clockDelta < 0 || clockDelta > toleranceSeconds) return null;
+      return { action, clockDelta };
+    })
+    .filter(Boolean)
+    .sort((left, right) => {
+      if (left.clockDelta !== right.clockDelta) return left.clockDelta - right.clockDelta;
+      return Number(right.action.action_number || right.action.actionNumber || 0) - Number(left.action.action_number || left.action.actionNumber || 0);
+    });
+
+  return candidates[0]?.action || null;
 }
 
 function findMatchingCall(challenge, calls, toleranceSeconds, reasonSuffix = "at-clock") {
@@ -120,6 +160,8 @@ export function enrichChallengeEventsWithOfficials(challenges, calls, assignment
   const toleranceSeconds = Number(options.clockToleranceSeconds) || 2;
   const secondPassToleranceSeconds = Number(options.secondPassClockToleranceSeconds) || 12;
   const secondPassMinConfidence = Number(options.secondPassMinConfidence) || 0.76;
+  const contextActions = Array.isArray(options.contextActions) ? options.contextActions : [];
+  const nearbyActionToleranceSeconds = Number(options.nearbyActionToleranceSeconds) || 12;
   return challenges.map((challenge) => {
     const gameId = cleanText(challenge.game_id || challenge.gameId);
     const crewChief = findCrewChief(assignments, gameId);
@@ -131,6 +173,7 @@ export function enrichChallengeEventsWithOfficials(challenges, calls, assignment
       ? secondPass
       : firstPass;
     const call = match.call;
+    const nearbyLocationContext = call ? null : findNearbyLocationContext(challenge, contextActions, nearbyActionToleranceSeconds);
     const existingWhistle = cleanText(challenge.whistling_official_id || challenge.whistling_official_name);
     const existingStatus = cleanText(challenge.review_status || challenge.reviewStatus);
     const confidence = call
@@ -145,7 +188,7 @@ export function enrichChallengeEventsWithOfficials(challenges, calls, assignment
       whistling_official_name: cleanText(challenge.whistling_official_name || call?.official_name || call?.officialName),
       matched_action_number: challenge.matched_action_number ?? challenge.matchedActionNumber ?? call?.action_number ?? call?.actionNumber ?? null,
       matched_call_event_id: challenge.matched_call_event_id || challenge.matchedCallEventId || call?.id || null,
-      challenge_sub_type: cleanText(challenge.challenge_sub_type || challenge.challengeSubType || challengeFoulSubtype(challenge, call)),
+      challenge_sub_type: cleanText(challengeFoulSubtype(challenge, call || nearbyLocationContext) || challenge.challenge_sub_type || challenge.challengeSubType),
       match_confidence: confidence,
       match_reason: call
         ? mergeMatchReason(challenge.match_reason || challenge.matchReason, match.reason)
@@ -169,6 +212,16 @@ export function enrichChallengeEventsWithOfficials(challenges, calls, assignment
             description: call.description,
             officialId: call.official_id || call.officialId,
             officialName: call.official_name || call.officialName,
+          } : null,
+          nearbyLocationContext: nearbyLocationContext ? {
+            gameId: nearbyLocationContext.game_id || nearbyLocationContext.gameId,
+            actionNumber: nearbyLocationContext.action_number || nearbyLocationContext.actionNumber,
+            period: nearbyLocationContext.period,
+            gameClock: nearbyLocationContext.game_clock || nearbyLocationContext.gameClock,
+            actionType: nearbyLocationContext.action_type || nearbyLocationContext.actionType,
+            description: nearbyLocationContext.description,
+            area: nearbyLocationContext.area,
+            areaDetail: nearbyLocationContext.area_detail || nearbyLocationContext.areaDetail,
           } : null,
           crewChief: crewChief ? {
             officialId: crewChief.official_id || crewChief.officialId,

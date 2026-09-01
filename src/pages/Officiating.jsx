@@ -17,7 +17,7 @@ import {
   importPgrReport,
   resolvePgrGameMetadata,
 } from "../pgrData.js";
-import { teamLogoUrl } from "../api.js";
+import { nbaEventVideoUrl, teamLogoUrl } from "../api.js";
 import { CALL_CATEGORY_GROUPS } from "../officiatingCategoryNormalization.js";
 import { loadRefereeHeadshotUrl } from "../refereeHeadshots.js";
 import styles from "./Officiating.module.css";
@@ -60,6 +60,44 @@ function OutcomeBadge({ value }) {
     <span className={`${styles.outcomeBadge} ${isSuccessfulOutcome(value) ? styles.outcomeGood : styles.outcomeBad}`}>
       {label}
     </span>
+  );
+}
+
+function challengeClockLabel(row) {
+  const value = String(row?.game_clock || row?.gameClock || "").trim();
+  if (!value) return "-";
+  const iso = /^PT(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$/.exec(value);
+  if (iso) {
+    return `${String(Number(iso[1] || 0)).padStart(2, "0")}:${String(Math.floor(Number(iso[2] || 0))).padStart(2, "0")}`;
+  }
+  const mmss = /^(\d+):(\d+(?:\.\d+)?)$/.exec(value);
+  if (mmss) {
+    return `${String(Number(mmss[1])).padStart(2, "0")}:${String(Math.floor(Number(mmss[2]))).padStart(2, "0")}`;
+  }
+  return value;
+}
+
+function challengePbpVideoUrl(row) {
+  const actionNumber = row?.matched_action_number ?? row?.matchedActionNumber;
+  const matcherPayload = row?.source_payload?.officialMatcher || row?.sourcePayload?.officialMatcher || {};
+  const matchedCall = matcherPayload.matchedCall || {};
+  const title = matchedCall.description || row?.description || row?.initial_call || row?.initialCall || row?.challenge_type || row?.challengeType;
+  return nbaEventVideoUrl({
+    gameId: row?.game_id || row?.gameId,
+    actionNumber,
+    seasonYear: row?.season || row?.seasonYear,
+    title,
+  });
+}
+
+function ChallengeClockLink({ row }) {
+  const label = challengeClockLabel(row);
+  const url = challengePbpVideoUrl(row);
+  if (!url) return label;
+  return (
+    <a href={url} target="_blank" rel="noreferrer" className={styles.inlineLink}>
+      {label}
+    </a>
   );
 }
 
@@ -750,7 +788,7 @@ function ChallengeLog({ rows, filteredRows, filters, filterOptions, onFilterChan
                   ) : "-"}
                 </td>
                 <td>{row.period ? `Q${row.period}` : "-"}</td>
-                <td>{row.game_clock || "-"}</td>
+                <td><ChallengeClockLink row={row} /></td>
                 <td>{row.challenge_type || "-"}</td>
                 <td>{row.challenge_sub_type || "-"}</td>
                 <td><ContextCell row={row} onEditContext={onEditContext} /></td>
@@ -830,7 +868,7 @@ function MiniChallengeLog({ rows, isLoading = false, officialColumn = "role", on
                 )}
               </td>
               <td>{row.period ? `Q${row.period}` : "-"}</td>
-              <td>{row.game_clock || "-"}</td>
+              <td><ChallengeClockLink row={row} /></td>
               <td>{row.challenge_type || "-"}</td>
               <td>{row.challenge_sub_type || "-"}</td>
               <td><ContextCell row={row} onEditContext={onEditContext} /></td>

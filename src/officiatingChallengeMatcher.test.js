@@ -221,3 +221,36 @@ test("enrichChallengeEventsWithOfficials is idempotent for repeated matched rows
   assert.equal(secondPass.match_reason, firstPass.match_reason);
   assert.equal(secondPass.review_status, firstPass.review_status);
 });
+
+test("enrichChallengeEventsWithOfficials uses nearby shot location for unmatched foul challenge subtype only", () => {
+  const [challenge] = enrichChallengeEventsWithOfficials([
+    {
+      game_id: "0042500104",
+      game_clock: "03:36.0",
+      challenging_team: "DET",
+      period: 2,
+      challenge_type: "Foul",
+      initial_call: "Defensive Foul",
+      source_payload: {},
+    },
+  ], [], [], {
+    contextActions: [
+      {
+        game_id: "0042500104",
+        period: 2,
+        game_clock: "PT03M39.00S",
+        action_number: 320,
+        action_type: "2pt",
+        description: "MISS J. Suggs running DUNK - blocked",
+        area: "Restricted Area",
+        area_detail: "0-8 Center",
+      },
+    ],
+  });
+
+  assert.equal(challenge.challenge_sub_type, "Restricted Area");
+  assert.equal(challenge.matched_call_event_id, null);
+  assert.equal(challenge.whistling_official_name, "");
+  assert.equal(challenge.review_status, "needs_review");
+  assert.equal(challenge.source_payload.officialMatcher.nearbyLocationContext.actionNumber, 320);
+});

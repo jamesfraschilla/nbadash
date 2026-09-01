@@ -93,12 +93,34 @@ export function shootingFoulLocationSubtype(event = {}, category = "") {
 export function challengeFoulSubtype(event = {}, matchedCall = null) {
   const call = matchedCall || event;
   const category = normalizeOfficialCallCategory(call);
-  if (["Shooting Foul", "Restricted Area Shooting Foul", "3-Pt Shooting Foul"].includes(category)) {
+
+  const challengeSignal = [
+    event.challenge_type,
+    event.challengeType,
+    event.initial_call,
+    event.initialCall,
+    call.primary_category,
+    call.primaryCategory,
+    call.secondary_category,
+    call.secondaryCategory,
+    call.action_type,
+    call.actionType,
+    call.description,
+  ].map(cleanCallCategoryPart).join(" ");
+  const isFoulChallenge = challengeSignal.includes("foul");
+  if (isFoulChallenge) {
     if (isRestrictedArea(call)) return "Restricted Area";
     if (isThreePointArea(call)) return "3-Pt";
   }
-  if (category === "Offensive Foul" && isThreePointArea(call)) return "3-Pt";
-  return "";
+
+  if (category && category !== "Unknown") return category;
+
+  const initialCall = cleanCallCategoryPart(event.initial_call || event.initialCall);
+  if (initialCall.includes("team ball") || initialCall.includes("out of bounds")) return "Out Of Bounds";
+  if (initialCall === "goaltending") return "Goaltending";
+  if (initialCall === "basket interference") return "Basket Interference";
+  if (initialCall === "jump ball") return "Jump Ball";
+  return initialCall ? titleCaseCategory(initialCall) : "";
 }
 
 export function isCountedTechnicalCategory(value) {
@@ -187,7 +209,7 @@ export function normalizeOfficialCallCategory(event = {}) {
 
   if (primary === "turnover") {
     const turnover = cleanCallCategoryPart(secondary || descriptor || subType);
-    if (["lost ball", "bad pass", "step out of bounds"].includes(turnover)) return "Out Of Bounds";
+    if (["lost ball", "bad pass", "step out of bounds"].includes(turnover) || turnover.includes("out of bounds")) return "Out Of Bounds";
     return normalizedViolationCategory(turnover);
   }
 
