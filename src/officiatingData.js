@@ -909,6 +909,13 @@ export async function fetchChallengeContextTagOptions() {
   })).filter((tag) => tag.id && tag.label);
 }
 
+function normalizeContextTagRows(rows) {
+  return asArray(rows).map((tag) => ({
+    id: String(tag.id || "").trim(),
+    label: String(tag.label || "").trim(),
+  })).filter((tag) => tag.id && tag.label);
+}
+
 export async function saveChallengeContextTags({ challengeEventId, selectedTagIds = [], newTagLabels = [] } = {}) {
   if (!supabase) throw new Error("Supabase is not configured.");
   const eventId = String(challengeEventId || "").trim();
@@ -918,6 +925,22 @@ export async function saveChallengeContextTags({ challengeEventId, selectedTagId
   const cleanNewLabels = [...new Set(asArray(newTagLabels)
     .map((label) => String(label || "").replace(/\s+/g, " ").trim())
     .filter(Boolean))];
+  const selectedIdsFromPayload = asArray(selectedTagIds).map((id) => String(id || "").trim()).filter(Boolean);
+  const rpcResult = await supabase.rpc("nba_save_challenge_context_tags", {
+    p_challenge_event_id: eventId,
+    p_selected_tag_ids: selectedIdsFromPayload,
+    p_new_tag_labels: cleanNewLabels,
+  });
+  if (!rpcResult.error) {
+    return {
+      options: normalizeContextTagRows(rpcResult.data?.options),
+      selected: normalizeContextTagRows(rpcResult.data?.selected),
+    };
+  }
+  if (!isMissingTableError(rpcResult.error) && rpcResult.error?.code !== "PGRST202") {
+    throw rpcResult.error;
+  }
+
   let createdTags = [];
   if (cleanNewLabels.length) {
     const { data, error } = await supabase
@@ -932,7 +955,7 @@ export async function saveChallengeContextTags({ challengeEventId, selectedTagId
   }
   const selectedIds = [
     ...new Set([
-      ...asArray(selectedTagIds).map((id) => String(id || "").trim()).filter(Boolean),
+      ...selectedIdsFromPayload,
       ...createdTags.map((tag) => String(tag.id || "").trim()).filter(Boolean),
     ]),
   ];
