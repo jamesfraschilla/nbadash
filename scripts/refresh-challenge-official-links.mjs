@@ -8,6 +8,7 @@ import { enrichChallengeEventsWithOfficials } from "../src/officiatingChallengeM
 
 const DEFAULT_SEASON = "2025-26";
 const PAGE_SIZE = 1000;
+const GAME_ID_CHUNK_SIZE = 50;
 const UPDATE_BATCH_SIZE = 250;
 
 function readArg(name) {
@@ -58,6 +59,14 @@ async function selectAll(supabase, table, buildQuery) {
     if (error) throw new Error(`Failed loading ${table}: ${error.message}`);
     rows.push(...(data || []));
     if (!data || data.length < PAGE_SIZE) break;
+  }
+  return rows;
+}
+
+async function selectForGameChunks(supabase, table, gameIds, buildQuery) {
+  const rows = [];
+  for (const gameIdChunk of chunkArray(gameIds, GAME_ID_CHUNK_SIZE)) {
+    rows.push(...await selectAll(supabase, table, (query) => buildQuery(query).in("game_id", gameIdChunk)));
   }
   return rows;
 }
@@ -130,22 +139,21 @@ async function main() {
   const season = readArg("season") || DEFAULT_SEASON;
   const apply = hasFlag("apply");
 
-  const [challenges, calls, assignments] = await Promise.all([
-    selectAll(supabase, "nba_coach_challenge_events", (query) => query
-      .select("*")
-      .eq("season", season)
-      .eq("source", "nba_official_challenge_pdf")
-      .order("game_date", { ascending: true })),
-    selectAll(supabase, "nba_official_call_events", (query) => query
+  const challenges = await selectAll(supabase, "nba_coach_challenge_events", (query) => query
+    .select("*")
+    .eq("season", season)
+    .eq("source", "nba_official_challenge_pdf")
+    .order("game_date", { ascending: true }));
+  const challengeGameIds = [...new Set(challenges.map((row) => row.game_id).filter(Boolean))];
+  const [calls, assignments] = await Promise.all([
+    selectForGameChunks(supabase, "nba_official_call_events", challengeGameIds, (query) => query
       .select("id,season,game_id,period,game_clock,action_number,action_type,primary_category,secondary_category,sub_type,descriptor,description,official_id,official_name,charged_team,area,area_detail,source_payload")
       .eq("season", season)
-      .order("game_id", { ascending: true })
       .order("action_number", { ascending: true, nullsFirst: false })
       .order("id", { ascending: true })),
-    selectAll(supabase, "nba_official_game_assignments", (query) => query
+    selectForGameChunks(supabase, "nba_official_game_assignments", challengeGameIds, (query) => query
       .select("*")
       .eq("season", season)
-      .order("game_id", { ascending: true })
       .order("assignment_order", { ascending: true, nullsFirst: false })
       .order("id", { ascending: true })),
   ]);
