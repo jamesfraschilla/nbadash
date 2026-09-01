@@ -163,6 +163,8 @@ function toCallRow(event) {
     primary_category: event.primaryCategory,
     charged_team: event.chargedTeam,
     benefiting_team: event.benefitingTeam,
+    area: event.sourcePayload?.area || "",
+    area_detail: event.sourcePayload?.areaDetail || event.sourcePayload?.area_detail || "",
   };
 }
 
@@ -253,6 +255,7 @@ function toChallengeRow(row, { season, pdfUrl }) {
     ruling_outcome: row.ruling_description,
     challenge_outcome: normalizeOutcome(row.challenge_outcome),
     video_url: row.video_url,
+    challenge_sub_type: row.challenge_sub_type || "",
     match_confidence: row.game_id ? 0.98 : 0.55,
     match_reason: row.game_id ? "matched-official-pdf-video-game-id" : "official-pdf-no-game-id",
     review_status: row.game_id ? "auto" : "needs_review",
@@ -292,7 +295,8 @@ function insertFromJson(rows) {
     "season", "season_type", "game_id", "game_date", "home_team", "away_team", "challenging_team", "period",
     "game_clock", "challenge_type", "initial_call", "call_ruling", "ruling_outcome", "challenge_outcome",
     "video_url", "crew_chief_id", "crew_chief_name", "whistling_official_id", "whistling_official_name",
-    "matched_action_number", "match_confidence", "match_reason", "review_status", "source", "source_payload",
+    "matched_action_number", "match_confidence", "match_reason", "challenge_sub_type", "review_status",
+    "source", "source_payload",
   ];
   const types = {
     season: "text",
@@ -317,6 +321,7 @@ function insertFromJson(rows) {
     matched_action_number: "integer",
     match_confidence: "numeric",
     match_reason: "text",
+    challenge_sub_type: "text",
     review_status: "text",
     source: "text",
     source_payload: "jsonb",

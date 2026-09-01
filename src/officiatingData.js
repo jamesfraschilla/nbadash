@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient.js";
+import { isCountedTechnicalEvent, normalizeOfficialCallCategory } from "./officiatingCategoryNormalization.js";
 
 const DEFAULT_SEASON = "2025-26";
 const SUPABASE_PAGE_SIZE = 1000;
@@ -7,6 +8,7 @@ const CHALLENGE_LIMIT = 5000;
 const ASSIGNMENT_LIMIT = 2000;
 const PROFILE_LIMIT = 500;
 const PROFILE_DETAIL_LIMIT = 5000;
+const CONTEXT_TAG_PAGE_SIZE = 750;
 const EXCLUDED_STAT_SEASON_TYPES = new Set(["preseason"]);
 const NBA_TEAM_ID_BY_TRICODE = {
   ATL: "1610612737",
@@ -58,109 +60,8 @@ function isIncludedStatEvent(row) {
   return !EXCLUDED_STAT_SEASON_TYPES.has(normalizeStatus(row?.season_type || row?.seasonType));
 }
 
-function titleCaseCategory(value) {
-  return String(value || "")
-    .replace(/_/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function cleanCategoryPart(value) {
-  const cleaned = String(value || "")
-    .replace(/_/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
-  return {
-    awayfromplay: "away from play",
-    "awayfrom play": "away from play",
-    clearpath: "clear path",
-    defense3second: "defense 3 second",
-    defensive3second: "defense 3 second",
-    defensivethreesecond: "defense 3 second",
-    "3secondviolation": "3 second violation",
-    threesecondviolation: "3 second violation",
-    jumpball: "jump ball",
-    lostball: "lost ball",
-    flagranttype1: "flagrant type 1",
-    flagranttype2: "flagrant type 2",
-    doubletechnical: "double technical",
-    delaytechnical: "delay technical",
-    floppingtechnical: "flopping technical",
-    nonunsportsmanliketechnical: "non unsportsmanlike technical",
-    looseball: "loose ball",
-    personaltake: "personal take",
-    transitiontake: "transition take",
-  }[cleaned.replace(/[^a-z0-9]+/g, "")] || cleaned;
-}
-
-function isCountedTechnicalCategory(value) {
-  const category = cleanCategoryPart(value);
-  return category === "technical" || category === "double technical";
-}
-
-function isCountedTechnicalEvent(event) {
-  return cleanCategoryPart(event.primary_category) === "technical" || isCountedTechnicalCategory(event.secondary_category);
-}
-
-function normalizedFoulCategory(parts) {
-  const uniqueParts = [...new Set(parts.filter(Boolean).filter((part) => part !== "foul"))];
-  const partSet = new Set(uniqueParts);
-  if (partSet.has("defense 3 second")) return "Defensive 3 Second Violation";
-  if (partSet.has("delay technical") || partSet.has("delay")) return "Delay Of Game";
-  if (partSet.has("flopping technical")) return "Flopping Technical";
-  if (partSet.has("non unsportsmanlike technical")) return "Non Unsportsmanlike Technical";
-  if (uniqueParts.some(isCountedTechnicalCategory)) return "Technical Foul";
-  if (partSet.has("shooting")) return "Shooting Foul";
-  if (partSet.has("loose ball")) return "Loose Ball Foul";
-  if (partSet.has("flagrant type 1")) return "Flagrant Type 1 Foul";
-  if (partSet.has("flagrant type 2")) return "Flagrant Type 2 Foul";
-  if (partSet.has("away from play")) return "Away From Play Foul";
-  if (partSet.has("transition take")) return "Transition Take Foul";
-  if (partSet.has("personal take") || partSet.has("take")) return "Take Foul";
-  if (partSet.has("offensive")) return "Offensive Foul";
-  if (partSet.has("clear path")) return "Clear Path Foul";
-  if (partSet.has("flagrant")) return "Flagrant Foul";
-  if (uniqueParts.length === 1 && uniqueParts[0] === "personal") return "Foul on Floor";
-  const visibleParts = uniqueParts.filter((part) => part !== "personal");
-  return visibleParts.length ? titleCaseCategory(`${visibleParts.join(" ")} foul`) : "Foul on Floor";
-}
-
 export function specificCallCategory(event) {
-  const primary = cleanCategoryPart(event.primary_category);
-  const secondary = cleanCategoryPart(event.secondary_category);
-  const descriptor = cleanCategoryPart(event.descriptor);
-  const subType = cleanCategoryPart(event.sub_type);
-  const description = String(event.description || "");
-
-  if (primary === "violation") {
-    const violationMatch = /violation:\s*([^()]+)/i.exec(description);
-    const violation = cleanCategoryPart(violationMatch?.[1] || secondary || descriptor || subType);
-    if (violation === "3 second violation") return "Offensive 3 Second Violation";
-    if (violation === "defense 3 second") return "Defensive 3 Second Violation";
-    return violation ? titleCaseCategory(violation) : "Violation";
-  }
-
-  if (primary === "foul" || primary === "technical") {
-    if (primary === "technical") return "Technical Foul";
-    return normalizedFoulCategory([secondary, descriptor, subType]);
-  }
-
-  if (primary === "jump ball") return "Jump Ball";
-
-  if (primary === "turnover") {
-    const turnover = cleanCategoryPart(secondary || descriptor || subType);
-    if (turnover === "3 second violation") return "Offensive 3 Second Violation";
-    if (turnover === "lost ball") return "Out Of Bounds";
-    if (turnover === "bad pass") return "Out Of Bounds";
-    if (turnover === "step out of bounds") return "Out Of Bounds";
-    if (turnover === "jump ball") return "Jump Ball";
-  }
-
-  if (secondary && secondary !== primary) return titleCaseCategory(secondary);
-  if (primary) return titleCaseCategory(primary);
-  return "Unknown";
+  return normalizeOfficialCallCategory(event);
 }
 
 function teamIdForTricode(team) {
@@ -222,6 +123,56 @@ function categoriesPerGameFromTotals(categoryTotals, games, existingCategories =
       rank: existingCategories?.[category]?.rank || null,
     },
   ]));
+}
+
+function withContextTagFields(row, tags = []) {
+  return {
+    ...row,
+    context_tags: tags,
+    contextTags: tags,
+  };
+}
+
+async function fetchChallengeContextRows(challengeIds = []) {
+  const ids = [...new Set(asArray(challengeIds).map((id) => String(id || "").trim()).filter(Boolean))];
+  if (!supabase || !ids.length) return [];
+  const rows = [];
+  for (let index = 0; index < ids.length; index += CONTEXT_TAG_PAGE_SIZE) {
+    const chunk = ids.slice(index, index + CONTEXT_TAG_PAGE_SIZE);
+    const { data, error } = await supabase
+      .from("nba_challenge_context_event_tags")
+      .select("challenge_event_id, tag_id")
+      .in("challenge_event_id", chunk);
+    if (error) {
+      if (isMissingTableError(error)) return [];
+      throw error;
+    }
+    rows.push(...asArray(data));
+  }
+  return rows;
+}
+
+async function attachChallengeContextTags(rows) {
+  const challengeRows = asArray(rows);
+  if (!supabase || !challengeRows.length) return challengeRows.map((row) => withContextTagFields(row, []));
+  const [tagsResult, eventTagRows] = await Promise.all([
+    selectTable("nba_challenge_context_tags", (query) => query.select("*").order("label", { ascending: true }), { maxRows: 500 })
+      .catch(() => ({ data: [], unavailable: true })),
+    fetchChallengeContextRows(challengeRows.map((row) => row.id)).catch(() => []),
+  ]);
+  const tagById = new Map(asArray(tagsResult.data).map((tag) => [String(tag.id), tag]));
+  const labelsByEventId = new Map();
+  eventTagRows.forEach((row) => {
+    const eventId = String(row.challenge_event_id || "").trim();
+    const tag = tagById.get(String(row.tag_id || ""));
+    if (!eventId || !tag) return;
+    if (!labelsByEventId.has(eventId)) labelsByEventId.set(eventId, []);
+    labelsByEventId.get(eventId).push({ id: tag.id, label: tag.label });
+  });
+  labelsByEventId.forEach((labels) => {
+    labels.sort((left, right) => String(left.label).localeCompare(String(right.label)));
+  });
+  return challengeRows.map((row) => withContextTagFields(row, labelsByEventId.get(String(row.id)) || []));
 }
 
 function clockSeconds(value) {
@@ -353,6 +304,9 @@ function toOfficialProfileFromRollup(row) {
     crewChiefChallenges: Number(row.crew_chief_challenges) || 0,
     successfulCrewChiefChallenges: Number(row.successful_crew_chief_challenges) || 0,
     crewChiefChallengeRate: Number(row.crew_chief_challenge_rate) || 0,
+    crewChallenges: Number(row.crew_challenges) || 0,
+    successfulCrewChallenges: Number(row.successful_crew_challenges) || 0,
+    crewChallengeRate: Number(row.crew_challenge_rate) || 0,
     callsByTeam: {},
     callsByCategory: {},
     schedule: [],
@@ -476,6 +430,8 @@ export function buildOfficialProfiles(callEvents, challengeEvents, assignments) 
         successfulWhistleChallenges: 0,
         crewChiefChallenges: 0,
         successfulCrewChiefChallenges: 0,
+        crewChallenges: 0,
+        successfulCrewChallenges: 0,
         callsByTeam: emptyTeamNetMap(),
         teamGames: Object.fromEntries(NBA_TEAM_CODES.map((team) => [team, new Set()])),
         callsByCategory: {},
@@ -520,9 +476,27 @@ export function buildOfficialProfiles(callEvents, challengeEvents, assignments) 
     profile.recentCalls.push(event);
   });
 
+  const assignmentsByGame = new Map();
+  statAssignments.filter((assignment) => !assignment.is_alternate).forEach((assignment) => {
+    const gameId = String(assignment.game_id || "").trim();
+    if (!gameId) return;
+    if (!assignmentsByGame.has(gameId)) assignmentsByGame.set(gameId, []);
+    assignmentsByGame.get(gameId).push(assignment);
+  });
+
   statChallengeEvents.forEach((event) => {
     const successful = normalizeStatus(event.challenge_outcome) === "successful";
     const profileRoles = new Map();
+    asArray(assignmentsByGame.get(String(event.game_id || "").trim())).forEach((assignment) => {
+      const name = String(assignment.official_name || "").trim();
+      if (!name) return;
+      const profileKey = String(assignment.official_id || name).trim();
+      const profile = ensure(profileKey, assignment);
+      if (event.game_id) profile.games.add(event.game_id);
+      profile.crewChallenges += 1;
+      if (successful) profile.successfulCrewChallenges += 1;
+      profileRoles.set(profileKey, "crew");
+    });
     [
       ["crew_chief_name", "crew_chief_id", "crewChief"],
       ["whistling_official_name", "whistling_official_id", "whistle"],
@@ -543,7 +517,7 @@ export function buildOfficialProfiles(callEvents, challengeEvents, assignments) 
         if (successful) profile.successfulCrewChiefChallenges += 1;
       }
       const existingRole = profileRoles.get(profileKey);
-      profileRoles.set(profileKey, existingRole === "whistle" || role === "whistle" ? "whistle" : "crewChief");
+      profileRoles.set(profileKey, existingRole === "whistle" || role === "whistle" ? "whistle" : role === "crewChief" ? "crewChief" : "crew");
     });
     profileRoles.forEach((role, profileKey) => {
       const profile = profiles.get(profileKey);
@@ -572,6 +546,7 @@ export function buildOfficialProfiles(callEvents, challengeEvents, assignments) 
         challengeRate: safeRate(profile.successfulChallenges, profile.challenges),
         whistleChallengeRate: safeRate(profile.successfulWhistleChallenges, profile.whistleChallenges),
         crewChiefChallengeRate: safeRate(profile.successfulCrewChiefChallenges, profile.crewChiefChallenges),
+        crewChallengeRate: safeRate(profile.successfulCrewChallenges, profile.crewChallenges),
         schedule: profile.schedule
           .sort((left, right) => String(right.game_date || "").localeCompare(String(left.game_date || ""))),
         recentCalls: profile.recentCalls
@@ -589,6 +564,7 @@ export function buildOfficialProfiles(callEvents, challengeEvents, assignments) 
     ["challengeRateRank", "challengeRate"],
     ["whistleChallengeRateRank", "whistleChallengeRate"],
     ["crewChiefChallengeRateRank", "crewChiefChallengeRate"],
+    ["crewChallengeRateRank", "crewChallengeRate"],
   ]));
 }
 
@@ -703,22 +679,11 @@ export async function fetchOfficialProfileDetails({ season = DEFAULT_SEASON, pro
   const officialName = String(profile?.name || profile?.official_name || "").trim();
   if (!officialId && !officialName) return profile;
 
-  const challengeQuery = (query) => {
-    let next = query.select("*").eq("season", season).not("season_type", "ilike", "Preseason");
-    if (officialId && officialName) {
-      next = next.or([
-        `crew_chief_id.eq.${officialId}`,
-        `whistling_official_id.eq.${officialId}`,
-        `crew_chief_name.eq.${officialName}`,
-        `whistling_official_name.eq.${officialName}`,
-      ].join(","));
-    } else if (officialId) {
-      next = next.or(`crew_chief_id.eq.${officialId},whistling_official_id.eq.${officialId}`);
-    } else {
-      next = next.or(`crew_chief_name.eq.${officialName},whistling_official_name.eq.${officialName}`);
-    }
-    return next.order("game_date", { ascending: false });
-  };
+  const challengeQuery = (query) => query
+    .select("*")
+    .eq("season", season)
+    .not("season_type", "ilike", "Preseason")
+    .order("game_date", { ascending: false });
   const teamNetQuery = (query) => {
     let next = query.select("*").eq("season", season);
     if (officialId && officialName) {
@@ -762,10 +727,11 @@ export async function fetchOfficialProfileDetails({ season = DEFAULT_SEASON, pro
   ]);
 
   if (challengeEventsResult.unavailable || assignmentsResult.unavailable) return profile;
+  const challengeRowsWithTags = await attachChallengeContextTags(preferAuthoritativeChallengeEvents(challengeEventsResult.data));
   const detail = applyOfficialProfileDetails(
     profile,
     [],
-    preferAuthoritativeChallengeEvents(challengeEventsResult.data),
+    challengeRowsWithTags,
     assignmentsResult.data,
     []
   );
@@ -803,7 +769,7 @@ export async function fetchTeamProfileDetails({ season = DEFAULT_SEASON, profile
   ]);
 
   if (challengeEventsResult.unavailable) return profile;
-  const challengeLog = preferAuthoritativeChallengeEvents(challengeEventsResult.data);
+  const challengeLog = await attachChallengeContextTags(preferAuthoritativeChallengeEvents(challengeEventsResult.data));
   return {
     ...profile,
     callsByOfficial: teamOfficialResult.unavailable ? profile.callsByOfficial : teamOfficialNetRollupsToOfficialMap(teamOfficialResult.data),
@@ -856,7 +822,7 @@ export async function fetchOfficiatingDashboardData({ season = DEFAULT_SEASON, i
       .order("game_date", { ascending: false }), { maxRows: CHALLENGE_LIMIT })
     : { data: [], unavailable: false };
 
-  const challengeEvents = preferAuthoritativeChallengeEvents(challengeEventsResult.data);
+  const challengeEvents = await attachChallengeContextTags(preferAuthoritativeChallengeEvents(challengeEventsResult.data));
   let callEvents = [];
   let assignments = [];
   let detailOfficialProfiles = [];
@@ -889,6 +855,7 @@ export async function fetchOfficiatingDashboardData({ season = DEFAULT_SEASON, i
       ["challengeRateRank", "challengeRate"],
       ["whistleChallengeRateRank", "whistleChallengeRate"],
       ["crewChiefChallengeRateRank", "crewChiefChallengeRate"],
+      ["crewChallengeRateRank", "crewChallengeRate"],
     ]).sort((a, b) => b.calls - a.calls || b.challenges - a.challenges || a.name.localeCompare(b.name));
   const rollupTeamProfiles = teamRollupsResult.unavailable
     ? []
@@ -929,5 +896,62 @@ export async function fetchOfficiatingChallengeLog({ season = DEFAULT_SEASON } =
     .select("*")
     .eq("season", season)
     .order("game_date", { ascending: false }), { maxRows: CHALLENGE_LIMIT });
-  return preferAuthoritativeChallengeEvents(result.data);
+  return attachChallengeContextTags(preferAuthoritativeChallengeEvents(result.data));
+}
+
+export async function fetchChallengeContextTagOptions() {
+  const result = await selectTable("nba_challenge_context_tags", (query) => query
+    .select("*")
+    .order("label", { ascending: true }), { maxRows: 500 });
+  return asArray(result.data).map((tag) => ({
+    id: String(tag.id || "").trim(),
+    label: String(tag.label || "").trim(),
+  })).filter((tag) => tag.id && tag.label);
+}
+
+export async function saveChallengeContextTags({ challengeEventId, selectedTagIds = [], newTagLabels = [] } = {}) {
+  if (!supabase) throw new Error("Supabase is not configured.");
+  const eventId = String(challengeEventId || "").trim();
+  if (!eventId) throw new Error("Missing challenge event id.");
+  const { data: authData } = await supabase.auth.getUser();
+  const userId = authData?.user?.id || null;
+  const cleanNewLabels = [...new Set(asArray(newTagLabels)
+    .map((label) => String(label || "").replace(/\s+/g, " ").trim())
+    .filter(Boolean))];
+  let createdTags = [];
+  if (cleanNewLabels.length) {
+    const { data, error } = await supabase
+      .from("nba_challenge_context_tags")
+      .upsert(cleanNewLabels.map((label) => ({
+        label,
+        created_by: userId,
+      })), { onConflict: "label" })
+      .select("*");
+    if (error) throw error;
+    createdTags = asArray(data);
+  }
+  const selectedIds = [
+    ...new Set([
+      ...asArray(selectedTagIds).map((id) => String(id || "").trim()).filter(Boolean),
+      ...createdTags.map((tag) => String(tag.id || "").trim()).filter(Boolean),
+    ]),
+  ];
+  const deleteResult = await supabase
+    .from("nba_challenge_context_event_tags")
+    .delete()
+    .eq("challenge_event_id", eventId);
+  if (deleteResult.error) throw deleteResult.error;
+  if (selectedIds.length) {
+    const { error } = await supabase
+      .from("nba_challenge_context_event_tags")
+      .insert(selectedIds.map((tagId) => ({
+        challenge_event_id: eventId,
+        tag_id: tagId,
+        tagged_by: userId,
+      })));
+    if (error) throw error;
+  }
+  const options = await fetchChallengeContextTagOptions();
+  const selected = options.filter((tag) => selectedIds.includes(tag.id));
+  return { options, selected };
 }

@@ -463,6 +463,10 @@
   min-width: 760px;
 }
 
+.officialsTable {
+  min-width: 1080px;
+}
+
 .table th,
 .table td {
   padding: 10px 12px;
@@ -619,6 +623,28 @@
   white-space: nowrap;
 }
 
+.contextCellButton {
+  max-width: 150px;
+  min-height: 24px;
+  overflow: hidden;
+  border: 1px solid rgba(79, 153, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(79, 153, 255, 0.08);
+  color: var(--oi-blue);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 900;
+  padding: 0 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contextCellButton:hover {
+  border-color: rgba(79, 153, 255, 0.44);
+  background: rgba(79, 153, 255, 0.15);
+}
+
 .modalOverlay {
   position: fixed;
   inset: 0;
@@ -718,7 +744,7 @@
 
 .profileMetrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(176px, 1fr));
   gap: 10px;
 }
 
@@ -879,6 +905,12 @@
   backdrop-filter: blur(8px);
 }
 
+.contextEditorOverlay {
+  position: fixed;
+  z-index: 6000;
+  border-radius: 0;
+}
+
 .innerModal {
   width: min(560px, 100%);
   max-height: min(78vh, 720px);
@@ -888,6 +920,11 @@
   border-radius: 12px;
   background: #0b111a;
   box-shadow: var(--oi-shadow);
+}
+
+.contextEditor {
+  display: grid;
+  gap: 12px;
 }
 
 .innerModalHeader {
@@ -903,6 +940,83 @@
   color: var(--oi-text);
   font-size: 1.05rem;
   text-transform: uppercase;
+}
+
+.contextEditorMeta {
+  overflow: hidden;
+  color: var(--oi-muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contextTagGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.contextTagOption {
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 9px;
+  background: #080d14;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--oi-text);
+  font-weight: 850;
+}
+
+.contextTagOption input {
+  flex: none;
+  accent-color: var(--oi-blue);
+}
+
+.contextTagOption span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contextNewTag {
+  display: grid;
+  gap: 6px;
+}
+
+.contextNewTag span {
+  color: var(--oi-muted);
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.contextNewTag input {
+  min-height: 38px;
+  border: 1px solid var(--oi-border-strong);
+  border-radius: 9px;
+  background: #090e15;
+  color: var(--oi-text);
+  padding: 0 10px;
+  font-weight: 800;
+}
+
+.contextEditorActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.contextError {
+  margin: 0;
+  color: var(--oi-red);
+  font-size: 0.84rem;
+  font-weight: 850;
 }
 
 .detailBlock summary {
@@ -1195,7 +1309,7 @@
 
 .miniTable {
   width: 100%;
-  min-width: 680px;
+  min-width: 860px;
   border-collapse: collapse;
 }
 

@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createPortal } from "react-dom";
 import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth.js";
 import {
   fetchOfficiatingChallengeLog,
+  fetchChallengeContextTagOptions,
   fetchOfficialProfileDetails,
   fetchOfficiatingDashboardData,
   fetchTeamProfileDetails,
+  saveChallengeContextTags,
 } from "../officiatingData.js";
 import {
   fetchPgrInsightsData,
@@ -16,6 +18,7 @@ import {
   resolvePgrGameMetadata,
 } from "../pgrData.js";
 import { teamLogoUrl } from "../api.js";
+import { CALL_CATEGORY_GROUPS } from "../officiatingCategoryNormalization.js";
 import { loadRefereeHeadshotUrl } from "../refereeHeadshots.js";
 import styles from "./Officiating.module.css";
 
@@ -192,107 +195,6 @@ function SortableTopList({
     </details>
   );
 }
-
-const CALL_CATEGORY_GROUPS = [
-  {
-    key: "fouls",
-    title: "Fouls",
-    types: [
-      { label: "Shooting Foul", labels: ["Shooting Foul"] },
-      { label: "Offensive Foul", labels: ["Offensive Foul"] },
-      {
-        label: "Foul on Floor",
-        labels: ["Foul on Floor", "Away From Play Foul", "Loose Ball Foul"],
-        subTypes: [
-          { label: "Foul on Floor", labels: ["Foul on Floor"] },
-          { label: "Away From the Play Foul", labels: ["Away From Play Foul"] },
-          { label: "Loose Ball Foul", labels: ["Loose Ball Foul"] },
-        ],
-      },
-      {
-        label: "Transition Foul",
-        labels: ["Transition Take Foul", "Clear Path Foul"],
-        subTypes: [
-          { label: "Transition Take Foul", labels: ["Transition Take Foul"] },
-          { label: "Clear Path Foul", labels: ["Clear Path Foul"] },
-        ],
-      },
-      {
-        label: "Flagrant Foul",
-        labels: ["Flagrant Type 1 Foul", "Flagrant Type 2 Foul"],
-        subTypes: [
-          { label: "Flagrant Type 1 Foul", labels: ["Flagrant Type 1 Foul"] },
-          { label: "Flagrant Type 2 Foul", labels: ["Flagrant Type 2 Foul"] },
-        ],
-      },
-      {
-        label: "Administrative Foul",
-        labels: ["Technical Foul", "Delay Of Game"],
-        subTypes: [
-          { label: "Technical Foul", labels: ["Technical Foul"] },
-          { label: "Delay of Game", labels: ["Delay Of Game"] },
-        ],
-      },
-    ],
-  },
-  {
-    key: "violations",
-    title: "Violations",
-    types: [
-      {
-        label: "Handling Violation",
-        labels: ["Traveling", "Double Dribble", "Palming", "Discontinued Dribble", "Backcourt", "Offensive Goaltending"],
-        subTypes: [
-          { label: "Traveling", labels: ["Traveling"] },
-          { label: "Double Dribble", labels: ["Double Dribble"] },
-          { label: "Palming", labels: ["Palming", "Discontinued Dribble"] },
-          { label: "Backcourt", labels: ["Backcourt"] },
-          { label: "Offensive Goaltending", labels: ["Offensive Goaltending"] },
-        ],
-      },
-      {
-        label: "Timing Violation",
-        labels: ["8 Second Violation", "5 Second Violation", "Offensive 3 Second Violation", "Shot Clock Violation"],
-        subTypes: [
-          { label: "8 Second Violation", labels: ["8 Second Violation"] },
-          { label: "5 Second Violation", labels: ["5 Second Violation"] },
-          { label: "Offensive 3 Second Violation", labels: ["Offensive 3 Second Violation"] },
-          { label: "Shot Clock Violation", labels: ["Shot Clock Violation"] },
-        ],
-      },
-      {
-        label: "Goaltending",
-        labels: ["Offensive Goaltending", "Defensive Goaltending"],
-        subTypes: [
-          { label: "Offensive Goaltending", labels: ["Offensive Goaltending"] },
-          { label: "Defensive Goaltending", labels: ["Defensive Goaltending"] },
-        ],
-      },
-      {
-        label: "Defensive Violation",
-        labels: ["Defensive Goaltending", "Defensive 3 Second Violation", "Kicked Ball"],
-        subTypes: [
-          { label: "Defensive Goaltending", labels: ["Defensive Goaltending"] },
-          { label: "Defensive 3 Second Violation", labels: ["Defensive 3 Second Violation"] },
-          { label: "Kicked Ball", labels: ["Kicked Ball"] },
-        ],
-      },
-      {
-        label: "Misc Violations",
-        labels: ["Inbound", "Lane", "Jump Ball", "Jumpball"],
-        subTypes: [
-          { label: "Inbound", labels: ["Inbound"] },
-          { label: "Lane", labels: ["Lane"] },
-          { label: "Jump Ball", labels: ["Jump Ball", "Jumpball"] },
-        ],
-      },
-      {
-        label: "Out of Bounds",
-        labels: ["Out Of Bounds", "Bad Pass Out Of Bounds", "Bad Pass", "Lost Ball Out Of Bounds", "Lost Ball Turnover", "Step Out Of Bounds"],
-      },
-    ],
-  },
-];
 
 function itemValue(items, labels = []) {
   return labels.reduce((total, label) => {
@@ -597,6 +499,7 @@ function OfficialsTable({ rows, sort, onSort, onSelect }) {
     violationsPerGame: buildMetricRankMap(rows, "violationsPerGame"),
     whistleChallengeRate: buildMetricRankMap(rows, "whistleChallengeRate", (row) => Number(row.whistleChallenges) > 0),
     crewChiefChallengeRate: buildMetricRankMap(rows, "crewChiefChallengeRate", (row) => Number(row.crewChiefChallenges) > 0),
+    crewChallengeRate: buildMetricRankMap(rows, "crewChallengeRate", (row) => Number(row.crewChallenges) > 0),
   }), [rows]);
 
   if (!rows.length) {
@@ -620,6 +523,7 @@ function OfficialsTable({ rows, sort, onSort, onSelect }) {
             <th><SortButton label="Violations/G" sortKey="violationsPerGame" sort={sort} onSort={onSort} /></th>
             <th><SortButton label="Challenges (Whistle)" sortKey="whistleChallengeRate" sort={sort} onSort={onSort} /></th>
             <th><SortButton label="Challenges (Crew Chief)" sortKey="crewChiefChallengeRate" sort={sort} onSort={onSort} /></th>
+            <th><SortButton label="Challenge (Crew)" sortKey="crewChallengeRate" sort={sort} onSort={onSort} /></th>
           </tr>
         </thead>
         <tbody>
@@ -644,6 +548,7 @@ function OfficialsTable({ rows, sort, onSort, onSelect }) {
               <td><RankedMetric value={row.violationsPerGame} rowId={row.id} rankInfo={metricRanks.violationsPerGame} /></td>
               <td><RankedMetric value={row.whistleChallengeRate} rowId={row.id} rankInfo={metricRanks.whistleChallengeRate} formatter={formatRate} /></td>
               <td><RankedMetric value={row.crewChiefChallengeRate} rowId={row.id} rankInfo={metricRanks.crewChiefChallengeRate} formatter={formatRate} /></td>
+              <td><RankedMetric value={row.crewChallengeRate} rowId={row.id} rankInfo={metricRanks.crewChallengeRate} formatter={formatRate} /></td>
             </tr>
           ))}
         </tbody>
@@ -715,7 +620,76 @@ function ChallengeFilter({ label, value, options, onChange, allLabel }) {
   );
 }
 
-function ChallengeLog({ rows, filteredRows, filters, filterOptions, onFilterChange, sort, onSort, onSelectTeam, onSelectOfficial }) {
+function contextTagLabels(row) {
+  return (row?.context_tags || row?.contextTags || [])
+    .map((tag) => String(typeof tag === "string" ? tag : tag?.label || "").trim())
+    .filter(Boolean);
+}
+
+function ContextCell({ row, onEditContext }) {
+  const labels = contextTagLabels(row);
+  return (
+    <button type="button" className={styles.contextCellButton} onClick={() => onEditContext?.(row)}>
+      {labels.length ? labels.join(", ") : "Add"}
+    </button>
+  );
+}
+
+function ContextTagEditor({ row, options, onClose, onSave, isSaving, error }) {
+  const [selected, setSelected] = useState(() => new Set((row?.context_tags || row?.contextTags || []).map((tag) => String(tag.id || "").trim()).filter(Boolean)));
+  const [newTag, setNewTag] = useState("");
+  const toggle = (id) => {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  return (
+    <div className={`${styles.innerModalOverlay} ${styles.contextEditorOverlay}`} role="presentation" onMouseDown={onClose}>
+      <section className={`${styles.innerModal} ${styles.contextEditor}`} role="dialog" aria-modal="true" aria-label="Challenge context tags" onMouseDown={(event) => event.stopPropagation()}>
+        <div className={styles.innerModalHeader}>
+          <h3>Challenge Context</h3>
+          <button type="button" className={styles.closeButton} onClick={onClose}>Close</button>
+        </div>
+        <div className={styles.contextEditorMeta}>
+          {[row?.game_date, [row?.away_team, row?.home_team].filter(Boolean).join(" @ "), row?.period ? `Q${row.period}` : "", row?.game_clock].filter(Boolean).join(" · ")}
+        </div>
+        <div className={styles.contextTagGrid}>
+          {options.map((tag) => (
+            <label key={tag.id} className={styles.contextTagOption}>
+              <input type="checkbox" checked={selected.has(tag.id)} onChange={() => toggle(tag.id)} />
+              <span>{tag.label}</span>
+            </label>
+          ))}
+        </div>
+        <label className={styles.contextNewTag}>
+          <span>Create New Tag</span>
+          <input value={newTag} onChange={(event) => setNewTag(event.target.value)} placeholder="Tag name" />
+        </label>
+        {error ? <p className={styles.contextError}>{error.message || "Unable to save context tags."}</p> : null}
+        <div className={styles.contextEditorActions}>
+          <button type="button" className={styles.closeButton} onClick={onClose}>Cancel</button>
+          <button
+            type="button"
+            className={styles.closeButton}
+            disabled={isSaving}
+            onClick={() => onSave({
+              challengeEventId: row.id,
+              selectedTagIds: [...selected],
+              newTagLabels: newTag.trim() ? [newTag.trim()] : [],
+            })}
+          >
+            {isSaving ? "Saving..." : "Save"}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ChallengeLog({ rows, filteredRows, filters, filterOptions, onFilterChange, sort, onSort, onSelectTeam, onSelectOfficial, onEditContext }) {
   if (!rows.length) {
     return (
       <EmptyPanel title="No challenge log yet">
@@ -747,6 +721,8 @@ function ChallengeLog({ rows, filteredRows, filters, filterOptions, onFilterChan
               <th><SortButton label="Period" sortKey="period" sort={sort} onSort={onSort} /></th>
               <th><SortButton label="Clock" sortKey="game_clock" sort={sort} onSort={onSort} /></th>
               <th><SortButton label="Type" sortKey="challenge_type" sort={sort} onSort={onSort} /></th>
+              <th><SortButton label="Sub Type" sortKey="challenge_sub_type" sort={sort} onSort={onSort} /></th>
+              <th>Context</th>
               <th><SortButton label="Outcome" sortKey="challenge_outcome" sort={sort} onSort={onSort} /></th>
               <th><SortButton label="Whistle" sortKey="whistling_official_name" sort={sort} onSort={onSort} /></th>
               <th><SortButton label="Crew Chief" sortKey="crew_chief_name" sort={sort} onSort={onSort} /></th>
@@ -776,6 +752,8 @@ function ChallengeLog({ rows, filteredRows, filters, filterOptions, onFilterChan
                 <td>{row.period ? `Q${row.period}` : "-"}</td>
                 <td>{row.game_clock || "-"}</td>
                 <td>{row.challenge_type || "-"}</td>
+                <td>{row.challenge_sub_type || "-"}</td>
+                <td><ContextCell row={row} onEditContext={onEditContext} /></td>
                 <td><OutcomeBadge value={row.challenge_outcome || row.call_ruling} /></td>
                 <td>
                   {row.whistling_official_name ? (
@@ -813,7 +791,7 @@ function ChallengeLog({ rows, filteredRows, filters, filterOptions, onFilterChan
   );
 }
 
-function MiniChallengeLog({ rows, isLoading = false, officialColumn = "role" }) {
+function MiniChallengeLog({ rows, isLoading = false, officialColumn = "role", onEditContext }) {
   if (!rows?.length) {
     return (
       <p className={styles.detailEmpty}>
@@ -831,6 +809,8 @@ function MiniChallengeLog({ rows, isLoading = false, officialColumn = "role" }) 
             <th>Period</th>
             <th>Clock</th>
             <th>Type</th>
+            <th>Sub Type</th>
+            <th>Context</th>
             <th>Outcome</th>
             <th>{officialColumn === "crewChief" ? "Crew Chief" : "Role"}</th>
             <th>Video</th>
@@ -852,11 +832,13 @@ function MiniChallengeLog({ rows, isLoading = false, officialColumn = "role" }) 
               <td>{row.period ? `Q${row.period}` : "-"}</td>
               <td>{row.game_clock || "-"}</td>
               <td>{row.challenge_type || "-"}</td>
+              <td>{row.challenge_sub_type || "-"}</td>
+              <td><ContextCell row={row} onEditContext={onEditContext} /></td>
               <td><OutcomeBadge value={row.challenge_outcome} /></td>
               <td>
                 {officialColumn === "crewChief"
                   ? row.crew_chief_name || "-"
-                  : row.profileChallengeRole === "crewChief" ? "Crew Chief" : row.profileChallengeRole === "whistle" ? "Whistle" : "-"}
+                  : row.profileChallengeRole === "crewChief" ? "Crew Chief" : row.profileChallengeRole === "whistle" ? "Whistle" : row.profileChallengeRole === "crew" ? "Crew" : "-"}
               </td>
               <td>{row.video_url ? <a href={row.video_url} target="_blank" rel="noreferrer">Watch</a> : "-"}</td>
             </tr>
@@ -892,7 +874,7 @@ function ProfileModal({ children, onClose, label }) {
   );
 }
 
-function OfficialProfile({ profile, isLoading, onClose, onSelectTeam }) {
+function OfficialProfile({ profile, isLoading, onClose, onSelectTeam, onEditContext }) {
   const [detailSectionsOpen, setDetailSectionsOpen] = useState(true);
   if (!profile) return null;
   return (
@@ -926,6 +908,12 @@ function OfficialProfile({ profile, isLoading, onClose, onSelectTeam }) {
           attempts={profile.crewChiefChallenges}
           rank={profile.crewChiefChallengeRateRank}
         />
+        <ChallengeVisualMetric
+          label="Challenge (Crew)"
+          successes={profile.successfulCrewChallenges}
+          attempts={profile.crewChallenges}
+          rank={profile.crewChallengeRateRank}
+        />
       </div>
       <div className={`${styles.detailGrid} ${styles.detailGridCategoryWide}`}>
         {isLoading ? <p className={styles.detailEmpty}>Loading profile details...</p> : null}
@@ -947,7 +935,7 @@ function OfficialProfile({ profile, isLoading, onClose, onSelectTeam }) {
       </div>
       <details className={`${styles.detailBlock} ${styles.scrollBlock}`} open>
         <summary>Challenge Log</summary>
-        <MiniChallengeLog rows={profile.challengeLog || []} isLoading={isLoading} />
+        <MiniChallengeLog rows={profile.challengeLog || []} isLoading={isLoading} onEditContext={onEditContext} />
       </details>
       <details className={`${styles.detailBlock} ${styles.scrollBlock}`} open>
         <summary>Season Schedule</summary>
@@ -961,7 +949,7 @@ function OfficialProfile({ profile, isLoading, onClose, onSelectTeam }) {
               ) : (
                 <span>{row.game_date} - {[row.away_team, row.home_team].filter(Boolean).join(" @ ")}</span>
               )}
-              <strong>{row.role_key === "crewChief" ? "Crew Chief" : `Official ${row.assignment_order || ""}`}</strong>
+              <strong>{row.role_key === "crewChief" ? "Crew Chief" : Number(row.assignment_order) === 2 ? "Referee" : Number(row.assignment_order) === 3 ? "Umpire" : `Official ${row.assignment_order || ""}`}</strong>
             </div>
           ))}
         </div>
@@ -970,7 +958,7 @@ function OfficialProfile({ profile, isLoading, onClose, onSelectTeam }) {
   );
 }
 
-function TeamProfile({ profile, isLoading, onClose, onSelectOfficial }) {
+function TeamProfile({ profile, isLoading, onClose, onSelectOfficial, onEditContext }) {
   const [detailSectionsOpen, setDetailSectionsOpen] = useState(true);
   if (!profile) return null;
   return (
@@ -1020,7 +1008,7 @@ function TeamProfile({ profile, isLoading, onClose, onSelectOfficial }) {
       </div>
       <details className={styles.detailBlock} open>
         <summary>Challenge Log</summary>
-        <MiniChallengeLog rows={profile.challengeLog || []} isLoading={isLoading} officialColumn="crewChief" />
+        <MiniChallengeLog rows={profile.challengeLog || []} isLoading={isLoading} officialColumn="crewChief" onEditContext={onEditContext} />
       </details>
     </ProfileModal>
   );
@@ -1523,6 +1511,7 @@ function PgrInsights({ season, canImport }) {
 }
 
 export default function Officiating() {
+  const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
   const { accountsEnabled, isAdmin } = useAuth();
   const selectedTab = params.get("tab") || "officials";
@@ -1541,6 +1530,9 @@ export default function Officiating() {
   const [selectedTeam, setSelectedTeam] = useState(null);
   const [loadingOfficialDetails, setLoadingOfficialDetails] = useState(false);
   const [loadingTeamDetails, setLoadingTeamDetails] = useState(false);
+  const [contextEditorRow, setContextEditorRow] = useState(null);
+  const [contextSaveError, setContextSaveError] = useState(null);
+  const [isSavingContext, setIsSavingContext] = useState(false);
   const activeTab = TABS.some((tab) => tab.key === selectedTab)
     ? selectedTab
     : "tonight";
@@ -1564,6 +1556,15 @@ export default function Officiating() {
     enabled: activeTab === "challenge-log",
     staleTime: 5 * 60_000,
     gcTime: 30 * 60_000,
+    retry: 1,
+  });
+  const {
+    data: contextTagOptions = [],
+  } = useQuery({
+    queryKey: ["challenge-context-tags"],
+    queryFn: fetchChallengeContextTagOptions,
+    staleTime: 10 * 60_000,
+    gcTime: 60 * 60_000,
     retry: 1,
   });
 
@@ -1672,6 +1673,45 @@ export default function Officiating() {
     const profile = teamProfilesByName.get(String(team || "").trim().toLowerCase());
     openTeamProfile(profile);
   };
+  const patchChallengeContextTags = (challengeEventId, selectedTags) => {
+    const patchRows = (rows = []) => rows.map((row) => (
+      String(row.id || "") === String(challengeEventId)
+        ? { ...row, context_tags: selectedTags, contextTags: selectedTags }
+        : row
+    ));
+    setSelectedOfficial((current) => current ? {
+      ...current,
+      challengeLog: patchRows(current.challengeLog),
+    } : current);
+    setSelectedTeam((current) => current ? {
+      ...current,
+      challengeLog: patchRows(current.challengeLog),
+    } : current);
+    setContextEditorRow((current) => (
+      current && String(current.id || "") === String(challengeEventId)
+        ? { ...current, context_tags: selectedTags, contextTags: selectedTags }
+        : current
+    ));
+  };
+  const saveContextTags = async (payload) => {
+    setIsSavingContext(true);
+    setContextSaveError(null);
+    try {
+      const result = await saveChallengeContextTags(payload);
+      patchChallengeContextTags(payload.challengeEventId, result.selected);
+      queryClient.setQueryData(["challenge-context-tags"], result.options);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["officiating-dashboard", season] }),
+        queryClient.invalidateQueries({ queryKey: ["officiating-challenge-log", season] }),
+        queryClient.invalidateQueries({ queryKey: ["challenge-context-tags"] }),
+      ]);
+      setContextEditorRow(null);
+    } catch (error) {
+      setContextSaveError(error);
+    } finally {
+      setIsSavingContext(false);
+    }
+  };
 
   return (
     <div className={styles.page}>
@@ -1761,6 +1801,7 @@ export default function Officiating() {
             onSort={toggleSort(setChallengeSort)}
             onSelectTeam={selectTeamByName}
             onSelectOfficial={selectOfficialByName}
+            onEditContext={setContextEditorRow}
           />
         )
       ) : activeTab === "pgr-insights" ? (
@@ -1771,13 +1812,28 @@ export default function Officiating() {
         isLoading={loadingOfficialDetails}
         onClose={() => setSelectedOfficial(null)}
         onSelectTeam={selectTeamByName}
+        onEditContext={setContextEditorRow}
       />
       <TeamProfile
         profile={selectedTeam}
         isLoading={loadingTeamDetails}
         onClose={() => setSelectedTeam(null)}
         onSelectOfficial={selectOfficialByName}
+        onEditContext={setContextEditorRow}
       />
+      {contextEditorRow ? (
+        <ContextTagEditor
+          row={contextEditorRow}
+          options={contextTagOptions}
+          onClose={() => {
+            setContextSaveError(null);
+            setContextEditorRow(null);
+          }}
+          onSave={saveContextTags}
+          isSaving={isSavingContext}
+          error={contextSaveError}
+        />
+      ) : null}
     </div>
   );
 }

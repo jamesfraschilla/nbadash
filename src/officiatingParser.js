@@ -38,6 +38,8 @@ function compactActionPayload(action = {}) {
     side: action.side ?? "",
     xLegacy: action.xLegacy ?? null,
     yLegacy: action.yLegacy ?? null,
+    area: action.area ?? "",
+    areaDetail: action.areaDetail ?? "",
   };
 }
 

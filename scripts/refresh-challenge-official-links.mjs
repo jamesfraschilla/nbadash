@@ -74,6 +74,7 @@ function rowChanged(before, after) {
     "whistling_official_name",
     "matched_action_number",
     "matched_call_event_id",
+    "challenge_sub_type",
     "match_confidence",
     "match_reason",
     "review_status",
@@ -89,6 +90,7 @@ function toUpdateRow(row) {
     whistling_official_name: row.whistling_official_name,
     matched_action_number: row.matched_action_number,
     matched_call_event_id: row.matched_call_event_id,
+    challenge_sub_type: row.challenge_sub_type,
     match_confidence: row.match_confidence,
     match_reason: row.match_reason,
     review_status: row.review_status,
@@ -135,7 +137,7 @@ async function main() {
       .eq("source", "nba_official_challenge_pdf")
       .order("game_date", { ascending: true })),
     selectAll(supabase, "nba_official_call_events", (query) => query
-      .select("id,season,game_id,period,game_clock,action_number,action_type,primary_category,secondary_category,sub_type,descriptor,description,official_id,official_name,charged_team")
+      .select("id,season,game_id,period,game_clock,action_number,action_type,primary_category,secondary_category,sub_type,descriptor,description,official_id,official_name,charged_team,area,area_detail,source_payload")
       .eq("season", season)
       .order("game_id", { ascending: true })
       .order("action_number", { ascending: true, nullsFirst: false })

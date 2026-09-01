@@ -1,3 +1,5 @@
+import { challengeFoulSubtype } from "./officiatingCategoryNormalization.js";
+
 function cleanText(value) {
   return String(value || "").trim();
 }
@@ -143,6 +145,7 @@ export function enrichChallengeEventsWithOfficials(challenges, calls, assignment
       whistling_official_name: cleanText(challenge.whistling_official_name || call?.official_name || call?.officialName),
       matched_action_number: challenge.matched_action_number ?? challenge.matchedActionNumber ?? call?.action_number ?? call?.actionNumber ?? null,
       matched_call_event_id: challenge.matched_call_event_id || challenge.matchedCallEventId || call?.id || null,
+      challenge_sub_type: cleanText(challenge.challenge_sub_type || challenge.challengeSubType || challengeFoulSubtype(challenge, call)),
       match_confidence: confidence,
       match_reason: call
         ? mergeMatchReason(challenge.match_reason || challenge.matchReason, match.reason)

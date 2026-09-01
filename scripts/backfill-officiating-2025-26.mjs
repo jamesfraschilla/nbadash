@@ -371,6 +371,8 @@ function toCallRow(event) {
     benefiting_team: event.benefitingTeam,
     confidence: event.confidence,
     confidence_reason: event.confidenceReason,
+    area: event.sourcePayload?.area || "",
+    area_detail: event.sourcePayload?.areaDetail || event.sourcePayload?.area_detail || "",
     source_payload: event.sourcePayload,
   };
 }
@@ -394,6 +396,7 @@ function toChallengeRow(event) {
     matched_action_number: event.matched_action_number ?? event.matchedActionNumber,
     match_confidence: event.match_confidence ?? event.matchConfidence,
     match_reason: event.match_reason ?? event.matchReason,
+    challenge_sub_type: event.challenge_sub_type || event.challengeSubType || "",
     review_status: event.review_status || "auto",
     source: event.source,
     source_payload: event.source_payload || event.sourcePayload,
@@ -429,13 +432,14 @@ function buildIngestSql({ gameIds, assignmentRows, callRows, challengeRows }) {
     "season", "season_type", "game_id", "game_date", "home_team", "away_team", "period", "game_clock",
     "action_number", "order_number", "action_type", "sub_type", "descriptor", "description", "official_token",
     "official_id", "official_name", "team_id", "team_tricode", "player_id", "player_name", "primary_category",
-    "secondary_category", "charged_team", "benefiting_team", "confidence", "confidence_reason", "source_payload",
+    "secondary_category", "charged_team", "benefiting_team", "confidence", "confidence_reason", "area",
+    "area_detail", "source_payload",
   ];
   const challengeColumns = [
     "season", "season_type", "game_id", "game_date", "home_team", "away_team", "challenging_team", "period",
     "game_clock", "crew_chief_id", "crew_chief_name", "whistling_official_id", "whistling_official_name",
-    "challenge_outcome", "matched_action_number", "match_confidence", "match_reason", "review_status",
-    "source", "source_payload",
+    "challenge_outcome", "matched_action_number", "match_confidence", "match_reason", "challenge_sub_type",
+    "review_status", "source", "source_payload",
   ];
   const commonTypes = {
     season: "text",
@@ -493,6 +497,8 @@ function buildIngestSql({ gameIds, assignmentRows, callRows, challengeRows }) {
         benefiting_team: "text",
         confidence: "numeric",
         confidence_reason: "text",
+        area: "text",
+        area_detail: "text",
       },
       rows: callRows,
     }),
@@ -512,6 +518,7 @@ function buildIngestSql({ gameIds, assignmentRows, callRows, challengeRows }) {
         matched_action_number: "integer",
         match_confidence: "numeric",
         match_reason: "text",
+        challenge_sub_type: "text",
         review_status: "text",
         source: "text",
       },

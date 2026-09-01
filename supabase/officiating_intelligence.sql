@@ -81,10 +81,26 @@ create table if not exists public.nba_official_call_events (
   benefiting_team text,
   confidence numeric,
   confidence_reason text,
+  area text,
+  area_detail text,
   source_payload jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
+
+alter table public.nba_official_call_events
+add column if not exists area text;
+
+alter table public.nba_official_call_events
+add column if not exists area_detail text;
+
+update public.nba_official_call_events
+set
+  area = coalesce(nullif(area, ''), nullif(source_payload->>'area', '')),
+  area_detail = coalesce(nullif(area_detail, ''), nullif(source_payload->>'areaDetail', ''), nullif(source_payload->>'area_detail', ''))
+where
+  (coalesce(area, '') = '' and coalesce(source_payload->>'area', '') <> '')
+  or (coalesce(area_detail, '') = '' and (coalesce(source_payload->>'areaDetail', '') <> '' or coalesce(source_payload->>'area_detail', '') <> ''));
 
 create unique index if not exists nba_official_call_events_game_action_idx
 on public.nba_official_call_events (game_id, action_number)
@@ -155,12 +171,16 @@ create table if not exists public.nba_coach_challenge_events (
   matched_call_event_id uuid references public.nba_official_call_events(id) on delete set null,
   match_confidence numeric,
   match_reason text,
+  challenge_sub_type text,
   review_status text not null default 'auto',
   source text not null,
   source_payload jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
+
+alter table public.nba_coach_challenge_events
+add column if not exists challenge_sub_type text;
 
 create unique index if not exists nba_coach_challenge_events_game_clock_team_idx
 on public.nba_coach_challenge_events (
@@ -236,6 +256,34 @@ on public.nba_officiating_event_reviews (source_table, source_event_id);
 
 create index if not exists nba_officiating_event_reviews_status_idx
 on public.nba_officiating_event_reviews (review_status, reviewed_at);
+
+create table if not exists public.nba_challenge_context_tags (
+  id uuid primary key default gen_random_uuid(),
+  label text not null unique,
+  created_by uuid,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.nba_challenge_context_event_tags (
+  challenge_event_id uuid not null references public.nba_coach_challenge_events(id) on delete cascade,
+  tag_id uuid not null references public.nba_challenge_context_tags(id) on delete cascade,
+  tagged_by uuid,
+  tagged_at timestamptz not null default timezone('utc', now()),
+  primary key (challenge_event_id, tag_id)
+);
+
+create index if not exists nba_challenge_context_event_tags_tag_idx
+on public.nba_challenge_context_event_tags (tag_id, challenge_event_id);
+
+insert into public.nba_challenge_context_tags (label)
+values
+  ('Block/Charge'),
+  ('Leg Kick'),
+  ('High 5'),
+  ('Off-Arm'),
+  ('Proximate'),
+  ('Moving Screen')
+on conflict (label) do nothing;
 
 create table if not exists public.nba_officiating_cache_refreshes (
   cache_name text primary key,
@@ -403,6 +451,8 @@ alter table public.nba_official_game_assignments enable row level security;
 alter table public.nba_official_call_events enable row level security;
 alter table public.nba_coach_challenge_events enable row level security;
 alter table public.nba_officiating_event_reviews enable row level security;
+alter table public.nba_challenge_context_tags enable row level security;
+alter table public.nba_challenge_context_event_tags enable row level security;
 alter table public.nba_pgr_imports enable row level security;
 alter table public.nba_pgr_possessions enable row level security;
 alter table public.nba_pgr_events enable row level security;
@@ -446,6 +496,39 @@ for update
 to authenticated
 using (auth.uid() = reviewed_by)
 with check (auth.uid() = reviewed_by);
+
+drop policy if exists nba_challenge_context_tags_select_public on public.nba_challenge_context_tags;
+create policy nba_challenge_context_tags_select_public
+on public.nba_challenge_context_tags
+for select
+using (true);
+
+drop policy if exists nba_challenge_context_tags_insert_authenticated on public.nba_challenge_context_tags;
+create policy nba_challenge_context_tags_insert_authenticated
+on public.nba_challenge_context_tags
+for insert
+to authenticated
+with check (created_by is null or auth.uid() = created_by);
+
+drop policy if exists nba_challenge_context_event_tags_select_public on public.nba_challenge_context_event_tags;
+create policy nba_challenge_context_event_tags_select_public
+on public.nba_challenge_context_event_tags
+for select
+using (true);
+
+drop policy if exists nba_challenge_context_event_tags_insert_authenticated on public.nba_challenge_context_event_tags;
+create policy nba_challenge_context_event_tags_insert_authenticated
+on public.nba_challenge_context_event_tags
+for insert
+to authenticated
+with check (tagged_by is null or auth.uid() = tagged_by);
+
+drop policy if exists nba_challenge_context_event_tags_delete_authenticated on public.nba_challenge_context_event_tags;
+create policy nba_challenge_context_event_tags_delete_authenticated
+on public.nba_challenge_context_event_tags
+for delete
+to authenticated
+using (true);
 
 drop policy if exists nba_pgr_imports_select_public on public.nba_pgr_imports;
 create policy nba_pgr_imports_select_public
@@ -752,8 +835,43 @@ begin
 end;
 $$;
 
+drop materialized view if exists public.nba_authoritative_coach_challenge_events_cache;
+
 create or replace view public.nba_authoritative_coach_challenge_events as
-select *
+select
+  id,
+  season,
+  season_type,
+  game_id,
+  game_date,
+  round,
+  series,
+  home_team,
+  away_team,
+  challenging_team,
+  period,
+  game_clock,
+  challenge_type,
+  initial_call,
+  call_ruling,
+  ruling_outcome,
+  challenge_outcome,
+  video_url,
+  crew_chief_id,
+  crew_chief_name,
+  whistling_official_id,
+  whistling_official_name,
+  matched_action_number,
+  matched_call_event_id,
+  match_confidence,
+  match_reason,
+  review_status,
+  source,
+  source_payload,
+  created_at,
+  updated_at,
+  authoritative_rank,
+  challenge_sub_type
 from (
   select
     challenges.*,
@@ -789,7 +907,8 @@ from (
 ) ranked
 where authoritative_rank = 1;
 
-create materialized view if not exists public.nba_authoritative_coach_challenge_events_cache as
+drop materialized view if exists public.nba_authoritative_coach_challenge_events_cache;
+create materialized view public.nba_authoritative_coach_challenge_events_cache as
 select * from public.nba_authoritative_coach_challenge_events
 with data;
 
@@ -826,7 +945,23 @@ select
   count(distinct game_id)::integer as games,
   count(*) filter (where primary_category = 'foul')::integer as fouls,
   count(*) filter (where primary_category = 'violation')::integer as violations,
-  count(*) filter (where primary_category = 'technical' or secondary_category in ('technical', 'double_technical'))::integer as technicals,
+  count(*) filter (
+    where (
+      regexp_replace(lower(coalesce(primary_category, '')), '[^a-z0-9]', '', 'g') = 'technical'
+      or regexp_replace(lower(coalesce(secondary_category, '')), '[^a-z0-9]', '', 'g') in ('technical', 'doubletechnical')
+    )
+    and not (
+      regexp_replace(lower(coalesce(secondary_category, '') || ' ' || coalesce(descriptor, '') || ' ' || coalesce(sub_type, '')), '[^a-z0-9]', '', 'g')
+      like any (array[
+        '%defensive3second%',
+        '%delaytechnical%',
+        '%floppingtechnical%',
+        '%rimhangingtechnical%',
+        '%nonunsportsmanliketechnical%',
+        '%excesstimeouttechnical%'
+      ])
+    )
+  )::integer as technicals,
   case
     when count(distinct game_id) > 0 then count(*) filter (where primary_category = 'foul')::numeric / count(distinct game_id)
     else 0
@@ -839,6 +974,118 @@ from public.nba_official_call_events
 where coalesce(official_name, '') <> ''
   and lower(coalesce(season_type, '')) <> 'preseason'
 group by season, season_type, official_id, official_name;
+
+create or replace function public.nba_normalized_official_call_category(
+  primary_category text,
+  secondary_category text,
+  descriptor text,
+  sub_type text,
+  area text default '',
+  area_detail text default ''
+)
+returns text
+language sql
+immutable
+as $$
+  with normalized as (
+    select
+      regexp_replace(lower(coalesce(primary_category, '')), '[^a-z0-9]', '', 'g') as primary_key,
+      regexp_replace(lower(coalesce(descriptor, '') || ' ' || coalesce(sub_type, '') || ' ' || coalesce(secondary_category, '')), '[^a-z0-9]', '', 'g') as category_key,
+      regexp_replace(lower(coalesce(area, '') || ' ' || coalesce(area_detail, '')), '[^a-z0-9]', '', 'g') as area_key
+  )
+  select case
+    when category_key like '%defensive3second%' then 'Defensive 3 Second Violation'
+    when primary_key in ('turnover', 'violation') and category_key like '%3secondviolation%' then 'Offensive 3 Second Violation'
+    when category_key like '%outofbounds%' then 'Out Of Bounds'
+    when primary_key = 'turnover' and category_key like '%badpass%' then 'Out Of Bounds'
+    when primary_key = 'turnover' and category_key like '%lostball%' then 'Out Of Bounds'
+    when primary_key = 'turnover' and category_key like '%shotclock%' then 'Shot Clock Violation'
+    when primary_key = 'turnover' and category_key like '%5secondviolation%' then '5 Second Violation'
+    when primary_key = 'turnover' and category_key like '%8secondviolation%' then '8 Second Violation'
+    when primary_key = 'turnover' and category_key like '%10secondfreethrowshooter%' then '10 Second Free Throw Violation'
+    when primary_key = 'turnover' and category_key like '%doubledribble%' then 'Double Dribble'
+    when primary_key = 'turnover' and category_key like '%discontinueddribble%' then 'Palming'
+    when primary_key = 'turnover' and category_key like '%palming%' then 'Palming'
+    when primary_key = 'turnover' and category_key like '%backcourt%' then 'Backcourt'
+    when category_key like '%offensivegoaltending%' then 'Offensive Goaltending'
+    when category_key like '%defensivegoaltending%' then 'Defensive Goaltending'
+    when category_key like '%kickedball%' then 'Kicked Ball'
+    when category_key like '%punchedball%' then 'Punched Ball'
+    when category_key like '%illegalassist%' then 'Illegal Assist'
+    when category_key like '%jumpball%' then 'Jump Ball'
+    when category_key like '%inbound%' then 'Inbound'
+    when category_key like '%lane%' then 'Lane'
+    when category_key like '%delaytechnical%' or category_key like '%delay%' or category_key like '%excesstimeouttechnical%' then 'Delay Of Game'
+    when category_key like '%floppingtechnical%' then 'Flopping Technical'
+    when category_key like '%rimhangingtechnical%' then 'Rim Hanging Technical'
+    when category_key like '%nonunsportsmanliketechnical%' then 'Non Unsportsmanlike Technical'
+    when primary_key = 'technical' or category_key like '%technical%' then 'Technical Foul'
+    when primary_key = 'foul' and category_key like '%shooting%' and area_key like '%restricted%' then 'Restricted Area Shooting Foul'
+    when primary_key = 'foul' and category_key like '%shooting%' and (
+      area_key like '%3pt%'
+      or area_key like '%3point%'
+      or area_key like '%threepoint%'
+      or area_key like '%corner3%'
+      or area_key like '%abovethebreak3%'
+    ) then '3-Pt Shooting Foul'
+    when primary_key = 'foul' and category_key like '%shooting%' then 'Shooting Foul'
+    when primary_key = 'foul' and category_key like '%looseball%' then 'Loose Ball Foul'
+    when primary_key = 'foul' and category_key like '%flagranttype1%' then 'Flagrant Type 1 Foul'
+    when primary_key = 'foul' and category_key like '%flagranttype2%' then 'Flagrant Type 2 Foul'
+    when primary_key = 'foul' and category_key like '%awayfromplay%' then 'Away From Play Foul'
+    when primary_key = 'foul' and category_key like '%transitiontake%' then 'Transition Take Foul'
+    when primary_key = 'foul' and (category_key like '%personaltake%' or category_key = 'take') then 'Take Foul'
+    when primary_key = 'foul' and (category_key like '%offensive%' or category_key like '%charge%' or category_key like '%offtheball%') then 'Offensive Foul'
+    when primary_key = 'foul' and category_key like '%clearpath%' then 'Clear Path Foul'
+    when primary_key = 'foul' and category_key like '%flagrant%' then 'Flagrant Foul'
+    when primary_key = 'foul' and category_key like '%doublepersonal%' then 'Double Personal Foul'
+    when primary_key = 'foul' and category_key like '%personal%' then 'Foul on Floor'
+    when primary_key = 'foul' then 'Foul on Floor'
+    when primary_key = 'violation' then initcap(replace(coalesce(nullif(secondary_category, ''), nullif(descriptor, ''), nullif(sub_type, ''), 'Violation'), '_', ' '))
+    else initcap(replace(coalesce(nullif(secondary_category, ''), nullif(primary_category, ''), 'Unknown'), '_', ' '))
+  end
+  from normalized;
+$$;
+
+update public.nba_coach_challenge_events challenges
+set challenge_sub_type = case
+  when public.nba_normalized_official_call_category(
+    calls.primary_category,
+    calls.secondary_category,
+    calls.descriptor,
+    calls.sub_type,
+    calls.area,
+    calls.area_detail
+  ) = 'Restricted Area Shooting Foul' then 'Restricted Area'
+  when public.nba_normalized_official_call_category(
+    calls.primary_category,
+    calls.secondary_category,
+    calls.descriptor,
+    calls.sub_type,
+    calls.area,
+    calls.area_detail
+  ) = '3-Pt Shooting Foul' then '3-Pt'
+  when public.nba_normalized_official_call_category(
+    calls.primary_category,
+    calls.secondary_category,
+    calls.descriptor,
+    calls.sub_type,
+    calls.area,
+    calls.area_detail
+  ) = 'Offensive Foul'
+    and regexp_replace(lower(coalesce(calls.area, '') || ' ' || coalesce(calls.area_detail, '')), '[^a-z0-9]', '', 'g') like any (array[
+      '%3pt%',
+      '%3point%',
+      '%threepoint%',
+      '%corner3%',
+      '%abovethebreak3%'
+    ])
+    then '3-Pt'
+  else null
+end
+from public.nba_official_call_events calls
+where challenges.matched_call_event_id = calls.id
+  and coalesce(challenges.challenge_sub_type, '') = '';
 
 create or replace view public.nba_official_call_category_rollups as
 with official_games as (
@@ -867,41 +1114,8 @@ categorized_calls as (
     max(nullif(official_id, '')) over (partition by season, coalesce(nullif(official_id, ''), official_name)) as official_id,
     max(official_name) over (partition by season, coalesce(nullif(official_id, ''), official_name)) as official_name,
     game_id,
-    case
-      when category_key like '%defensive3second%' then 'Defensive 3 Second Violation'
-      when primary_category in ('turnover', 'violation') and category_key like '%3secondviolation%' then 'Offensive 3 Second Violation'
-      when primary_category = 'out_of_bounds' or category_key like '%outofbounds%' then 'Out Of Bounds'
-      when primary_category = 'turnover' and category_key like '%badpass%' then 'Out Of Bounds'
-      when primary_category = 'turnover' and category_key like '%lostball%' then 'Out Of Bounds'
-      when primary_category = 'jump_ball' or category_key like '%jumpball%' then 'Jump Ball'
-      when primary_category = 'technical' or secondary_category in ('technical', 'double_technical') then 'Technical Foul'
-      when secondary_category = 'delay_technical' then 'Delay Of Game'
-      when primary_category = 'foul' and category_key like '%shooting%' then 'Shooting Foul'
-      when primary_category = 'foul' and category_key like '%looseball%' then 'Loose Ball Foul'
-      when primary_category = 'foul' and category_key like '%flagranttype1%' then 'Flagrant Type 1 Foul'
-      when primary_category = 'foul' and category_key like '%flagranttype2%' then 'Flagrant Type 2 Foul'
-      when primary_category = 'foul' and category_key like '%awayfromplay%' then 'Away From Play Foul'
-      when primary_category = 'foul' and category_key like '%transitiontake%' then 'Transition Take Foul'
-      when primary_category = 'foul' and (category_key like '%personaltake%' or category_key = 'take') then 'Take Foul'
-      when primary_category = 'foul' and category_key like '%offensive%' then 'Offensive Foul'
-      when primary_category = 'foul' and category_key like '%clearpath%' then 'Clear Path Foul'
-      when primary_category = 'foul' and category_key like '%flagrant%' then 'Flagrant Foul'
-      when primary_category = 'foul' and category_key like '%personal%' then 'Foul on Floor'
-      when primary_category = 'foul' then 'Foul on Floor'
-      when primary_category = 'violation' then initcap(replace(coalesce(nullif(secondary_category, ''), nullif(descriptor, ''), nullif(sub_type, ''), 'Violation'), '_', ' '))
-      else initcap(replace(coalesce(nullif(secondary_category, ''), nullif(primary_category, ''), 'Unknown'), '_', ' '))
-    end as category
-  from (
-    select
-      *,
-      regexp_replace(
-        lower(coalesce(descriptor, '') || ' ' || coalesce(sub_type, '') || ' ' || coalesce(secondary_category, '')),
-        '[^a-z0-9]',
-        '',
-        'g'
-      ) as category_key
-    from public.nba_official_call_events
-  ) calls
+    public.nba_normalized_official_call_category(primary_category, secondary_category, descriptor, sub_type, area, area_detail) as category
+  from public.nba_official_call_events calls
   where coalesce(official_id, official_name, '') <> ''
     and lower(coalesce(season_type, '')) <> 'preseason'
 ),
@@ -982,41 +1196,8 @@ categorized_calls as (
     season,
     coalesce(charged_team, team_tricode, benefiting_team) as team,
     game_id,
-    case
-      when category_key like '%defensive3second%' then 'Defensive 3 Second Violation'
-      when primary_category in ('turnover', 'violation') and category_key like '%3secondviolation%' then 'Offensive 3 Second Violation'
-      when primary_category = 'out_of_bounds' or category_key like '%outofbounds%' then 'Out Of Bounds'
-      when primary_category = 'turnover' and category_key like '%badpass%' then 'Out Of Bounds'
-      when primary_category = 'turnover' and category_key like '%lostball%' then 'Out Of Bounds'
-      when primary_category = 'jump_ball' or category_key like '%jumpball%' then 'Jump Ball'
-      when primary_category = 'technical' or secondary_category in ('technical', 'double_technical') then 'Technical Foul'
-      when secondary_category = 'delay_technical' then 'Delay Of Game'
-      when primary_category = 'foul' and category_key like '%shooting%' then 'Shooting Foul'
-      when primary_category = 'foul' and category_key like '%looseball%' then 'Loose Ball Foul'
-      when primary_category = 'foul' and category_key like '%flagranttype1%' then 'Flagrant Type 1 Foul'
-      when primary_category = 'foul' and category_key like '%flagranttype2%' then 'Flagrant Type 2 Foul'
-      when primary_category = 'foul' and category_key like '%awayfromplay%' then 'Away From Play Foul'
-      when primary_category = 'foul' and category_key like '%transitiontake%' then 'Transition Take Foul'
-      when primary_category = 'foul' and (category_key like '%personaltake%' or category_key = 'take') then 'Take Foul'
-      when primary_category = 'foul' and category_key like '%offensive%' then 'Offensive Foul'
-      when primary_category = 'foul' and category_key like '%clearpath%' then 'Clear Path Foul'
-      when primary_category = 'foul' and category_key like '%flagrant%' then 'Flagrant Foul'
-      when primary_category = 'foul' and category_key like '%personal%' then 'Foul on Floor'
-      when primary_category = 'foul' then 'Foul on Floor'
-      when primary_category = 'violation' then initcap(replace(coalesce(nullif(secondary_category, ''), nullif(descriptor, ''), nullif(sub_type, ''), 'Violation'), '_', ' '))
-      else initcap(replace(coalesce(nullif(secondary_category, ''), nullif(primary_category, ''), 'Unknown'), '_', ' '))
-    end as category
-  from (
-    select
-      *,
-      regexp_replace(
-        lower(coalesce(descriptor, '') || ' ' || coalesce(sub_type, '') || ' ' || coalesce(secondary_category, '')),
-        '[^a-z0-9]',
-        '',
-        'g'
-      ) as category_key
-    from public.nba_official_call_events
-  ) calls
+    public.nba_normalized_official_call_category(primary_category, secondary_category, descriptor, sub_type, area, area_detail) as category
+  from public.nba_official_call_events calls
   where coalesce(charged_team, team_tricode, benefiting_team, '') <> ''
     and lower(coalesce(season_type, '')) <> 'preseason'
 ),
@@ -1300,7 +1481,23 @@ call_rollups as (
     count(distinct game_id)::integer as call_games,
     count(*) filter (where primary_category = 'foul')::integer as fouls,
     count(*) filter (where primary_category = 'violation')::integer as violations,
-    count(*) filter (where primary_category = 'technical' or secondary_category in ('technical', 'double_technical'))::integer as technicals
+    count(*) filter (
+      where (
+        regexp_replace(lower(coalesce(primary_category, '')), '[^a-z0-9]', '', 'g') = 'technical'
+        or regexp_replace(lower(coalesce(secondary_category, '')), '[^a-z0-9]', '', 'g') in ('technical', 'doubletechnical')
+      )
+      and not (
+        regexp_replace(lower(coalesce(secondary_category, '') || ' ' || coalesce(descriptor, '') || ' ' || coalesce(sub_type, '')), '[^a-z0-9]', '', 'g')
+        like any (array[
+          '%defensive3second%',
+          '%delaytechnical%',
+          '%floppingtechnical%',
+          '%rimhangingtechnical%',
+          '%nonunsportsmanliketechnical%',
+          '%excesstimeouttechnical%'
+        ])
+      )
+    )::integer as technicals
   from public.nba_official_call_events
   where coalesce(official_id, official_name, '') <> ''
     and lower(coalesce(season_type, '')) <> 'preseason'
@@ -1327,6 +1524,22 @@ crew_challenge_rollups as (
   where coalesce(crew_chief_id, crew_chief_name, '') <> ''
     and lower(coalesce(season_type, '')) <> 'preseason'
   group by season, coalesce(nullif(crew_chief_id, ''), crew_chief_name)
+),
+crew_member_challenge_rollups as (
+  select
+    assignments.season,
+    coalesce(nullif(assignments.official_id, ''), assignments.official_name) as official_key,
+    count(distinct challenges.id)::integer as crew_challenges,
+    count(distinct challenges.id) filter (where challenges.challenge_outcome = 'successful')::integer as successful_crew_challenges
+  from public.nba_official_game_assignments assignments
+  join public.nba_authoritative_coach_challenge_events challenges
+    on challenges.season = assignments.season
+    and challenges.game_id = assignments.game_id
+  where coalesce(assignments.official_id, assignments.official_name, '') <> ''
+    and assignments.is_alternate = false
+    and lower(coalesce(assignments.season_type, '')) <> 'preseason'
+    and lower(coalesce(challenges.season_type, '')) <> 'preseason'
+  group by assignments.season, coalesce(nullif(assignments.official_id, ''), assignments.official_name)
 ),
 unique_challenge_rollups as (
   select season, official_key, count(*)::integer as challenges, sum(successful)::integer as successful_challenges
@@ -1391,12 +1604,20 @@ select
     when greatest(coalesce(assignments.assigned_games, 0), coalesce(calls.call_games, 0)) > 0
       then coalesce(calls.violations, 0)::numeric / greatest(coalesce(assignments.assigned_games, 0), coalesce(calls.call_games, 0))
     else 0
-  end as violations_per_game
+  end as violations_per_game,
+  coalesce(crew_member_challenges.crew_challenges, 0)::integer as crew_challenges,
+  coalesce(crew_member_challenges.successful_crew_challenges, 0)::integer as successful_crew_challenges,
+  case
+    when coalesce(crew_member_challenges.crew_challenges, 0) > 0
+      then coalesce(crew_member_challenges.successful_crew_challenges, 0)::numeric / crew_member_challenges.crew_challenges
+    else 0
+  end as crew_challenge_rate
 from official_keys keys
 left join assignment_rollups assignments using (season, official_key)
 left join call_rollups calls using (season, official_key)
 left join whistle_challenge_rollups whistle_challenges using (season, official_key)
 left join crew_challenge_rollups crew_challenges using (season, official_key)
+left join crew_member_challenge_rollups crew_member_challenges using (season, official_key)
 left join unique_challenge_rollups unique_challenges using (season, official_key);
 
 create or replace view public.nba_team_profiles as
@@ -1503,7 +1724,8 @@ with data;
 create unique index if not exists nba_officiating_overview_rollups_cache_key
 on public.nba_officiating_overview_rollups_cache (season);
 
-create materialized view if not exists public.nba_official_profiles_cache as
+drop materialized view if exists public.nba_official_profiles_cache;
+create materialized view public.nba_official_profiles_cache as
 select * from public.nba_official_profiles
 with data;
 

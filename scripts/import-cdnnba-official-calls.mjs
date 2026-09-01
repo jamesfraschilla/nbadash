@@ -297,6 +297,8 @@ function actionFromCdnRow(row) {
     side: cleanText(row.side),
     xLegacy: numericOrNull(row.xLegacy),
     yLegacy: numericOrNull(row.yLegacy),
+    area: cleanText(row.area),
+    areaDetail: cleanText(row.areaDetail),
   };
 }
 
@@ -443,6 +445,8 @@ function toCallRow(event) {
     benefiting_team: event.benefitingTeam,
     confidence: event.confidence,
     confidence_reason: event.confidenceReason,
+    area: event.sourcePayload?.area || "",
+    area_detail: event.sourcePayload?.areaDetail || "",
     source_payload: event.sourcePayload,
   };
 }
