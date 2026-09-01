@@ -31,6 +31,17 @@ const TABS = [
 ];
 
 const DEFAULT_SEASON = "2025-26";
+const CUMULATIVE_SEASON = "2024-Present";
+const SEASON_OPTIONS = [CUMULATIVE_SEASON, "2024-25", "2025-26", "2026-27"];
+const SEASON_2026_27_START = new Date("2026-10-03T00:00:00-04:00");
+
+function currentOfficiatingSeasonDefault() {
+  return new Date() >= SEASON_2026_27_START ? "2026-27" : DEFAULT_SEASON;
+}
+
+function defaultSeasonForTab(tab) {
+  return tab === "officials" ? CUMULATIVE_SEASON : currentOfficiatingSeasonDefault();
+}
 
 function formatRate(value) {
   if (!Number.isFinite(value)) return "0.0%";
@@ -952,7 +963,7 @@ function ProfileModal({ children, onClose, label }) {
   );
 }
 
-function OfficialProfile({ profile, isLoading, onClose, onSelectTeam, onEditContext }) {
+function OfficialProfile({ profile, isLoading, season, onSeasonChange, onClose, onSelectTeam, onEditContext }) {
   const [detailSectionsOpen, setDetailSectionsOpen] = useState(true);
   if (!profile) return null;
   return (
@@ -964,7 +975,17 @@ function OfficialProfile({ profile, isLoading, onClose, onSelectTeam, onEditCont
           <h2>{profile.name}</h2>
           <p>{profile.jerseyNumber ? `#${profile.jerseyNumber}` : "NBA official"}</p>
         </div>
-        <button type="button" className={styles.closeButton} onClick={onClose}>Close</button>
+        <div className={styles.profileHeaderActions}>
+          <label className={styles.seasonControl}>
+            <span>Season</span>
+            <select value={season} onChange={(event) => onSeasonChange(event.target.value)}>
+              {SEASON_OPTIONS.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </label>
+          <button type="button" className={styles.closeButton} onClick={onClose}>Close</button>
+        </div>
       </div>
       <div className={styles.profileMetrics}>
         <ProfileMetric label="Games" value={profile.games} />
@@ -1036,7 +1057,7 @@ function OfficialProfile({ profile, isLoading, onClose, onSelectTeam, onEditCont
   );
 }
 
-function TeamProfile({ profile, isLoading, onClose, onSelectOfficial, onEditContext }) {
+function TeamProfile({ profile, isLoading, season, onSeasonChange, onClose, onSelectOfficial, onEditContext }) {
   const [detailSectionsOpen, setDetailSectionsOpen] = useState(true);
   if (!profile) return null;
   return (
@@ -1048,7 +1069,17 @@ function TeamProfile({ profile, isLoading, onClose, onSelectOfficial, onEditCont
           <h2>{profile.team}</h2>
           <p>Challenge profile, call trends, and recent event log.</p>
         </div>
-        <button type="button" className={styles.closeButton} onClick={onClose}>Close</button>
+        <div className={styles.profileHeaderActions}>
+          <label className={styles.seasonControl}>
+            <span>Season</span>
+            <select value={season} onChange={(event) => onSeasonChange(event.target.value)}>
+              {SEASON_OPTIONS.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </label>
+          <button type="button" className={styles.closeButton} onClick={onClose}>Close</button>
+        </div>
       </div>
       <div className={styles.profileMetrics}>
         <ProfileMetric
@@ -1608,6 +1639,8 @@ export default function Officiating() {
   });
   const [selectedOfficial, setSelectedOfficial] = useState(null);
   const [selectedTeam, setSelectedTeam] = useState(null);
+  const [selectedOfficialSeason, setSelectedOfficialSeason] = useState(CUMULATIVE_SEASON);
+  const [selectedTeamSeason, setSelectedTeamSeason] = useState(currentOfficiatingSeasonDefault());
   const [loadingOfficialDetails, setLoadingOfficialDetails] = useState(false);
   const [loadingTeamDetails, setLoadingTeamDetails] = useState(false);
   const [contextEditorRow, setContextEditorRow] = useState(null);
@@ -1616,7 +1649,7 @@ export default function Officiating() {
   const activeTab = TABS.some((tab) => tab.key === selectedTab)
     ? selectedTab
     : "tonight";
-  const season = params.get("season") || DEFAULT_SEASON;
+  const season = params.get("season") || defaultSeasonForTab(activeTab);
   const canImportPgr = !accountsEnabled || isAdmin;
 
   const { data, isLoading, error } = useQuery({
@@ -1728,29 +1761,47 @@ export default function Officiating() {
   const setChallengeFilter = (key, value) => {
     setChallengeFilters((current) => ({ ...current, [key]: value }));
   };
-  const openOfficialProfile = async (profile) => {
+  const loadOfficialProfile = async (profile, profileSeason) => {
     if (profile) {
       setSelectedTeam(null);
       setSelectedOfficial(profile);
       setLoadingOfficialDetails(true);
-      const details = await fetchOfficialProfileDetails({ season, profile }).catch(() => profile);
+      const details = await fetchOfficialProfileDetails({ season: profileSeason, profile }).catch(() => profile);
       setSelectedOfficial((current) => (
         current && String(current.id) === String(profile.id) ? details : current
       ));
       setLoadingOfficialDetails(false);
     }
   };
-  const openTeamProfile = async (profile) => {
+  const openOfficialProfile = (profile) => {
+    const nextSeason = CUMULATIVE_SEASON;
+    setSelectedOfficialSeason(nextSeason);
+    loadOfficialProfile(profile, nextSeason);
+  };
+  const loadTeamProfile = async (profile, profileSeason) => {
     if (profile) {
       setSelectedOfficial(null);
       setSelectedTeam(profile);
       setLoadingTeamDetails(true);
-      const details = await fetchTeamProfileDetails({ season, profile }).catch(() => profile);
+      const details = await fetchTeamProfileDetails({ season: profileSeason, profile }).catch(() => profile);
       setSelectedTeam((current) => (
         current && String(current.team) === String(profile.team) ? details : current
       ));
       setLoadingTeamDetails(false);
     }
+  };
+  const openTeamProfile = (profile) => {
+    const nextSeason = currentOfficiatingSeasonDefault();
+    setSelectedTeamSeason(nextSeason);
+    loadTeamProfile(profile, nextSeason);
+  };
+  const changeSelectedOfficialSeason = (nextSeason) => {
+    setSelectedOfficialSeason(nextSeason);
+    if (selectedOfficial) loadOfficialProfile(selectedOfficial, nextSeason);
+  };
+  const changeSelectedTeamSeason = (nextSeason) => {
+    setSelectedTeamSeason(nextSeason);
+    if (selectedTeam) loadTeamProfile(selectedTeam, nextSeason);
   };
   const selectOfficialByName = (name) => {
     const profile = officialProfilesByName.get(String(name || "").trim().toLowerCase());
@@ -1840,8 +1891,9 @@ export default function Officiating() {
               setParams(nextParams);
             }}
           >
-            <option value="2025-26">2025-26</option>
-            <option value="2026-27">2026-27</option>
+            {SEASON_OPTIONS.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
           </select>
         </label>
       </section>
@@ -1920,6 +1972,8 @@ export default function Officiating() {
       <OfficialProfile
         profile={selectedOfficial}
         isLoading={loadingOfficialDetails}
+        season={selectedOfficialSeason}
+        onSeasonChange={changeSelectedOfficialSeason}
         onClose={() => setSelectedOfficial(null)}
         onSelectTeam={selectTeamByName}
         onEditContext={setContextEditorRow}
@@ -1927,6 +1981,8 @@ export default function Officiating() {
       <TeamProfile
         profile={selectedTeam}
         isLoading={loadingTeamDetails}
+        season={selectedTeamSeason}
+        onSeasonChange={changeSelectedTeamSeason}
         onClose={() => setSelectedTeam(null)}
         onSelectOfficial={selectOfficialByName}
         onEditContext={setContextEditorRow}
