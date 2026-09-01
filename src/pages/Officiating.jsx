@@ -425,7 +425,7 @@ function RefereeHeadshot({ name }) {
 
   return (
     <div className={styles.headshot}>
-      {src ? <img src={src} alt="" /> : <span>{String(name || "?").charAt(0)}</span>}
+      {src ? <img src={src} alt="" loading="lazy" decoding="async" /> : <span>{String(name || "?").charAt(0)}</span>}
     </div>
   );
 }

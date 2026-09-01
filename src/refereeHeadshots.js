@@ -79,6 +79,15 @@ function buildLegacyFullResolutionRefereeHeadshotUrl(path, fileName) {
   return `${baseUrl}referees-full/${root}/${encodePublicPathSegment(fileName)}`;
 }
 
+function buildStaticRefereeHeadshotPreviewUrl(path, fileName) {
+  const baseUrl = import.meta.env.BASE_URL || "/";
+  const root = path.includes("/referees_review_duplicates/")
+    ? "referees_review_duplicates"
+    : "referees";
+  const previewFileName = String(fileName || "").replace(/\.[^.]+$/, ".jpg");
+  return `${baseUrl}referee-headshots/${root}/${encodePublicPathSegment(previewFileName)}`;
+}
+
 function buildFullResolutionRefereeHeadshotUrl(path, fileName) {
   const storagePath = buildStaticRefereeHeadshotFullPath(path, fileName);
   return buildSupabaseStoragePublicUrl(REFEREE_HEADSHOT_FULL_BUCKET, storagePath)
@@ -471,7 +480,7 @@ function buildStaticRefereeHeadshotItems(assetPaths) {
         fileName,
         fullName,
         nameKey: normalizeNameKey(fullName),
-        url: storageUrl,
+        url: buildStaticRefereeHeadshotPreviewUrl(path, fileName),
         exportUrl: storageUrl,
         source: isDuplicate ? "duplicate review" : "production",
         isDuplicate,
