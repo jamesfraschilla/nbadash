@@ -17,6 +17,7 @@
     "officiating:import:cdn-calls": "node scripts/import-cdnnba-official-calls.mjs",
     "officiating:refresh:challenge-links": "node scripts/refresh-challenge-official-links.mjs",
     "officiating:refresh:rollups": "node scripts/refresh-officiating-rollups.mjs",
+    "officiating:pilot:2024-25": "node scripts/pilot-officiating-2024-25.mjs",
     "officiating:check:cache": "node scripts/check-officiating-cache-health.mjs",
     "officiating:import:pgr": "node scripts/import-pgr-workbooks.mjs",
     "pgr:refresh:rollups": "node scripts/refresh-pgr-rollups.mjs",

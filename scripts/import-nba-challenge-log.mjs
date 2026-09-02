@@ -2,6 +2,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import readXlsxFile from "read-excel-file/node";
 import { assertOutsideWizardsGameWindow } from "./lib/game-window-guard.mjs";
 import { enrichChallengeEventsWithOfficials } from "../src/officiatingChallengeMatcher.js";
 import { extractOfficialCallEvents } from "../src/officiatingParser.js";
@@ -213,14 +214,103 @@ function runPythonExtractor(pdfPath) {
   });
 }
 
+function normalizeHeader(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[\r\n]+/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function excelDateValue(value) {
+  if (value instanceof Date && Number.isFinite(value.getTime())) {
+    return `${value.getUTCFullYear()}-${String(value.getUTCMonth() + 1).padStart(2, "0")}-${String(value.getUTCDate()).padStart(2, "0")}`;
+  }
+  const text = String(value || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
+  return normalizeDate(text);
+}
+
+function normalizeExcelClock(value) {
+  if (value instanceof Date && Number.isFinite(value.getTime())) {
+    const minutes = value.getUTCMinutes();
+    const seconds = value.getUTCSeconds() + value.getUTCMilliseconds() / 1000;
+    return `${String(minutes).padStart(2, "0")}:${seconds % 1 ? seconds.toFixed(1).padStart(4, "0") : String(Math.round(seconds)).padStart(2, "0")}`;
+  }
+  return String(value || "").trim();
+}
+
+function sheetRowsFromWorkbookPayload(payload, preferredSheetName = "ALL") {
+  if (!Array.isArray(payload)) return [];
+  const sheetPayload = payload.find((entry) => String(entry?.sheet || "").toUpperCase() === preferredSheetName)
+    || payload.find((entry) => Array.isArray(entry?.data))
+    || null;
+  return Array.isArray(sheetPayload?.data) ? sheetPayload.data : payload;
+}
+
+async function extractRowsFromExcel(filePath) {
+  const workbookRows = sheetRowsFromWorkbookPayload(await readXlsxFile(filePath));
+  const headerIndex = workbookRows.findIndex((row) => (
+    Array.isArray(row) && row.map(normalizeHeader).includes("date") && row.map(normalizeHeader).includes("away team")
+  ));
+  if (headerIndex < 0) {
+    throw new Error(`Could not find challenge-log headers in ${filePath}`);
+  }
+  const headers = workbookRows[headerIndex].map(normalizeHeader);
+  const columnIndex = (aliases) => aliases
+    .map((alias) => headers.indexOf(normalizeHeader(alias)))
+    .find((index) => index >= 0);
+  const columns = {
+    date: columnIndex(["Date"]),
+    away_team: columnIndex(["Away Team"]),
+    home_team: columnIndex(["Home Team"]),
+    trigger: columnIndex(["Trigger"]),
+    initial_call: columnIndex(["Initial Call"]),
+    final_ruling: columnIndex(["Final Ruling"]),
+    ruling_description: columnIndex(["Ruling Description"]),
+    team_challenged: columnIndex(["Team Challenged"]),
+    challenge_outcome: columnIndex(["Challenge Outcome"]),
+    period: columnIndex(["Period"]),
+    game_clock: columnIndex(["Game Clock - Review is Triggered", "Game Clock"]),
+    video_url: columnIndex(["Video Link", "Video"]),
+  };
+  return workbookRows.slice(headerIndex + 1)
+    .filter((row) => Array.isArray(row) && row.some((value) => value !== null && value !== undefined && String(value).trim() !== ""))
+    .map((row) => ({
+      date: excelDateValue(row[columns.date]),
+      away_team: String(row[columns.away_team] || "").trim(),
+      home_team: String(row[columns.home_team] || "").trim(),
+      trigger: String(row[columns.trigger] || "").trim(),
+      initial_call: String(row[columns.initial_call] || "").trim(),
+      final_ruling: String(row[columns.final_ruling] || "").trim(),
+      ruling_description: String(row[columns.ruling_description] || "").trim(),
+      team_challenged: String(row[columns.team_challenged] || "").trim(),
+      challenge_outcome: String(row[columns.challenge_outcome] || "").trim(),
+      period: row[columns.period],
+      game_clock: normalizeExcelClock(row[columns.game_clock]),
+      video_url: String(row[columns.video_url] || "").trim(),
+    }))
+    .filter((row) => row.date && row.away_team && row.home_team && row.team_challenged);
+}
+
+function gameIdFromVideoUrl(value) {
+  const match = /\/ON-AIR\/((?:00)?[1245]\d{7})_/i.exec(String(value || ""));
+  if (!match) return "";
+  const id = match[1];
+  return id.length === 8 ? `00${id}` : id;
+}
+
 function inferSeasonType(row) {
   if (row.game_id?.startsWith("001")) return "Preseason";
   if (row.game_id?.startsWith("002")) return "Regular Season";
+  if (row.game_id?.startsWith("005")) return "Play-In";
   if (row.game_id?.startsWith("004")) return "Playoffs";
   return "Regular Season";
 }
 
 function normalizeDate(value) {
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value || "").trim());
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
   const match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(value || "").trim());
   if (!match) return null;
   return `${match[3]}-${match[1].padStart(2, "0")}-${match[2].padStart(2, "0")}`;
@@ -238,11 +328,12 @@ function normalizeChallengeType(value) {
 }
 
 function toChallengeRow(row, { season, pdfUrl }) {
-  const seasonType = inferSeasonType(row);
+  const gameId = row.game_id || gameIdFromVideoUrl(row.video_url);
+  const seasonType = inferSeasonType({ ...row, game_id: gameId });
   return {
     season,
     season_type: seasonType,
-    game_id: row.game_id || null,
+    game_id: gameId || null,
     game_date: normalizeDate(row.date),
     home_team: row.home_team,
     away_team: row.away_team,
@@ -256,9 +347,9 @@ function toChallengeRow(row, { season, pdfUrl }) {
     challenge_outcome: normalizeOutcome(row.challenge_outcome),
     video_url: row.video_url,
     challenge_sub_type: row.challenge_sub_type || "",
-    match_confidence: row.game_id ? 0.98 : 0.55,
-    match_reason: row.game_id ? "matched-official-pdf-video-game-id" : "official-pdf-no-game-id",
-    review_status: row.game_id ? "auto" : "needs_review",
+    match_confidence: gameId ? 0.98 : 0.55,
+    match_reason: gameId ? "matched-official-log-video-game-id" : "official-log-no-game-id",
+    review_status: gameId ? "auto" : "needs_review",
     source: SOURCE,
     source_payload: {
       officialPageUrl: OFFICIAL_PAGE_URL,
@@ -273,6 +364,19 @@ function applyFilters(rows, { seasonTypes, gameIdPrefixes }) {
     if (seasonTypes.length && !seasonTypes.includes(row.season_type)) return false;
     if (!row.game_id) return true;
     if (gameIdPrefixes.length && !gameIdPrefixes.some((prefix) => String(row.game_id || "").startsWith(prefix))) return false;
+    return true;
+  });
+}
+
+function limitRowsByGame(rows, maxGames) {
+  if (!maxGames) return rows;
+  const seen = new Set();
+  return rows.filter((row) => {
+    const key = row.game_id || `missing-${row.game_date}-${row.challenging_team}-${row.period}-${row.game_clock}`;
+    if (!seen.has(key)) {
+      if (seen.size >= maxGames) return false;
+      seen.add(key);
+    }
     return true;
   });
 }
@@ -445,10 +549,11 @@ async function main() {
   const season = readArg("season") || DEFAULT_SEASON;
   const sourceName = readArg("source");
   const explicitPdf = readArg("pdf");
+  const explicitExcel = readArg("xlsx") || readArg("excel");
   const pdfUrl = readArg("pdf-url") || (
     sourceName === "playoffs" ? PLAYOFFS_PDF_URL : REGULAR_SEASON_PDF_URL
   );
-  const pdfPath = explicitPdf || await downloadPdf(pdfUrl, "test-results/nba-challenge");
+  const pdfPath = explicitExcel ? "" : (explicitPdf || await downloadPdf(pdfUrl, "test-results/nba-challenge"));
   const seasonTypes = readListArg("season-types", sourceName === "playoffs" ? ["Playoffs"] : ["Preseason", "Regular Season"]);
   const gameIdPrefixes = readListArg("game-id-prefixes", seasonTypes.includes("Playoffs") ? ["004"] : ["001", "002"]);
   const outPath = readArg("out");
@@ -456,12 +561,13 @@ async function main() {
   const sqlDir = readArg("sql-dir");
   const sqlChunkSize = readIntegerArg("sql-chunk-size", 250);
   const enrichmentConcurrency = readIntegerArg("enrichment-concurrency", 4);
+  const maxGames = readIntegerArg("max-games", 0);
 
-  const extractedRows = await runPythonExtractor(pdfPath);
-  const baseChallengeRows = applyFilters(
+  const extractedRows = explicitExcel ? await extractRowsFromExcel(explicitExcel) : await runPythonExtractor(pdfPath);
+  const baseChallengeRows = limitRowsByGame(applyFilters(
     extractedRows.map((row) => toChallengeRow(row, { season, pdfUrl })),
     { seasonTypes, gameIdPrefixes }
-  );
+  ), maxGames);
   const challengeRows = hasFlag("skip-official-enrichment")
     ? baseChallengeRows
     : await enrichOfficialRows(baseChallengeRows, { season, concurrency: enrichmentConcurrency });

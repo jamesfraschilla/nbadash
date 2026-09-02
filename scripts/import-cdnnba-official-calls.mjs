@@ -315,7 +315,7 @@ function normalizeGameDate(row) {
   return actual ? actual.slice(0, 10) : null;
 }
 
-async function loadCdnCalledEvents({ cdnArchivePath, statsTokenByAction, officialNameById, gameMetadata, season, seasonType }) {
+async function loadCdnCalledEvents({ cdnArchivePath, statsTokenByAction, officialNameById, gameMetadata, season, seasonType, maxGames = 0 }) {
   const rowsByGame = new Map();
   const teamRowsByGame = new Map();
   let rawRows = 0;
@@ -332,7 +332,8 @@ async function loadCdnCalledEvents({ cdnArchivePath, statsTokenByAction, officia
   });
 
   const events = [];
-  rowsByGame.forEach((rows, gameId) => {
+  const gameEntries = [...rowsByGame.entries()].slice(0, maxGames || rowsByGame.size);
+  gameEntries.forEach(([gameId, rows]) => {
     const teamMap = buildTeamMapFromGameRows(teamRowsByGame.get(gameId) || rows);
     const meta = gameMetadata.get(gameId) || {};
     const homeTeam = teamMap.get(meta.homeTeamId) || "";
@@ -561,7 +562,8 @@ async function main() {
   await loadLocalEnv();
   const season = readArg("season") || DEFAULT_SEASON;
   const seasonStart = readArg("season-start") || splitSeasonStart(season);
-  const datasetDir = findNewestDataRoot();
+  const maxGames = Number(readArg("max-games")) || 0;
+  const datasetDir = readArg("dataset-dir") || findNewestDataRoot();
   const includePlayoffs = !hasFlag("regular-only");
   const apply = hasFlag("apply");
   const officialAssetNames = await loadOfficialAssetNames();
@@ -624,6 +626,7 @@ async function main() {
       gameMetadata,
       season,
       seasonType: set.seasonType,
+      maxGames,
     });
     const rows = events.map(toCallRow);
     allRows.push(...rows);
