@@ -5,6 +5,7 @@ const TABLE = "game_live_state";
 const REQUEST_TIMEOUT_MS = 10_000;
 const READ_TIMEOUT_MS = 2_500;
 const WRITE_TIMEOUT_MS = 3_500;
+const SNAPSHOT_COLUMNS = "game_id,league,season_year,game_status,game_status_text,game_date,source,source_signature,source_updated_at,normalized_at,updated_at,created_at,payload,diagnostics";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -300,7 +301,7 @@ async function fetchGameBundle(gameId: string, includeMinutes: boolean) {
 async function readSnapshot(admin: SupabaseAdminClient, gameId: string) {
   const { data, error } = await admin
     .from(TABLE)
-    .select("*")
+    .select(SNAPSHOT_COLUMNS)
     .eq("game_id", gameId)
     .abortSignal(AbortSignal.timeout(READ_TIMEOUT_MS))
     .maybeSingle();
@@ -330,7 +331,7 @@ async function upsertSnapshot(admin: SupabaseAdminClient, normalized: Awaited<Re
       payload: normalized.payload,
       diagnostics: normalized.diagnostics,
     }, { onConflict: "game_id" })
-    .select("*")
+    .select(SNAPSHOT_COLUMNS)
     .abortSignal(AbortSignal.timeout(WRITE_TIMEOUT_MS))
     .single();
   if (error) throw error;

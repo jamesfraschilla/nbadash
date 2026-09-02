@@ -83,7 +83,8 @@ begin
 end;
 $$;
 
-grant execute on function public.nba_save_challenge_context_tags(uuid, uuid[], text[]) to anon, authenticated;
+revoke execute on function public.nba_save_challenge_context_tags(uuid, uuid[], text[]) from anon;
+grant execute on function public.nba_save_challenge_context_tags(uuid, uuid[], text[]) to authenticated;
 
 insert into public.nba_challenge_context_event_tags (challenge_event_id, tag_id, tagged_by, tagged_at)
 select distinct

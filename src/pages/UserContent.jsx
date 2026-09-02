@@ -38,6 +38,7 @@ const GRAPHIC_TOOL_RECORD_TYPES = [
   TOOL_RECORD_TYPES.PREGAME_COURT_TIME_GRAPHIC,
   TOOL_RECORD_TYPES.PERSONNEL_GRAPHIC,
   TOOL_RECORD_TYPES.DEPTH_CHART_GRAPHIC,
+  TOOL_RECORD_TYPES.TABLE_GRAPHIC,
 ];
 const LATE_GAME_TOOL_RECORD_TYPES = [
   TOOL_RECORD_TYPES.LATE_GAME_FEEDBACK,
@@ -188,6 +189,19 @@ function getSavedGraphicPresentation(toolRecord) {
       meta: "Depth Chart Graphic · Saved draft",
       body: `${team?.fullName || (league === "gleague" ? "G League depth chart" : "NBA depth chart")}${selectedSlots ? ` · ${selectedSlots} slots filled` : ""}`,
       link: `/graphics?graphic=depth-chart&depthChart=${encodeURIComponent(toolRecord.id)}`,
+    };
+  }
+  if (toolRecord.type === TOOL_RECORD_TYPES.TABLE_GRAPHIC) {
+    const rowCount = Array.isArray(toolRecord.payload?.rows)
+      ? toolRecord.payload.rows.filter((row, index, rows) => (
+        index === rows.length - 1 || String(row?.playerId || row?.label || "").trim()
+      )).length
+      : 0;
+    const columnCount = Array.isArray(toolRecord.payload?.columns) ? toolRecord.payload.columns.length : 0;
+    return {
+      meta: "Table Graphic · Saved draft",
+      body: `${rowCount || "No"} export row${rowCount === 1 ? "" : "s"}${columnCount ? ` · ${columnCount} columns` : ""}`,
+      link: `/graphics?graphic=table&table=${encodeURIComponent(toolRecord.id)}`,
     };
   }
   const league = String(toolRecord.payload?.league || "nba").trim() === "gleague" ? "gleague" : "nba";
@@ -415,6 +429,10 @@ export default function UserContent() {
   );
   const depthChartToolRecords = useMemo(
     () => savedTools.filter((record) => record.type === TOOL_RECORD_TYPES.DEPTH_CHART_GRAPHIC),
+    [savedTools]
+  );
+  const tableToolRecords = useMemo(
+    () => savedTools.filter((record) => record.type === TOOL_RECORD_TYPES.TABLE_GRAPHIC),
     [savedTools]
   );
   const rotationToolRecords = useMemo(
@@ -867,6 +885,13 @@ export default function UserContent() {
             <SavedGraphicArea
               title="Depth Chart Graphics"
               records={depthChartToolRecords}
+              deletingKey={deletingKey}
+              onDelete={handleDeleteTool}
+            />
+          ) : activeGraphicTab === TOOL_TABS.TABLE ? (
+            <SavedGraphicArea
+              title="Table Graphics"
+              records={tableToolRecords}
               deletingKey={deletingKey}
               onDelete={handleDeleteTool}
             />

@@ -20,6 +20,7 @@ export const TOOL_RECORD_TYPES = {
   PREGAME_COURT_TIME_GRAPHIC: "pregame_court_time_graphic",
   PERSONNEL_GRAPHIC: "personnel_graphic",
   DEPTH_CHART_GRAPHIC: "depth_chart_graphic",
+  TABLE_GRAPHIC: "table_graphic",
   ROTATIONS_TOOL: "rotations_tool",
   GAME_ANALYSIS: "game_analysis",
   PREGAME_SCOUTING_PACKET: "pregame_scouting_packet",

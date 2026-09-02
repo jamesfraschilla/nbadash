@@ -12,6 +12,15 @@ const PROFILE_LIMIT = 500;
 const PROFILE_DETAIL_LIMIT = 10000;
 const CONTEXT_TAG_PAGE_SIZE = 100;
 const EXCLUDED_STAT_SEASON_TYPES = new Set(["preseason"]);
+const CONTEXT_TAG_COLUMNS = "id,label";
+const PROFILE_ROLLUP_COLUMNS = "season,id,official_id,name,official_name,jersey_number,games,calls,calls_per_game,fouls,fouls_per_game,violations,violations_per_game,technicals,challenges,successful_challenges,whistle_challenges,successful_whistle_challenges,whistle_challenge_rate,crew_chief_challenges,successful_crew_chief_challenges,crew_chief_challenge_rate,crew_challenges,successful_crew_challenges,crew_challenge_rate";
+const TEAM_ROLLUP_COLUMNS = "season,team,team_id,games,calls_against,calls_for,net_calls_for,challenges,successful_challenges,challenge_rate";
+const OVERVIEW_ROLLUP_COLUMNS = "season,call_events,challenges,successful_challenges,challenge_rate,officials,teams";
+const TEAM_OFFICIAL_NET_COLUMNS = "season,team,official_key,official_id,official_name,net_calls_for,net_calls_for_per_game,games";
+const CATEGORY_ROLLUP_COLUMNS = "season,official_id,official_name,team,category,calls,calls_per_game,category_rank";
+const ASSIGNMENT_COLUMNS = "season,season_type,game_id,game_date,home_team,away_team,official_id,official_name,jersey_number,role_key,assignment_order,is_alternate";
+const CHALLENGE_COLUMNS = "id,season,season_type,game_id,game_date,round,series,home_team,away_team,challenging_team,period,game_clock,challenge_type,initial_call,call_ruling,ruling_outcome,challenge_outcome,video_url,crew_chief_id,crew_chief_name,whistling_official_id,whistling_official_name,matched_action_number,matched_call_event_id,match_confidence,match_reason,challenge_sub_type,review_status,source";
+const CALL_EVENT_COLUMNS = "id,season,season_type,game_id,game_date,home_team,away_team,period,game_clock,action_number,order_number,action_type,sub_type,descriptor,description,official_token,official_id,official_name,team_id,team_tricode,player_id,player_name,primary_category,secondary_category,charged_team,benefiting_team,confidence,confidence_reason,area,area_detail";
 const NBA_TEAM_ID_BY_TRICODE = {
   ATL: "1610612737",
   BOS: "1610612738",
@@ -208,7 +217,7 @@ async function attachChallengeContextTags(rows) {
   const challengeRows = asArray(rows);
   if (!supabase || !challengeRows.length) return challengeRows.map((row) => withContextTagFields(row, []));
   const [tagsResult, eventTagRows] = await Promise.all([
-    selectTable("nba_challenge_context_tags", (query) => query.select("*").order("label", { ascending: true }), { maxRows: 500 })
+    selectTable("nba_challenge_context_tags", (query) => query.select(CONTEXT_TAG_COLUMNS).order("label", { ascending: true }), { maxRows: 500 })
       .catch(() => ({ data: [], unavailable: true })),
     fetchChallengeContextRows(challengeRows.map((row) => row.id)).catch(() => []),
   ]);
@@ -833,12 +842,12 @@ export async function fetchOfficialProfileDetails({ season = DEFAULT_SEASON, pro
   const cumulative = season === CUMULATIVE_SEASON;
 
   const challengeQuery = (query) => query
-    .select("*")
+    .select(CHALLENGE_COLUMNS)
     .in("season", seasonValues(season))
     .not("season_type", "ilike", "Preseason")
     .order("game_date", { ascending: false });
   const teamNetQuery = (query) => {
-    let next = applySeasonFilter(query.select("*"), season);
+    let next = applySeasonFilter(query.select(TEAM_OFFICIAL_NET_COLUMNS), season);
     if (officialId && officialName) {
       next = next.or(`official_key.eq.${officialId},official_id.eq.${officialId},official_name.eq.${officialName}`);
     } else if (officialId) {
@@ -849,7 +858,7 @@ export async function fetchOfficialProfileDetails({ season = DEFAULT_SEASON, pro
     return next.order("team", { ascending: true });
   };
   const assignmentQuery = (query) => {
-    let next = applySeasonFilter(query.select("*"), season).not("season_type", "ilike", "Preseason");
+    let next = applySeasonFilter(query.select(ASSIGNMENT_COLUMNS), season).not("season_type", "ilike", "Preseason");
     if (officialId && officialName) {
       next = next.or(`official_id.eq.${officialId},official_name.eq.${officialName}`);
     } else if (officialId) {
@@ -860,7 +869,7 @@ export async function fetchOfficialProfileDetails({ season = DEFAULT_SEASON, pro
     return next.order("game_date", { ascending: false });
   };
   const categoryQuery = (query) => {
-    let next = applySeasonFilter(query.select("*"), season);
+    let next = applySeasonFilter(query.select(CATEGORY_ROLLUP_COLUMNS), season);
     if (officialId && officialName) {
       next = next.or(`official_id.eq.${officialId},official_name.eq.${officialName}`);
     } else if (officialId) {
@@ -870,7 +879,7 @@ export async function fetchOfficialProfileDetails({ season = DEFAULT_SEASON, pro
     }
     return next.order("calls_per_game", { ascending: false });
   };
-  const profileQuery = (query) => applySeasonFilter(query.select("*"), season);
+  const profileQuery = (query) => applySeasonFilter(query.select(PROFILE_ROLLUP_COLUMNS), season);
   const [profileResult, teamNetResult, challengeEventsResult, assignmentsResult, categoryRollupsResult] = await Promise.all([
     selectPreferredTable("nba_official_profiles_cache", "nba_official_profiles", profileQuery, { maxRows: PROFILE_LIMIT })
       .catch(() => ({ data: [], unavailable: true })),
@@ -921,20 +930,20 @@ export async function fetchTeamProfileDetails({ season = DEFAULT_SEASON, profile
   const team = String(profile?.team || "").trim();
   if (!team) return profile;
   const cumulative = season === CUMULATIVE_SEASON;
-  const categoryRollupQuery = (query) => applySeasonFilter(query.select("*"), season)
+  const categoryRollupQuery = (query) => applySeasonFilter(query.select(CATEGORY_ROLLUP_COLUMNS), season)
     .eq("team", team)
     .order("calls_per_game", { ascending: false });
-  const teamOfficialQuery = (query) => applySeasonFilter(query.select("*"), season)
+  const teamOfficialQuery = (query) => applySeasonFilter(query.select(TEAM_OFFICIAL_NET_COLUMNS), season)
     .eq("team", team)
     .order("net_calls_for_per_game", { ascending: false });
-  const profileQuery = (query) => applySeasonFilter(query.select("*"), season);
+  const profileQuery = (query) => applySeasonFilter(query.select(TEAM_ROLLUP_COLUMNS), season);
   const [profileResult, teamOfficialResult, challengeEventsResult, categoryRollupsResult] = await Promise.all([
     selectPreferredTable("nba_team_profiles_cache", "nba_team_profiles", profileQuery, { maxRows: 10 })
       .catch(() => ({ data: [], unavailable: true })),
     selectPreferredTable("nba_team_official_net_call_rollups_cache", "nba_team_official_net_call_rollups", teamOfficialQuery, { maxRows: PROFILE_DETAIL_LIMIT })
       .catch(() => ({ data: [], unavailable: true })),
     selectPreferredTable("nba_authoritative_coach_challenge_events_cache", "nba_authoritative_coach_challenge_events", (query) => query
-      .select("*")
+      .select(CHALLENGE_COLUMNS)
       .in("season", seasonValues(season))
       .not("season_type", "ilike", "Preseason")
       .eq("challenging_team", team)
@@ -994,18 +1003,18 @@ export async function fetchOfficiatingDashboardData({ season = DEFAULT_SEASON, i
     teamRollupsResult,
   ] = await Promise.all([
     selectPreferredTable("nba_officiating_overview_rollups_cache", "nba_officiating_overview_rollups", (query) => applySeasonFilter(query
-      .select("*"), season), { maxRows: 5 }),
+      .select(OVERVIEW_ROLLUP_COLUMNS), season), { maxRows: 5 }),
     selectPreferredTable("nba_official_profiles_cache", "nba_official_profiles", (query) => applySeasonFilter(query
-      .select("*"), season), { maxRows: PROFILE_LIMIT }),
+      .select(PROFILE_ROLLUP_COLUMNS), season), { maxRows: PROFILE_LIMIT }),
     selectPreferredTable("nba_team_profiles_cache", "nba_team_profiles", (query) => applySeasonFilter(query
-      .select("*"), season), { maxRows: PROFILE_LIMIT }),
+      .select(TEAM_ROLLUP_COLUMNS), season), { maxRows: PROFILE_LIMIT }),
   ]);
 
   const hasProfileRollups = !officialRollupsResult.unavailable && !teamRollupsResult.unavailable;
   const shouldLoadChallengeEvents = includeChallengeLog || !hasProfileRollups || overviewResult.unavailable;
   const challengeEventsResult = shouldLoadChallengeEvents
     ? await selectPreferredTable("nba_authoritative_coach_challenge_events_cache", "nba_authoritative_coach_challenge_events", (query) => query
-      .select("*")
+      .select(CHALLENGE_COLUMNS)
       .in("season", seasonValues(season))
       .order("game_date", { ascending: false }), { maxRows: CHALLENGE_LIMIT })
     : { data: [], unavailable: false };
@@ -1019,12 +1028,12 @@ export async function fetchOfficiatingDashboardData({ season = DEFAULT_SEASON, i
   if (!hasProfileRollups || overviewResult.unavailable) {
     const [callEventsResult, assignmentsResult] = await Promise.all([
       selectTable("nba_official_call_events", (query) => query
-        .select("*")
+        .select(CALL_EVENT_COLUMNS)
         .in("season", seasonValues(season))
         .not("season_type", "ilike", "Preseason")
         .order("game_date", { ascending: false }), { maxRows: CALL_EVENT_LIMIT }),
       selectTable("nba_official_game_assignments", (query) => query
-        .select("*")
+        .select(ASSIGNMENT_COLUMNS)
         .in("season", seasonValues(season))
         .not("season_type", "ilike", "Preseason")
         .order("game_date", { ascending: false }), { maxRows: ASSIGNMENT_LIMIT }),
@@ -1083,7 +1092,7 @@ export async function fetchOfficiatingDashboardData({ season = DEFAULT_SEASON, i
 
 export async function fetchOfficiatingChallengeLog({ season = DEFAULT_SEASON } = {}) {
   const result = await selectPreferredTable("nba_authoritative_coach_challenge_events_cache", "nba_authoritative_coach_challenge_events", (query) => query
-    .select("*")
+    .select(CHALLENGE_COLUMNS)
     .in("season", seasonValues(season))
     .order("game_date", { ascending: false }), { maxRows: CHALLENGE_LIMIT });
   return attachChallengeContextTags(preferAuthoritativeChallengeEvents(result.data));
@@ -1091,7 +1100,7 @@ export async function fetchOfficiatingChallengeLog({ season = DEFAULT_SEASON } =
 
 export async function fetchChallengeContextTagOptions() {
   const result = await selectTable("nba_challenge_context_tags", (query) => query
-    .select("*")
+    .select(CONTEXT_TAG_COLUMNS)
     .order("label", { ascending: true }), { maxRows: 500 });
   return asArray(result.data).map((tag) => ({
     id: String(tag.id || "").trim(),
@@ -1144,7 +1153,7 @@ export async function saveChallengeContextTags({ challengeEventId, selectedTagId
         label,
         created_by: userId,
       })), { onConflict: "label" })
-      .select("*");
+      .select(CONTEXT_TAG_COLUMNS);
     if (error) throw error;
     createdTags = asArray(data);
   }

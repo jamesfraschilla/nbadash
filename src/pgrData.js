@@ -3,11 +3,12 @@ import { supabase } from "./supabaseClient.js";
 
 const WIZARDS_TEAM_ID = "1610612764";
 const WIZARDS_TRICODE = "WAS";
-const PGR_ROW_LIMIT = 150000;
-const SUPABASE_PAGE_SIZE = 1000;
 const INCORRECT_CALL_CODES = ["NI", "BCA", "WPA", "SFA", "PFA", "TTFE"];
 const ASSESSMENT_ERROR_CODES = ["BCA", "WPA", "SFA", "PFA", "TTFE"];
 const POTENTIAL_INFRACTION_CODES = ["PI", "PII"];
+const PGR_IMPORT_ROLLUP_COLUMNS = "id,season,game_id,game_date,home_team,away_team,filename,file_hash,worksheet_name,status,row_count,possession_count,event_count,warnings,errors,imported_at,infractions,judgment_calls,calls,no_calls,infraction_rate,call_rate";
+const PGR_OVERVIEW_ROLLUP_COLUMNS = "season,games,evaluations,events,possessions,infractions,judgment_calls,calls,no_calls,infraction_rate,call_rate";
+const PGR_ACCURACY_ROLLUP_COLUMNS = "season,scope,evaluations,calls,no_calls,called_no_infraction,called_assessment_error,missed_infractions,missed_potential_infractions";
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -47,23 +48,6 @@ async function safeSelectTable(table, queryBuilder, fallback = []) {
   } catch (error) {
     return { data: fallback, unavailable: false, loadError: error };
   }
-}
-
-async function selectPagedTable(table, queryBuilder, { maxRows = PGR_ROW_LIMIT } = {}) {
-  if (!supabase) return { data: [], unavailable: true };
-  const rows = [];
-  for (let from = 0; from < maxRows; from += SUPABASE_PAGE_SIZE) {
-    const to = Math.min(from + SUPABASE_PAGE_SIZE - 1, maxRows - 1);
-    const { data, error } = await queryBuilder(supabase.from(table)).range(from, to);
-    if (error) {
-      if (isMissingTableError(error)) return { data: [], unavailable: true };
-      throw error;
-    }
-    const page = asArray(data);
-    rows.push(...page);
-    if (page.length < SUPABASE_PAGE_SIZE) break;
-  }
-  return { data: rows, unavailable: false };
 }
 
 function normalizeTeam(value) {
@@ -202,88 +186,6 @@ function isNoInfraction(row) {
     || String(row.infraction_rating_name || "").toLowerCase() === "no infraction";
 }
 
-function pgrDecision(row) {
-  const called = row.call_or_no_call === "C";
-  if (called && (isNoInfraction(row) || isAssessmentError(row))) return "incorrect_call";
-  if (!called && (isInfraction(row) || isPotentialInfraction(row))) return "incorrect_non_call";
-  if (called) return "correct_call";
-  return "correct_non_call";
-}
-
-function pgrImpactSide(row) {
-  const playerTeam = normalizeTeam(row.player_team);
-  const opponentTeam = normalizeTeam(row.opponent_team);
-  if (playerTeam === WIZARDS_TRICODE) return "wizards_against";
-  if (opponentTeam === WIZARDS_TRICODE) return "wizards_for";
-  return "neutral";
-}
-
-function buildPgrContextRows({ evaluations, imports, assignments, calls }) {
-  const importsByGame = new Map(imports.map((row) => [String(row.game_id || ""), row]));
-  const crewByGame = new Map();
-  assignments.forEach((row) => {
-    const role = String(row.role_key || "").toLowerCase();
-    const order = Number(row.assignment_order) || 0;
-    const current = crewByGame.get(row.game_id);
-    if (!current || role === "crewchief" || role === "crew_chief" || order === 1) {
-      crewByGame.set(row.game_id, row);
-    }
-  });
-  const callsByGameEvent = new Map();
-  calls.forEach((row) => {
-    const actionNumber = Number(row.action_number) || 0;
-    const keys = [
-      `${row.game_id || ""}|${actionNumber}`,
-      `${row.game_id || ""}|${actionNumber + 100000}`,
-    ];
-    keys.forEach((key) => {
-      if (row.official_name && !callsByGameEvent.has(key)) callsByGameEvent.set(key, row);
-    });
-  });
-
-  return evaluations.map((row) => {
-    const game = importsByGame.get(row.game_id) || row.nba_pgr_imports || {};
-    const callEvent = callsByGameEvent.get(`${row.game_id}|${Number(row.event_id) || row.event_id}`) || {};
-    const crewChief = crewByGame.get(row.game_id) || {};
-    const homeTeam = normalizeTeam(game.home_team);
-    const awayTeam = normalizeTeam(game.away_team);
-    const opponent = homeTeam === WIZARDS_TRICODE ? awayTeam : homeTeam;
-    const decision = pgrDecision(row);
-    const impactSide = pgrImpactSide(row);
-    return {
-      id: row.id,
-      season: row.season,
-      gameId: row.game_id,
-      gameDate: game.game_date || "",
-      matchup: [awayTeam, homeTeam].filter(Boolean).join(" @ "),
-      opponent,
-      homeRoad: homeTeam === WIZARDS_TRICODE ? "Home" : "Road",
-      period: Number(row.period) || null,
-      periodName: row.period_name,
-      clock: row.game_clock,
-      eventId: row.event_id,
-      callType: row.call_type_name || "",
-      playType: row.play_type_name || "",
-      infractionType: row.infraction_type_name || "Unknown",
-      playerName: row.player_name || "",
-      playerTeam: normalizeTeam(row.player_team),
-      opponentName: row.opponent_name || "",
-      opponentTeam: normalizeTeam(row.opponent_team),
-      actionCode: row.player_action_code || "",
-      actionLabel: row.player_action_label || row.player_action_code || "Unknown",
-      rating: row.infraction_rating_name || "",
-      callOrNoCall: row.call_or_no_call || "",
-      decision,
-      impactSide,
-      videoUrl: row.video_url || "",
-      crewChiefName: crewChief.official_name || "",
-      whistlingOfficialName: callEvent.official_name || "",
-      whistlingOfficialId: callEvent.official_id || "",
-      matchedCallConfidence: Number(callEvent.confidence) || 0,
-    };
-  });
-}
-
 function emptyAccuracy() {
   return {
     total: 0,
@@ -326,21 +228,6 @@ export function summarizePgrAccuracy(rows) {
     bucket.accuracy = safeRate(correct, bucket.total);
   });
   return summary;
-}
-
-function groupRows(rows, selector) {
-  const groups = new Map();
-  rows.forEach((row) => {
-    const key = selector(row) || "Unknown";
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(row);
-  });
-  return [...groups.entries()].map(([label, groupRows]) => ({
-    label,
-    ...summarizePgrAccuracy(groupRows).all,
-  })).sort((left, right) => right.incorrectCalls + right.incorrectNonCalls - (left.incorrectCalls + left.incorrectNonCalls)
-    || right.total - left.total
-    || left.label.localeCompare(right.label));
 }
 
 function uniqueValues(rows, selector) {
@@ -396,49 +283,17 @@ function accuracyFromRows(rows) {
   };
 }
 
-async function fetchPgrContextRows(season, imports) {
-  const gameIds = uniqueValues(imports, (row) => row.game_id)
-    .filter((gameId) => !String(gameId).startsWith("001"));
-  if (!gameIds.length) {
-    return { unavailable: false, rows: [] };
-  }
-  const [evaluationsResult, assignmentsResult, callsResult] = await Promise.all([
-    selectPagedTable("nba_pgr_evaluations", (query) => query
-      .select("id,season,game_id,pos_id,event_id,rating_seq_no,period,period_name,game_clock,call_type_name,play_type_name,infraction_type_name,player_name,player_team,opponent_name,opponent_team,player_action_code,player_action_label,infraction_rating_name,call_or_no_call,call_or_no_call_label,video_url")
-      .eq("season", season)
-      .in("game_id", gameIds)
-      .order("game_id", { ascending: false }), { maxRows: PGR_ROW_LIMIT }),
-    selectPagedTable("nba_official_game_assignments", (query) => query
-      .select("game_id,official_id,official_name,role_key,assignment_order")
-      .eq("season", season)
-      .not("season_type", "ilike", "Preseason")
-      .in("game_id", gameIds), { maxRows: 1000 }),
-    selectPagedTable("nba_official_call_events", (query) => query
-      .select("game_id,action_number,official_id,official_name,confidence")
-      .eq("season", season)
-      .not("season_type", "ilike", "Preseason")
-      .in("game_id", gameIds), { maxRows: 10000 }),
-  ]);
-  return {
-    unavailable: evaluationsResult.unavailable,
-    rows: buildPgrContextRows({
-      evaluations: evaluationsResult.data,
-      imports,
-      assignments: assignmentsResult.data || [],
-      calls: callsResult.data || [],
-    }),
-  };
-}
-
 export async function fetchPgrInsightsData({ season = "2025-26" } = {}) {
-  const [overviewResult, importsResult, accuracyResult] = await Promise.all([
-    selectPreferredTable("nba_pgr_overview_rollups_cache", "nba_pgr_overview_rollups", (query) => query.select("*").eq("season", season).limit(1)),
-    selectPreferredTable("nba_pgr_import_rollups_cache", "nba_pgr_import_rollups", (query) => query.select("*").eq("season", season).order("game_date", { ascending: false }).limit(100)),
-    safeSelectTable("nba_pgr_accuracy_rollups_cache", (query) => query.select("*").eq("season", season)),
+  const [overviewResult, importsResult, accuracyResult, filterOptionsResult] = await Promise.all([
+    selectPreferredTable("nba_pgr_overview_rollups_cache", "nba_pgr_overview_rollups", (query) => query.select(PGR_OVERVIEW_ROLLUP_COLUMNS).eq("season", season).limit(1)),
+    selectPreferredTable("nba_pgr_import_rollups_cache", "nba_pgr_import_rollups", (query) => query.select(PGR_IMPORT_ROLLUP_COLUMNS).eq("season", season).order("game_date", { ascending: false }).limit(100)),
+    safeSelectTable("nba_pgr_accuracy_rollups_cache", (query) => query.select(PGR_ACCURACY_ROLLUP_COLUMNS).eq("season", season)),
+    fetchPgrSmartInsightsFilterOptions({ season }).catch(() => ({ unavailable: true })),
   ]);
 
   const overviewRow = overviewResult.data[0] || {};
   const imports = importsResult.data;
+  const filterOptions = filterOptionsResult.unavailable ? null : filterOptionsResult.filterOptions;
   return {
     unavailable: overviewResult.unavailable || importsResult.unavailable,
     loadWarnings: [accuracyResult.loadError]
@@ -462,15 +317,15 @@ export async function fetchPgrInsightsData({ season = "2025-26" } = {}) {
     evaluations: [],
     accuracy: accuracyFromRows(accuracyResult.data),
     filterOptions: {
-      opponents: uniqueValues(imports, (row) => {
+      opponents: filterOptions?.opponents || uniqueValues(imports, (row) => {
         const homeTeam = normalizeTeam(row.home_team);
         const awayTeam = normalizeTeam(row.away_team);
         return homeTeam === WIZARDS_TRICODE ? awayTeam : homeTeam;
       }),
-      homeRoad: ["Home", "Road"],
-      crewChiefs: [],
-      whistlingOfficials: [],
-      infractionTypes: [],
+      homeRoad: filterOptions?.homeRoad || ["Home", "Road"],
+      crewChiefs: filterOptions?.crewChiefs || [],
+      whistlingOfficials: filterOptions?.whistlingOfficials || [],
+      infractionTypes: filterOptions?.infractionTypes || [],
     },
     grouped: {
       byOpponent: [],
@@ -481,29 +336,18 @@ export async function fetchPgrInsightsData({ season = "2025-26" } = {}) {
   };
 }
 
-export async function fetchPgrSmartInsightsRows({ season = "2025-26" } = {}) {
-  const importsResult = await selectPreferredTable("nba_pgr_import_rollups_cache", "nba_pgr_import_rollups", (query) => query
-    .select("*")
-    .eq("season", season)
-    .order("game_date", { ascending: false })
-    .limit(100));
-  const contextResult = await fetchPgrContextRows(season, importsResult.data);
-  const rows = contextResult.rows;
+export async function fetchPgrSmartInsightsFilterOptions({ season = "2025-26" } = {}) {
+  if (!supabase) return { unavailable: true, filterOptions: {} };
+  const { data, error } = await supabase.rpc("nba_pgr_smart_filter_options", { p_season: season });
+  if (error) return { unavailable: true, filterOptions: {} };
   return {
-    unavailable: importsResult.unavailable || contextResult.unavailable,
-    evaluations: rows,
+    unavailable: false,
     filterOptions: {
-      opponents: uniqueValues(rows, (row) => row.opponent),
-      homeRoad: uniqueValues(rows, (row) => row.homeRoad),
-      crewChiefs: uniqueValues(rows, (row) => row.crewChiefName),
-      whistlingOfficials: uniqueValues(rows, (row) => row.whistlingOfficialName),
-      infractionTypes: uniqueValues(rows, (row) => row.infractionType),
-    },
-    grouped: {
-      byOpponent: groupRows(rows, (row) => row.opponent),
-      byInfractionType: groupRows(rows, (row) => row.infractionType),
-      byCrewChief: groupRows(rows, (row) => row.crewChiefName),
-      byWhistle: groupRows(rows, (row) => row.whistlingOfficialName),
+      opponents: asArray(data?.opponents),
+      homeRoad: asArray(data?.homeRoad),
+      crewChiefs: asArray(data?.crewChiefs),
+      whistlingOfficials: asArray(data?.whistlingOfficials),
+      infractionTypes: asArray(data?.infractionTypes),
     },
   };
 }

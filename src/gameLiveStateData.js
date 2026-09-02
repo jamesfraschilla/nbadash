@@ -1,6 +1,9 @@
 import { supabase, supabaseFunctionConfig } from "./supabaseClient.js";
 
 const DEFAULT_TIMEOUT_MS = 12_000;
+const SHADOW_LEASE_TTL_MS = 10_000;
+const SHADOW_LEASE_PREFIX = "nba-dash:game-live-state-shadow:";
+const SHADOW_TAB_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
 function createTimeoutSignal(signal, timeoutMs, message = "Game state cache request timed out.") {
   const controller = new AbortController();
@@ -102,6 +105,31 @@ export function buildGameLiveStateShadowKey(game, minutesData = null) {
   ].join("|");
 }
 
+function getStorage() {
+  try {
+    return globalThis.window?.localStorage || null;
+  } catch {
+    return null;
+  }
+}
+
+export function claimGameLiveStateShadowLease(gameId, nowMs = Date.now()) {
+  const storage = getStorage();
+  if (!storage || !gameId) return true;
+  const key = `${SHADOW_LEASE_PREFIX}${gameId}`;
+  const expiresAt = nowMs + SHADOW_LEASE_TTL_MS;
+  try {
+    const current = JSON.parse(storage.getItem(key) || "null");
+    if (current?.owner && current.owner !== SHADOW_TAB_ID && Number(current.expiresAt) > nowMs) {
+      return false;
+    }
+    storage.setItem(key, JSON.stringify({ owner: SHADOW_TAB_ID, expiresAt }));
+    return true;
+  } catch {
+    return true;
+  }
+}
+
 export async function getGameLiveStateSnapshot(gameId, options = {}) {
   if (!gameId) return null;
   const data = await invokeGameLiveState({
@@ -119,6 +147,7 @@ export async function upsertGameLiveStateShadow({
   timeoutMs,
 }) {
   if (!gameId || !game) return { skipped: true, reason: "missing-game" };
+  if (!claimGameLiveStateShadowLease(gameId)) return { skipped: true, reason: "shadow-lease-held" };
   return invokeGameLiveState({
     operation: "upsert",
     gameId,

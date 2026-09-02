@@ -1,0 +1,264 @@
+.tableTool {
+  display: grid;
+  gap: 12px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.kicker {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 2px 0 0;
+  font-size: 1.32rem;
+}
+
+.toolbarActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.titleField {
+  display: grid;
+  max-width: 420px;
+  gap: 5px;
+}
+
+.titleField span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.titleField input {
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg);
+  color: var(--text);
+  padding: 0 10px;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.primaryButton,
+.secondaryButton,
+.secondaryLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  min-width: 90px;
+  border-radius: var(--radius-sm);
+  padding: 0 12px;
+  font-size: 0.86rem;
+  font-weight: 800;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.primaryButton {
+  border: 1px solid var(--button-primary-bg);
+  background: var(--button-primary-bg);
+  color: var(--button-primary-text);
+}
+
+.secondaryButton,
+.secondaryLink {
+  border: 1px solid var(--border);
+  background: var(--button-bg);
+  color: var(--text);
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled,
+.columnControl button:disabled,
+.rowControl button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tableShell {
+  display: grid;
+  grid-template-columns: max-content auto;
+  gap: 8px;
+  align-items: start;
+  justify-content: start;
+}
+
+.tableScroller {
+  width: max-content;
+  min-width: 0;
+  max-width: 100%;
+  max-height: 680px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+}
+
+.editorTable {
+  width: auto;
+  min-width: 0;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.editorTable th,
+.editorTable td {
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  padding: 4px 6px;
+  vertical-align: middle;
+}
+
+.editorTable th:last-child,
+.editorTable td:last-child {
+  border-right: 0;
+}
+
+.editorTable th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-align: left;
+}
+
+.editorTable th:first-child,
+.editorTable td:first-child {
+  width: 240px;
+  min-width: 240px;
+  max-width: 240px;
+}
+
+.editorTable th:not(:first-child),
+.editorTable td:not(:first-child) {
+  width: 132px;
+  min-width: 132px;
+  max-width: 132px;
+}
+
+.editorTable input,
+.editorTable select {
+  width: 100%;
+  min-height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--input-bg);
+  color: var(--text);
+  padding: 0 8px;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.editorTable th:not(:first-child) input,
+.editorTable td:not(:first-child) input {
+  text-align: center;
+}
+
+.editorTable input:focus,
+.editorTable select:focus {
+  outline: 2px solid color-mix(in srgb, var(--highlight-text) 72%, transparent);
+  outline-offset: 1px;
+}
+
+.teamRow td {
+  background: color-mix(in srgb, var(--surface) 78%, var(--highlight-text));
+}
+
+.teamLabel {
+  display: flex;
+  min-height: 26px;
+  align-items: center;
+  color: var(--text);
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.columnControl,
+.rowControl {
+  display: flex;
+  gap: 6px;
+}
+
+.columnControl {
+  grid-column: 2;
+  grid-row: 1;
+  padding-top: 2px;
+  flex-direction: column;
+}
+
+.rowControl {
+  grid-column: 1;
+  justify-self: start;
+  margin-left: 6px;
+}
+
+.columnControl button,
+.rowControl button {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--button-bg);
+  color: var(--text);
+  font-size: 1.05rem;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.footerMeta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.footerMeta span {
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+}
+
+.status {
+  color: var(--muted);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  .tableShell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .columnControl {
+    grid-column: 1;
+    grid-row: auto;
+    flex-direction: row;
+  }
+}

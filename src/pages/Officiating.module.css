@@ -649,9 +649,10 @@
   position: fixed;
   inset: 0;
   z-index: 5000;
-  padding: 28px;
+  padding: 18px 28px 28px;
   display: grid;
-  place-items: center;
+  align-items: start;
+  justify-items: center;
   overflow: auto;
   background: rgba(0, 0, 0, 0.76);
   backdrop-filter: blur(10px);
@@ -674,7 +675,8 @@
 
 .profileModal {
   width: min(1040px, 100%);
-  max-height: calc(100vh - 56px);
+  max-height: calc(100dvh - 46px);
+  margin: 0 auto;
   position: relative;
   display: grid;
   gap: 16px;
@@ -834,11 +836,12 @@
 .detailGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   gap: 12px;
 }
 
 .detailGridCategoryWide {
-  grid-template-columns: minmax(220px, 0.58fr) minmax(0, 1.42fr);
+  grid-template-columns: minmax(220px, 0.52fr) minmax(0, 1.48fr);
 }
 
 .detailLauncher {
@@ -1045,6 +1048,7 @@
 }
 
 .profileListScroll {
+  height: var(--profile-detail-scroll-height);
   max-height: var(--profile-detail-scroll-height);
   overflow: auto;
   border: 1px solid rgba(148, 163, 184, 0.12);
@@ -1168,6 +1172,7 @@
 }
 
 .categorySubhead .sortButton:last-child {
+  justify-content: flex-end;
   text-align: right;
 }
 

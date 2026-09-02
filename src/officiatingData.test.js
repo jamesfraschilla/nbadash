@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildOfficialProfiles, buildTeamProfiles, preferAuthoritativeChallengeEvents, specificCallCategory } from "./officiatingData.js";
-import { challengeFoulSubtype } from "./officiatingCategoryNormalization.js";
+import { CALL_CATEGORY_GROUPS, challengeFoulSubtype } from "./officiatingCategoryNormalization.js";
 
 test("preferAuthoritativeChallengeEvents keeps daily PBP rows until weekly official rows arrive", () => {
   const events = preferAuthoritativeChallengeEvents([
@@ -239,6 +239,19 @@ test("specificCallCategory displays detailed foul and violation types", () => {
   assert.equal(challengeFoulSubtype({
     initial_call: "Basket Interference",
   }), "Basket Interference");
+});
+
+test("call category groups keep out of bounds under violations and location foul subtypes under shooting fouls", () => {
+  const fouls = CALL_CATEGORY_GROUPS.find((group) => group.key === "fouls");
+  const violations = CALL_CATEGORY_GROUPS.find((group) => group.key === "violations");
+  const shootingFoul = fouls.types.find((type) => type.label === "Shooting Foul");
+  const outOfBounds = violations.types.find((type) => type.label === "Out of Bounds");
+
+  assert.ok(shootingFoul);
+  assert.deepEqual(shootingFoul.subTypes.map((subType) => subType.label), ["Restricted Area", "3-Pt"]);
+  assert.ok(outOfBounds);
+  assert.deepEqual(outOfBounds.labels, ["Out Of Bounds"]);
+  assert.equal(fouls.types.some((type) => type.label === "Out of Bounds"), false);
 });
 
 test("official challenge logs prefer whistle label while counting dual crew-chief role", () => {
