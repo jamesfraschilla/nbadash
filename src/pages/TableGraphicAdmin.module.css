@@ -172,6 +172,28 @@
   font-weight: 700;
 }
 
+.cellEditor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 54px;
+  gap: 4px;
+  align-items: center;
+}
+
+.cellEditor input:disabled {
+  opacity: 1;
+  color: var(--text);
+  background: color-mix(in srgb, var(--highlight-text) 14%, var(--input-bg));
+}
+
+.editorTable .formulaSelect {
+  padding: 0 4px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-align: center;
+  text-transform: uppercase;
+}
+
 .editorTable th:not(:first-child) input,
 .editorTable td:not(:first-child) input {
   text-align: center;

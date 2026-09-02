@@ -6,6 +6,7 @@ import { getNbaTeamRoster } from "../data/nbaTeams.js";
 import {
   TABLE_GRAPHIC_MAX_COLUMNS,
   TABLE_GRAPHIC_MAX_ROWS,
+  TABLE_GRAPHIC_CELL_MODES,
   TABLE_GRAPHIC_MIN_COLUMNS,
   TABLE_GRAPHIC_MIN_ROWS,
   addTableGraphicColumn,
@@ -15,6 +16,7 @@ import {
   normalizeTableGraphicDraft,
   removeTableGraphicColumn,
   removeTableGraphicRow,
+  resolveTableGraphicCellValue,
 } from "../tableGraphic.js";
 import {
   deleteSavedToolRecord,
@@ -115,7 +117,24 @@ export default function TableGraphicAdmin() {
       const row = next.rows[rowIndex];
       next.rows[rowIndex] = {
         ...row,
-        values: row.values.map((currentValue, index) => (index === valueIndex ? value : currentValue)),
+        values: row.values.map((currentValue, index) => (
+          index === valueIndex ? { ...currentValue, value, mode: TABLE_GRAPHIC_CELL_MODES.MANUAL } : currentValue
+        )),
+      };
+      return next;
+    });
+    setStatus("");
+  };
+
+  const updateCellMode = (rowIndex, valueIndex, mode) => {
+    setDraft((current) => {
+      const next = normalizeTableGraphicDraft(current);
+      const row = next.rows[rowIndex];
+      next.rows[rowIndex] = {
+        ...row,
+        values: row.values.map((currentValue, index) => (
+          index === valueIndex ? { ...currentValue, mode } : currentValue
+        )),
       };
       return next;
     });
@@ -298,15 +317,34 @@ export default function TableGraphicAdmin() {
                         </select>
                       )}
                     </td>
-                    {row.values.map((value, valueIndex) => (
+                    {row.values.map((cell, valueIndex) => {
+                      const resolvedRow = exportRows.find((candidate) => candidate.id === row.id);
+                      const resolvedValue = resolvedRow?.values?.[valueIndex]
+                        ?? resolveTableGraphicCellValue(cell, normalized.rows, rowIndex, valueIndex);
+                      const isFormula = cell.mode !== TABLE_GRAPHIC_CELL_MODES.MANUAL;
+                      return (
                       <td key={`${row.id}-${valueIndex}`}>
-                        <input
-                          value={value}
-                          onChange={(event) => updateCellValue(rowIndex, valueIndex, event.target.value)}
-                          aria-label={`${isTeamRow ? "Team" : `Row ${rowIndex + 1}`} column ${valueIndex + 2}`}
-                        />
+                        <div className={styles.cellEditor}>
+                          <input
+                            value={isFormula ? resolvedValue : cell.value}
+                            onChange={(event) => updateCellValue(rowIndex, valueIndex, event.target.value)}
+                            disabled={isFormula}
+                            aria-label={`${isTeamRow ? "Team" : `Row ${rowIndex + 1}`} column ${valueIndex + 2}`}
+                          />
+                          <select
+                            className={styles.formulaSelect}
+                            value={cell.mode}
+                            onChange={(event) => updateCellMode(rowIndex, valueIndex, event.target.value)}
+                            aria-label={`${isTeamRow ? "Team" : `Row ${rowIndex + 1}`} column ${valueIndex + 2} calculation`}
+                          >
+                            <option value={TABLE_GRAPHIC_CELL_MODES.MANUAL}>Manual</option>
+                            <option value={TABLE_GRAPHIC_CELL_MODES.SUM}>Sum</option>
+                            <option value={TABLE_GRAPHIC_CELL_MODES.AVERAGE}>Avg</option>
+                          </select>
+                        </div>
                       </td>
-                    ))}
+                      );
+                    })}
                   </tr>
                 );
               })}

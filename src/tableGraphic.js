@@ -5,9 +5,58 @@ export const TABLE_GRAPHIC_MAX_ROWS = 34;
 export const TABLE_GRAPHIC_MIN_COLUMNS = 2;
 export const TABLE_GRAPHIC_MAX_COLUMNS = 8;
 export const TABLE_GRAPHIC_TEAM_ROW_ID = "team";
+export const TABLE_GRAPHIC_CELL_MODES = Object.freeze({
+  MANUAL: "manual",
+  SUM: "sum",
+  AVERAGE: "average",
+});
 
 function createId(prefix, index) {
   return `${prefix}-${index + 1}`;
+}
+
+function createCell(value = "", mode = TABLE_GRAPHIC_CELL_MODES.MANUAL) {
+  return {
+    mode: Object.values(TABLE_GRAPHIC_CELL_MODES).includes(mode) ? mode : TABLE_GRAPHIC_CELL_MODES.MANUAL,
+    value: String(value || ""),
+  };
+}
+
+function normalizeCell(source) {
+  if (source && typeof source === "object" && !Array.isArray(source)) {
+    return createCell(source.value, source.mode);
+  }
+  return createCell(source);
+}
+
+function parseNumericCell(cell) {
+  const value = typeof cell === "object" && cell ? cell.value : cell;
+  const cleaned = String(value ?? "").replace(/,/g, "").trim();
+  if (!cleaned) return null;
+  const number = Number(cleaned);
+  return Number.isFinite(number) ? number : null;
+}
+
+function formatFormulaNumber(value) {
+  if (!Number.isFinite(value)) return "";
+  if (Number.isInteger(value)) return String(value);
+  return String(Math.round(value * 10) / 10);
+}
+
+export function resolveTableGraphicCellValue(cell, rows, rowIndex, valueIndex) {
+  const normalized = normalizeCell(cell);
+  if (normalized.mode === TABLE_GRAPHIC_CELL_MODES.MANUAL) return normalized.value;
+  const values = rows
+    .slice(0, rowIndex)
+    .filter((row) => !row.isTeam)
+    .map((row) => parseNumericCell(row.values?.[valueIndex]))
+    .filter((value) => value !== null);
+  if (!values.length) return "";
+  const sum = values.reduce((total, value) => total + value, 0);
+  if (normalized.mode === TABLE_GRAPHIC_CELL_MODES.AVERAGE) {
+    return formatFormulaNumber(sum / values.length);
+  }
+  return formatFormulaNumber(sum);
 }
 
 export function createTableGraphicDraft({
@@ -22,7 +71,7 @@ export function createTableGraphicDraft({
       id: index === safeRowCount - 1 ? TABLE_GRAPHIC_TEAM_ROW_ID : createId("row", index),
       playerId: "",
       label: index === safeRowCount - 1 ? "TEAM" : "",
-      values: Array.from({ length: safeColumnCount - 1 }, () => ""),
+      values: Array.from({ length: safeColumnCount - 1 }, () => createCell()),
     })),
     columns: [
       { id: "player", header: "PLAYER" },
@@ -60,7 +109,7 @@ export function normalizeTableGraphicDraft(draft) {
       id: isTeamRow ? TABLE_GRAPHIC_TEAM_ROW_ID : String(source.id || createId("row", index)).trim(),
       playerId: isTeamRow ? "" : String(source.playerId || "").trim(),
       label: isTeamRow ? "TEAM" : String(source.label || "").trim(),
-      values: Array.from({ length: columnCount - 1 }, (_, valueIndex) => String(source.values?.[valueIndex] || "")),
+      values: Array.from({ length: columnCount - 1 }, (_, valueIndex) => normalizeCell(source.values?.[valueIndex])),
     };
   });
   return {
@@ -73,7 +122,7 @@ export function normalizeTableGraphicDraft(draft) {
 export function getTableGraphicExportRows(draft, roster = []) {
   const normalized = normalizeTableGraphicDraft(draft);
   const rosterById = new Map((Array.isArray(roster) ? roster : []).map((player) => [String(player.personId || "").trim(), player]));
-  return normalized.rows
+  const rows = normalized.rows
     .map((row, index) => {
       const isTeam = index === normalized.rows.length - 1 || row.id === TABLE_GRAPHIC_TEAM_ROW_ID;
       const player = row.playerId ? rosterById.get(row.playerId) : null;
@@ -87,6 +136,10 @@ export function getTableGraphicExportRows(draft, roster = []) {
       };
     })
     .filter((row) => row.isTeam || row.label);
+  return rows.map((row, rowIndex) => ({
+    ...row,
+    values: row.values.map((cell, valueIndex) => resolveTableGraphicCellValue(cell, rows, rowIndex, valueIndex)),
+  }));
 }
 
 export function getTableGraphicExportColumns(draft) {
@@ -104,7 +157,7 @@ export function addTableGraphicColumn(draft) {
     ],
     rows: normalized.rows.map((row) => ({
       ...row,
-      values: [...row.values, ""],
+      values: [...row.values, createCell()],
     })),
   };
 }
@@ -131,14 +184,14 @@ export function addTableGraphicRow(draft) {
     id: TABLE_GRAPHIC_TEAM_ROW_ID,
     playerId: "",
     label: "TEAM",
-    values: Array.from({ length: valueCount }, () => ""),
+    values: Array.from({ length: valueCount }, () => createCell()),
   };
   return {
     title: normalized.title,
     columns: normalized.columns,
     rows: [
       ...playerRows,
-      { id: createId("row", playerRows.length), playerId: "", label: "", values: Array.from({ length: valueCount }, () => "") },
+      { id: createId("row", playerRows.length), playerId: "", label: "", values: Array.from({ length: valueCount }, () => createCell()) },
       { ...teamRow, id: TABLE_GRAPHIC_TEAM_ROW_ID, playerId: "", label: "TEAM" },
     ],
   };

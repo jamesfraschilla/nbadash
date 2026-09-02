@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   TABLE_GRAPHIC_DEFAULT_COLUMNS,
   TABLE_GRAPHIC_DEFAULT_ROWS,
+  TABLE_GRAPHIC_CELL_MODES,
   addTableGraphicColumn,
   addTableGraphicRow,
   createTableGraphicDraft,
@@ -31,19 +32,41 @@ test("table graphic normalization preserves editable spaces in title and headers
   const draft = createTableGraphicDraft();
   draft.title = "Paint ";
   draft.columns[1].header = "2 Min ";
-  draft.rows[0].values[0] = "10 ";
+  draft.rows[0].values[0] = { mode: TABLE_GRAPHIC_CELL_MODES.MANUAL, value: "10 " };
   const normalized = normalizeTableGraphicDraft(draft);
   assert.equal(normalized.title, "Paint ");
   assert.equal(normalized.columns[1].header, "2 Min ");
-  assert.equal(normalized.rows[0].values[0], "10 ");
+  assert.deepEqual(normalized.rows[0].values[0], { mode: TABLE_GRAPHIC_CELL_MODES.MANUAL, value: "10 " });
 });
 
 test("table graphic export drops blank player rows and keeps the team row", () => {
   const draft = createTableGraphicDraft();
   draft.rows[0].playerId = "1";
-  draft.rows[0].values[0] = "12";
+  draft.rows[0].values[0] = { mode: TABLE_GRAPHIC_CELL_MODES.MANUAL, value: "12" };
   const rows = getTableGraphicExportRows(draft, [{ personId: "1", fullName: "Alex Sarr" }]);
   assert.deepEqual(rows.map((row) => row.label), ["Alex Sarr", "TEAM"]);
+});
+
+test("table graphic formula cells calculate from visible numeric player rows only", () => {
+  const draft = createTableGraphicDraft({ rowCount: 5, columnCount: 2 });
+  draft.rows[0].playerId = "1";
+  draft.rows[0].values[0] = { mode: TABLE_GRAPHIC_CELL_MODES.MANUAL, value: "10" };
+  draft.rows[1].values[0] = { mode: TABLE_GRAPHIC_CELL_MODES.MANUAL, value: "99" };
+  draft.rows[2].playerId = "2";
+  draft.rows[2].values[0] = { mode: TABLE_GRAPHIC_CELL_MODES.MANUAL, value: "5" };
+  draft.rows[4].values[0] = { mode: TABLE_GRAPHIC_CELL_MODES.SUM, value: "" };
+  const rows = getTableGraphicExportRows(draft, [
+    { personId: "1", fullName: "Alex Sarr" },
+    { personId: "2", fullName: "Bilal Coulibaly" },
+  ]);
+  assert.deepEqual(rows.map((row) => row.values[0]), ["10", "5", "15"]);
+
+  draft.rows[4].values[0] = { mode: TABLE_GRAPHIC_CELL_MODES.AVERAGE, value: "" };
+  const averageRows = getTableGraphicExportRows(draft, [
+    { personId: "1", fullName: "Alex Sarr" },
+    { personId: "2", fullName: "Bilal Coulibaly" },
+  ]);
+  assert.deepEqual(averageRows.map((row) => row.values[0]), ["10", "5", "7.5"]);
 });
 
 test("table graphic row and column controls preserve rectangular data", () => {
