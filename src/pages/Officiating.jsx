@@ -274,15 +274,6 @@ function itemValue(items, labels = []) {
   }, 0);
 }
 
-function itemRank(items, labels = []) {
-  return labels.reduce((bestRank, label) => {
-    const raw = items?.[label];
-    const rank = typeof raw === "object" && raw !== null ? Number(raw.rank) || null : null;
-    if (!rank) return bestRank;
-    return bestRank ? Math.min(bestRank, rank) : rank;
-  }, null);
-}
-
 function metricRankFromPeers(currentValue, peers = [], labels = []) {
   const value = Number(currentValue) || 0;
   if (value <= 0) return null;
@@ -295,10 +286,8 @@ function metricRankFromPeers(currentValue, peers = [], labels = []) {
   return firstMatch >= 0 ? firstMatch + 1 : null;
 }
 
-function categoryRankFromPeers(value, peers = [], labels = [], items = []) {
-  const peerRank = metricRankFromPeers(value, peers, labels);
-  if (peerRank || peers.length) return peerRank;
-  return itemRank(items, labels);
+function categoryRankFromPeers(value, peers = [], labels = []) {
+  return metricRankFromPeers(value, peers, labels);
 }
 
 function uniqueLabelValue(items, groups) {
@@ -328,7 +317,7 @@ function categoryMetric(items, labels, peers = []) {
   const value = itemValue(items, labels);
   return {
     value,
-    rank: categoryRankFromPeers(value, peers, labels, items),
+    rank: categoryRankFromPeers(value, peers, labels),
   };
 }
 
@@ -341,13 +330,13 @@ function CategoryColumn({ group, items, peers, sort, onSort, expanded, onToggle,
         return {
           ...type,
           value,
-          rank: categoryRankFromPeers(value, peers, type.labels, items),
+          rank: categoryRankFromPeers(value, peers, type.labels),
           subTypes: (type.subTypes || []).map((subType) => {
             const subTypeValue = itemValue(items, subType.labels);
             return {
               ...subType,
               value: subTypeValue,
-              rank: categoryRankFromPeers(subTypeValue, peers, subType.labels, items),
+              rank: categoryRankFromPeers(subTypeValue, peers, subType.labels),
             };
           }).filter((subType) => subType.value > 0),
         };
@@ -366,7 +355,7 @@ function CategoryColumn({ group, items, peers, sort, onSort, expanded, onToggle,
   }, [group, items, peers, sort]);
   const total = uniqueLabelValue(items, group.types);
   const totalLabels = [...new Set(group.types.flatMap((type) => type.labels || []))];
-  const totalRank = categoryRankFromPeers(total, peers, totalLabels, items);
+  const totalRank = categoryRankFromPeers(total, peers, totalLabels);
 
   return (
     <section className={styles.categoryColumn}>
