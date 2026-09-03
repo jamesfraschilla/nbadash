@@ -1,5 +1,5 @@
 import { supabase } from "./supabaseClient.js";
-import { isCountedTechnicalEvent, normalizeOfficialCallCategory } from "./officiatingCategoryNormalization.js";
+import { CALL_CATEGORY_GROUPS, isCountedTechnicalEvent, normalizeOfficialCallCategory } from "./officiatingCategoryNormalization.js";
 
 const DEFAULT_SEASON = "2025-26";
 const CUMULATIVE_SEASON = "2024-Present";
@@ -13,7 +13,7 @@ const PROFILE_DETAIL_LIMIT = 10000;
 const CONTEXT_TAG_PAGE_SIZE = 100;
 const EXCLUDED_STAT_SEASON_TYPES = new Set(["preseason"]);
 const CONTEXT_TAG_COLUMNS = "id,label";
-const PROFILE_ROLLUP_COLUMNS = "season,id,official_id,name,official_name,jersey_number,games,calls,calls_per_game,fouls,fouls_per_game,violations,violations_per_game,technicals,challenges,successful_challenges,whistle_challenges,successful_whistle_challenges,whistle_challenge_rate,crew_chief_challenges,successful_crew_chief_challenges,crew_chief_challenge_rate,crew_challenges,successful_crew_challenges,crew_challenge_rate";
+const PROFILE_ROLLUP_COLUMNS = "season,id,official_id,name,jersey_number,games,calls,calls_per_game,fouls,fouls_per_game,violations,violations_per_game,technicals,challenges,successful_challenges,whistle_challenges,successful_whistle_challenges,whistle_challenge_rate,crew_chief_challenges,successful_crew_chief_challenges,crew_chief_challenge_rate,crew_challenges,successful_crew_challenges,crew_challenge_rate";
 const TEAM_ROLLUP_COLUMNS = "season,team,team_id,games,calls_against,calls_for,net_calls_for,challenges,successful_challenges,challenge_rate";
 const OVERVIEW_ROLLUP_COLUMNS = "season,call_events,challenges,successful_challenges,challenge_rate,officials,teams";
 const TEAM_OFFICIAL_NET_COLUMNS = "season,team,official_key,official_id,official_name,net_calls_for,net_calls_for_per_game,games";
@@ -164,15 +164,173 @@ function aggregateCategoryRollupsToMap(rows, denominator) {
   const totals = new Map();
   asArray(rows).forEach((row) => {
     const category = String(row.category || "Unknown").trim();
-    totals.set(category, (totals.get(category) || 0) + (Number(row.calls) || 0));
+    if (!totals.has(category)) totals.set(category, { calls: 0, rank: null });
+    const total = totals.get(category);
+    total.calls += Number(row.calls) || 0;
+    const rank = Number(row.category_rank) || null;
+    if (rank) total.rank = total.rank ? Math.min(total.rank, rank) : rank;
   });
-  return Object.fromEntries([...totals.entries()].map(([category, calls]) => [
+  return Object.fromEntries([...totals.entries()].map(([category, total]) => [
     category,
     {
-      value: safeRate(calls, denominator),
-      rank: null,
+      value: safeRate(total.calls, denominator),
+      rank: total.rank,
     },
   ]));
+}
+
+function officialRollupKey(row) {
+  return String(row.official_id || row.id || row.name || row.official_name || "Unknown").trim();
+}
+
+function officialCategoryRollupKey(row) {
+  return String(row.official_id || row.official_name || "Unknown").trim();
+}
+
+function categoryRankGroupKey(labels = []) {
+  return [...new Set(labels.map((label) => String(label || "").trim()).filter(Boolean))]
+    .sort((left, right) => left.localeCompare(right))
+    .join("|");
+}
+
+function displayCategoryRankDefinitions() {
+  const definitions = new Map();
+  const addDefinition = (labels = []) => {
+    const normalizedLabels = [...new Set(labels.map((label) => String(label || "").trim()).filter(Boolean))];
+    const key = categoryRankGroupKey(normalizedLabels);
+    if (key && normalizedLabels.length > 1) definitions.set(key, normalizedLabels);
+  };
+  CALL_CATEGORY_GROUPS.forEach((group) => {
+    group.types.forEach((type) => {
+      addDefinition(type.labels);
+      (type.subTypes || []).forEach((subType) => addDefinition(subType.labels));
+    });
+  });
+  return [...definitions.entries()].map(([key, labels]) => ({ key, labels }));
+}
+
+function attachDisplayCategoryRanks(categoryMapsByEntity) {
+  const definitions = displayCategoryRankDefinitions();
+  if (!definitions.length) return categoryMapsByEntity;
+  definitions.forEach((definition) => {
+    [...categoryMapsByEntity.entries()]
+      .map(([entityKey, categoryMap]) => ({
+        entityKey,
+        value: definition.labels.reduce((total, label) => total + (Number(categoryMap?.[label]?.value) || 0), 0),
+      }))
+      .filter((row) => row.value > 0)
+      .sort((left, right) => right.value - left.value || String(left.entityKey).localeCompare(String(right.entityKey)))
+      .forEach((row, index) => {
+        const categoryMap = categoryMapsByEntity.get(row.entityKey);
+        if (!categoryMap) return;
+        if (!categoryMap.__displayRanks) {
+          categoryMap.__displayRanks = {};
+        }
+        categoryMap.__displayRanks[definition.key] = index + 1;
+      });
+  });
+  return categoryMapsByEntity;
+}
+
+function aggregateOfficialCategoryRollups(rows, profileRows) {
+  const gamesByKey = new Map();
+  asArray(profileRows).forEach((row) => {
+    const games = Number(row.games) || 0;
+    [
+      row.official_id,
+      row.id,
+      row.name,
+      row.official_name,
+    ].map((value) => String(value || "").trim()).filter(Boolean).forEach((key) => {
+      gamesByKey.set(key.toLowerCase(), games);
+    });
+  });
+
+  const totals = new Map();
+  asArray(rows).forEach((row) => {
+    const officialKey = officialCategoryRollupKey(row);
+    const category = String(row.category || "Unknown").trim();
+    if (!officialKey || !category) return;
+    const key = `${officialKey.toLowerCase()}|${category}`;
+    if (!totals.has(key)) {
+      totals.set(key, {
+        officialKey,
+        category,
+        calls: 0,
+        games: gamesByKey.get(officialKey.toLowerCase()) || 0,
+      });
+    }
+    totals.get(key).calls += Number(row.calls) || 0;
+  });
+
+  const byOfficial = new Map();
+  [...totals.values()].forEach((row) => {
+    row.value = safeRate(row.calls, row.games);
+    const officialKey = row.officialKey.toLowerCase();
+    if (!byOfficial.has(officialKey)) byOfficial.set(officialKey, {});
+    byOfficial.get(officialKey)[row.category] = { value: row.value, rank: null };
+  });
+
+  const categories = new Set([...totals.values()].map((row) => row.category));
+  categories.forEach((category) => {
+    [...totals.values()]
+      .filter((row) => row.category === category)
+      .sort((left, right) => right.value - left.value)
+      .forEach((row, index) => {
+        const map = byOfficial.get(row.officialKey.toLowerCase());
+        if (map?.[category]) map[category].rank = index + 1;
+      });
+  });
+  return attachDisplayCategoryRanks(byOfficial);
+}
+
+function teamCategoryRollupsToMaps(rows, teamRows) {
+  const gamesByTeam = new Map();
+  asArray(teamRows).forEach((row) => {
+    const team = String(row.team || "").trim();
+    if (team) gamesByTeam.set(team.toLowerCase(), Number(row.games) || 0);
+  });
+
+  const totals = new Map();
+  asArray(rows).forEach((row) => {
+    const team = String(row.team || "").trim();
+    const category = String(row.category || "Unknown").trim();
+    if (!team || !category) return;
+    const key = `${team.toLowerCase()}|${category}`;
+    if (!totals.has(key)) {
+      totals.set(key, {
+        team,
+        category,
+        calls: 0,
+        games: gamesByTeam.get(team.toLowerCase()) || 0,
+      });
+    }
+    totals.get(key).calls += Number(row.calls) || 0;
+  });
+
+  const byTeam = new Map();
+  [...totals.values()].forEach((row) => {
+    row.value = safeRate(row.calls, row.games);
+    const teamKey = row.team.toLowerCase();
+    if (!byTeam.has(teamKey)) byTeam.set(teamKey, {});
+    byTeam.get(teamKey)[row.category] = { value: row.value, rank: null };
+  });
+
+  const categories = new Set([...totals.values()].map((row) => row.category));
+  categories.forEach((category) => {
+    [...totals.values()]
+      .filter((row) => row.category === category)
+      .sort((left, right) => right.value - left.value)
+      .forEach((row, index) => {
+        const map = byTeam.get(row.team.toLowerCase());
+        if (map?.[category]) map[category].rank = index + 1;
+      });
+  });
+  return attachDisplayCategoryRanks(byTeam);
+}
+
+function hasCategoryMapRows(map) {
+  return Object.keys(map || {}).length > 0;
 }
 
 function categoriesPerGameFromTotals(categoryTotals, games, existingCategories = {}) {
@@ -184,6 +342,22 @@ function categoriesPerGameFromTotals(categoryTotals, games, existingCategories =
       rank: existingCategories?.[category]?.rank || null,
     },
   ]));
+}
+
+function mergeCategoryValuesWithRanks(valueMap = {}, rankMap = {}) {
+  const merged = {};
+  const keys = new Set([
+    ...Object.keys(valueMap || {}),
+    ...Object.keys(rankMap || {}),
+  ]);
+  keys.forEach((key) => {
+    const valueRow = valueMap?.[key];
+    const rankRow = rankMap?.[key];
+    const value = typeof valueRow === "object" && valueRow !== null ? Number(valueRow.value) || 0 : Number(valueRow) || 0;
+    const rank = typeof rankRow === "object" && rankRow !== null ? Number(rankRow.rank) || null : null;
+    merged[key] = { value, rank };
+  });
+  return merged;
 }
 
 function withContextTagFields(row, tags = []) {
@@ -401,7 +575,7 @@ function toTeamProfileFromRollup(row) {
 function aggregateOfficialRollups(rows) {
   const byOfficial = new Map();
   asArray(rows).forEach((row) => {
-    const key = String(row.id || row.official_id || row.name || row.official_name || "Unknown").trim();
+    const key = officialRollupKey(row);
     if (!key) return;
     if (!byOfficial.has(key)) {
       byOfficial.set(key, {
@@ -722,6 +896,8 @@ export function buildOfficialProfiles(callEvents, challengeEvents, assignments) 
   return addCategoryRanks(addRanks(rows, [
     ["callsRank", "calls"],
     ["callsPerGameRank", "callsPerGame"],
+    ["foulsPerGameRank", "foulsPerGame"],
+    ["violationsPerGameRank", "violationsPerGame"],
     ["challengeRateRank", "challengeRate"],
     ["whistleChallengeRateRank", "whistleChallengeRate"],
     ["crewChiefChallengeRateRank", "crewChiefChallengeRate"],
@@ -868,6 +1044,17 @@ export async function fetchOfficialProfileDetails({ season = DEFAULT_SEASON, pro
     }
     return next.order("game_date", { ascending: false });
   };
+  const callEventQuery = (query) => {
+    let next = applySeasonFilter(query.select(CALL_EVENT_COLUMNS), season).not("season_type", "ilike", "Preseason");
+    if (officialId && officialName) {
+      next = next.or(`official_id.eq.${officialId},official_name.eq.${officialName}`);
+    } else if (officialId) {
+      next = next.eq("official_id", officialId);
+    } else {
+      next = next.eq("official_name", officialName);
+    }
+    return next.order("game_date", { ascending: false });
+  };
   const categoryQuery = (query) => {
     let next = applySeasonFilter(query.select(CATEGORY_ROLLUP_COLUMNS), season);
     if (officialId && officialName) {
@@ -880,14 +1067,19 @@ export async function fetchOfficialProfileDetails({ season = DEFAULT_SEASON, pro
     return next.order("calls_per_game", { ascending: false });
   };
   const profileQuery = (query) => applySeasonFilter(query.select(PROFILE_ROLLUP_COLUMNS), season);
-  const [profileResult, teamNetResult, challengeEventsResult, assignmentsResult, categoryRollupsResult] = await Promise.all([
+  const categoryPopulationQuery = (query) => applySeasonFilter(query.select(CATEGORY_ROLLUP_COLUMNS), season);
+  const [profileResult, teamNetResult, challengeEventsResult, assignmentsResult, callEventsResult, categoryRollupsResult, categoryPopulationResult] = await Promise.all([
     selectPreferredTable("nba_official_profiles_cache", "nba_official_profiles", profileQuery, { maxRows: PROFILE_LIMIT })
       .catch(() => ({ data: [], unavailable: true })),
     selectPreferredTable("nba_team_official_net_call_rollups_cache", "nba_team_official_net_call_rollups", teamNetQuery, { maxRows: 100 })
       .catch(() => ({ data: [], unavailable: true })),
     selectPreferredTable("nba_authoritative_coach_challenge_events_cache", "nba_authoritative_coach_challenge_events", challengeQuery, { maxRows: PROFILE_DETAIL_LIMIT }),
     selectTable("nba_official_game_assignments", assignmentQuery, { maxRows: PROFILE_DETAIL_LIMIT }),
+    selectTable("nba_official_call_events", callEventQuery, { maxRows: PROFILE_DETAIL_LIMIT })
+      .catch(() => ({ data: [], unavailable: true })),
     selectPreferredTable("nba_official_call_category_rollups_cache", "nba_official_call_category_rollups", categoryQuery, { maxRows: 200 })
+      .catch(() => ({ data: [], unavailable: true })),
+    selectPreferredTable("nba_official_call_category_rollups_cache", "nba_official_call_category_rollups", categoryPopulationQuery, { maxRows: PROFILE_DETAIL_LIMIT })
       .catch(() => ({ data: [], unavailable: true })),
   ]);
 
@@ -896,9 +1088,14 @@ export async function fetchOfficialProfileDetails({ season = DEFAULT_SEASON, pro
   const baseProfileRows = profileResult.unavailable
     ? []
     : (cumulative ? aggregateOfficialRollups(profileResult.data) : profileResult.data);
+  const categoryPopulation = !categoryPopulationResult.unavailable && categoryPopulationResult.data?.length
+    ? aggregateOfficialCategoryRollups(categoryPopulationResult.data, baseProfileRows)
+    : new Map();
   const rankedBaseProfiles = addRanks(baseProfileRows.map(toOfficialProfileFromRollup), [
     ["callsRank", "calls"],
     ["callsPerGameRank", "callsPerGame"],
+    ["foulsPerGameRank", "foulsPerGame"],
+    ["violationsPerGameRank", "violationsPerGame"],
     ["challengeRateRank", "challengeRate"],
     ["whistleChallengeRateRank", "whistleChallengeRate"],
     ["crewChiefChallengeRateRank", "crewChiefChallengeRate"],
@@ -910,19 +1107,25 @@ export async function fetchOfficialProfileDetails({ season = DEFAULT_SEASON, pro
   )) || profile;
   const detail = applyOfficialProfileDetails(
     baseProfile,
-    [],
+    callEventsResult.unavailable ? [] : callEventsResult.data,
     challengeRowsWithTags,
     assignmentsResult.data,
     []
   );
+  const populationCategoryMap = categoryPopulation.get(String(baseProfile.officialId || baseProfile.id || "").trim().toLowerCase())
+    || categoryPopulation.get(String(baseProfile.name || "").trim().toLowerCase())
+    || {};
+  const fallbackCategoryMap = categoryRollupsResult.unavailable || !categoryRollupsResult.data?.length
+    ? (hasCategoryMapRows(detail.callsByCategory) ? detail.callsByCategory : profile.callsByCategory)
+    : cumulative ? aggregateCategoryRollupsToMap(categoryRollupsResult.data, detail.games) : categoryRollupsToMap(categoryRollupsResult.data);
   return {
     ...detail,
     callsByTeam: teamNetResult.unavailable
       ? detail.callsByTeam
       : cumulative ? aggregateOfficialTeamNetRollupsToTeamMap(teamNetResult.data) : officialTeamNetRollupsToTeamMap(teamNetResult.data),
-    callsByCategory: categoryRollupsResult.unavailable
-      ? detail.callsByCategory
-      : cumulative ? aggregateCategoryRollupsToMap(categoryRollupsResult.data, detail.games) : categoryRollupsToMap(categoryRollupsResult.data),
+    callsByCategory: hasCategoryMapRows(populationCategoryMap)
+      ? populationCategoryMap
+      : fallbackCategoryMap,
   };
 }
 
@@ -933,12 +1136,17 @@ export async function fetchTeamProfileDetails({ season = DEFAULT_SEASON, profile
   const categoryRollupQuery = (query) => applySeasonFilter(query.select(CATEGORY_ROLLUP_COLUMNS), season)
     .eq("team", team)
     .order("calls_per_game", { ascending: false });
+  const categoryPopulationQuery = (query) => applySeasonFilter(query.select(CATEGORY_ROLLUP_COLUMNS), season);
   const teamOfficialQuery = (query) => applySeasonFilter(query.select(TEAM_OFFICIAL_NET_COLUMNS), season)
     .eq("team", team)
     .order("net_calls_for_per_game", { ascending: false });
+  const callEventQuery = (query) => applySeasonFilter(query.select(CALL_EVENT_COLUMNS), season)
+    .not("season_type", "ilike", "Preseason")
+    .or(`charged_team.eq.${team},benefiting_team.eq.${team}`)
+    .order("game_date", { ascending: false });
   const profileQuery = (query) => applySeasonFilter(query.select(TEAM_ROLLUP_COLUMNS), season);
-  const [profileResult, teamOfficialResult, challengeEventsResult, categoryRollupsResult] = await Promise.all([
-    selectPreferredTable("nba_team_profiles_cache", "nba_team_profiles", profileQuery, { maxRows: 10 })
+  const [profileResult, teamOfficialResult, challengeEventsResult, callEventsResult, categoryRollupsResult, categoryPopulationResult] = await Promise.all([
+    selectPreferredTable("nba_team_profiles_cache", "nba_team_profiles", profileQuery, { maxRows: PROFILE_LIMIT })
       .catch(() => ({ data: [], unavailable: true })),
     selectPreferredTable("nba_team_official_net_call_rollups_cache", "nba_team_official_net_call_rollups", teamOfficialQuery, { maxRows: PROFILE_DETAIL_LIMIT })
       .catch(() => ({ data: [], unavailable: true })),
@@ -948,7 +1156,11 @@ export async function fetchTeamProfileDetails({ season = DEFAULT_SEASON, profile
       .not("season_type", "ilike", "Preseason")
       .eq("challenging_team", team)
       .order("game_date", { ascending: false }), { maxRows: PROFILE_DETAIL_LIMIT }),
+    selectTable("nba_official_call_events", callEventQuery, { maxRows: PROFILE_DETAIL_LIMIT })
+      .catch(() => ({ data: [], unavailable: true })),
     selectPreferredTable("nba_team_call_category_rollups_cache", "nba_team_call_category_rollups", categoryRollupQuery, { maxRows: 200 })
+      .catch(() => ({ data: [], unavailable: true })),
+    selectPreferredTable("nba_team_call_category_rollups_cache", "nba_team_call_category_rollups", categoryPopulationQuery, { maxRows: PROFILE_DETAIL_LIMIT })
       .catch(() => ({ data: [], unavailable: true })),
   ]);
 
@@ -957,6 +1169,9 @@ export async function fetchTeamProfileDetails({ season = DEFAULT_SEASON, profile
   const baseProfileRows = profileResult.unavailable
     ? []
     : (cumulative ? aggregateTeamRollups(profileResult.data) : profileResult.data);
+  const categoryPopulation = !categoryPopulationResult.unavailable && categoryPopulationResult.data?.length
+    ? teamCategoryRollupsToMaps(categoryPopulationResult.data, baseProfileRows)
+    : new Map();
   const rankedBaseProfiles = addRanks(baseProfileRows.map(toTeamProfileFromRollup), [
     ["netCallsForRank", "netCallsFor"],
     ["challengeRateRank", "challengeRate"],
@@ -965,14 +1180,21 @@ export async function fetchTeamProfileDetails({ season = DEFAULT_SEASON, profile
   const baseProfile = rankedBaseProfiles.find((row) => (
     String(row.team || "").trim().toLowerCase() === team.toLowerCase()
   )) || profile;
+  const detailProfile = callEventsResult.unavailable
+    ? baseProfile
+    : applyTeamProfileDetails(baseProfile, callEventsResult.data, [], []);
+  const populationCategoryMap = categoryPopulation.get(team.toLowerCase()) || {};
+  const fallbackCategoryMap = categoryRollupsResult.unavailable || !categoryRollupsResult.data?.length
+    ? (hasCategoryMapRows(baseProfile.callsByCategory) ? baseProfile.callsByCategory : profile.callsByCategory)
+    : cumulative ? aggregateCategoryRollupsToMap(categoryRollupsResult.data, baseProfile.games) : categoryRollupsToMap(categoryRollupsResult.data);
   return {
-    ...baseProfile,
+    ...detailProfile,
     callsByOfficial: teamOfficialResult.unavailable
       ? baseProfile.callsByOfficial
       : cumulative ? aggregateTeamOfficialNetRollupsToOfficialMap(teamOfficialResult.data) : teamOfficialNetRollupsToOfficialMap(teamOfficialResult.data),
-    callsByCategory: categoryRollupsResult.unavailable
-      ? baseProfile.callsByCategory
-      : cumulative ? aggregateCategoryRollupsToMap(categoryRollupsResult.data, baseProfile.games) : categoryRollupsToMap(categoryRollupsResult.data),
+    callsByCategory: hasCategoryMapRows(populationCategoryMap)
+      ? populationCategoryMap
+      : fallbackCategoryMap,
     challengeLog,
   };
 }
@@ -1001,6 +1223,8 @@ export async function fetchOfficiatingDashboardData({ season = DEFAULT_SEASON, i
     overviewResult,
     officialRollupsResult,
     teamRollupsResult,
+    officialCategoryRollupsResult,
+    teamCategoryRollupsResult,
   ] = await Promise.all([
     selectPreferredTable("nba_officiating_overview_rollups_cache", "nba_officiating_overview_rollups", (query) => applySeasonFilter(query
       .select(OVERVIEW_ROLLUP_COLUMNS), season), { maxRows: 5 }),
@@ -1008,6 +1232,12 @@ export async function fetchOfficiatingDashboardData({ season = DEFAULT_SEASON, i
       .select(PROFILE_ROLLUP_COLUMNS), season), { maxRows: PROFILE_LIMIT }),
     selectPreferredTable("nba_team_profiles_cache", "nba_team_profiles", (query) => applySeasonFilter(query
       .select(TEAM_ROLLUP_COLUMNS), season), { maxRows: PROFILE_LIMIT }),
+    selectPreferredTable("nba_official_call_category_rollups_cache", "nba_official_call_category_rollups", (query) => applySeasonFilter(query
+      .select(CATEGORY_ROLLUP_COLUMNS), season), { maxRows: PROFILE_DETAIL_LIMIT })
+      .catch(() => ({ data: [], unavailable: true })),
+    selectPreferredTable("nba_team_call_category_rollups_cache", "nba_team_call_category_rollups", (query) => applySeasonFilter(query
+      .select(CATEGORY_ROLLUP_COLUMNS), season), { maxRows: PROFILE_DETAIL_LIMIT })
+      .catch(() => ({ data: [], unavailable: true })),
   ]);
 
   const hasProfileRollups = !officialRollupsResult.unavailable && !teamRollupsResult.unavailable;
@@ -1046,23 +1276,39 @@ export async function fetchOfficiatingDashboardData({ season = DEFAULT_SEASON, i
 
   const officialRollupRows = cumulative ? aggregateOfficialRollups(officialRollupsResult.data) : officialRollupsResult.data;
   const teamRollupRows = cumulative ? aggregateTeamRollups(teamRollupsResult.data) : teamRollupsResult.data;
+  const officialCategoryPopulation = !officialCategoryRollupsResult.unavailable && officialCategoryRollupsResult.data?.length
+    ? aggregateOfficialCategoryRollups(officialCategoryRollupsResult.data, officialRollupRows)
+    : new Map();
+  const teamCategoryPopulation = !teamCategoryRollupsResult.unavailable && teamCategoryRollupsResult.data?.length
+    ? teamCategoryRollupsToMaps(teamCategoryRollupsResult.data, teamRollupRows)
+    : new Map();
   const rollupOfficialProfiles = officialRollupsResult.unavailable
     ? []
     : addRanks(officialRollupRows.map(toOfficialProfileFromRollup), [
       ["callsRank", "calls"],
       ["callsPerGameRank", "callsPerGame"],
+      ["foulsPerGameRank", "foulsPerGame"],
+      ["violationsPerGameRank", "violationsPerGame"],
       ["challengeRateRank", "challengeRate"],
       ["whistleChallengeRateRank", "whistleChallengeRate"],
       ["crewChiefChallengeRateRank", "crewChiefChallengeRate"],
       ["crewChallengeRateRank", "crewChallengeRate"],
-    ]).sort((a, b) => b.calls - a.calls || b.challenges - a.challenges || a.name.localeCompare(b.name));
+    ]).map((profile) => ({
+      ...profile,
+      callsByCategory: officialCategoryPopulation.get(String(profile.officialId || profile.id || "").trim().toLowerCase())
+        || officialCategoryPopulation.get(String(profile.name || "").trim().toLowerCase())
+        || profile.callsByCategory,
+    })).sort((a, b) => b.calls - a.calls || b.challenges - a.challenges || a.name.localeCompare(b.name));
   const rollupTeamProfiles = teamRollupsResult.unavailable
     ? []
     : addRanks(teamRollupRows.map(toTeamProfileFromRollup), [
       ["netCallsForRank", "netCallsFor"],
       ["challengeRateRank", "challengeRate"],
       ["challengesRank", "challenges"],
-    ]).sort((a, b) => b.challenges - a.challenges || b.netCallsFor - a.netCallsFor || a.team.localeCompare(b.team));
+    ]).map((profile) => ({
+      ...profile,
+      callsByCategory: teamCategoryPopulation.get(String(profile.team || "").trim().toLowerCase()) || profile.callsByCategory,
+    })).sort((a, b) => b.challenges - a.challenges || b.netCallsFor - a.netCallsFor || a.team.localeCompare(b.team));
   const overviewRow = cumulative ? aggregateOverviewRollups(overviewResult.data, officialRollupRows, teamRollupRows) : overviewResult.data[0];
   const overview = overviewResult.unavailable || !overviewRow
     ? buildOverview(callEvents, challengeEvents, assignments)

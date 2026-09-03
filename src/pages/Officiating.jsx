@@ -34,6 +34,11 @@ const DEFAULT_SEASON = "2025-26";
 const CUMULATIVE_SEASON = "2024-Present";
 const SEASON_OPTIONS = [CUMULATIVE_SEASON, "2024-25", "2025-26", "2026-27"];
 const SEASON_2026_27_START = new Date("2026-10-03T00:00:00-04:00");
+const TONIGHT_REPORT_CREW = [
+  { name: "Tyler Ford", role: "Crew Chief" },
+  { name: "Kevin Scott", role: "Referee" },
+  { name: "Karl Lane", role: "Umpire" },
+];
 
 function currentOfficiatingSeasonDefault() {
   return new Date() >= SEASON_2026_27_START ? "2026-27" : DEFAULT_SEASON;
@@ -174,6 +179,7 @@ function ProfileMetric({ label, value, detail, style }) {
 
 function getTopListEntries(items) {
   return Object.entries(items || {})
+    .filter(([label]) => !String(label || "").startsWith("__"))
     .map(([label, raw]) => {
       const value = typeof raw === "object" && raw !== null ? Number(raw.value) || 0 : Number(raw) || 0;
       const rank = typeof raw === "object" && raw !== null ? raw.rank : null;
@@ -192,6 +198,7 @@ function SortableTopList({
   defaultOpen = false,
   open,
   onOpenChange,
+  isLoading = false,
 }) {
   const [sort, setSort] = useState({ key: "value", direction: "desc" });
   const entries = useMemo(() => {
@@ -213,16 +220,19 @@ function SortableTopList({
       direction: current.key === key && current.direction === "desc" ? "asc" : "desc",
     }));
   };
-  if (!entries.length) return null;
   const detailProps = {
     className: styles.detailBlock,
     onToggle: onOpenChange ? (event) => onOpenChange(event.currentTarget.open) : undefined,
   };
   if (open === undefined) detailProps.open = defaultOpen;
   else detailProps.open = open;
+  if (!entries.length && !isLoading) return null;
   return (
     <details {...detailProps}>
       <summary>{title}</summary>
+      {isLoading ? (
+        <p className={styles.detailEmpty}>Loading profile details...</p>
+      ) : (
       <div className={styles.profileListScroll}>
         <table className={styles.profileListTable}>
           <thead>
@@ -251,6 +261,7 @@ function SortableTopList({
           </tbody>
         </table>
       </div>
+      )}
     </details>
   );
 }
@@ -272,30 +283,69 @@ function itemRank(items, labels = []) {
   }, null);
 }
 
+function metricRankFromPeers(currentValue, peers = [], labels = []) {
+  const value = Number(currentValue) || 0;
+  if (value <= 0) return null;
+  const rankedValues = peers
+    .map((peer) => itemValue(peer?.callsByCategory, labels))
+    .filter((peerValue) => Number(peerValue) > 0)
+    .sort((left, right) => right - left);
+  if (!rankedValues.length) return null;
+  const firstMatch = rankedValues.findIndex((peerValue) => peerValue <= value + 0.0000001);
+  return firstMatch >= 0 ? firstMatch + 1 : null;
+}
+
 function uniqueLabelValue(items, groups) {
   const labels = new Set();
   groups.forEach((group) => group.labels.forEach((label) => labels.add(label)));
   return itemValue(items, [...labels]);
 }
 
-function formatCategoryMetric(value, rank) {
-  return `${formatNumber(value, 2)}${rank ? ` (${ordinal(rank)})` : ""}`;
+function percentileFromRank(rank, populationSize) {
+  const numericRank = Number(rank) || 0;
+  const total = Number(populationSize) || 0;
+  if (!numericRank || total <= 1) return null;
+  return Math.max(1, Math.min(100, Math.round(((total - numericRank) / (total - 1)) * 99 + 1)));
 }
 
-function CategoryColumn({ group, items, sort, onSort, expanded, onToggle }) {
+function formatPercentile(rank, populationSize) {
+  const percentile = percentileFromRank(rank, populationSize);
+  return percentile ? `${ordinal(percentile)} percentile` : "Percentile --";
+}
+
+function formatCategoryMetric(value, rank, populationSize) {
+  const percentile = percentileFromRank(rank, populationSize);
+  return `${formatNumber(value, 2)}${percentile ? ` (${percentile}%)` : ""}`;
+}
+
+function categoryMetric(items, labels, peers = []) {
+  const value = itemValue(items, labels);
+  return {
+    value,
+    rank: metricRankFromPeers(value, peers, labels) || itemRank(items, labels),
+  };
+}
+
+function CategoryColumn({ group, items, peers, sort, onSort, expanded, onToggle, populationSize }) {
   const rows = useMemo(() => {
     const direction = sort.direction === "asc" ? 1 : -1;
     return group.types
-      .map((type) => ({
-        ...type,
-        value: itemValue(items, type.labels),
-        rank: itemRank(items, type.labels),
-        subTypes: (type.subTypes || []).map((subType) => ({
-          ...subType,
-          value: itemValue(items, subType.labels),
-          rank: itemRank(items, subType.labels),
-        })).filter((subType) => subType.value > 0),
-      }))
+      .map((type) => {
+        const value = itemValue(items, type.labels);
+        return {
+          ...type,
+          value,
+          rank: metricRankFromPeers(value, peers, type.labels) || itemRank(items, type.labels),
+          subTypes: (type.subTypes || []).map((subType) => {
+            const subTypeValue = itemValue(items, subType.labels);
+            return {
+              ...subType,
+              value: subTypeValue,
+              rank: metricRankFromPeers(subTypeValue, peers, subType.labels) || itemRank(items, subType.labels),
+            };
+          }).filter((subType) => subType.value > 0),
+        };
+      })
       .filter((type) => type.value > 0)
       .sort((left, right) => {
         if (sort.key === "label") {
@@ -307,15 +357,16 @@ function CategoryColumn({ group, items, sort, onSort, expanded, onToggle }) {
         }
         return left.label.localeCompare(right.label, undefined, { numeric: true });
       });
-  }, [group, items, sort]);
+  }, [group, items, peers, sort]);
   const total = uniqueLabelValue(items, group.types);
-  const totalRank = itemRank(items, group.labels || []);
+  const totalLabels = [...new Set(group.types.flatMap((type) => type.labels || []))];
+  const totalRank = metricRankFromPeers(total, peers, totalLabels) || itemRank(items, group.labels || []);
 
   return (
     <section className={styles.categoryColumn}>
       <div className={styles.categoryColumnHeader}>
         <span>{group.title}</span>
-        <strong>{formatCategoryMetric(total, totalRank)}</strong>
+        <strong>{formatCategoryMetric(total, totalRank, populationSize)}</strong>
       </div>
       <div className={styles.categorySubhead}>
         <SortButton label="Call" sortKey="label" sort={sort} onSort={onSort} />
@@ -335,14 +386,14 @@ function CategoryColumn({ group, items, sort, onSort, expanded, onToggle }) {
                 disabled={!canExpand}
               >
                 <span>{canExpand ? (isExpanded ? "- " : "+ ") : ""}{row.label}</span>
-                <strong>{formatCategoryMetric(row.value, row.rank)}</strong>
+                <strong>{formatCategoryMetric(row.value, row.rank, populationSize)}</strong>
               </button>
               {canExpand && isExpanded ? (
                 <div className={styles.categorySubRows}>
                   {row.subTypes.map((subType) => (
                     <div key={`${rowKey}:${subType.label}`} className={styles.categorySubRow}>
                       <span>{subType.label}</span>
-                      <strong>{formatCategoryMetric(subType.value, subType.rank)}</strong>
+                      <strong>{formatCategoryMetric(subType.value, subType.rank, populationSize)}</strong>
                     </div>
                   ))}
                 </div>
@@ -355,7 +406,7 @@ function CategoryColumn({ group, items, sort, onSort, expanded, onToggle }) {
   );
 }
 
-function CallsByCategoryBreakdown({ items, open, onOpenChange }) {
+function CallsByCategoryBreakdown({ items, peers = [], isLoading = false, open, onOpenChange, populationSize }) {
   const [sorts, setSorts] = useState(() => Object.fromEntries(
     CALL_CATEGORY_GROUPS.map((group) => [group.key, { key: "value", direction: "desc" }])
   ));
@@ -389,17 +440,21 @@ function CallsByCategoryBreakdown({ items, open, onOpenChange }) {
       onToggle={onOpenChange ? (event) => onOpenChange(event.currentTarget.open) : undefined}
     >
       <summary>Calls By Category</summary>
-      {hasData ? (
+      {isLoading ? (
+        <p className={styles.detailEmpty}>Loading profile details...</p>
+      ) : hasData ? (
         <div className={styles.categoryBreakdownGrid}>
           {CALL_CATEGORY_GROUPS.map((group) => (
             <CategoryColumn
               key={group.key}
               group={group}
               items={items}
+              peers={peers}
               sort={sorts[group.key] || { key: "value", direction: "desc" }}
               onSort={(key) => handleSort(group.key, key)}
               expanded={expanded}
               onToggle={handleToggle}
+              populationSize={populationSize}
             />
           ))}
         </div>
@@ -487,6 +542,164 @@ function metricToneStyle(rank, total) {
   };
 }
 
+function metricToneClass(rank, total) {
+  const eligibleTotal = Math.max(1, Number(total) || 1);
+  const numericRank = Math.max(1, Math.min(eligibleTotal, Number(rank) || eligibleTotal));
+  const ratio = eligibleTotal === 1 ? 0 : (numericRank - 1) / (eligibleTotal - 1);
+  if (ratio <= 0.33) return styles.reportMetricGood;
+  if (ratio <= 0.66) return styles.reportMetricNeutral;
+  return styles.reportMetricBad;
+}
+
+function formatReportMetric(value) {
+  return formatNumber(value, 2);
+}
+
+function formatShortDate(value) {
+  const [year, month, day] = String(value || "").split("-").map((part) => Number(part));
+  if (!year || !month || !day) return "";
+  return `${month}/${day}`;
+}
+
+function priorWizardsGames(schedule = []) {
+  return schedule
+    .filter((row) => {
+      const away = String(row.away_team || "").trim();
+      const home = String(row.home_team || "").trim();
+      return row.season === "2025-26" && (away === "WAS" || home === "WAS");
+    })
+    .sort((left, right) => String(right.game_date || "").localeCompare(String(left.game_date || "")))
+    .slice(0, 4)
+    .map((row) => {
+      const away = String(row.away_team || "").trim();
+      const home = String(row.home_team || "").trim();
+      const opponent = away === "WAS" ? home : away;
+      const location = away === "WAS" ? "@" : "vs";
+      return `${formatShortDate(row.game_date)} ${location} ${opponent}`;
+    })
+    .filter(Boolean);
+}
+
+function ReportMetric({ label, value, rank, populationSize, prominent = false }) {
+  return (
+    <div className={`${styles.reportMetric} ${prominent ? styles.reportMetricProminent : ""} ${metricToneClass(rank, populationSize)}`}>
+      <span>{label}</span>
+      <strong>{formatReportMetric(value)}</strong>
+      <em>{formatPercentile(rank, populationSize)}</em>
+    </div>
+  );
+}
+
+function OfficialsReportCard({ profile, role, populationSize, categoryPeers = [] }) {
+  const categories = profile?.callsByCategory || {};
+  const shooting = categoryMetric(categories, ["Shooting Foul", "Restricted Area Shooting Foul", "3-Pt Shooting Foul"], categoryPeers);
+  const technical = categoryMetric(categories, ["Technical Foul"], categoryPeers);
+  const restricted = categoryMetric(categories, ["Restricted Area Shooting Foul"], categoryPeers);
+  const threePoint = categoryMetric(categories, ["3-Pt Shooting Foul"], categoryPeers);
+  const floor = categoryMetric(categories, ["Foul on Floor", "Away From Play Foul", "Loose Ball Foul", "Double Personal Foul"], categoryPeers);
+  const offensive = categoryMetric(categories, ["Offensive Foul"], categoryPeers);
+  const handling = categoryMetric(categories, ["Traveling", "Double Dribble", "Palming", "Backcourt", "Offensive Goaltending"], categoryPeers);
+  const threeSeconds = categoryMetric(categories, ["Offensive 3 Second Violation", "Defensive 3 Second Violation"], categoryPeers);
+  const goaltending = categoryMetric(categories, ["Offensive Goaltending", "Defensive Goaltending"], categoryPeers);
+  const wizardsGames = priorWizardsGames(profile?.schedule);
+
+  return (
+    <article className={styles.reportOfficialCard}>
+      <div className={styles.reportOfficialIdentity}>
+        <RefereeHeadshot name={profile?.name} />
+        <div>
+          <span>{role}</span>
+          <h3>{profile?.name || "Official unavailable"}</h3>
+          <p>{profile?.jerseyNumber ? `#${profile.jerseyNumber}` : "Number unavailable"}</p>
+        </div>
+      </div>
+      <div className={styles.reportOfficialMeta}>
+        <div>
+          <span>Hometown</span>
+          <strong>{profile?.hometown || "Unavailable"}</strong>
+        </div>
+        <div>
+          <span>Previous Wizards Games</span>
+          <strong>{wizardsGames.length ? wizardsGames.join("  |  ") : "None in 2025-26"}</strong>
+        </div>
+      </div>
+      <div className={styles.reportPrimaryMetrics}>
+        <ReportMetric label="Fouls/G" value={profile?.foulsPerGame} rank={profile?.foulsPerGameRank} populationSize={populationSize} prominent />
+        <ReportMetric label="Shooting Fouls/G" value={shooting.value} rank={shooting.rank} populationSize={populationSize} prominent />
+        <ReportMetric label="Technical Fouls/G" value={technical.value} rank={technical.rank} populationSize={populationSize} prominent />
+      </div>
+      <div className={styles.reportProfileGrid}>
+        <section>
+          <h4>Foul Profile</h4>
+          <div>
+            <ReportMetric label="Restricted Area/G" value={restricted.value} rank={restricted.rank} populationSize={populationSize} />
+            <ReportMetric label="3-PT Fouls/G" value={threePoint.value} rank={threePoint.rank} populationSize={populationSize} />
+            <ReportMetric label="Fouls on Floor/G" value={floor.value} rank={floor.rank} populationSize={populationSize} />
+            <ReportMetric label="Offensive Fouls/G" value={offensive.value} rank={offensive.rank} populationSize={populationSize} />
+          </div>
+        </section>
+        <section>
+          <h4>Violation Profile</h4>
+          <div>
+            <ReportMetric label="Handling Violations/G" value={handling.value} rank={handling.rank} populationSize={populationSize} />
+            <ReportMetric label="3 Seconds/G" value={threeSeconds.value} rank={threeSeconds.rank} populationSize={populationSize} />
+            <ReportMetric label="Goaltending/G" value={goaltending.value} rank={goaltending.rank} populationSize={populationSize} />
+          </div>
+        </section>
+      </div>
+    </article>
+  );
+}
+
+function TonightOfficialsReport({ rows, isLoading, onExportPdf, populationSize, categoryPeers = [] }) {
+  return (
+    <section className={styles.tonightReportPanel}>
+      <div className={styles.reportToolbar}>
+        <div>
+          <h2>Tonight's Officials Report</h2>
+          <p>Sample report layout using 2024-Present regular season and playoff stats.</p>
+        </div>
+        <button type="button" className={styles.primaryButton} onClick={onExportPdf} disabled={isLoading}>
+          Export PDF
+        </button>
+      </div>
+      <div className={styles.officialsReportSheet}>
+        <header className={styles.officialsReportHeader}>
+          <div>
+            <span>Washington Wizards</span>
+            <h2>Officials Report</h2>
+          </div>
+          <div>
+            <strong>2024-Present</strong>
+            <span>Regular Season + Playoffs</span>
+          </div>
+        </header>
+        {isLoading ? (
+          <div className={styles.reportLoading}>Loading report data...</div>
+        ) : (
+          <div className={styles.reportCards}>
+            {TONIGHT_REPORT_CREW.map((slot) => {
+              const profile = rows.find((row) => String(row?.name || "").toLowerCase() === slot.name.toLowerCase());
+              return (
+                <OfficialsReportCard
+                  key={slot.name}
+                  profile={profile || { name: slot.name }}
+                  role={slot.role}
+                  populationSize={populationSize}
+                  categoryPeers={categoryPeers}
+                />
+              );
+            })}
+          </div>
+        )}
+        <footer className={styles.officialsReportFooter}>
+          Stats use 2024-Present regular season + playoffs. Percentiles compare eligible officials in the selected data set.
+        </footer>
+      </div>
+    </section>
+  );
+}
+
 function buildMetricRankMap(rows, key, eligible = () => true) {
   const rankedRows = rows
     .filter((row) => eligible(row) && Number.isFinite(Number(row[key])))
@@ -514,7 +727,7 @@ function RankedMetric({ value, rankInfo, rowId, formatter = (metric) => formatNu
   );
 }
 
-function ChallengeVisualMetric({ label, successes, attempts, rank }) {
+function ChallengeVisualMetric({ label, successes, attempts, rank, populationSize }) {
   const total = Number(attempts) || 0;
   const made = Number(successes) || 0;
   const rate = total ? made / total : 0;
@@ -523,7 +736,7 @@ function ChallengeVisualMetric({ label, successes, attempts, rank }) {
       <div>
         <span>{label}</span>
         <strong>{formatRateRecord(made, total)}</strong>
-        {rank ? <em>Rank {rank}</em> : null}
+        {rank ? <em>{formatPercentile(rank, populationSize)}</em> : null}
       </div>
       <div className={styles.challengeTrack} aria-hidden="true">
         <div
@@ -963,7 +1176,7 @@ function ProfileModal({ children, onClose, label }) {
   );
 }
 
-function OfficialProfile({ profile, isLoading, season, onSeasonChange, onClose, onSelectTeam, onEditContext }) {
+function OfficialProfile({ profile, isLoading, season, onSeasonChange, onClose, onSelectTeam, onEditContext, categoryPopulationSize, categoryPeers = [] }) {
   const [detailSectionsOpen, setDetailSectionsOpen] = useState(true);
   if (!profile) return null;
   return (
@@ -992,30 +1205,33 @@ function OfficialProfile({ profile, isLoading, season, onSeasonChange, onClose, 
         <ProfileMetric
           label="Calls/G"
           value={formatNumber(profile.callsPerGame, 2)}
-          detail={`Rank ${profile.callsPerGameRank || "-"}`}
-          style={profile.callsPerGameRank ? metricToneStyle(profile.callsPerGameRank, 81) : undefined}
+          detail={formatPercentile(profile.callsPerGameRank, categoryPopulationSize)}
+          style={profile.callsPerGameRank ? metricToneStyle(profile.callsPerGameRank, categoryPopulationSize) : undefined}
         />
         <ChallengeVisualMetric
           label="Challenges (Whistle)"
           successes={profile.successfulWhistleChallenges}
           attempts={profile.whistleChallenges}
           rank={profile.whistleChallengeRateRank}
+          populationSize={categoryPopulationSize}
         />
         <ChallengeVisualMetric
           label="Challenges (Crew Chief)"
           successes={profile.successfulCrewChiefChallenges}
           attempts={profile.crewChiefChallenges}
           rank={profile.crewChiefChallengeRateRank}
+          populationSize={categoryPopulationSize}
         />
         <ChallengeVisualMetric
           label="Challenge (Crew)"
           successes={profile.successfulCrewChallenges}
           attempts={profile.crewChallenges}
           rank={profile.crewChallengeRateRank}
+          populationSize={categoryPopulationSize}
         />
       </div>
+      {isLoading ? <p className={styles.profileLoading}>Loading profile details...</p> : null}
       <div className={`${styles.detailGrid} ${styles.detailGridCategoryWide}`}>
-        {isLoading ? <p className={styles.detailEmpty}>Loading profile details...</p> : null}
         <SortableTopList
           title="Calls By Team"
           items={profile.callsByTeam}
@@ -1025,11 +1241,15 @@ function OfficialProfile({ profile, isLoading, season, onSeasonChange, onClose, 
           valueFormatter={formatSignedDecimal}
           open={detailSectionsOpen}
           onOpenChange={setDetailSectionsOpen}
+          isLoading={isLoading}
         />
         <CallsByCategoryBreakdown
           items={profile.callsByCategory}
+          peers={categoryPeers}
+          isLoading={isLoading}
           open={detailSectionsOpen}
           onOpenChange={setDetailSectionsOpen}
+          populationSize={categoryPopulationSize}
         />
       </div>
       <details className={`${styles.detailBlock} ${styles.scrollBlock}`} open>
@@ -1057,7 +1277,7 @@ function OfficialProfile({ profile, isLoading, season, onSeasonChange, onClose, 
   );
 }
 
-function TeamProfile({ profile, isLoading, season, onSeasonChange, onClose, onSelectOfficial, onEditContext }) {
+function TeamProfile({ profile, isLoading, season, onSeasonChange, onClose, onSelectOfficial, onEditContext, categoryPopulationSize, categoryPeers = [] }) {
   const [detailSectionsOpen, setDetailSectionsOpen] = useState(true);
   if (!profile) return null;
   return (
@@ -1097,8 +1317,8 @@ function TeamProfile({ profile, isLoading, season, onSeasonChange, onClose, onSe
           style={profile.challengeRateRank ? successRateStyle(profile.challengeRateRank) : undefined}
         />
       </div>
+      {isLoading ? <p className={styles.profileLoading}>Loading profile details...</p> : null}
       <div className={`${styles.detailGrid} ${styles.detailGridCategoryWide}`}>
-        {isLoading ? <p className={styles.detailEmpty}>Loading profile details...</p> : null}
         <SortableTopList
           title="Calls By Official"
           items={profile.callsByOfficial}
@@ -1108,11 +1328,15 @@ function TeamProfile({ profile, isLoading, season, onSeasonChange, onClose, onSe
           valueFormatter={formatSignedDecimal}
           open={detailSectionsOpen}
           onOpenChange={setDetailSectionsOpen}
+          isLoading={isLoading}
         />
         <CallsByCategoryBreakdown
           items={profile.callsByCategory}
+          peers={categoryPeers}
+          isLoading={isLoading}
           open={detailSectionsOpen}
           onOpenChange={setDetailSectionsOpen}
+          populationSize={categoryPopulationSize}
         />
       </div>
       <details className={styles.detailBlock} open>
@@ -1660,6 +1884,38 @@ export default function Officiating() {
     retry: 1,
   });
   const {
+    data: reportBaseData,
+    isLoading: isReportBaseLoading,
+  } = useQuery({
+    queryKey: ["officiating-dashboard", CUMULATIVE_SEASON, "tonight-report"],
+    queryFn: () => fetchOfficiatingDashboardData({ season: CUMULATIVE_SEASON }),
+    enabled: activeTab === "tonight",
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
+    retry: 1,
+  });
+  const {
+    data: tonightReportRows = [],
+    isLoading: isTonightReportLoading,
+  } = useQuery({
+    queryKey: ["officiating-tonight-report", CUMULATIVE_SEASON],
+    queryFn: async () => {
+      const profiles = reportBaseData?.officialProfiles || [];
+      const profilesByName = new Map(profiles.map((profile) => [
+        String(profile.name || "").trim().toLowerCase(),
+        profile,
+      ]));
+      return Promise.all(TONIGHT_REPORT_CREW.map(async (slot) => {
+        const profile = profilesByName.get(slot.name.toLowerCase()) || { name: slot.name };
+        return fetchOfficialProfileDetails({ season: CUMULATIVE_SEASON, profile }).catch(() => profile);
+      }));
+    },
+    enabled: activeTab === "tonight" && Boolean(reportBaseData),
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
+    retry: 1,
+  });
+  const {
     data: loadedChallengeLogRows = [],
     isLoading: isChallengeLogLoading,
     error: challengeLogError,
@@ -1682,6 +1938,14 @@ export default function Officiating() {
   });
 
   const visibleTabs = TABS;
+  useEffect(() => {
+    const handleAfterPrint = () => document.body.classList.remove("officiating-report-print");
+    window.addEventListener("afterprint", handleAfterPrint);
+    return () => {
+      window.removeEventListener("afterprint", handleAfterPrint);
+      document.body.classList.remove("officiating-report-print");
+    };
+  }, []);
   const sortedOfficials = useMemo(
     () => sortRows(data?.officialProfiles || [], officialSort, "name"),
     [data?.officialProfiles, officialSort]
@@ -1764,7 +2028,13 @@ export default function Officiating() {
   const loadOfficialProfile = async (profile, profileSeason) => {
     if (profile) {
       setSelectedTeam(null);
-      setSelectedOfficial(profile);
+      setSelectedOfficial({
+        ...profile,
+        callsByTeam: {},
+        callsByCategory: {},
+        challengeLog: [],
+        schedule: [],
+      });
       setLoadingOfficialDetails(true);
       const details = await fetchOfficialProfileDetails({ season: profileSeason, profile }).catch(() => profile);
       setSelectedOfficial((current) => (
@@ -1781,7 +2051,12 @@ export default function Officiating() {
   const loadTeamProfile = async (profile, profileSeason) => {
     if (profile) {
       setSelectedOfficial(null);
-      setSelectedTeam(profile);
+      setSelectedTeam({
+        ...profile,
+        callsByOfficial: {},
+        callsByCategory: {},
+        challengeLog: [],
+      });
       setLoadingTeamDetails(true);
       const details = await fetchTeamProfileDetails({ season: profileSeason, profile }).catch(() => profile);
       setSelectedTeam((current) => (
@@ -1873,6 +2148,12 @@ export default function Officiating() {
       setIsSavingContext(false);
     }
   };
+  const exportTonightReportPdf = () => {
+    document.body.classList.add("officiating-report-print");
+    window.setTimeout(() => {
+      window.print();
+    }, 60);
+  };
 
   return (
     <div className={styles.page}>
@@ -1922,9 +2203,13 @@ export default function Officiating() {
       ) : error ? (
         <EmptyPanel title="Unable to load officiating data">{error.message}</EmptyPanel>
       ) : activeTab === "tonight" ? (
-        <EmptyPanel title="Tonight's Officials">
-          This report will use Wizards game-day assignments once the ingestion job has populated official profiles.
-        </EmptyPanel>
+        <TonightOfficialsReport
+          rows={tonightReportRows}
+          isLoading={isReportBaseLoading || isTonightReportLoading}
+          onExportPdf={exportTonightReportPdf}
+          populationSize={reportBaseData?.officialProfiles?.length || 0}
+          categoryPeers={reportBaseData?.officialProfiles || []}
+        />
       ) : activeTab === "officials" ? (
         <div>
           <OfficialsTable
@@ -1977,6 +2262,8 @@ export default function Officiating() {
         onClose={() => setSelectedOfficial(null)}
         onSelectTeam={selectTeamByName}
         onEditContext={setContextEditorRow}
+        categoryPopulationSize={data?.officialProfiles?.length || 0}
+        categoryPeers={data?.officialProfiles || []}
       />
       <TeamProfile
         profile={selectedTeam}
@@ -1986,6 +2273,8 @@ export default function Officiating() {
         onClose={() => setSelectedTeam(null)}
         onSelectOfficial={selectOfficialByName}
         onEditContext={setContextEditorRow}
+        categoryPopulationSize={data?.teamProfiles?.length || 0}
+        categoryPeers={data?.teamProfiles || []}
       />
       {contextEditorRow ? (
         <ContextTagEditor

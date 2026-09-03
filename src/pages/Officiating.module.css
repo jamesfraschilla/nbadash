@@ -194,6 +194,289 @@
   line-height: 1.55;
 }
 
+.tonightReportPanel {
+  display: grid;
+  gap: 14px;
+}
+
+.reportToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--oi-border);
+  border-radius: 12px;
+  background: var(--oi-panel);
+  box-shadow: var(--oi-shadow);
+}
+
+.reportToolbar h2 {
+  margin: 0 0 4px;
+  color: var(--oi-text);
+  font-size: 1.1rem;
+  line-height: 1.1;
+}
+
+.reportToolbar p {
+  margin: 0;
+  color: var(--oi-muted);
+  font-size: 0.86rem;
+  font-weight: 750;
+}
+
+.primaryButton {
+  min-height: 38px;
+  padding: 0 15px;
+  border: 1px solid rgba(79, 153, 255, 0.42);
+  border-radius: 9px;
+  background: #4f99ff;
+  color: #06111f;
+  cursor: pointer;
+  font-weight: 950;
+}
+
+.primaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.officialsReportSheet {
+  width: min(8.5in, 100%);
+  min-height: 11in;
+  margin: 0 auto;
+  padding: 0.34in;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 0.16in;
+  overflow: hidden;
+  border: 1px solid rgba(11, 28, 55, 0.14);
+  border-radius: 12px;
+  background: #f7f9fc;
+  color: #111827;
+  box-shadow: var(--oi-shadow);
+}
+
+.officialsReportHeader {
+  min-height: 0.62in;
+  padding-bottom: 0.11in;
+  border-bottom: 2px solid #172033;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 0.2in;
+}
+
+.officialsReportHeader span,
+.officialsReportFooter,
+.reportOfficialIdentity span,
+.reportOfficialMeta span,
+.reportMetric span {
+  font-size: 0.11in;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.officialsReportHeader span,
+.reportOfficialIdentity span,
+.reportOfficialMeta span,
+.reportMetric span,
+.officialsReportFooter {
+  color: #5f6877;
+}
+
+.officialsReportHeader h2 {
+  margin: 0.03in 0 0;
+  color: #111827;
+  font-size: 0.34in;
+  line-height: 1;
+}
+
+.officialsReportHeader > div:last-child {
+  display: grid;
+  justify-items: end;
+  gap: 0.03in;
+  text-align: right;
+}
+
+.officialsReportHeader strong {
+  color: #111827;
+  font-size: 0.18in;
+  line-height: 1;
+}
+
+.reportCards {
+  display: grid;
+  gap: 0.13in;
+}
+
+.reportOfficialCard {
+  min-height: 2.88in;
+  padding: 0.14in;
+  display: grid;
+  grid-template-columns: 1.45in 1fr;
+  grid-template-rows: auto auto 1fr;
+  gap: 0.1in 0.14in;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.1in;
+  background: #fff;
+}
+
+.reportOfficialIdentity {
+  display: flex;
+  align-items: center;
+  gap: 0.1in;
+}
+
+.reportOfficialIdentity .headshot {
+  width: 0.56in;
+  height: 0.56in;
+  border-color: #cbd5e1;
+  background: #e9eef6;
+  color: #172033;
+  font-size: 0.18in;
+}
+
+.reportOfficialIdentity h3 {
+  margin: 0.02in 0;
+  color: #0f172a;
+  font-size: 0.2in;
+  line-height: 1.05;
+}
+
+.reportOfficialIdentity p {
+  margin: 0;
+  color: #5f6877;
+  font-size: 0.13in;
+  font-weight: 900;
+}
+
+.reportOfficialMeta {
+  display: grid;
+  grid-template-columns: 1fr 1.8fr;
+  gap: 0.1in;
+}
+
+.reportOfficialMeta div {
+  min-width: 0;
+  padding: 0.08in 0.1in;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.07in;
+  background: #f8fafc;
+}
+
+.reportOfficialMeta strong {
+  display: block;
+  min-height: 0.16in;
+  margin-top: 0.03in;
+  overflow: hidden;
+  color: #111827;
+  font-size: 0.13in;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reportPrimaryMetrics {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.1in;
+}
+
+.reportProfileGrid {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 0.1in;
+}
+
+.reportProfileGrid section {
+  min-width: 0;
+  padding: 0.08in;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.07in;
+  background: #f8fafc;
+}
+
+.reportProfileGrid h4 {
+  margin: 0 0 0.06in;
+  color: #172033;
+  font-size: 0.12in;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.reportProfileGrid section > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.07in;
+}
+
+.reportMetric {
+  min-width: 0;
+  min-height: 0.52in;
+  padding: 0.07in 0.08in;
+  display: grid;
+  gap: 0.02in;
+  align-content: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.07in;
+  background: #f8fafc;
+}
+
+.reportMetricProminent {
+  min-height: 0.72in;
+}
+
+.reportMetric strong {
+  color: #111827;
+  font-size: 0.2in;
+  line-height: 1;
+}
+
+.reportMetricProminent strong {
+  font-size: 0.27in;
+}
+
+.reportMetric em {
+  color: #475569;
+  font-size: 0.105in;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.reportMetricGood {
+  border-color: rgba(22, 163, 74, 0.42);
+  background: linear-gradient(180deg, rgba(34, 197, 94, 0.18), #fff);
+}
+
+.reportMetricNeutral {
+  border-color: rgba(234, 179, 8, 0.46);
+  background: linear-gradient(180deg, rgba(250, 204, 21, 0.18), #fff);
+}
+
+.reportMetricBad {
+  border-color: rgba(220, 38, 38, 0.38);
+  background: linear-gradient(180deg, rgba(248, 113, 113, 0.16), #fff);
+}
+
+.reportLoading {
+  min-height: 9in;
+  display: grid;
+  place-items: center;
+  color: #475569;
+  font-size: 0.18in;
+  font-weight: 900;
+}
+
+.officialsReportFooter {
+  padding-top: 0.08in;
+  border-top: 1px solid #cbd5e1;
+  text-align: center;
+}
+
 .tableWrap {
   overflow: auto;
   background: var(--oi-panel);
@@ -844,6 +1127,13 @@
   grid-template-columns: minmax(220px, 0.52fr) minmax(0, 1.48fr);
 }
 
+.profileLoading {
+  margin: -2px 0;
+  color: var(--oi-muted);
+  font-size: 0.84rem;
+  font-weight: 850;
+}
+
 .detailLauncher {
   min-height: 96px;
   min-width: 0;
@@ -1454,5 +1744,41 @@
 
   .profileModal {
     max-height: calc(100vh - 24px);
+  }
+}
+
+@media print {
+  @page {
+    size: letter portrait;
+    margin: 0;
+  }
+
+  :global(body.officiating-report-print) {
+    margin: 0;
+    background: #fff !important;
+  }
+
+  :global(body.officiating-report-print *) {
+    visibility: hidden !important;
+  }
+
+  :global(body.officiating-report-print) .officialsReportSheet,
+  :global(body.officiating-report-print) .officialsReportSheet * {
+    visibility: visible !important;
+  }
+
+  :global(body.officiating-report-print) .officialsReportSheet {
+    position: fixed;
+    inset: 0;
+    width: 8.5in;
+    height: 11in;
+    min-height: 11in;
+    margin: 0;
+    padding: 0.34in;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
   }
 }
