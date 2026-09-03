@@ -274,7 +274,7 @@ function itemValue(items, labels = []) {
   }, 0);
 }
 
-function metricRankFromPeers(currentValue, peers = [], labels = []) {
+function metricPercentileFromPeers(currentValue, peers = [], labels = []) {
   const value = Number(currentValue) || 0;
   if (value <= 0) return null;
   const rankedValues = peers
@@ -283,11 +283,11 @@ function metricRankFromPeers(currentValue, peers = [], labels = []) {
     .sort((left, right) => right - left);
   if (!rankedValues.length) return null;
   const firstMatch = rankedValues.findIndex((peerValue) => peerValue <= value + 0.0000001);
-  return firstMatch >= 0 ? firstMatch + 1 : null;
+  return firstMatch >= 0 ? percentileFromRank(firstMatch + 1, rankedValues.length) : null;
 }
 
-function categoryRankFromPeers(value, peers = [], labels = []) {
-  return metricRankFromPeers(value, peers, labels);
+function categoryPercentileFromPeers(value, peers = [], labels = []) {
+  return metricPercentileFromPeers(value, peers, labels);
 }
 
 function uniqueLabelValue(items, groups) {
@@ -308,8 +308,11 @@ function formatPercentile(rank, populationSize) {
   return percentile ? `${ordinal(percentile)} percentile` : "Percentile --";
 }
 
-function formatCategoryMetric(value, rank, populationSize) {
-  const percentile = percentileFromRank(rank, populationSize);
+function formatPercentileValue(percentile) {
+  return percentile ? `${ordinal(percentile)} percentile` : "Percentile --";
+}
+
+function formatCategoryMetric(value, percentile) {
   return `${formatNumber(value, 2)}${percentile ? ` (${percentile}%)` : ""}`;
 }
 
@@ -317,11 +320,11 @@ function categoryMetric(items, labels, peers = []) {
   const value = itemValue(items, labels);
   return {
     value,
-    rank: categoryRankFromPeers(value, peers, labels),
+    percentile: categoryPercentileFromPeers(value, peers, labels),
   };
 }
 
-function CategoryColumn({ group, items, peers, sort, onSort, expanded, onToggle, populationSize }) {
+function CategoryColumn({ group, items, peers, sort, onSort, expanded, onToggle }) {
   const rows = useMemo(() => {
     const direction = sort.direction === "asc" ? 1 : -1;
     return group.types
@@ -330,13 +333,13 @@ function CategoryColumn({ group, items, peers, sort, onSort, expanded, onToggle,
         return {
           ...type,
           value,
-          rank: categoryRankFromPeers(value, peers, type.labels),
+          percentile: categoryPercentileFromPeers(value, peers, type.labels),
           subTypes: (type.subTypes || []).map((subType) => {
             const subTypeValue = itemValue(items, subType.labels);
             return {
               ...subType,
               value: subTypeValue,
-              rank: categoryRankFromPeers(subTypeValue, peers, subType.labels),
+              percentile: categoryPercentileFromPeers(subTypeValue, peers, subType.labels),
             };
           }).filter((subType) => subType.value > 0),
         };
@@ -355,13 +358,13 @@ function CategoryColumn({ group, items, peers, sort, onSort, expanded, onToggle,
   }, [group, items, peers, sort]);
   const total = uniqueLabelValue(items, group.types);
   const totalLabels = [...new Set(group.types.flatMap((type) => type.labels || []))];
-  const totalRank = categoryRankFromPeers(total, peers, totalLabels);
+  const totalPercentile = categoryPercentileFromPeers(total, peers, totalLabels);
 
   return (
     <section className={styles.categoryColumn}>
       <div className={styles.categoryColumnHeader}>
         <span>{group.title}</span>
-        <strong>{formatCategoryMetric(total, totalRank, populationSize)}</strong>
+        <strong>{formatCategoryMetric(total, totalPercentile)}</strong>
       </div>
       <div className={styles.categorySubhead}>
         <SortButton label="Call" sortKey="label" sort={sort} onSort={onSort} />
@@ -381,14 +384,14 @@ function CategoryColumn({ group, items, peers, sort, onSort, expanded, onToggle,
                 disabled={!canExpand}
               >
                 <span>{canExpand ? (isExpanded ? "- " : "+ ") : ""}{row.label}</span>
-                <strong>{formatCategoryMetric(row.value, row.rank, populationSize)}</strong>
+                <strong>{formatCategoryMetric(row.value, row.percentile)}</strong>
               </button>
               {canExpand && isExpanded ? (
                 <div className={styles.categorySubRows}>
                   {row.subTypes.map((subType) => (
                     <div key={`${rowKey}:${subType.label}`} className={styles.categorySubRow}>
                       <span>{subType.label}</span>
-                      <strong>{formatCategoryMetric(subType.value, subType.rank, populationSize)}</strong>
+                      <strong>{formatCategoryMetric(subType.value, subType.percentile)}</strong>
                     </div>
                   ))}
                 </div>
@@ -401,7 +404,7 @@ function CategoryColumn({ group, items, peers, sort, onSort, expanded, onToggle,
   );
 }
 
-function CallsByCategoryBreakdown({ items, peers = [], isLoading = false, open, onOpenChange, populationSize }) {
+function CallsByCategoryBreakdown({ items, peers = [], isLoading = false, open, onOpenChange }) {
   const [sorts, setSorts] = useState(() => Object.fromEntries(
     CALL_CATEGORY_GROUPS.map((group) => [group.key, { key: "value", direction: "desc" }])
   ));
@@ -449,7 +452,6 @@ function CallsByCategoryBreakdown({ items, peers = [], isLoading = false, open, 
               onSort={(key) => handleSort(group.key, key)}
               expanded={expanded}
               onToggle={handleToggle}
-              populationSize={populationSize}
             />
           ))}
         </div>
@@ -546,6 +548,13 @@ function metricToneClass(rank, total) {
   return styles.reportMetricBad;
 }
 
+function metricToneClassFromPercentile(percentile) {
+  const value = Number(percentile) || 0;
+  if (value >= 67) return styles.reportMetricGood;
+  if (value >= 34) return styles.reportMetricNeutral;
+  return styles.reportMetricBad;
+}
+
 function formatReportMetric(value) {
   return formatNumber(value, 2);
 }
@@ -575,12 +584,18 @@ function priorWizardsGames(schedule = []) {
     .filter(Boolean);
 }
 
-function ReportMetric({ label, value, rank, populationSize, prominent = false }) {
+function ReportMetric({ label, value, rank, populationSize, percentile, prominent = false }) {
+  const toneClass = percentile
+    ? metricToneClassFromPercentile(percentile)
+    : metricToneClass(rank, populationSize);
+  const percentileLabel = percentile
+    ? formatPercentileValue(percentile)
+    : formatPercentile(rank, populationSize);
   return (
-    <div className={`${styles.reportMetric} ${prominent ? styles.reportMetricProminent : ""} ${metricToneClass(rank, populationSize)}`}>
+    <div className={`${styles.reportMetric} ${prominent ? styles.reportMetricProminent : ""} ${toneClass}`}>
       <span>{label}</span>
       <strong>{formatReportMetric(value)}</strong>
-      <em>{formatPercentile(rank, populationSize)}</em>
+      <em>{percentileLabel}</em>
     </div>
   );
 }
@@ -620,25 +635,25 @@ function OfficialsReportCard({ profile, role, populationSize, categoryPeers = []
       </div>
       <div className={styles.reportPrimaryMetrics}>
         <ReportMetric label="Fouls/G" value={profile?.foulsPerGame} rank={profile?.foulsPerGameRank} populationSize={populationSize} prominent />
-        <ReportMetric label="Shooting Fouls/G" value={shooting.value} rank={shooting.rank} populationSize={populationSize} prominent />
-        <ReportMetric label="Technical Fouls/G" value={technical.value} rank={technical.rank} populationSize={populationSize} prominent />
+        <ReportMetric label="Shooting Fouls/G" value={shooting.value} percentile={shooting.percentile} prominent />
+        <ReportMetric label="Technical Fouls/G" value={technical.value} percentile={technical.percentile} prominent />
       </div>
       <div className={styles.reportProfileGrid}>
         <section>
           <h4>Foul Profile</h4>
           <div>
-            <ReportMetric label="Restricted Area/G" value={restricted.value} rank={restricted.rank} populationSize={populationSize} />
-            <ReportMetric label="3-PT Fouls/G" value={threePoint.value} rank={threePoint.rank} populationSize={populationSize} />
-            <ReportMetric label="Fouls on Floor/G" value={floor.value} rank={floor.rank} populationSize={populationSize} />
-            <ReportMetric label="Offensive Fouls/G" value={offensive.value} rank={offensive.rank} populationSize={populationSize} />
+            <ReportMetric label="Restricted Area/G" value={restricted.value} percentile={restricted.percentile} />
+            <ReportMetric label="3-PT Fouls/G" value={threePoint.value} percentile={threePoint.percentile} />
+            <ReportMetric label="Fouls on Floor/G" value={floor.value} percentile={floor.percentile} />
+            <ReportMetric label="Offensive Fouls/G" value={offensive.value} percentile={offensive.percentile} />
           </div>
         </section>
         <section>
           <h4>Violation Profile</h4>
           <div>
-            <ReportMetric label="Handling Violations/G" value={handling.value} rank={handling.rank} populationSize={populationSize} />
-            <ReportMetric label="3 Seconds/G" value={threeSeconds.value} rank={threeSeconds.rank} populationSize={populationSize} />
-            <ReportMetric label="Goaltending/G" value={goaltending.value} rank={goaltending.rank} populationSize={populationSize} />
+            <ReportMetric label="Handling Violations/G" value={handling.value} percentile={handling.percentile} />
+            <ReportMetric label="3 Seconds/G" value={threeSeconds.value} percentile={threeSeconds.percentile} />
+            <ReportMetric label="Goaltending/G" value={goaltending.value} percentile={goaltending.percentile} />
           </div>
         </section>
       </div>
@@ -1911,6 +1926,28 @@ export default function Officiating() {
     retry: 1,
   });
   const {
+    data: selectedOfficialPeerData,
+    isLoading: isSelectedOfficialPeerLoading,
+  } = useQuery({
+    queryKey: ["officiating-dashboard", selectedOfficialSeason, "official-profile-peers"],
+    queryFn: () => fetchOfficiatingDashboardData({ season: selectedOfficialSeason }),
+    enabled: Boolean(selectedOfficial) && selectedOfficialSeason !== season,
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
+    retry: 1,
+  });
+  const {
+    data: selectedTeamPeerData,
+    isLoading: isSelectedTeamPeerLoading,
+  } = useQuery({
+    queryKey: ["officiating-dashboard", selectedTeamSeason, "team-profile-peers"],
+    queryFn: () => fetchOfficiatingDashboardData({ season: selectedTeamSeason }),
+    enabled: Boolean(selectedTeam) && selectedTeamSeason !== season,
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
+    retry: 1,
+  });
+  const {
     data: loadedChallengeLogRows = [],
     isLoading: isChallengeLogLoading,
     error: challengeLogError,
@@ -1990,6 +2027,12 @@ export default function Officiating() {
     () => sortRows(filteredChallengeRows, challengeSort, "game_id"),
     [filteredChallengeRows, challengeSort]
   );
+  const officialCategoryPeers = selectedOfficialSeason === season
+    ? data?.officialProfiles || []
+    : selectedOfficialPeerData?.officialProfiles || [];
+  const teamCategoryPeers = selectedTeamSeason === season
+    ? data?.teamProfiles || []
+    : selectedTeamPeerData?.teamProfiles || [];
   const officialProfilesByName = useMemo(() => {
     const map = new Map();
     (data?.officialProfiles || []).forEach((profile) => {
@@ -2251,25 +2294,25 @@ export default function Officiating() {
       ) : null}
       <OfficialProfile
         profile={selectedOfficial}
-        isLoading={loadingOfficialDetails}
+        isLoading={loadingOfficialDetails || isSelectedOfficialPeerLoading}
         season={selectedOfficialSeason}
         onSeasonChange={changeSelectedOfficialSeason}
         onClose={() => setSelectedOfficial(null)}
         onSelectTeam={selectTeamByName}
         onEditContext={setContextEditorRow}
-        categoryPopulationSize={data?.officialProfiles?.length || 0}
-        categoryPeers={data?.officialProfiles || []}
+        categoryPopulationSize={officialCategoryPeers.length}
+        categoryPeers={officialCategoryPeers}
       />
       <TeamProfile
         profile={selectedTeam}
-        isLoading={loadingTeamDetails}
+        isLoading={loadingTeamDetails || isSelectedTeamPeerLoading}
         season={selectedTeamSeason}
         onSeasonChange={changeSelectedTeamSeason}
         onClose={() => setSelectedTeam(null)}
         onSelectOfficial={selectOfficialByName}
         onEditContext={setContextEditorRow}
-        categoryPopulationSize={data?.teamProfiles?.length || 0}
-        categoryPeers={data?.teamProfiles || []}
+        categoryPopulationSize={teamCategoryPeers.length}
+        categoryPeers={teamCategoryPeers}
       />
       {contextEditorRow ? (
         <ContextTagEditor
