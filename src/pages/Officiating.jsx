@@ -7,6 +7,7 @@ import {
   fetchOfficiatingChallengeLog,
   fetchChallengeContextTagOptions,
   fetchOfficialProfileDetails,
+  fetchOfficialsReportData,
   fetchOfficiatingDashboardData,
   fetchTeamProfileDetails,
   saveChallengeContextTags,
@@ -466,7 +467,7 @@ function CallsByCategoryBreakdown({ items, isLoading = false, open, onOpenChange
   );
 }
 
-function RefereeHeadshot({ name }) {
+function RefereeHeadshot({ name, eager = false }) {
   const [src, setSrc] = useState("");
 
   useEffect(() => {
@@ -481,7 +482,7 @@ function RefereeHeadshot({ name }) {
 
   return (
     <div className={styles.headshot}>
-      {src ? <img src={src} alt="" loading="lazy" decoding="async" /> : <span>{String(name || "?").charAt(0)}</span>}
+      {src ? <img src={src} alt="" loading={eager ? "eager" : "lazy"} decoding="async" /> : <span>{String(name || "?").charAt(0)}</span>}
     </div>
   );
 }
@@ -604,8 +605,23 @@ function ReportMetric({ label, value, rank, populationSize, percentile, prominen
   );
 }
 
+function ReportChallengeMetric({ label, successes, attempts, rank, populationSize }) {
+  const made = Number(successes) || 0;
+  const total = Number(attempts) || 0;
+  return (
+    <div className={`${styles.reportMetric} ${styles.reportMetricProminent} ${metricToneClass(rank, populationSize)}`}>
+      <span>{label}</span>
+      <strong>{formatRate(total ? made / total : 0)}</strong>
+      <em>{made}/{total} · {formatPercentile(rank, populationSize)}</em>
+    </div>
+  );
+}
+
 function OfficialsReportCard({ profile, role, populationSize }) {
   const categories = profile?.callsByCategory || {};
+  const foulGroup = CALL_CATEGORY_GROUPS.find((group) => group.key === "fouls");
+  const foulLabels = [...new Set((foulGroup?.types || []).flatMap((type) => type.labels || []))];
+  const fouls = categoryMetric(categories, foulLabels);
   const shooting = categoryMetric(categories, ["Shooting Foul", "Restricted Area Shooting Foul", "3-Pt Shooting Foul"]);
   const technical = categoryMetric(categories, ["Technical Foul"]);
   const restricted = categoryMetric(categories, ["Restricted Area Shooting Foul"]);
@@ -619,33 +635,46 @@ function OfficialsReportCard({ profile, role, populationSize }) {
 
   return (
     <article className={styles.reportOfficialCard}>
-      <div className={styles.reportOfficialIdentity}>
-        <RefereeHeadshot name={profile?.name} />
-        <div>
-          <span>{role}</span>
-          <h3>{profile?.name || "Official unavailable"}</h3>
-          <p>{profile?.jerseyNumber ? `#${profile.jerseyNumber}` : "Number unavailable"}</p>
+      <div className={styles.reportOfficialIntro}>
+        <div className={styles.reportOfficialIdentity}>
+          <RefereeHeadshot name={profile?.name} eager />
+          <div>
+            <span>{role}</span>
+            <h3>{profile?.name || "Official unavailable"}</h3>
+            <p>{profile?.jerseyNumber ? `#${profile.jerseyNumber}` : "Number unavailable"}</p>
+          </div>
         </div>
-      </div>
-      <div className={styles.reportOfficialMeta}>
-        <div>
-          <span>Hometown</span>
-          <strong>{profile?.hometown || "Unavailable"}</strong>
-        </div>
-        <div>
+        <section className={styles.reportWizardsHistory}>
           <span>Previous Wizards Games</span>
-          <strong>{wizardsGames.length ? wizardsGames.join("  |  ") : "None in 2025-26"}</strong>
-        </div>
+          {wizardsGames.length ? (
+            <ul>{wizardsGames.map((game) => <li key={game}>{game}</li>)}</ul>
+          ) : <strong>None in 2025-26</strong>}
+        </section>
       </div>
       <div className={styles.reportPrimaryMetrics}>
-        <ReportMetric label="Fouls/G" value={profile?.foulsPerGame} rank={profile?.foulsPerGameRank} populationSize={populationSize} prominent />
-        <ReportMetric label="Shooting Fouls/G" value={shooting.value} percentile={shooting.percentile} prominent />
-        <ReportMetric label="Technical Fouls/G" value={technical.value} percentile={technical.percentile} prominent />
+        <ReportMetric label="Calls/G" value={profile?.callsPerGame} rank={profile?.callsPerGameRank} populationSize={populationSize} prominent />
+        <ReportMetric label="Fouls/G" value={fouls.value} percentile={fouls.percentile} prominent />
+        <ReportChallengeMetric
+          label="Challenge (Whistle)"
+          successes={profile?.successfulWhistleChallenges}
+          attempts={profile?.whistleChallenges}
+          rank={profile?.whistleChallengeRateRank}
+          populationSize={populationSize}
+        />
+        <ReportChallengeMetric
+          label="Challenge (Crew Chief)"
+          successes={profile?.successfulCrewChiefChallenges}
+          attempts={profile?.crewChiefChallenges}
+          rank={profile?.crewChiefChallengeRateRank}
+          populationSize={populationSize}
+        />
       </div>
       <div className={styles.reportProfileGrid}>
         <section>
           <h4>Foul Profile</h4>
-          <div>
+          <div className={styles.reportFoulMetrics}>
+            <ReportMetric label="Shooting Fouls/G" value={shooting.value} percentile={shooting.percentile} />
+            <ReportMetric label="Technical Fouls/G" value={technical.value} percentile={technical.percentile} />
             <ReportMetric label="Restricted Area/G" value={restricted.value} percentile={restricted.percentile} />
             <ReportMetric label="3-PT Fouls/G" value={threePoint.value} percentile={threePoint.percentile} />
             <ReportMetric label="Fouls on Floor/G" value={floor.value} percentile={floor.percentile} />
@@ -654,7 +683,7 @@ function OfficialsReportCard({ profile, role, populationSize }) {
         </section>
         <section>
           <h4>Violation Profile</h4>
-          <div>
+          <div className={styles.reportViolationMetrics}>
             <ReportMetric label="Handling Violations/G" value={handling.value} percentile={handling.percentile} />
             <ReportMetric label="3 Seconds/G" value={threeSeconds.value} percentile={threeSeconds.percentile} />
             <ReportMetric label="Goaltending/G" value={goaltending.value} percentile={goaltending.percentile} />
@@ -1888,38 +1917,21 @@ export default function Officiating() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["officiating-dashboard", season],
     queryFn: () => fetchOfficiatingDashboardData({ season }),
+    enabled: activeTab !== "tonight",
     staleTime: 5 * 60_000,
     gcTime: 30 * 60_000,
     retry: 1,
   });
   const {
-    data: reportBaseData,
-    isLoading: isReportBaseLoading,
-  } = useQuery({
-    queryKey: ["officiating-dashboard", CUMULATIVE_SEASON, "tonight-report"],
-    queryFn: () => fetchOfficiatingDashboardData({ season: CUMULATIVE_SEASON }),
-    enabled: activeTab === "tonight",
-    staleTime: 5 * 60_000,
-    gcTime: 30 * 60_000,
-    retry: 1,
-  });
-  const {
-    data: tonightReportRows = [],
+    data: tonightReportData,
     isLoading: isTonightReportLoading,
   } = useQuery({
     queryKey: ["officiating-tonight-report", CUMULATIVE_SEASON],
-    queryFn: async () => {
-      const profiles = reportBaseData?.officialProfiles || [];
-      const profilesByName = new Map(profiles.map((profile) => [
-        String(profile.name || "").trim().toLowerCase(),
-        profile,
-      ]));
-      return Promise.all(TONIGHT_REPORT_CREW.map(async (slot) => {
-        const profile = profilesByName.get(slot.name.toLowerCase()) || { name: slot.name };
-        return fetchOfficialProfileDetails({ season: CUMULATIVE_SEASON, profile }).catch(() => profile);
-      }));
-    },
-    enabled: activeTab === "tonight" && Boolean(reportBaseData),
+    queryFn: () => fetchOfficialsReportData({
+      season: CUMULATIVE_SEASON,
+      officialNames: TONIGHT_REPORT_CREW.map((slot) => slot.name),
+    }),
+    enabled: activeTab === "tonight",
     staleTime: 5 * 60_000,
     gcTime: 30 * 60_000,
     retry: 1,
@@ -2186,9 +2198,12 @@ export default function Officiating() {
     }
   };
   const exportTonightReportPdf = () => {
+    const clearPrintMode = () => document.body.classList.remove("officiating-report-print");
     document.body.classList.add("officiating-report-print");
+    window.addEventListener("afterprint", clearPrintMode, { once: true });
     window.setTimeout(() => {
       window.print();
+      window.setTimeout(clearPrintMode, 1000);
     }, 60);
   };
 
@@ -2235,16 +2250,16 @@ export default function Officiating() {
         ))}
       </nav>
 
-      {isLoading ? (
+      {activeTab !== "tonight" && isLoading ? (
         <EmptyPanel title="Loading officiating data">Fetching cached officiating summaries from Supabase.</EmptyPanel>
       ) : error ? (
         <EmptyPanel title="Unable to load officiating data">{error.message}</EmptyPanel>
       ) : activeTab === "tonight" ? (
         <TonightOfficialsReport
-          rows={tonightReportRows}
-          isLoading={isReportBaseLoading || isTonightReportLoading}
+          rows={tonightReportData?.profiles || []}
+          isLoading={isTonightReportLoading}
           onExportPdf={exportTonightReportPdf}
-          populationSize={reportBaseData?.officialProfiles?.length || 0}
+          populationSize={tonightReportData?.populationSize || 0}
         />
       ) : activeTab === "officials" ? (
         <div>

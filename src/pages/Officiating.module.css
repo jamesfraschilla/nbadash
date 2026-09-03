@@ -243,12 +243,13 @@
 
 .officialsReportSheet {
   width: min(8.5in, 100%);
+  height: 11in;
   min-height: 11in;
   margin: 0 auto;
-  padding: 0.34in;
+  padding: 0.24in;
   display: grid;
   grid-template-rows: auto 1fr auto;
-  gap: 0.16in;
+  gap: 0.1in;
   overflow: hidden;
   border: 1px solid rgba(11, 28, 55, 0.14);
   border-radius: 12px;
@@ -258,8 +259,8 @@
 }
 
 .officialsReportHeader {
-  min-height: 0.62in;
-  padding-bottom: 0.11in;
+  min-height: 0.54in;
+  padding-bottom: 0.08in;
   border-bottom: 2px solid #172033;
   display: flex;
   align-items: end;
@@ -270,7 +271,6 @@
 .officialsReportHeader span,
 .officialsReportFooter,
 .reportOfficialIdentity span,
-.reportOfficialMeta span,
 .reportMetric span {
   font-size: 0.11in;
   font-weight: 900;
@@ -280,7 +280,6 @@
 
 .officialsReportHeader span,
 .reportOfficialIdentity span,
-.reportOfficialMeta span,
 .reportMetric span,
 .officialsReportFooter {
   color: #5f6877;
@@ -308,30 +307,44 @@
 
 .reportCards {
   display: grid;
-  gap: 0.13in;
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  gap: 0.08in;
+  min-height: 0;
 }
 
 .reportOfficialCard {
-  min-height: 2.88in;
-  padding: 0.14in;
+  min-height: 0;
+  padding: 0.08in;
   display: grid;
-  grid-template-columns: 1.45in 1fr;
   grid-template-rows: auto auto 1fr;
-  gap: 0.1in 0.14in;
+  gap: 0.055in;
+  overflow: hidden;
   border: 1px solid #cbd5e1;
   border-radius: 0.1in;
   background: #fff;
 }
 
+.reportOfficialIntro {
+  display: grid;
+  grid-template-columns: 2.15in 1fr;
+  align-items: stretch;
+  gap: 0.08in;
+}
+
 .reportOfficialIdentity {
   display: flex;
   align-items: center;
-  gap: 0.1in;
+  gap: 0.11in;
+}
+
+.reportOfficialIdentity > div {
+  min-width: 0;
 }
 
 .reportOfficialIdentity .headshot {
-  width: 0.56in;
-  height: 0.56in;
+  width: 0.72in;
+  height: 0.72in;
+  flex: 0 0 0.72in;
   border-color: #cbd5e1;
   background: #e9eef6;
   color: #172033;
@@ -341,8 +354,9 @@
 .reportOfficialIdentity h3 {
   margin: 0.02in 0;
   color: #0f172a;
-  font-size: 0.2in;
+  font-size: 0.23in;
   line-height: 1.05;
+  white-space: nowrap;
 }
 
 .reportOfficialIdentity p {
@@ -352,58 +366,69 @@
   font-weight: 900;
 }
 
-.reportOfficialMeta {
-  display: grid;
-  grid-template-columns: 1fr 1.8fr;
-  gap: 0.1in;
-}
-
-.reportOfficialMeta div {
+.reportWizardsHistory {
   min-width: 0;
-  padding: 0.08in 0.1in;
+  padding: 0.045in 0.07in;
   border: 1px solid #e2e8f0;
   border-radius: 0.07in;
   background: #f8fafc;
 }
 
-.reportOfficialMeta strong {
+.reportWizardsHistory > span {
+  color: #5f6877;
+  font-size: 0.09in;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.reportWizardsHistory strong {
   display: block;
-  min-height: 0.16in;
   margin-top: 0.03in;
-  overflow: hidden;
   color: #111827;
-  font-size: 0.13in;
+  font-size: 0.105in;
+  line-height: 1.2;
+}
+
+.reportWizardsHistory ul {
+  margin: 0.02in 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.005in;
+  list-style: none;
+}
+
+.reportWizardsHistory li {
+  color: #111827;
+  font-size: 0.095in;
+  font-weight: 850;
   line-height: 1.15;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .reportPrimaryMetrics {
-  grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.1in;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.05in;
 }
 
 .reportProfileGrid {
-  grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: 1.1fr 0.9fr;
-  gap: 0.1in;
+  grid-template-columns: 1.35fr 0.65fr;
+  gap: 0.055in;
 }
 
 .reportProfileGrid section {
   min-width: 0;
-  padding: 0.08in;
+  padding: 0.055in;
   border: 1px solid #e2e8f0;
   border-radius: 0.07in;
   background: #f8fafc;
 }
 
 .reportProfileGrid h4 {
-  margin: 0 0 0.06in;
+  margin: 0 0 0.035in;
   color: #172033;
-  font-size: 0.12in;
+  font-size: 0.105in;
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
@@ -411,15 +436,19 @@
 .reportProfileGrid section > div {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.07in;
+  gap: 0.035in;
+}
+
+.reportProfileGrid section > .reportFoulMetrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .reportMetric {
   min-width: 0;
-  min-height: 0.52in;
-  padding: 0.07in 0.08in;
+  min-height: 0.43in;
+  padding: 0.03in 0.045in;
   display: grid;
-  gap: 0.02in;
+  gap: 0.008in;
   align-content: center;
   border: 1px solid #cbd5e1;
   border-radius: 0.07in;
@@ -427,22 +456,28 @@
 }
 
 .reportMetricProminent {
-  min-height: 0.72in;
+  min-height: 0.54in;
+}
+
+.reportMetric span {
+  font-size: 0.09in;
+  line-height: 1.05;
 }
 
 .reportMetric strong {
   color: #111827;
-  font-size: 0.2in;
+  font-size: 0.185in;
   line-height: 1;
 }
 
 .reportMetricProminent strong {
-  font-size: 0.27in;
+  font-size: 0.22in;
 }
 
 .reportMetric em {
   color: #475569;
-  font-size: 0.105in;
+  font-size: 0.09in;
+  line-height: 1.05;
   font-style: normal;
   font-weight: 850;
 }
@@ -472,9 +507,10 @@
 }
 
 .officialsReportFooter {
-  padding-top: 0.08in;
+  padding-top: 0.05in;
   border-top: 1px solid #cbd5e1;
   text-align: center;
+  font-size: 0.085in;
 }
 
 .tableWrap {
@@ -1774,7 +1810,7 @@
     height: 11in;
     min-height: 11in;
     margin: 0;
-    padding: 0.34in;
+    padding: 0.24in;
     border: 0;
     border-radius: 0;
     box-shadow: none;

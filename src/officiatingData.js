@@ -1228,6 +1228,60 @@ export async function fetchOfficialProfileDetails({ season = DEFAULT_SEASON, pro
   };
 }
 
+export async function fetchOfficialsReportData({ season = CUMULATIVE_SEASON, officialNames = [] } = {}) {
+  const names = [...new Set(asArray(officialNames).map((name) => String(name || "").trim()).filter(Boolean))];
+  if (!names.length) return { profiles: [], populationSize: 0 };
+  const cumulative = season === CUMULATIVE_SEASON;
+
+  const [profileResult, categoryResult, assignmentResult] = await Promise.all([
+    selectPreferredTable("nba_official_profiles_cache", "nba_official_profiles", (query) => applySeasonFilter(query
+      .select(PROFILE_ROLLUP_COLUMNS), season), { maxRows: PROFILE_LIMIT }),
+    selectPreferredTable("nba_official_call_category_rollups_cache", "nba_official_call_category_rollups", (query) => applySeasonFilter(query
+      .select(OFFICIAL_CATEGORY_ROLLUP_COLUMNS), season), { maxRows: PROFILE_DETAIL_LIMIT })
+      .catch(() => ({ data: [], unavailable: true })),
+    selectTable("nba_official_game_assignments", (query) => applySeasonFilter(query
+      .select(ASSIGNMENT_COLUMNS), season)
+      .not("season_type", "ilike", "Preseason")
+      .in("official_name", names)
+      .or("home_team.eq.WAS,away_team.eq.WAS")
+      .order("game_date", { ascending: false }), { maxRows: 100 })
+      .catch(() => ({ data: [], unavailable: true })),
+  ]);
+
+  if (profileResult.unavailable) {
+    return { profiles: names.map((name) => ({ name, schedule: [] })), populationSize: 0 };
+  }
+  const profileRows = cumulative ? aggregateOfficialRollups(profileResult.data) : profileResult.data;
+  const categoryPopulation = !categoryResult.unavailable && categoryResult.data?.length
+    ? aggregateOfficialCategoryRollups(categoryResult.data, profileRows)
+    : new Map();
+  const rankedProfiles = addRanks(profileRows.map(toOfficialProfileFromRollup), [
+    ["callsRank", "calls"],
+    ["callsPerGameRank", "callsPerGame"],
+    ["foulsPerGameRank", "foulsPerGame"],
+    ["violationsPerGameRank", "violationsPerGame"],
+    ["challengeRateRank", "challengeRate"],
+    ["whistleChallengeRateRank", "whistleChallengeRate"],
+    ["crewChiefChallengeRateRank", "crewChiefChallengeRate"],
+    ["crewChallengeRateRank", "crewChallengeRate"],
+  ]).map((profile) => ({
+    ...profile,
+    callsByCategory: categoryPopulation.get(normalizedEntityKey(profile.officialId || profile.id))
+      || categoryPopulation.get(normalizedEntityKey(profile.name))
+      || {},
+  }));
+  const profilesByName = new Map(rankedProfiles.map((profile) => [normalizedEntityKey(profile.name), profile]));
+  const assignments = assignmentResult.data || [];
+
+  return {
+    profiles: names.map((name) => ({
+      ...(profilesByName.get(normalizedEntityKey(name)) || { name }),
+      schedule: assignments.filter((row) => normalizedEntityKey(row.official_name) === normalizedEntityKey(name)),
+    })),
+    populationSize: rankedProfiles.length,
+  };
+}
+
 export async function fetchTeamProfileDetails({ season = DEFAULT_SEASON, profile } = {}) {
   const team = String(profile?.team || "").trim();
   if (!team) return profile;
