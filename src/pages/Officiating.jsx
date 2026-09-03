@@ -274,20 +274,25 @@ function itemValue(items, labels = []) {
   }, 0);
 }
 
-function metricPercentileFromPeers(currentValue, peers = [], labels = []) {
-  const value = Number(currentValue) || 0;
-  if (value <= 0) return null;
-  const rankedValues = peers
-    .map((peer) => itemValue(peer?.callsByCategory, labels))
-    .filter((peerValue) => Number(peerValue) > 0)
-    .sort((left, right) => right - left);
-  if (!rankedValues.length) return null;
-  const firstMatch = rankedValues.findIndex((peerValue) => peerValue <= value + 0.0000001);
-  return firstMatch >= 0 ? percentileFromRank(firstMatch + 1, rankedValues.length) : null;
+function categoryMetricKey(labels = []) {
+  return [...new Set(labels.map((label) => String(label || "").trim()).filter(Boolean))]
+    .sort((left, right) => left.localeCompare(right))
+    .join("|");
 }
 
-function categoryPercentileFromPeers(value, peers = [], labels = []) {
-  return metricPercentileFromPeers(value, peers, labels);
+function storedCategoryPercentile(items, labels = []) {
+  const key = categoryMetricKey(labels);
+  const displayPercentile = Number(items?.__displayPercentiles?.[key]) || null;
+  if (displayPercentile) return displayPercentile;
+  if (labels.length === 1) {
+    const row = items?.[labels[0]];
+    if (typeof row === "object" && row !== null) return Number(row.percentile) || null;
+  }
+  return null;
+}
+
+function categoryPercentile(items, labels = []) {
+  return storedCategoryPercentile(items, labels);
 }
 
 function uniqueLabelValue(items, groups) {
@@ -316,15 +321,15 @@ function formatCategoryMetric(value, percentile) {
   return `${formatNumber(value, 2)}${percentile ? ` (${percentile}%)` : ""}`;
 }
 
-function categoryMetric(items, labels, peers = []) {
+function categoryMetric(items, labels) {
   const value = itemValue(items, labels);
   return {
     value,
-    percentile: categoryPercentileFromPeers(value, peers, labels),
+    percentile: categoryPercentile(items, labels),
   };
 }
 
-function CategoryColumn({ group, items, peers, sort, onSort, expanded, onToggle }) {
+function CategoryColumn({ group, items, sort, onSort, expanded, onToggle }) {
   const rows = useMemo(() => {
     const direction = sort.direction === "asc" ? 1 : -1;
     return group.types
@@ -333,13 +338,13 @@ function CategoryColumn({ group, items, peers, sort, onSort, expanded, onToggle 
         return {
           ...type,
           value,
-          percentile: categoryPercentileFromPeers(value, peers, type.labels),
+          percentile: categoryPercentile(items, type.labels),
           subTypes: (type.subTypes || []).map((subType) => {
             const subTypeValue = itemValue(items, subType.labels);
             return {
               ...subType,
               value: subTypeValue,
-              percentile: categoryPercentileFromPeers(subTypeValue, peers, subType.labels),
+              percentile: categoryPercentile(items, subType.labels),
             };
           }).filter((subType) => subType.value > 0),
         };
@@ -355,10 +360,10 @@ function CategoryColumn({ group, items, peers, sort, onSort, expanded, onToggle 
         }
         return left.label.localeCompare(right.label, undefined, { numeric: true });
       });
-  }, [group, items, peers, sort]);
+  }, [group, items, sort]);
   const total = uniqueLabelValue(items, group.types);
   const totalLabels = [...new Set(group.types.flatMap((type) => type.labels || []))];
-  const totalPercentile = categoryPercentileFromPeers(total, peers, totalLabels);
+  const totalPercentile = categoryPercentile(items, totalLabels);
 
   return (
     <section className={styles.categoryColumn}>
@@ -404,7 +409,7 @@ function CategoryColumn({ group, items, peers, sort, onSort, expanded, onToggle 
   );
 }
 
-function CallsByCategoryBreakdown({ items, peers = [], isLoading = false, open, onOpenChange }) {
+function CallsByCategoryBreakdown({ items, isLoading = false, open, onOpenChange }) {
   const [sorts, setSorts] = useState(() => Object.fromEntries(
     CALL_CATEGORY_GROUPS.map((group) => [group.key, { key: "value", direction: "desc" }])
   ));
@@ -447,7 +452,6 @@ function CallsByCategoryBreakdown({ items, peers = [], isLoading = false, open, 
               key={group.key}
               group={group}
               items={items}
-              peers={peers}
               sort={sorts[group.key] || { key: "value", direction: "desc" }}
               onSort={(key) => handleSort(group.key, key)}
               expanded={expanded}
@@ -600,17 +604,17 @@ function ReportMetric({ label, value, rank, populationSize, percentile, prominen
   );
 }
 
-function OfficialsReportCard({ profile, role, populationSize, categoryPeers = [] }) {
+function OfficialsReportCard({ profile, role, populationSize }) {
   const categories = profile?.callsByCategory || {};
-  const shooting = categoryMetric(categories, ["Shooting Foul", "Restricted Area Shooting Foul", "3-Pt Shooting Foul"], categoryPeers);
-  const technical = categoryMetric(categories, ["Technical Foul"], categoryPeers);
-  const restricted = categoryMetric(categories, ["Restricted Area Shooting Foul"], categoryPeers);
-  const threePoint = categoryMetric(categories, ["3-Pt Shooting Foul"], categoryPeers);
-  const floor = categoryMetric(categories, ["Foul on Floor", "Away From Play Foul", "Loose Ball Foul", "Double Personal Foul"], categoryPeers);
-  const offensive = categoryMetric(categories, ["Offensive Foul"], categoryPeers);
-  const handling = categoryMetric(categories, ["Traveling", "Double Dribble", "Palming", "Backcourt", "Offensive Goaltending"], categoryPeers);
-  const threeSeconds = categoryMetric(categories, ["Offensive 3 Second Violation", "Defensive 3 Second Violation"], categoryPeers);
-  const goaltending = categoryMetric(categories, ["Offensive Goaltending", "Defensive Goaltending"], categoryPeers);
+  const shooting = categoryMetric(categories, ["Shooting Foul", "Restricted Area Shooting Foul", "3-Pt Shooting Foul"]);
+  const technical = categoryMetric(categories, ["Technical Foul"]);
+  const restricted = categoryMetric(categories, ["Restricted Area Shooting Foul"]);
+  const threePoint = categoryMetric(categories, ["3-Pt Shooting Foul"]);
+  const floor = categoryMetric(categories, ["Foul on Floor", "Away From Play Foul", "Loose Ball Foul", "Double Personal Foul"]);
+  const offensive = categoryMetric(categories, ["Offensive Foul"]);
+  const handling = categoryMetric(categories, ["Traveling", "Double Dribble", "Palming", "Backcourt", "Offensive Goaltending"]);
+  const threeSeconds = categoryMetric(categories, ["Offensive 3 Second Violation", "Defensive 3 Second Violation"]);
+  const goaltending = categoryMetric(categories, ["Offensive Goaltending", "Defensive Goaltending"]);
   const wizardsGames = priorWizardsGames(profile?.schedule);
 
   return (
@@ -661,7 +665,7 @@ function OfficialsReportCard({ profile, role, populationSize, categoryPeers = []
   );
 }
 
-function TonightOfficialsReport({ rows, isLoading, onExportPdf, populationSize, categoryPeers = [] }) {
+function TonightOfficialsReport({ rows, isLoading, onExportPdf, populationSize }) {
   return (
     <section className={styles.tonightReportPanel}>
       <div className={styles.reportToolbar}>
@@ -696,7 +700,6 @@ function TonightOfficialsReport({ rows, isLoading, onExportPdf, populationSize, 
                   profile={profile || { name: slot.name }}
                   role={slot.role}
                   populationSize={populationSize}
-                  categoryPeers={categoryPeers}
                 />
               );
             })}
@@ -1186,7 +1189,7 @@ function ProfileModal({ children, onClose, label }) {
   );
 }
 
-function OfficialProfile({ profile, isLoading, season, onSeasonChange, onClose, onSelectTeam, onEditContext, categoryPopulationSize, categoryPeers = [] }) {
+function OfficialProfile({ profile, isLoading, season, onSeasonChange, onClose, onSelectTeam, onEditContext, categoryPopulationSize }) {
   const [detailSectionsOpen, setDetailSectionsOpen] = useState(true);
   if (!profile) return null;
   return (
@@ -1255,11 +1258,9 @@ function OfficialProfile({ profile, isLoading, season, onSeasonChange, onClose, 
         />
         <CallsByCategoryBreakdown
           items={profile.callsByCategory}
-          peers={categoryPeers}
           isLoading={isLoading}
           open={detailSectionsOpen}
           onOpenChange={setDetailSectionsOpen}
-          populationSize={categoryPopulationSize}
         />
       </div>
       <details className={`${styles.detailBlock} ${styles.scrollBlock}`} open>
@@ -1287,7 +1288,7 @@ function OfficialProfile({ profile, isLoading, season, onSeasonChange, onClose, 
   );
 }
 
-function TeamProfile({ profile, isLoading, season, onSeasonChange, onClose, onSelectOfficial, onEditContext, categoryPopulationSize, categoryPeers = [] }) {
+function TeamProfile({ profile, isLoading, season, onSeasonChange, onClose, onSelectOfficial, onEditContext, categoryPopulationSize }) {
   const [detailSectionsOpen, setDetailSectionsOpen] = useState(true);
   if (!profile) return null;
   return (
@@ -1342,11 +1343,9 @@ function TeamProfile({ profile, isLoading, season, onSeasonChange, onClose, onSe
         />
         <CallsByCategoryBreakdown
           items={profile.callsByCategory}
-          peers={categoryPeers}
           isLoading={isLoading}
           open={detailSectionsOpen}
           onOpenChange={setDetailSectionsOpen}
-          populationSize={categoryPopulationSize}
         />
       </div>
       <details className={styles.detailBlock} open>
@@ -2246,7 +2245,6 @@ export default function Officiating() {
           isLoading={isReportBaseLoading || isTonightReportLoading}
           onExportPdf={exportTonightReportPdf}
           populationSize={reportBaseData?.officialProfiles?.length || 0}
-          categoryPeers={reportBaseData?.officialProfiles || []}
         />
       ) : activeTab === "officials" ? (
         <div>
@@ -2301,7 +2299,6 @@ export default function Officiating() {
         onSelectTeam={selectTeamByName}
         onEditContext={setContextEditorRow}
         categoryPopulationSize={officialCategoryPeers.length}
-        categoryPeers={officialCategoryPeers}
       />
       <TeamProfile
         profile={selectedTeam}
@@ -2312,7 +2309,6 @@ export default function Officiating() {
         onSelectOfficial={selectOfficialByName}
         onEditContext={setContextEditorRow}
         categoryPopulationSize={teamCategoryPeers.length}
-        categoryPeers={teamCategoryPeers}
       />
       {contextEditorRow ? (
         <ContextTagEditor

@@ -63,6 +63,13 @@ function safeRate(numerator, denominator) {
   return denominator > 0 ? numerator / denominator : 0;
 }
 
+function percentileFromRank(rank, populationSize) {
+  const numericRank = Number(rank) || 0;
+  const total = Number(populationSize) || 0;
+  if (!numericRank || total <= 1) return null;
+  return Math.max(1, Math.min(100, Math.round(((total - numericRank) / (total - 1)) * 99 + 1)));
+}
+
 function seasonValues(season) {
   return season === CUMULATIVE_SEASON ? CUMULATIVE_SEASONS : [season || DEFAULT_SEASON];
 }
@@ -101,7 +108,7 @@ function addMapValue(map, key, delta) {
 function formatRankedCategoryMap(categoryTotals, games) {
   return Object.fromEntries(Object.entries(categoryTotals || {}).map(([category, count]) => [
     category,
-    { value: safeRate(Number(count) || 0, games), rank: null },
+    { value: safeRate(Number(count) || 0, games), rank: null, percentile: null },
   ]));
 }
 
@@ -111,6 +118,7 @@ function categoryRollupsToMap(rows) {
     {
       value: Number(row.calls_per_game) || 0,
       rank: Number(row.category_rank) || null,
+      percentile: null,
     },
   ]));
 }
@@ -175,6 +183,7 @@ function aggregateCategoryRollupsToMap(rows, denominator) {
     {
       value: safeRate(total.calls, denominator),
       rank: total.rank,
+      percentile: null,
     },
   ]));
 }
@@ -201,6 +210,7 @@ function displayCategoryRankDefinitions() {
     if (key && normalizedLabels.length > 1) definitions.set(key, normalizedLabels);
   };
   CALL_CATEGORY_GROUPS.forEach((group) => {
+    addDefinition(group.types.flatMap((type) => type.labels || []));
     group.types.forEach((type) => {
       addDefinition(type.labels);
       (type.subTypes || []).forEach((subType) => addDefinition(subType.labels));
@@ -209,7 +219,7 @@ function displayCategoryRankDefinitions() {
   return [...definitions.entries()].map(([key, labels]) => ({ key, labels }));
 }
 
-function attachDisplayCategoryRanks(categoryMapsByEntity) {
+export function attachDisplayCategoryMetrics(categoryMapsByEntity) {
   const definitions = displayCategoryRankDefinitions();
   if (!definitions.length) return categoryMapsByEntity;
   definitions.forEach((definition) => {
@@ -220,13 +230,17 @@ function attachDisplayCategoryRanks(categoryMapsByEntity) {
       }))
       .filter((row) => row.value > 0)
       .sort((left, right) => right.value - left.value || String(left.entityKey).localeCompare(String(right.entityKey)))
-      .forEach((row, index) => {
+      .forEach((row, index, rows) => {
         const categoryMap = categoryMapsByEntity.get(row.entityKey);
         if (!categoryMap) return;
         if (!categoryMap.__displayRanks) {
           categoryMap.__displayRanks = {};
         }
+        if (!categoryMap.__displayPercentiles) {
+          categoryMap.__displayPercentiles = {};
+        }
         categoryMap.__displayRanks[definition.key] = index + 1;
+        categoryMap.__displayPercentiles[definition.key] = percentileFromRank(index + 1, rows.length);
       });
   });
   return categoryMapsByEntity;
@@ -280,12 +294,15 @@ function aggregateOfficialCategoryRollups(rows, profileRows) {
     [...totals.values()]
       .filter((row) => row.category === category)
       .sort((left, right) => right.value - left.value)
-      .forEach((row, index) => {
+      .forEach((row, index, rows) => {
         const map = byOfficial.get(row.officialKey.toLowerCase());
-        if (map?.[category]) map[category].rank = index + 1;
+        if (map?.[category]) {
+          map[category].rank = index + 1;
+          map[category].percentile = percentileFromRank(index + 1, rows.length);
+        }
       });
   });
-  attachDisplayCategoryRanks(byOfficial);
+  attachDisplayCategoryMetrics(byOfficial);
 
   [...totals.values()].forEach((row) => {
     const source = byOfficial.get(row.officialKey.toLowerCase());
@@ -328,7 +345,7 @@ function teamCategoryRollupsToMaps(rows, teamRows) {
     row.value = safeRate(row.calls, row.games);
     const teamKey = row.team.toLowerCase();
     if (!byTeam.has(teamKey)) byTeam.set(teamKey, {});
-    byTeam.get(teamKey)[row.category] = { value: row.value, rank: null };
+    byTeam.get(teamKey)[row.category] = { value: row.value, rank: null, percentile: null };
   });
 
   const categories = new Set([...totals.values()].map((row) => row.category));
@@ -336,12 +353,15 @@ function teamCategoryRollupsToMaps(rows, teamRows) {
     [...totals.values()]
       .filter((row) => row.category === category)
       .sort((left, right) => right.value - left.value)
-      .forEach((row, index) => {
+      .forEach((row, index, rows) => {
         const map = byTeam.get(row.team.toLowerCase());
-        if (map?.[category]) map[category].rank = index + 1;
+        if (map?.[category]) {
+          map[category].rank = index + 1;
+          map[category].percentile = percentileFromRank(index + 1, rows.length);
+        }
       });
   });
-  return attachDisplayCategoryRanks(byTeam);
+  return attachDisplayCategoryMetrics(byTeam);
 }
 
 function hasCategoryMapRows(map) {
@@ -355,6 +375,7 @@ function categoriesPerGameFromTotals(categoryTotals, games, existingCategories =
     {
       value: safeRate(Number(count) || 0, denominator),
       rank: existingCategories?.[category]?.rank || null,
+      percentile: existingCategories?.[category]?.percentile || null,
     },
   ]));
 }
@@ -370,7 +391,8 @@ function mergeCategoryValuesWithRanks(valueMap = {}, rankMap = {}) {
     const rankRow = rankMap?.[key];
     const value = typeof valueRow === "object" && valueRow !== null ? Number(valueRow.value) || 0 : Number(valueRow) || 0;
     const rank = typeof rankRow === "object" && rankRow !== null ? Number(rankRow.rank) || null : null;
-    merged[key] = { value, rank };
+    const percentile = typeof rankRow === "object" && rankRow !== null ? Number(rankRow.percentile) || null : null;
+    merged[key] = { value, rank, percentile };
   });
   return merged;
 }
@@ -1019,8 +1041,11 @@ function addCategoryRanks(rows) {
   categories.forEach((category) => {
     [...rows]
       .sort((left, right) => Number(right.callsByCategory?.[category]?.value || 0) - Number(left.callsByCategory?.[category]?.value || 0))
-      .forEach((row, index) => {
-        if (row.callsByCategory?.[category]) row.callsByCategory[category].rank = index + 1;
+      .forEach((row, index, rankedRows) => {
+        if (row.callsByCategory?.[category]) {
+          row.callsByCategory[category].rank = index + 1;
+          row.callsByCategory[category].percentile = percentileFromRank(index + 1, rankedRows.length);
+        }
       });
   });
   return rows;

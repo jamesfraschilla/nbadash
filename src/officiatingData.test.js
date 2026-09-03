@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildOfficialProfiles, buildTeamProfiles, preferAuthoritativeChallengeEvents, specificCallCategory } from "./officiatingData.js";
+import { attachDisplayCategoryMetrics, buildOfficialProfiles, buildTeamProfiles, preferAuthoritativeChallengeEvents, specificCallCategory } from "./officiatingData.js";
 import { CALL_CATEGORY_GROUPS, challengeFoulSubtype } from "./officiatingCategoryNormalization.js";
 
 test("preferAuthoritativeChallengeEvents keeps daily PBP rows until weekly official rows arrive", () => {
@@ -252,6 +252,53 @@ test("call category groups keep out of bounds under violations and location foul
   assert.ok(outOfBounds);
   assert.deepEqual(outOfBounds.labels, ["Out Of Bounds"]);
   assert.equal(fouls.types.some((type) => type.label === "Out of Bounds"), false);
+});
+
+test("display category metrics store grouped percentiles across the full peer population", () => {
+  const peerMaps = new Map([
+    ["top", {
+      "Shooting Foul": { value: 4, rank: null, percentile: null },
+      "Restricted Area Shooting Foul": { value: 2, rank: null, percentile: null },
+      "3-Pt Shooting Foul": { value: 1, rank: null, percentile: null },
+    }],
+    ["middle", {
+      "Shooting Foul": { value: 3, rank: null, percentile: null },
+      "Restricted Area Shooting Foul": { value: 1, rank: null, percentile: null },
+      "3-Pt Shooting Foul": { value: 0.5, rank: null, percentile: null },
+    }],
+    ["bottom", {
+      "Shooting Foul": { value: 2, rank: null, percentile: null },
+      "Restricted Area Shooting Foul": { value: 0.5, rank: null, percentile: null },
+      "3-Pt Shooting Foul": { value: 0.25, rank: null, percentile: null },
+    }],
+  ]);
+
+  attachDisplayCategoryMetrics(peerMaps);
+  const key = ["3-Pt Shooting Foul", "Restricted Area Shooting Foul", "Shooting Foul"].sort().join("|");
+  const foulTotalKey = [
+    "3-Pt Shooting Foul",
+    "Away From Play Foul",
+    "Clear Path Foul",
+    "Delay Of Game",
+    "Double Personal Foul",
+    "Flagrant Type 1 Foul",
+    "Flagrant Type 2 Foul",
+    "Flopping Technical",
+    "Foul on Floor",
+    "Loose Ball Foul",
+    "Non Unsportsmanlike Technical",
+    "Offensive Foul",
+    "Restricted Area Shooting Foul",
+    "Rim Hanging Technical",
+    "Shooting Foul",
+    "Technical Foul",
+    "Transition Take Foul",
+  ].sort().join("|");
+
+  assert.equal(peerMaps.get("top").__displayPercentiles[key], 100);
+  assert.equal(peerMaps.get("middle").__displayPercentiles[key], 51);
+  assert.equal(peerMaps.get("bottom").__displayPercentiles[key], 1);
+  assert.equal(peerMaps.get("middle").__displayPercentiles[foulTotalKey], 51);
 });
 
 test("official challenge logs prefer whistle label while counting dual crew-chief role", () => {
