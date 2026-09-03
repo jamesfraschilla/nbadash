@@ -316,7 +316,7 @@
   min-height: 0;
   padding: 0.08in;
   display: grid;
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto 1fr;
   gap: 0.055in;
   overflow: hidden;
   border: 1px solid #cbd5e1;
@@ -324,11 +324,11 @@
   background: #fff;
 }
 
-.reportOfficialIntro {
+.reportOfficialTop {
   display: grid;
   grid-template-columns: 2.15in 1fr;
-  align-items: stretch;
-  gap: 0.08in;
+  align-items: center;
+  gap: 0.055in;
 }
 
 .reportOfficialIdentity {
@@ -368,7 +368,8 @@
 
 .reportWizardsHistory {
   min-width: 0;
-  padding: 0.045in 0.07in;
+  padding: 0.06in 0.07in;
+  align-self: stretch;
   border: 1px solid #e2e8f0;
   border-radius: 0.07in;
   background: #f8fafc;
@@ -391,18 +392,18 @@
 }
 
 .reportWizardsHistory ul {
-  margin: 0.02in 0 0;
+  margin: 0.035in 0 0;
   padding: 0;
   display: grid;
-  gap: 0.005in;
+  gap: 0.02in;
   list-style: none;
 }
 
 .reportWizardsHistory li {
   color: #111827;
-  font-size: 0.095in;
+  font-size: 0.1in;
   font-weight: 850;
-  line-height: 1.15;
+  line-height: 1.2;
 }
 
 .reportPrimaryMetrics {
@@ -411,21 +412,29 @@
   gap: 0.05in;
 }
 
-.reportProfileGrid {
+.reportOfficialDetails {
   display: grid;
-  grid-template-columns: 1.35fr 0.65fr;
+  grid-template-columns: minmax(0, 1fr) 1.5in;
   gap: 0.055in;
+  min-height: 0;
 }
 
-.reportProfileGrid section {
+.reportStatProfiles {
+  display: grid;
+  grid-template-rows: auto auto;
+  gap: 0.04in;
   min-width: 0;
-  padding: 0.055in;
+}
+
+.reportStatProfiles section {
+  min-width: 0;
+  padding: 0.045in;
   border: 1px solid #e2e8f0;
   border-radius: 0.07in;
   background: #f8fafc;
 }
 
-.reportProfileGrid h4 {
+.reportStatProfiles h4 {
   margin: 0 0 0.035in;
   color: #172033;
   font-size: 0.105in;
@@ -433,14 +442,10 @@
   text-transform: uppercase;
 }
 
-.reportProfileGrid section > div {
+.reportStatProfiles section > div {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.035in;
-}
-
-.reportProfileGrid section > .reportFoulMetrics {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.035in;
 }
 
 .reportMetric {
@@ -456,7 +461,7 @@
 }
 
 .reportMetricProminent {
-  min-height: 0.54in;
+  min-height: 0.6in;
 }
 
 .reportMetric span {
@@ -1791,7 +1796,35 @@
 
   :global(body.officiating-report-print) {
     margin: 0;
+    width: 8.5in;
+    height: 11in;
+    min-height: 0;
+    overflow: hidden;
     background: #fff !important;
+  }
+
+  :global(body.officiating-report-print #root) {
+    width: 8.5in;
+    height: 11in;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  :global(body.officiating-report-print #root > div),
+  :global(body.officiating-report-print #root > div > main) {
+    width: 8.5in;
+    height: 11in;
+    min-height: 11in;
+    overflow: visible !important;
+  }
+
+  :global(body.officiating-report-print #root > div > header) {
+    display: none !important;
+  }
+
+  :global(body.officiating-report-print #root > div > main) {
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
   :global(body.officiating-report-print *) {
@@ -1803,9 +1836,20 @@
     visibility: visible !important;
   }
 
+  :global(body.officiating-report-print) .page {
+    position: static;
+    width: 8.5in;
+    height: 11in;
+    min-height: 11in;
+    overflow: visible !important;
+    clip-path: none !important;
+  }
+
   :global(body.officiating-report-print) .officialsReportSheet {
     position: fixed;
-    inset: 0;
+    top: 0;
+    left: 0;
+    z-index: 1000;
     width: 8.5in;
     height: 11in;
     min-height: 11in;
@@ -1816,5 +1860,19 @@
     box-shadow: none;
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
+  }
+
+  :global(body.officiating-report-print) .officialsReportHeader,
+  :global(body.officiating-report-print) .officialsReportFooter {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  :global(body.officiating-report-print) .officialsReportFooter {
+    align-items: center;
+    justify-content: center;
   }
 }

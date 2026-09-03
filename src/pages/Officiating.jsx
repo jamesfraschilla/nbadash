@@ -635,7 +635,7 @@ function OfficialsReportCard({ profile, role, populationSize }) {
 
   return (
     <article className={styles.reportOfficialCard}>
-      <div className={styles.reportOfficialIntro}>
+      <div className={styles.reportOfficialTop}>
         <div className={styles.reportOfficialIdentity}>
           <RefereeHeadshot name={profile?.name} eager />
           <div>
@@ -644,50 +644,52 @@ function OfficialsReportCard({ profile, role, populationSize }) {
             <p>{profile?.jerseyNumber ? `#${profile.jerseyNumber}` : "Number unavailable"}</p>
           </div>
         </div>
+        <div className={styles.reportPrimaryMetrics}>
+          <ReportMetric label="Calls/G" value={profile?.callsPerGame} rank={profile?.callsPerGameRank} populationSize={populationSize} prominent />
+          <ReportMetric label="Fouls/G" value={fouls.value} percentile={fouls.percentile} prominent />
+          <ReportChallengeMetric
+            label="Challenge (Whistle)"
+            successes={profile?.successfulWhistleChallenges}
+            attempts={profile?.whistleChallenges}
+            rank={profile?.whistleChallengeRateRank}
+            populationSize={populationSize}
+          />
+          <ReportChallengeMetric
+            label="Challenge (Crew Chief)"
+            successes={profile?.successfulCrewChiefChallenges}
+            attempts={profile?.crewChiefChallenges}
+            rank={profile?.crewChiefChallengeRateRank}
+            populationSize={populationSize}
+          />
+        </div>
+      </div>
+      <div className={styles.reportOfficialDetails}>
+        <div className={styles.reportStatProfiles}>
+          <section>
+            <h4>Foul Profile</h4>
+            <div className={styles.reportFoulMetrics}>
+              <ReportMetric label="Shooting Fouls/G" value={shooting.value} percentile={shooting.percentile} />
+              <ReportMetric label="Technical Fouls/G" value={technical.value} percentile={technical.percentile} />
+              <ReportMetric label="Restricted Area/G" value={restricted.value} percentile={restricted.percentile} />
+              <ReportMetric label="3-PT Fouls/G" value={threePoint.value} percentile={threePoint.percentile} />
+              <ReportMetric label="Fouls on Floor/G" value={floor.value} percentile={floor.percentile} />
+              <ReportMetric label="Offensive Fouls/G" value={offensive.value} percentile={offensive.percentile} />
+            </div>
+          </section>
+          <section>
+            <h4>Violation Profile</h4>
+            <div className={styles.reportViolationMetrics}>
+              <ReportMetric label="Handling Violations/G" value={handling.value} percentile={handling.percentile} />
+              <ReportMetric label="3 Seconds/G" value={threeSeconds.value} percentile={threeSeconds.percentile} />
+              <ReportMetric label="Goaltending/G" value={goaltending.value} percentile={goaltending.percentile} />
+            </div>
+          </section>
+        </div>
         <section className={styles.reportWizardsHistory}>
           <span>Previous Wizards Games</span>
           {wizardsGames.length ? (
             <ul>{wizardsGames.map((game) => <li key={game}>{game}</li>)}</ul>
           ) : <strong>None in 2025-26</strong>}
-        </section>
-      </div>
-      <div className={styles.reportPrimaryMetrics}>
-        <ReportMetric label="Calls/G" value={profile?.callsPerGame} rank={profile?.callsPerGameRank} populationSize={populationSize} prominent />
-        <ReportMetric label="Fouls/G" value={fouls.value} percentile={fouls.percentile} prominent />
-        <ReportChallengeMetric
-          label="Challenge (Whistle)"
-          successes={profile?.successfulWhistleChallenges}
-          attempts={profile?.whistleChallenges}
-          rank={profile?.whistleChallengeRateRank}
-          populationSize={populationSize}
-        />
-        <ReportChallengeMetric
-          label="Challenge (Crew Chief)"
-          successes={profile?.successfulCrewChiefChallenges}
-          attempts={profile?.crewChiefChallenges}
-          rank={profile?.crewChiefChallengeRateRank}
-          populationSize={populationSize}
-        />
-      </div>
-      <div className={styles.reportProfileGrid}>
-        <section>
-          <h4>Foul Profile</h4>
-          <div className={styles.reportFoulMetrics}>
-            <ReportMetric label="Shooting Fouls/G" value={shooting.value} percentile={shooting.percentile} />
-            <ReportMetric label="Technical Fouls/G" value={technical.value} percentile={technical.percentile} />
-            <ReportMetric label="Restricted Area/G" value={restricted.value} percentile={restricted.percentile} />
-            <ReportMetric label="3-PT Fouls/G" value={threePoint.value} percentile={threePoint.percentile} />
-            <ReportMetric label="Fouls on Floor/G" value={floor.value} percentile={floor.percentile} />
-            <ReportMetric label="Offensive Fouls/G" value={offensive.value} percentile={offensive.percentile} />
-          </div>
-        </section>
-        <section>
-          <h4>Violation Profile</h4>
-          <div className={styles.reportViolationMetrics}>
-            <ReportMetric label="Handling Violations/G" value={handling.value} percentile={handling.percentile} />
-            <ReportMetric label="3 Seconds/G" value={threeSeconds.value} percentile={threeSeconds.percentile} />
-            <ReportMetric label="Goaltending/G" value={goaltending.value} percentile={goaltending.percentile} />
-          </div>
         </section>
       </div>
     </article>
