@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { attachDisplayCategoryMetrics, buildOfficialProfiles, buildTeamProfiles, preferAuthoritativeChallengeEvents, specificCallCategory } from "./officiatingData.js";
+import {
+  attachDisplayCategoryMetrics,
+  buildOfficialProfiles,
+  buildTeamProfiles,
+  OFFICIAL_CATEGORY_ROLLUP_COLUMNS,
+  preferAuthoritativeChallengeEvents,
+  specificCallCategory,
+  TEAM_CATEGORY_ROLLUP_COLUMNS,
+  TEAM_ROLLUP_COLUMNS,
+} from "./officiatingData.js";
 import { CALL_CATEGORY_GROUPS, challengeFoulSubtype } from "./officiatingCategoryNormalization.js";
 
 test("preferAuthoritativeChallengeEvents keeps daily PBP rows until weekly official rows arrive", () => {
@@ -252,6 +261,19 @@ test("call category groups keep out of bounds under violations and location foul
   assert.ok(outOfBounds);
   assert.deepEqual(outOfBounds.labels, ["Out Of Bounds"]);
   assert.equal(fouls.types.some((type) => type.label === "Out of Bounds"), false);
+});
+
+test("official and team category rollup queries use their own table schemas", () => {
+  const officialColumns = new Set(OFFICIAL_CATEGORY_ROLLUP_COLUMNS.split(","));
+  const teamColumns = new Set(TEAM_CATEGORY_ROLLUP_COLUMNS.split(","));
+
+  assert.equal(officialColumns.has("official_key"), true);
+  assert.equal(officialColumns.has("official_id"), true);
+  assert.equal(officialColumns.has("team"), false);
+  assert.equal(teamColumns.has("team"), true);
+  assert.equal(teamColumns.has("official_id"), false);
+  assert.equal(teamColumns.has("official_name"), false);
+  assert.equal(new Set(TEAM_ROLLUP_COLUMNS.split(",")).has("team_id"), false);
 });
 
 test("display category metrics store grouped percentiles across the full peer population", () => {

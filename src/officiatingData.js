@@ -14,10 +14,11 @@ const CONTEXT_TAG_PAGE_SIZE = 100;
 const EXCLUDED_STAT_SEASON_TYPES = new Set(["preseason"]);
 const CONTEXT_TAG_COLUMNS = "id,label";
 const PROFILE_ROLLUP_COLUMNS = "season,id,official_id,name,jersey_number,games,calls,calls_per_game,fouls,fouls_per_game,violations,violations_per_game,technicals,challenges,successful_challenges,whistle_challenges,successful_whistle_challenges,whistle_challenge_rate,crew_chief_challenges,successful_crew_chief_challenges,crew_chief_challenge_rate,crew_challenges,successful_crew_challenges,crew_challenge_rate";
-const TEAM_ROLLUP_COLUMNS = "season,team,team_id,games,calls_against,calls_for,net_calls_for,challenges,successful_challenges,challenge_rate";
+export const TEAM_ROLLUP_COLUMNS = "season,team,games,calls_against,calls_for,net_calls_for,challenges,successful_challenges,challenge_rate";
 const OVERVIEW_ROLLUP_COLUMNS = "season,call_events,challenges,successful_challenges,challenge_rate,officials,teams";
 const TEAM_OFFICIAL_NET_COLUMNS = "season,team,official_key,official_id,official_name,net_calls_for,net_calls_for_per_game,games";
-const CATEGORY_ROLLUP_COLUMNS = "season,official_id,official_name,team,category,calls,calls_per_game,category_rank";
+export const OFFICIAL_CATEGORY_ROLLUP_COLUMNS = "season,official_key,official_id,official_name,category,calls,games,calls_per_game,category_rank";
+export const TEAM_CATEGORY_ROLLUP_COLUMNS = "season,team,category,calls,category_games,games,calls_per_game,category_rank";
 const ASSIGNMENT_COLUMNS = "season,season_type,game_id,game_date,home_team,away_team,official_id,official_name,jersey_number,role_key,assignment_order,is_alternate";
 const CHALLENGE_COLUMNS = "id,season,season_type,game_id,game_date,round,series,home_team,away_team,challenging_team,period,game_clock,challenge_type,initial_call,call_ruling,ruling_outcome,challenge_outcome,video_url,crew_chief_id,crew_chief_name,whistling_official_id,whistling_official_name,matched_action_number,matched_call_event_id,match_confidence,match_reason,challenge_sub_type,review_status,source";
 const CALL_EVENT_COLUMNS = "id,season,season_type,game_id,game_date,home_team,away_team,period,game_clock,action_number,order_number,action_type,sub_type,descriptor,description,official_token,official_id,official_name,team_id,team_tricode,player_id,player_name,primary_category,secondary_category,charged_team,benefiting_team,confidence,confidence_reason,area,area_detail";
@@ -578,6 +579,7 @@ async function selectTable(table, queryBuilder, { maxRows = SUPABASE_PAGE_SIZE }
     }
     if (error) {
       if (isMissingTableError(error)) return { data: [], unavailable: true };
+      console.warn(`[officiating] ${table} query failed`, error.code || "unknown", error.message || error.details || "Unknown query error");
       throw error;
     }
     const page = asArray(data);
@@ -777,7 +779,9 @@ function mergeProfileDetails(profiles, detailProfiles) {
       ...profile,
       jerseyNumber: profile.jerseyNumber || detail.jerseyNumber,
       callsByTeam: detail.callsByTeam,
-      callsByCategory: detail.callsByCategory,
+      callsByCategory: hasCategoryMapRows(profile.callsByCategory)
+        ? profile.callsByCategory
+        : detail.callsByCategory,
       schedule: detail.schedule,
       recentCalls: detail.recentCalls,
       challengeLog: detail.challengeLog,
@@ -792,7 +796,9 @@ function mergeTeamDetails(profiles, detailProfiles) {
     return detail ? {
       ...profile,
       callsByOfficial: detail.callsByOfficial,
-      callsByCategory: detail.callsByCategory,
+      callsByCategory: hasCategoryMapRows(profile.callsByCategory)
+        ? profile.callsByCategory
+        : detail.callsByCategory,
       challengeLog: detail.challengeLog,
       recentCalls: detail.recentCalls,
     } : profile;
@@ -1149,7 +1155,7 @@ export async function fetchOfficialProfileDetails({ season = DEFAULT_SEASON, pro
     return next.order("game_date", { ascending: false });
   };
   const categoryQuery = (query) => {
-    let next = applySeasonFilter(query.select(CATEGORY_ROLLUP_COLUMNS), season);
+    let next = applySeasonFilter(query.select(OFFICIAL_CATEGORY_ROLLUP_COLUMNS), season);
     if (officialId && officialName) {
       next = next.or(`official_id.eq.${officialId},official_name.eq.${officialName}`);
     } else if (officialId) {
@@ -1160,7 +1166,7 @@ export async function fetchOfficialProfileDetails({ season = DEFAULT_SEASON, pro
     return next.order("calls_per_game", { ascending: false });
   };
   const profileQuery = (query) => applySeasonFilter(query.select(PROFILE_ROLLUP_COLUMNS), season);
-  const categoryPopulationQuery = (query) => applySeasonFilter(query.select(CATEGORY_ROLLUP_COLUMNS), season);
+  const categoryPopulationQuery = (query) => applySeasonFilter(query.select(OFFICIAL_CATEGORY_ROLLUP_COLUMNS), season);
   const [profileResult, teamNetResult, challengeEventsResult, assignmentsResult, callEventsResult, categoryRollupsResult, categoryPopulationResult] = await Promise.all([
     selectPreferredTable("nba_official_profiles_cache", "nba_official_profiles", profileQuery, { maxRows: PROFILE_LIMIT })
       .catch(() => ({ data: [], unavailable: true })),
@@ -1226,10 +1232,10 @@ export async function fetchTeamProfileDetails({ season = DEFAULT_SEASON, profile
   const team = String(profile?.team || "").trim();
   if (!team) return profile;
   const cumulative = season === CUMULATIVE_SEASON;
-  const categoryRollupQuery = (query) => applySeasonFilter(query.select(CATEGORY_ROLLUP_COLUMNS), season)
+  const categoryRollupQuery = (query) => applySeasonFilter(query.select(TEAM_CATEGORY_ROLLUP_COLUMNS), season)
     .eq("team", team)
     .order("calls_per_game", { ascending: false });
-  const categoryPopulationQuery = (query) => applySeasonFilter(query.select(CATEGORY_ROLLUP_COLUMNS), season);
+  const categoryPopulationQuery = (query) => applySeasonFilter(query.select(TEAM_CATEGORY_ROLLUP_COLUMNS), season);
   const teamOfficialQuery = (query) => applySeasonFilter(query.select(TEAM_OFFICIAL_NET_COLUMNS), season)
     .eq("team", team)
     .order("net_calls_for_per_game", { ascending: false });
@@ -1326,10 +1332,10 @@ export async function fetchOfficiatingDashboardData({ season = DEFAULT_SEASON, i
     selectPreferredTable("nba_team_profiles_cache", "nba_team_profiles", (query) => applySeasonFilter(query
       .select(TEAM_ROLLUP_COLUMNS), season), { maxRows: PROFILE_LIMIT }),
     selectPreferredTable("nba_official_call_category_rollups_cache", "nba_official_call_category_rollups", (query) => applySeasonFilter(query
-      .select(CATEGORY_ROLLUP_COLUMNS), season), { maxRows: PROFILE_DETAIL_LIMIT })
+      .select(OFFICIAL_CATEGORY_ROLLUP_COLUMNS), season), { maxRows: PROFILE_DETAIL_LIMIT })
       .catch(() => ({ data: [], unavailable: true })),
     selectPreferredTable("nba_team_call_category_rollups_cache", "nba_team_call_category_rollups", (query) => applySeasonFilter(query
-      .select(CATEGORY_ROLLUP_COLUMNS), season), { maxRows: PROFILE_DETAIL_LIMIT })
+      .select(TEAM_CATEGORY_ROLLUP_COLUMNS), season), { maxRows: PROFILE_DETAIL_LIMIT })
       .catch(() => ({ data: [], unavailable: true })),
   ]);
 
