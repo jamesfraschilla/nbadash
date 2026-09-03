@@ -21,6 +21,9 @@ const CATEGORY_ROLLUP_COLUMNS = "season,official_id,official_name,team,category,
 const ASSIGNMENT_COLUMNS = "season,season_type,game_id,game_date,home_team,away_team,official_id,official_name,jersey_number,role_key,assignment_order,is_alternate";
 const CHALLENGE_COLUMNS = "id,season,season_type,game_id,game_date,round,series,home_team,away_team,challenging_team,period,game_clock,challenge_type,initial_call,call_ruling,ruling_outcome,challenge_outcome,video_url,crew_chief_id,crew_chief_name,whistling_official_id,whistling_official_name,matched_action_number,matched_call_event_id,match_confidence,match_reason,challenge_sub_type,review_status,source";
 const CALL_EVENT_COLUMNS = "id,season,season_type,game_id,game_date,home_team,away_team,period,game_clock,action_number,order_number,action_type,sub_type,descriptor,description,official_token,official_id,official_name,team_id,team_tricode,player_id,player_name,primary_category,secondary_category,charged_team,benefiting_team,confidence,confidence_reason,area,area_detail";
+const OFFICIAL_REPORT_CATEGORY_DEFINITIONS = [
+  ["Offensive 3 Second Violation", "Defensive 3 Second Violation"],
+];
 const NBA_TEAM_ID_BY_TRICODE = {
   ATL: "1610612737",
   BOS: "1610612738",
@@ -117,7 +120,7 @@ function categoryRollupsToMap(rows) {
     String(row.category || "Unknown").trim(),
     {
       value: Number(row.calls_per_game) || 0,
-      rank: Number(row.category_rank) || null,
+      rank: null,
       percentile: null,
     },
   ]));
@@ -172,17 +175,15 @@ function aggregateCategoryRollupsToMap(rows, denominator) {
   const totals = new Map();
   asArray(rows).forEach((row) => {
     const category = String(row.category || "Unknown").trim();
-    if (!totals.has(category)) totals.set(category, { calls: 0, rank: null });
+    if (!totals.has(category)) totals.set(category, { calls: 0 });
     const total = totals.get(category);
     total.calls += Number(row.calls) || 0;
-    const rank = Number(row.category_rank) || null;
-    if (rank) total.rank = total.rank ? Math.min(total.rank, rank) : rank;
   });
   return Object.fromEntries([...totals.entries()].map(([category, total]) => [
     category,
     {
       value: safeRate(total.calls, denominator),
-      rank: total.rank,
+      rank: null,
       percentile: null,
     },
   ]));
@@ -196,6 +197,45 @@ function officialCategoryRollupKey(row) {
   return String(row.official_id || row.official_name || "Unknown").trim();
 }
 
+function normalizedEntityKey(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function officialProfileCanonicalKey(row) {
+  return normalizedEntityKey(row.official_id || row.id || row.name || row.official_name || "Unknown");
+}
+
+function officialAliasCandidates(row) {
+  return [
+    row.official_id,
+    row.id,
+    row.name,
+    row.official_name,
+  ].map(normalizedEntityKey).filter(Boolean);
+}
+
+function buildOfficialAliasMap(profileRows) {
+  const aliasToCanonical = new Map();
+  asArray(profileRows).forEach((row) => {
+    const canonical = officialProfileCanonicalKey(row);
+    if (!canonical) return;
+    officialAliasCandidates(row).forEach((alias) => {
+      aliasToCanonical.set(alias, canonical);
+    });
+  });
+  return aliasToCanonical;
+}
+
+function canonicalOfficialCategoryKey(row, aliasToCanonical) {
+  const candidates = [
+    row.official_id,
+    row.official_name,
+    row.id,
+    row.name,
+  ].map(normalizedEntityKey).filter(Boolean);
+  return candidates.map((candidate) => aliasToCanonical.get(candidate)).find(Boolean) || candidates[0] || "unknown";
+}
+
 function categoryRankGroupKey(labels = []) {
   return [...new Set(labels.map((label) => String(label || "").trim()).filter(Boolean))]
     .sort((left, right) => left.localeCompare(right))
@@ -207,7 +247,10 @@ function displayCategoryRankDefinitions() {
   const addDefinition = (labels = []) => {
     const normalizedLabels = [...new Set(labels.map((label) => String(label || "").trim()).filter(Boolean))];
     const key = categoryRankGroupKey(normalizedLabels);
-    if (key && normalizedLabels.length > 1) definitions.set(key, normalizedLabels);
+    if (key) definitions.set(key, normalizedLabels);
+    normalizedLabels.forEach((label) => {
+      definitions.set(label, [label]);
+    });
   };
   CALL_CATEGORY_GROUPS.forEach((group) => {
     addDefinition(group.types.flatMap((type) => type.labels || []));
@@ -216,6 +259,7 @@ function displayCategoryRankDefinitions() {
       (type.subTypes || []).forEach((subType) => addDefinition(subType.labels));
     });
   });
+  OFFICIAL_REPORT_CATEGORY_DEFINITIONS.forEach(addDefinition);
   return [...definitions.entries()].map(([key, labels]) => ({ key, labels }));
 }
 
@@ -240,7 +284,12 @@ export function attachDisplayCategoryMetrics(categoryMapsByEntity) {
           categoryMap.__displayPercentiles = {};
         }
         categoryMap.__displayRanks[definition.key] = index + 1;
-        categoryMap.__displayPercentiles[definition.key] = percentileFromRank(index + 1, rows.length);
+        const percentile = percentileFromRank(index + 1, rows.length);
+        categoryMap.__displayPercentiles[definition.key] = percentile;
+        if (definition.labels.length === 1 && categoryMap[definition.labels[0]]) {
+          categoryMap[definition.labels[0]].rank = index + 1;
+          categoryMap[definition.labels[0]].percentile = percentile;
+        }
       });
   });
   return categoryMapsByEntity;
@@ -248,34 +297,40 @@ export function attachDisplayCategoryMetrics(categoryMapsByEntity) {
 
 function aggregateOfficialCategoryRollups(rows, profileRows) {
   const gamesByKey = new Map();
+  const aliasToCanonical = buildOfficialAliasMap(profileRows);
+  const profileAliasesByCanonical = new Map();
   asArray(profileRows).forEach((row) => {
     const games = Number(row.games) || 0;
-    [
-      row.official_id,
-      row.id,
-      row.name,
-      row.official_name,
-    ].map((value) => String(value || "").trim()).filter(Boolean).forEach((key) => {
-      gamesByKey.set(key.toLowerCase(), games);
+    const canonical = officialProfileCanonicalKey(row);
+    if (!canonical) return;
+    gamesByKey.set(canonical, games);
+    if (!profileAliasesByCanonical.has(canonical)) profileAliasesByCanonical.set(canonical, new Set());
+    officialAliasCandidates(row).forEach((alias) => {
+      profileAliasesByCanonical.get(canonical).add(alias);
+      gamesByKey.set(alias, games);
     });
   });
 
   const totals = new Map();
   asArray(rows).forEach((row) => {
-    const officialKey = officialCategoryRollupKey(row);
+    const officialKey = canonicalOfficialCategoryKey(row, aliasToCanonical);
     const category = String(row.category || "Unknown").trim();
     if (!officialKey || !category) return;
-    const key = `${officialKey.toLowerCase()}|${category}`;
+    const key = `${officialKey}|${category}`;
     if (!totals.has(key)) {
+      const aliases = new Set(profileAliasesByCanonical.get(officialKey) || []);
+      [
+        row.official_id,
+        row.official_name,
+        row.id,
+        row.name,
+      ].map(normalizedEntityKey).filter(Boolean).forEach((alias) => aliases.add(alias));
       totals.set(key, {
         officialKey,
-        aliases: [
-          row.official_id,
-          row.official_name,
-        ].map((value) => String(value || "").trim()).filter(Boolean),
+        aliases: [...aliases],
         category,
         calls: 0,
-        games: gamesByKey.get(officialKey.toLowerCase()) || 0,
+        games: gamesByKey.get(officialKey) || 0,
       });
     }
     totals.get(key).calls += Number(row.calls) || 0;
@@ -284,9 +339,8 @@ function aggregateOfficialCategoryRollups(rows, profileRows) {
   const byOfficial = new Map();
   [...totals.values()].forEach((row) => {
     row.value = safeRate(row.calls, row.games);
-    const officialKey = row.officialKey.toLowerCase();
-    if (!byOfficial.has(officialKey)) byOfficial.set(officialKey, {});
-    byOfficial.get(officialKey)[row.category] = { value: row.value, rank: null };
+    if (!byOfficial.has(row.officialKey)) byOfficial.set(row.officialKey, {});
+    byOfficial.get(row.officialKey)[row.category] = { value: row.value, rank: null, percentile: null };
   });
 
   const categories = new Set([...totals.values()].map((row) => row.category));
@@ -295,7 +349,7 @@ function aggregateOfficialCategoryRollups(rows, profileRows) {
       .filter((row) => row.category === category)
       .sort((left, right) => right.value - left.value)
       .forEach((row, index, rows) => {
-        const map = byOfficial.get(row.officialKey.toLowerCase());
+        const map = byOfficial.get(row.officialKey);
         if (map?.[category]) {
           map[category].rank = index + 1;
           map[category].percentile = percentileFromRank(index + 1, rows.length);
@@ -305,11 +359,10 @@ function aggregateOfficialCategoryRollups(rows, profileRows) {
   attachDisplayCategoryMetrics(byOfficial);
 
   [...totals.values()].forEach((row) => {
-    const source = byOfficial.get(row.officialKey.toLowerCase());
+    const source = byOfficial.get(row.officialKey);
     if (!source) return;
     row.aliases.forEach((alias) => {
-      const aliasKey = alias.toLowerCase();
-      if (!byOfficial.has(aliasKey)) byOfficial.set(aliasKey, source);
+      if (!byOfficial.has(alias)) byOfficial.set(alias, source);
     });
   });
 

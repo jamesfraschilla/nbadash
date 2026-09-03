@@ -260,16 +260,22 @@ test("display category metrics store grouped percentiles across the full peer po
       "Shooting Foul": { value: 4, rank: null, percentile: null },
       "Restricted Area Shooting Foul": { value: 2, rank: null, percentile: null },
       "3-Pt Shooting Foul": { value: 1, rank: null, percentile: null },
+      "Offensive 3 Second Violation": { value: 0.5, rank: null, percentile: null },
+      "Defensive 3 Second Violation": { value: 0.25, rank: null, percentile: null },
     }],
     ["middle", {
       "Shooting Foul": { value: 3, rank: null, percentile: null },
       "Restricted Area Shooting Foul": { value: 1, rank: null, percentile: null },
       "3-Pt Shooting Foul": { value: 0.5, rank: null, percentile: null },
+      "Offensive 3 Second Violation": { value: 0.25, rank: null, percentile: null },
+      "Defensive 3 Second Violation": { value: 0.125, rank: null, percentile: null },
     }],
     ["bottom", {
       "Shooting Foul": { value: 2, rank: null, percentile: null },
       "Restricted Area Shooting Foul": { value: 0.5, rank: null, percentile: null },
       "3-Pt Shooting Foul": { value: 0.25, rank: null, percentile: null },
+      "Offensive 3 Second Violation": { value: 0.1, rank: null, percentile: null },
+      "Defensive 3 Second Violation": { value: 0.05, rank: null, percentile: null },
     }],
   ]);
 
@@ -299,6 +305,14 @@ test("display category metrics store grouped percentiles across the full peer po
   assert.equal(peerMaps.get("middle").__displayPercentiles[key], 51);
   assert.equal(peerMaps.get("bottom").__displayPercentiles[key], 1);
   assert.equal(peerMaps.get("middle").__displayPercentiles[foulTotalKey], 51);
+  assert.equal(peerMaps.get("top").__displayPercentiles["Shooting Foul"], 100);
+  assert.equal(peerMaps.get("middle").__displayPercentiles["Shooting Foul"], 51);
+  assert.equal(peerMaps.get("bottom").__displayPercentiles["Shooting Foul"], 1);
+  assert.equal(peerMaps.get("middle")["Shooting Foul"].percentile, 51);
+  const threeSecondKey = ["Offensive 3 Second Violation", "Defensive 3 Second Violation"].sort().join("|");
+  assert.equal(peerMaps.get("top").__displayPercentiles[threeSecondKey], 100);
+  assert.equal(peerMaps.get("middle").__displayPercentiles[threeSecondKey], 51);
+  assert.equal(peerMaps.get("bottom").__displayPercentiles[threeSecondKey], 1);
 });
 
 test("official challenge logs prefer whistle label while counting dual crew-chief role", () => {
