@@ -295,6 +295,12 @@ function metricRankFromPeers(currentValue, peers = [], labels = []) {
   return firstMatch >= 0 ? firstMatch + 1 : null;
 }
 
+function categoryRankFromPeers(value, peers = [], labels = [], items = []) {
+  const peerRank = metricRankFromPeers(value, peers, labels);
+  if (peerRank || peers.length) return peerRank;
+  return itemRank(items, labels);
+}
+
 function uniqueLabelValue(items, groups) {
   const labels = new Set();
   groups.forEach((group) => group.labels.forEach((label) => labels.add(label)));
@@ -322,7 +328,7 @@ function categoryMetric(items, labels, peers = []) {
   const value = itemValue(items, labels);
   return {
     value,
-    rank: metricRankFromPeers(value, peers, labels) || itemRank(items, labels),
+    rank: categoryRankFromPeers(value, peers, labels, items),
   };
 }
 
@@ -335,13 +341,13 @@ function CategoryColumn({ group, items, peers, sort, onSort, expanded, onToggle,
         return {
           ...type,
           value,
-          rank: metricRankFromPeers(value, peers, type.labels) || itemRank(items, type.labels),
+          rank: categoryRankFromPeers(value, peers, type.labels, items),
           subTypes: (type.subTypes || []).map((subType) => {
             const subTypeValue = itemValue(items, subType.labels);
             return {
               ...subType,
               value: subTypeValue,
-              rank: metricRankFromPeers(subTypeValue, peers, subType.labels) || itemRank(items, subType.labels),
+              rank: categoryRankFromPeers(subTypeValue, peers, subType.labels, items),
             };
           }).filter((subType) => subType.value > 0),
         };
@@ -360,7 +366,7 @@ function CategoryColumn({ group, items, peers, sort, onSort, expanded, onToggle,
   }, [group, items, peers, sort]);
   const total = uniqueLabelValue(items, group.types);
   const totalLabels = [...new Set(group.types.flatMap((type) => type.labels || []))];
-  const totalRank = metricRankFromPeers(total, peers, totalLabels) || itemRank(items, group.labels || []);
+  const totalRank = categoryRankFromPeers(total, peers, totalLabels, items);
 
   return (
     <section className={styles.categoryColumn}>

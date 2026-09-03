@@ -255,6 +255,10 @@ function aggregateOfficialCategoryRollups(rows, profileRows) {
     if (!totals.has(key)) {
       totals.set(key, {
         officialKey,
+        aliases: [
+          row.official_id,
+          row.official_name,
+        ].map((value) => String(value || "").trim()).filter(Boolean),
         category,
         calls: 0,
         games: gamesByKey.get(officialKey.toLowerCase()) || 0,
@@ -281,7 +285,18 @@ function aggregateOfficialCategoryRollups(rows, profileRows) {
         if (map?.[category]) map[category].rank = index + 1;
       });
   });
-  return attachDisplayCategoryRanks(byOfficial);
+  attachDisplayCategoryRanks(byOfficial);
+
+  [...totals.values()].forEach((row) => {
+    const source = byOfficial.get(row.officialKey.toLowerCase());
+    if (!source) return;
+    row.aliases.forEach((alias) => {
+      const aliasKey = alias.toLowerCase();
+      if (!byOfficial.has(aliasKey)) byOfficial.set(aliasKey, source);
+    });
+  });
+
+  return byOfficial;
 }
 
 function teamCategoryRollupsToMaps(rows, teamRows) {
