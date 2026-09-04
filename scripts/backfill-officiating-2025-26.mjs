@@ -1,6 +1,8 @@
 #!/usr/bin/env node
-import { mkdir, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { createClient } from "@supabase/supabase-js";
 import { assertOutsideWizardsGameWindow } from "./lib/game-window-guard.mjs";
 import { canonicalOfficialIdentity } from "../src/officiatingIdentity.js";
 import { enrichChallengeEventsWithOfficials } from "../src/officiatingChallengeMatcher.js";
@@ -28,6 +30,26 @@ const NBA_REQUEST_HEADERS = {
   "x-nba-stats-origin": "stats",
   "x-nba-stats-token": "true",
 };
+const INSERT_BATCH_SIZE = 500;
+
+async function loadEnvFile(filePath) {
+  if (!existsSync(filePath)) return;
+  const text = await readFile(filePath, "utf8");
+  text.split(/\r?\n/).forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) return;
+    const separator = trimmed.indexOf("=");
+    if (separator <= 0) return;
+    const key = trimmed.slice(0, separator).trim();
+    if (!key || process.env[key]) return;
+    process.env[key] = trimmed.slice(separator + 1).trim().replace(/^['"]|['"]$/g, "");
+  });
+}
+
+async function loadLocalEnv() {
+  await loadEnvFile(path.join(process.cwd(), ".env"));
+  await loadEnvFile(path.join(process.cwd(), ".env.local"));
+}
 
 function readArg(name) {
   const prefix = `--${name}=`;
@@ -323,7 +345,7 @@ function normalizedGameDate(game, fallback = "") {
   return String(game.gameDate || game.gameEt || game.gameTimeUTC || fallback || "").slice(0, 10) || null;
 }
 
-function buildAssignmentRows(game, discovered = {}) {
+function buildAssignmentRows(game, discovered = {}, requestedSeason = DEFAULT_SEASON) {
   const officials = Array.isArray(game.officials) ? game.officials : [];
   return officials.map((official, index) => {
     const identity = canonicalOfficialIdentity({
@@ -332,7 +354,7 @@ function buildAssignmentRows(game, discovered = {}) {
       jerseyNumber: official.jerseyNum || official.jerseyNumber,
     });
     return ({
-    season: String(game.seasonYear || DEFAULT_SEASON),
+    season: String(game.seasonYear || requestedSeason),
     season_type: normalizedSeasonType(game, discovered.seasonType),
     game_id: String(game.gameId || discovered.gameId || ""),
     game_date: normalizedGameDate(game, discovered.gameDate),
@@ -548,6 +570,81 @@ function chunkArray(items, chunkSize) {
   return chunks;
 }
 
+function challengeNaturalKey(row) {
+  return [
+    row.game_id,
+    row.challenging_team,
+    row.period ?? -1,
+    row.game_clock,
+    row.source,
+  ].map((value) => String(value ?? "")).join("|");
+}
+
+async function insertRows(supabase, table, rows) {
+  for (const chunk of chunkArray(rows, INSERT_BATCH_SIZE)) {
+    const { error } = await supabase.from(table).insert(chunk);
+    if (error) throw new Error(`Failed inserting ${table}: ${error.message}`);
+  }
+}
+
+async function applyGameRows(supabase, gameId, assignmentRows, callRows, challengeRows) {
+  const { data: existingChallenges, error: challengeReadError } = await supabase
+    .from("nba_coach_challenge_events")
+    .select("id,game_id,challenging_team,period,game_clock,source")
+    .eq("game_id", gameId)
+    .eq("source", "play_by_play");
+  if (challengeReadError) throw new Error(`Failed reading existing challenges for ${gameId}: ${challengeReadError.message}`);
+  const existingChallengeIds = new Map(
+    (existingChallenges || []).map((row) => [challengeNaturalKey(row), row.id]),
+  );
+
+  const { error: callDeleteError } = await supabase
+    .from("nba_official_call_events")
+    .delete()
+    .eq("game_id", gameId);
+  if (callDeleteError) throw new Error(`Failed replacing calls for ${gameId}: ${callDeleteError.message}`);
+  const { error: assignmentDeleteError } = await supabase
+    .from("nba_official_game_assignments")
+    .delete()
+    .eq("game_id", gameId);
+  if (assignmentDeleteError) throw new Error(`Failed replacing assignments for ${gameId}: ${assignmentDeleteError.message}`);
+
+  await insertRows(supabase, "nba_official_game_assignments", assignmentRows);
+  await insertRows(supabase, "nba_official_call_events", callRows);
+
+  const existingRows = [];
+  const newRows = [];
+  challengeRows.forEach((row) => {
+    const id = existingChallengeIds.get(challengeNaturalKey(row));
+    if (id) existingRows.push({ ...row, id });
+    else newRows.push(row);
+  });
+  for (const chunk of chunkArray(existingRows, INSERT_BATCH_SIZE)) {
+    const { error } = await supabase
+      .from("nba_coach_challenge_events")
+      .upsert(chunk, { onConflict: "id" });
+    if (error) throw new Error(`Failed updating challenges for ${gameId}: ${error.message}`);
+  }
+  await insertRows(supabase, "nba_coach_challenge_events", newRows);
+}
+
+async function applyIngestion({ gameIds, assignmentRows, callRows, challengeRows }) {
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for --apply.");
+  const supabase = createClient(url, key, { auth: { persistSession: false } });
+  for (const [index, gameId] of gameIds.entries()) {
+    await applyGameRows(
+      supabase,
+      gameId,
+      rowsForGameIds(assignmentRows, [gameId]),
+      rowsForGameIds(callRows, [gameId]),
+      rowsForGameIds(challengeRows, [gameId]),
+    );
+    console.error(`Applied ${index + 1}/${gameIds.length}: ${gameId}`);
+  }
+}
+
 function rowsForGameIds(rows, gameIds) {
   const allowed = new Set(gameIds);
   return rows.filter((row) => allowed.has(row.game_id));
@@ -669,6 +766,7 @@ async function writeSqlChunks({ outputDir, chunkSize, gameIds, assignmentRows, c
 }
 
 async function main() {
+  await loadLocalEnv();
   await assertOutsideWizardsGameWindow("officiating backfill");
   const season = readArg("season") || DEFAULT_SEASON;
   const teamId = readArg("team-id") || WIZARDS_TEAM_ID;
@@ -689,6 +787,8 @@ async function main() {
   const discoverConcurrency = readIntegerArg("discover-concurrency", 2);
   const gameIdSource = readArg("game-id-source") || (league ? "generated" : "stats");
   const skipStatsPlayByPlay = hasFlag("skip-stats-playbyplay");
+  const apply = hasFlag("apply");
+  const requireComplete = hasFlag("require-complete");
   const discover = hasFlag("discover") || !gameIdsArg.length;
 
   const discoveredGames = discover && gameIdSource === "generated"
@@ -724,7 +824,7 @@ async function main() {
   });
   const loadedGames = games.filter(Boolean);
 
-  const assignmentRows = loadedGames.flatMap(({ game, gameRef }) => buildAssignmentRows(game, gameRef));
+  const assignmentRows = loadedGames.flatMap(({ game, gameRef }) => buildAssignmentRows(game, gameRef, season));
   const callRows = loadedGames.flatMap(({ game, gameRef }) => extractOfficialCallEvents(game, {
     season,
     seasonType: gameRef.seasonType,
@@ -740,6 +840,8 @@ async function main() {
   const processedGameIds = loadedGames.map(({ gameRef }) => gameRef.gameId);
   const gameAudits = buildGameAuditRows({ loadedGames, assignmentRows, callRows, challengeRows });
   const flaggedGames = gameAudits.filter((row) => row.flags.length);
+  const incompleteGameIds = new Set(requireComplete ? flaggedGames.map((row) => row.gameId) : []);
+  const appliedGameIds = processedGameIds.filter((gameId) => !incompleteGameIds.has(gameId));
   let generatedSqlChunks = [];
   if (sqlOutputDir) {
     generatedSqlChunks = await writeSqlChunks({
@@ -758,6 +860,8 @@ async function main() {
     seasonTypes,
     gamesRequested: gameRefs.length,
     gamesProcessed: loadedGames.length,
+    gamesEligibleToApply: appliedGameIds.length,
+    applyMode: apply,
     errors,
     assignments: assignmentRows.length,
     officialCallEvents: callRows.length,
@@ -765,7 +869,7 @@ async function main() {
     flaggedGames: flaggedGames.length,
     auditSummary: {
       lowGameCallCount: flaggedGames.filter((row) => row.flags.some((flag) => flag.startsWith("low-game-call-count"))).length,
-      missingThreeOfficials: flaggedGames.filter((row) => row.flags.some((flag) => flag.startsWith("expected-3-officials"))).length,
+      missingThreeOfficials: flaggedGames.filter((row) => row.flags.some((flag) => flag.startsWith("expected-3-or-4-officials"))).length,
       missingCrewChief: flaggedGames.filter((row) => row.flags.some((flag) => flag.startsWith("expected-1-crew-chief"))).length,
       zeroCallOfficials: flaggedGames.reduce((total, row) => total + row.flags.filter((flag) => flag.startsWith("zero-calls")).length, 0),
       unmatchedWhistleChallenges: challengeRows.filter((row) => !row.whistling_official_name).length,
@@ -782,7 +886,7 @@ async function main() {
         gameDate: normalizedGameDate(game, gameRef.gameDate),
         matchup: gameRef.matchup,
         seasonType: normalizedSeasonType(game, gameRef.seasonType),
-        officials: buildAssignmentRows(game, gameRef).map((official) => official.official_name),
+        officials: buildAssignmentRows(game, gameRef, season).map((official) => official.official_name),
       })),
       assignments: assignmentRows.slice(0, 5),
       officialCallEvents: callRows.slice(0, 5),
@@ -809,7 +913,24 @@ async function main() {
     }));
   }
 
+  if (apply) {
+    if (!appliedGameIds.length) {
+      throw new Error("No complete games were eligible for database ingestion.");
+    }
+    await applyIngestion({
+      gameIds: appliedGameIds,
+      assignmentRows: rowsForGameIds(assignmentRows, appliedGameIds),
+      callRows: rowsForGameIds(callRows, appliedGameIds),
+      challengeRows: rowsForGameIds(challengeRows, appliedGameIds),
+    });
+  }
+
   console.log(JSON.stringify(report, null, 2));
+  if (requireComplete && (errors.length || incompleteGameIds.size)) {
+    throw new Error(
+      `Incomplete ingestion: ${errors.length} fetch failures and ${incompleteGameIds.size} games failed integrity checks.`,
+    );
+  }
 }
 
 main().catch((error) => {

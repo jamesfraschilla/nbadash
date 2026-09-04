@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import readXlsxFile from "read-excel-file/node";
+import { createClient } from "@supabase/supabase-js";
 import { assertOutsideWizardsGameWindow } from "./lib/game-window-guard.mjs";
 import { canonicalOfficialIdentity } from "../src/officiatingIdentity.js";
 import { enrichChallengeEventsWithOfficials } from "../src/officiatingChallengeMatcher.js";
@@ -339,7 +340,7 @@ function normalizeChallengeType(value) {
   return String(value || "").replace(/^challenge(?: of called)?\s+/i, "").trim();
 }
 
-function toChallengeRow(row, { season, pdfUrl }) {
+function toChallengeRow(row, { season, pdfUrl, pdfSha256 = "", officialPageUrl = OFFICIAL_PAGE_URL }) {
   const gameId = row.game_id || gameIdFromVideoUrl(row.video_url);
   const seasonType = inferSeasonType({ ...row, game_id: gameId });
   return {
@@ -364,8 +365,9 @@ function toChallengeRow(row, { season, pdfUrl }) {
     review_status: gameId ? "auto" : "needs_review",
     source: SOURCE,
     source_payload: {
-      officialPageUrl: OFFICIAL_PAGE_URL,
+      officialPageUrl,
       pdfUrl,
+      pdfSha256,
       pdfRow: row,
     },
   };
@@ -461,6 +463,64 @@ function buildIngestSql(rows) {
     insertFromJson(rows),
     "commit;",
   ].join("\n\n");
+}
+
+function challengeNaturalKey(row) {
+  return [
+    row.game_id,
+    row.challenging_team,
+    row.period ?? -1,
+    row.game_clock,
+    row.source,
+  ].map((value) => String(value ?? "")).join("|");
+}
+
+function chunkArray(items, chunkSize = 250) {
+  const chunks = [];
+  for (let index = 0; index < items.length; index += chunkSize) {
+    chunks.push(items.slice(index, index + chunkSize));
+  }
+  return chunks;
+}
+
+async function loadExistingOfficialRows(supabase, season) {
+  const rows = [];
+  const pageSize = 1000;
+  for (let start = 0; ; start += pageSize) {
+    const { data, error } = await supabase
+      .from("nba_coach_challenge_events")
+      .select("id,game_id,challenging_team,period,game_clock,source")
+      .eq("season", season)
+      .eq("source", SOURCE)
+      .range(start, start + pageSize - 1);
+    if (error) throw new Error(`Failed loading existing challenge rows: ${error.message}`);
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+  }
+  return rows;
+}
+
+async function applyChallengeRows(rows, season) {
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for --apply.");
+  const supabase = createClient(url, key, { auth: { persistSession: false } });
+  const existingRows = await loadExistingOfficialRows(supabase, season);
+  const existingIds = new Map(existingRows.map((row) => [challengeNaturalKey(row), row.id]));
+  const writes = rows.map((row) => {
+    const id = existingIds.get(challengeNaturalKey(row));
+    return id ? { ...row, id } : row;
+  });
+  for (const chunk of chunkArray(writes)) {
+    const { error } = await supabase
+      .from("nba_coach_challenge_events")
+      .upsert(chunk, { onConflict: "id" });
+    if (error) throw new Error(`Failed applying official challenge rows: ${error.message}`);
+  }
+  return {
+    inserted: writes.filter((row) => !row.id).length,
+    updated: writes.filter((row) => row.id).length,
+  };
 }
 
 function chunkRowsByGame(rows, chunkSize) {
@@ -565,6 +625,8 @@ async function main() {
   const pdfUrl = readArg("pdf-url") || (
     sourceName === "playoffs" ? PLAYOFFS_PDF_URL : REGULAR_SEASON_PDF_URL
   );
+  const pdfSha256 = readArg("pdf-sha256");
+  const officialPageUrl = readArg("official-page-url") || OFFICIAL_PAGE_URL;
   const pdfPath = explicitExcel ? "" : (explicitPdf || await downloadPdf(pdfUrl, "test-results/nba-challenge"));
   const seasonTypes = readListArg("season-types", sourceName === "playoffs" ? ["Playoffs"] : ["Preseason", "Regular Season"]);
   const gameIdPrefixes = readListArg("game-id-prefixes", seasonTypes.includes("Playoffs") ? ["004"] : ["001", "002"]);
@@ -577,7 +639,12 @@ async function main() {
 
   const extractedRows = explicitExcel ? await extractRowsFromExcel(explicitExcel) : await runPythonExtractor(pdfPath);
   const baseChallengeRows = limitRowsByGame(applyFilters(
-    extractedRows.map((row) => toChallengeRow(row, { season, pdfUrl })),
+    extractedRows.map((row) => toChallengeRow(row, {
+      season,
+      pdfUrl,
+      pdfSha256,
+      officialPageUrl,
+    })),
     { seasonTypes, gameIdPrefixes }
   ), maxGames);
   const challengeRows = hasFlag("skip-official-enrichment")
@@ -591,7 +658,8 @@ async function main() {
   if (sqlDir) {
     generatedSqlChunks = await writeSqlChunks({ outputDir: sqlDir, rows: challengeRows, chunkSize: sqlChunkSize });
   }
-  const report = summarize(challengeRows, generatedSqlChunks);
+  const applied = hasFlag("apply") ? await applyChallengeRows(challengeRows, season) : null;
+  const report = { ...summarize(challengeRows, generatedSqlChunks), applied };
   if (outPath) {
     await writeJsonFile(outPath, { report, challengeRows });
   }

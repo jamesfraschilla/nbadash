@@ -388,6 +388,19 @@ The refresh is intentionally outside normal page-load traffic. The app should re
 
 The full season challenge log should be lazy-loaded only when the Challenge Log tab is active. Officials, Teams, and game-day pages should read compact overview/profile caches and targeted profile-detail caches instead of loading every challenge row.
 
+### Weekly Official Challenge Reconciliation
+
+Beginning October 4, 2026, the 5:05 AM Eastern maintenance workflow checks the official NBA season page every Sunday:
+
+- expected page: `https://official.nba.com/2026-27-nba-coachs-challenge-reviews/`
+- fallback discovery source: `https://official.nba.com/archive/`
+- imported documents: only links labeled `Coach's Challenge reviews by day`
+- ignored documents: season-total summaries
+
+The job downloads each published regular-season or playoff PDF, calculates its SHA-256 hash, and checks that hash against previously imported official challenge rows. It imports only a new or changed document. This detects both a new dated URL and a replacement published at an existing URL. The subsequent maintenance step sees the changed source timestamp, refreshes only the `2026-27` rollups, and runs the integrity checks.
+
+The weekly job does not retain PDF files, scan historical rollups, or run in the browser. Temporary downloads are deleted after parsing. Daily play-by-play remains the current source between official NBA PDF updates.
+
 ### Historical Backfill Scaling Note
 
 Before backfilling prior seasons beyond the current 2025-26 test season, convert the current materialized cache strategy into season-scoped physical rollup tables.
@@ -589,3 +602,25 @@ Efficiency rules:
 - send compact normalized JSON to Supabase through `nba_import_pgr_report`,
 - read dashboard summaries from SQL rollup views with row limits,
 - do not persist full workbook contents in localStorage/sessionStorage.
+
+## Nightly Current-Season Ingestion
+
+The current season is ingested from completed NBA per-game feeds before rollups are refreshed:
+
+- `Officiating Nightly Ingestion` runs at 4:05 AM America/New_York.
+- It checks only the prior three Eastern calendar dates so late feeds and a failed prior run are retried.
+- It excludes preseason and requires the NBA schedule to mark a game final.
+- It queries Supabase only for those recent game IDs and skips games that already have at least three active assignments and 20 official-attributed calls.
+- The existing parser writes normalized assignments, calls, and play-by-play challenge rows one game at a time.
+- Games with incomplete crews, low call counts, or an assigned official with zero attributed calls are not written.
+- Existing play-by-play challenge IDs are preserved so user context tags are not deleted on a retry.
+- No raw play-by-play archives, images, or video are stored in Supabase.
+- `Officiating Daily Maintenance` runs at 5:05 AM America/New_York and refreshes only the current-season rollups when source rows changed.
+
+Manual recovery commands:
+
+```text
+npm run officiating:ingest:nightly -- --force-time --force-season
+npm run officiating:ingest:nightly -- --force-time --force-season --lookback-days=7
+npm run officiating:ingest:nightly -- --force-time --force-season --refresh-all
+```

@@ -1,0 +1,42 @@
+name: Officiating Nightly Ingestion
+
+on:
+  schedule:
+    # 4:05 AM America/New_York across daylight and standard time.
+    - cron: "5 8,9 * * *"
+  workflow_dispatch:
+    inputs:
+      lookback_days:
+        description: Completed Eastern dates to retry
+        required: false
+        default: "3"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: officiating-nightly-ingestion
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Import recently completed non-preseason games
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          LOOKBACK_DAYS: ${{ inputs.lookback_days || '3' }}
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            npm run officiating:ingest:nightly -- --force-time --force-season --lookback-days="${LOOKBACK_DAYS}"
+          else
+            npm run officiating:ingest:nightly -- --lookback-days="${LOOKBACK_DAYS}"
+          fi

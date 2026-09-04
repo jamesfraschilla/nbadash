@@ -22,9 +22,36 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - run: npm ci
+      - name: Install challenge PDF parser
+        run: python -m pip install pdfplumber
+      - name: Reconcile the weekly official challenge log when updated
+        id: challenge-sync
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            npm run officiating:sync:challenges -- --force
+          else
+            npm run officiating:sync:challenges
+          fi
       - name: Refresh stale current-season rollups and audit integrity
         env:
           SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: node scripts/run-officiating-daily-maintenance.mjs
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            node scripts/run-officiating-daily-maintenance.mjs --force-time --force-season
+          else
+            node scripts/run-officiating-daily-maintenance.mjs
+          fi
+      - name: Report challenge reconciliation failure
+        if: steps.challenge-sync.outcome == 'failure'
+        run: |
+          echo "::error::Official challenge-log reconciliation failed; daily rollup maintenance and integrity checks still completed."
+          exit 1

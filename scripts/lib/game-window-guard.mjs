@@ -40,6 +40,8 @@ async function fetchTodayGames() {
       signal: controller.signal,
       headers: {
         Accept: "application/json, text/plain, */*",
+        Origin: "https://www.nba.com",
+        Referer: "https://www.nba.com/",
         "User-Agent": "Mozilla/5.0 (compatible; NBA Dashboard Maintenance Guard)",
       },
     });
