@@ -385,7 +385,8 @@
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) minmax(0, 0.58fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: minmax(0, 1fr);
   gap: 0.04in;
 }
 
@@ -428,7 +429,7 @@
 
 .reportOfficialDetails {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 1.5in;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   gap: 0.055in;
   min-height: 0;
 }
@@ -436,7 +437,7 @@
 .reportStatProfiles {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-  gap: 0.04in;
+  gap: 0.075in;
   min-width: 0;
 }
 
