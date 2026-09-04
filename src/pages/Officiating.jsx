@@ -723,7 +723,7 @@ function OfficialsReportCard({ profile, role, populationSize }) {
         </div>
         <aside className={styles.reportOfficialAside}>
           <section className={styles.reportWizardsHistory}>
-            <span>Previous Wizards Games</span>
+            <span>Previous WAS Games</span>
             {wizardsGames.length ? (
               <ul>{wizardsGames.map((game) => <li key={game}>{game}</li>)}</ul>
             ) : <strong>None in 2025-26</strong>}
