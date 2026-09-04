@@ -19,6 +19,8 @@ import {
   resolvePgrGameMetadata,
 } from "../pgrData.js";
 import { nbaEventVideoUrl, teamLogoUrl } from "../api.js";
+import { useGamesByDate } from "../queries.js";
+import { formatDateInputInTimeZone } from "../utils.js";
 import { CALL_CATEGORY_GROUPS } from "../officiatingCategoryNormalization.js";
 import { loadRefereeHeadshotUrl } from "../refereeHeadshots.js";
 import {
@@ -568,6 +570,36 @@ function formatShortDate(value) {
   return `${month}/${day}`;
 }
 
+function formatReportGameDate(value) {
+  const [year, month, day] = String(value || "").split("-").map((part) => Number(part));
+  if (!year || !month || !day) return "";
+  return `${month}/${day}/${year}`;
+}
+
+function reportTeamLocation(team) {
+  const tricode = String(team?.teamTricode || "").trim();
+  if (tricode === "WAS") return "Washington";
+  return String(team?.teamCity || team?.teamName || tricode || "Opponent").trim();
+}
+
+function reportGameMetadata(game, fallbackDate) {
+  const away = game?.awayTeam;
+  const home = game?.homeTeam;
+  const isWashingtonAway = String(away?.teamTricode || "").trim() === "WAS";
+  const isWashingtonHome = String(home?.teamTricode || "").trim() === "WAS";
+  if (!isWashingtonAway && !isWashingtonHome) {
+    return {
+      title: "Officials Report – Washington vs New York",
+      date: "12/9/2026",
+    };
+  }
+  const opponent = isWashingtonAway ? home : away;
+  return {
+    title: `Officials Report – Washington ${isWashingtonAway ? "@" : "vs"} ${reportTeamLocation(opponent)}`,
+    date: formatReportGameDate(game?.gameDate || fallbackDate),
+  };
+}
+
 function priorWizardsGames(schedule = []) {
   return schedule
     .filter((row) => {
@@ -587,7 +619,7 @@ function priorWizardsGames(schedule = []) {
     .filter(Boolean);
 }
 
-function ReportMetric({ label, value, rank, populationSize, percentile, prominent = false }) {
+function ReportMetric({ label, value, rank, populationSize, percentile, prominent = false, formatter = formatReportMetric }) {
   const hasPercentile = Number.isFinite(Number(percentile));
   const toneClass = hasPercentile
     ? metricToneClassFromPercentile(percentile)
@@ -598,7 +630,7 @@ function ReportMetric({ label, value, rank, populationSize, percentile, prominen
   return (
     <div className={`${styles.reportMetric} ${prominent ? styles.reportMetricProminent : ""} ${toneClass}`}>
       <span>{label}</span>
-      <strong>{formatReportMetric(value)}</strong>
+      <strong>{formatter(value)}</strong>
       <em>{percentileLabel}</em>
     </div>
   );
@@ -641,15 +673,13 @@ function OfficialsReportCard({ profile, role, populationSize }) {
           </div>
         </div>
         <div className={styles.reportPrimaryMetrics}>
-          <ReportMetric label="Calls/G" value={profile?.callsPerGame} rank={profile?.callsPerGameRank} populationSize={populationSize} percentile={profile?.callsPerGameRankPercentile} prominent />
-          <ReportMetric label="Fouls/G" value={profile?.foulsPerGame} rank={profile?.foulsPerGameRank} populationSize={populationSize} percentile={profile?.foulsPerGameRankPercentile} prominent />
           <ReportChallengeMetric
-            label="Challenge (Whistle)"
-            successes={profile?.successfulWhistleChallenges}
-            attempts={profile?.whistleChallenges}
-            rank={profile?.whistleChallengeRateRank}
+            label="Challenge (Crew)"
+            successes={profile?.successfulCrewChallenges}
+            attempts={profile?.crewChallenges}
+            rank={profile?.crewChallengeRateRank}
             populationSize={populationSize}
-            percentile={profile?.whistleChallengeRateRankPercentile}
+            percentile={profile?.crewChallengeRateRankPercentile}
           />
           <ReportChallengeMetric
             label="Challenge (Crew Chief)"
@@ -658,6 +688,14 @@ function OfficialsReportCard({ profile, role, populationSize }) {
             rank={profile?.crewChiefChallengeRateRank}
             populationSize={populationSize}
             percentile={profile?.crewChiefChallengeRateRankPercentile}
+          />
+          <ReportMetric label="Fouls/G" value={profile?.foulsPerGame} rank={profile?.foulsPerGameRank} populationSize={populationSize} percentile={profile?.foulsPerGameRankPercentile} prominent />
+          <ReportMetric
+            label="Net Calls For (WAS)"
+            value={profile?.wizardsNetCallsFor}
+            percentile={profile?.wizardsNetCallsForPercentile}
+            prominent
+            formatter={formatSignedDecimal}
           />
         </div>
       </div>
@@ -699,7 +737,7 @@ function OfficialsReportCard({ profile, role, populationSize }) {
   );
 }
 
-function TonightOfficialsReport({ rows, isLoading, onExportPdf, populationSize }) {
+function TonightOfficialsReport({ rows, isLoading, onExportPdf, populationSize, gameMetadata }) {
   return (
     <section className={styles.tonightReportPanel}>
       <div className={styles.reportToolbar}>
@@ -715,11 +753,10 @@ function TonightOfficialsReport({ rows, isLoading, onExportPdf, populationSize }
         <header className={styles.officialsReportHeader}>
           <div>
             <span>Washington Wizards</span>
-            <h2>Officials Report</h2>
+            <h2>{gameMetadata.title}</h2>
           </div>
           <div>
-            <strong>2024-Present</strong>
-            <span>Regular Season + Playoffs</span>
+            <strong>{gameMetadata.date}</strong>
           </div>
         </header>
         {isLoading ? (
@@ -1932,7 +1969,18 @@ export default function Officiating() {
     ? selectedTab
     : "tonight";
   const season = params.get("season") || defaultSeasonForTab(activeTab);
+  const reportDate = params.get("d") || formatDateInputInTimeZone(new Date(), "America/New_York");
   const canImportPgr = !accountsEnabled || isAdmin;
+  const { data: reportDateGames = [] } = useGamesByDate(reportDate, {
+    enabled: activeTab === "tonight",
+    staleTime: 5 * 60_000,
+    retry: 1,
+  });
+  const reportGame = reportDateGames.find((game) => (
+    String(game?.awayTeam?.teamTricode || "").trim() === "WAS"
+    || String(game?.homeTeam?.teamTricode || "").trim() === "WAS"
+  ));
+  const tonightGameMetadata = reportGameMetadata(reportGame, reportDate);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["officiating-dashboard", season],
@@ -2289,6 +2337,7 @@ export default function Officiating() {
           isLoading={isTonightReportLoading}
           onExportPdf={exportTonightReportPdf}
           populationSize={tonightReportData?.populationSize || 0}
+          gameMetadata={tonightGameMetadata}
         />
       ) : activeTab === "officials" ? (
         <div>

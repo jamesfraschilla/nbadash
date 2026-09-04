@@ -288,8 +288,14 @@
 .officialsReportHeader h2 {
   margin: 0.03in 0 0;
   color: #111827;
-  font-size: 0.34in;
+  font-size: 0.27in;
   line-height: 1;
+  overflow-wrap: anywhere;
+}
+
+.officialsReportHeader > div:first-child {
+  min-width: 0;
+  flex: 1;
 }
 
 .officialsReportHeader > div:last-child {
@@ -429,14 +435,17 @@
 
 .reportStatProfiles {
   display: grid;
-  grid-template-rows: auto auto;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   gap: 0.04in;
   min-width: 0;
 }
 
 .reportStatProfiles section {
   min-width: 0;
+  min-height: 0;
   padding: 0.045in;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   border: 1px solid #e2e8f0;
   border-radius: 0.07in;
   background: #f8fafc;
@@ -445,15 +454,26 @@
 .reportStatProfiles h4 {
   margin: 0 0 0.035in;
   color: #172033;
-  font-size: 0.105in;
+  font-size: 0.12in;
   letter-spacing: 0.07em;
+  text-align: center;
   text-transform: uppercase;
 }
 
-.reportStatProfiles section > div {
+.reportFoulMetrics {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(3, minmax(0, 1fr));
   gap: 0.035in;
+  min-height: 0;
+}
+
+.reportViolationMetrics {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  gap: 0.035in;
+  min-height: 0;
 }
 
 .reportMetric {
@@ -463,6 +483,8 @@
   display: grid;
   gap: 0.008in;
   align-content: center;
+  justify-items: center;
+  text-align: center;
   border: 1px solid #cbd5e1;
   border-radius: 0.07in;
   background: #f8fafc;

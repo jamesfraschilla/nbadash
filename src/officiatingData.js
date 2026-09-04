@@ -1273,7 +1273,7 @@ export async function fetchOfficialsReportData({ season = CUMULATIVE_SEASON, off
   if (!names.length) return { profiles: [], populationSize: 0 };
   const cumulative = season === CUMULATIVE_SEASON;
 
-  const [profileResult, categoryResult, assignmentResult] = await Promise.all([
+  const [profileResult, categoryResult, assignmentResult, wizardsNetResult] = await Promise.all([
     selectPreferredTable("nba_official_profiles_cache", "nba_official_profiles", (query) => applySeasonFilter(query
       .select(PROFILE_ROLLUP_COLUMNS), season), { maxRows: PROFILE_LIMIT, requireComplete: true }),
     selectPreferredTable("nba_official_call_category_rollups_cache", "nba_official_call_category_rollups", (query) => applySeasonFilter(query
@@ -1285,6 +1285,9 @@ export async function fetchOfficialsReportData({ season = CUMULATIVE_SEASON, off
       .in("official_name", names)
       .or("home_team.eq.WAS,away_team.eq.WAS")
       .order("game_date", { ascending: false }), { maxRows: 100, requireComplete: true }),
+    selectPreferredTable("nba_team_official_net_call_rollups_cache", "nba_team_official_net_call_rollups", (query) => applySeasonFilter(query
+      .select(TEAM_OFFICIAL_NET_COLUMNS), season)
+      .eq("team", "WAS"), { maxRows: PROFILE_LIMIT, requireComplete: true }),
   ]);
 
   if (profileResult.unavailable) {
@@ -1311,10 +1314,39 @@ export async function fetchOfficialsReportData({ season = CUMULATIVE_SEASON, off
   }));
   const profilesByName = new Map(rankedProfiles.map((profile) => [normalizedEntityKey(profile.name), profile]));
   const assignments = assignmentResult.data || [];
+  const wizardsNetTotals = new Map();
+  asArray(wizardsNetResult.data).forEach((row) => {
+    const keys = [...new Set([
+      row.official_key,
+      row.official_id,
+      row.official_name,
+    ].map(normalizedEntityKey).filter(Boolean))];
+    if (!keys.length) return;
+    const total = keys.map((key) => wizardsNetTotals.get(key)).find(Boolean)
+      || { net: 0, games: 0 };
+    total.net += Number(row.net_calls_for) || 0;
+    total.games += Number(row.games) || 0;
+    keys.forEach((alias) => wizardsNetTotals.set(alias, total));
+  });
+  const eligibleWizardsNetValues = [...new Set(wizardsNetTotals.values())]
+    .filter((total) => total.games >= MIN_OFFICIAL_GAMES_FOR_PERCENTILES)
+    .map((total) => safeRate(total.net, total.games));
 
   return {
     profiles: names.map((name) => ({
-      ...(profilesByName.get(normalizedEntityKey(name)) || { name }),
+      ...(() => {
+        const profile = profilesByName.get(normalizedEntityKey(name)) || { name };
+        const keys = [profile.officialId, profile.id, profile.name, name]
+          .map(normalizedEntityKey)
+          .filter(Boolean);
+        const total = keys.map((key) => wizardsNetTotals.get(key)).find(Boolean);
+        const value = total ? safeRate(total.net, total.games) : 0;
+        return {
+          ...profile,
+          wizardsNetCallsFor: value,
+          wizardsNetCallsForPercentile: percentileForValue(value, eligibleWizardsNetValues),
+        };
+      })(),
       schedule: assignments.filter((row) => normalizedEntityKey(row.official_name) === normalizedEntityKey(name)),
     })),
     populationSize: rankedProfiles.length,
