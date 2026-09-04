@@ -375,7 +375,7 @@ Current cache-backed read path:
 After any call/challenge import or challenge-match refresh, run:
 
 ```bash
-npm run officiating:refresh:rollups
+npm run officiating:refresh:rollups -- --season=2026-27
 ```
 
 To confirm the cache state:

@@ -2,6 +2,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { assertOutsideWizardsGameWindow } from "./lib/game-window-guard.mjs";
+import { canonicalOfficialIdentity } from "../src/officiatingIdentity.js";
 import { enrichChallengeEventsWithOfficials } from "../src/officiatingChallengeMatcher.js";
 import { detectCoachChallengeActions, extractOfficialCallEvents } from "../src/officiatingParser.js";
 
@@ -324,25 +325,36 @@ function normalizedGameDate(game, fallback = "") {
 
 function buildAssignmentRows(game, discovered = {}) {
   const officials = Array.isArray(game.officials) ? game.officials : [];
-  return officials.map((official, index) => ({
+  return officials.map((official, index) => {
+    const identity = canonicalOfficialIdentity({
+      officialId: official.personId || official.officialId,
+      officialName: [official.firstName, official.familyName || official.lastName].filter(Boolean).join(" "),
+      jerseyNumber: official.jerseyNum || official.jerseyNumber,
+    });
+    return ({
     season: String(game.seasonYear || DEFAULT_SEASON),
     season_type: normalizedSeasonType(game, discovered.seasonType),
     game_id: String(game.gameId || discovered.gameId || ""),
     game_date: normalizedGameDate(game, discovered.gameDate),
     home_team: String(game.homeTeam?.teamTricode || ""),
     away_team: String(game.awayTeam?.teamTricode || ""),
-    official_id: String(official.personId || official.officialId || ""),
-    official_name: [official.firstName, official.familyName || official.lastName].filter(Boolean).join(" ").trim(),
-    jersey_number: String(official.jerseyNum || official.jerseyNumber || "").trim(),
-    role_key: index === 0 ? "crewChief" : "",
+    official_id: identity.officialId,
+    official_name: identity.officialName,
+    jersey_number: identity.jerseyNumber,
+    role_key: index === 0 ? "crewChief" : index >= 3 ? "alternate" : "",
     assignment_order: index + 1,
-    is_alternate: false,
+    is_alternate: index >= 3,
     source: "game_metadata",
     source_payload: official,
-  })).filter((row) => row.game_id && row.official_name);
+    });
+  }).filter((row) => row.game_id && row.official_name);
 }
 
 function toCallRow(event) {
+  const identity = canonicalOfficialIdentity({
+    officialId: event.officialId,
+    officialName: event.officialName,
+  });
   return {
     season: event.season || DEFAULT_SEASON,
     season_type: event.seasonType,
@@ -359,8 +371,8 @@ function toCallRow(event) {
     descriptor: event.descriptor,
     description: event.description,
     official_token: event.officialToken,
-    official_id: event.officialId,
-    official_name: event.officialName,
+    official_id: identity.officialId,
+    official_name: identity.officialName,
     team_id: event.teamId,
     team_tricode: event.teamTricode,
     player_id: event.playerId,
@@ -560,6 +572,12 @@ function markAlternateAssignments(assignmentRows, callRows) {
 
   assignmentsByGame.forEach((assignments, gameId) => {
     if (assignments.length <= 3) return;
+    assignments.forEach((assignment) => {
+      if (Number(assignment.assignment_order) >= 4) {
+        assignment.is_alternate = true;
+        assignment.role_key = "alternate";
+      }
+    });
     const calls = callsByGame.get(gameId) || [];
     const callCounts = calls.reduce((counts, row) => {
       const key = officialKey(row);
@@ -573,6 +591,7 @@ function markAlternateAssignments(assignmentRows, callRows) {
     const alternatesNeeded = assignments.length - 3;
     zeroCallAssignments.slice(0, alternatesNeeded).forEach((assignment) => {
       assignment.is_alternate = true;
+      assignment.role_key = "alternate";
     });
   });
 

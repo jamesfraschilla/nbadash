@@ -1,16 +1,20 @@
 import { supabase } from "./supabaseClient.js";
 import { CALL_CATEGORY_GROUPS, isCountedTechnicalEvent, normalizeOfficialCallCategory } from "./officiatingCategoryNormalization.js";
+import {
+  CUMULATIVE_OFFICIATING_SEASON as CUMULATIVE_SEASON,
+  DEFAULT_OFFICIATING_SEASON as DEFAULT_SEASON,
+  officiatingSeasonValues,
+} from "./officiatingSeasons.js";
 
-const DEFAULT_SEASON = "2025-26";
-const CUMULATIVE_SEASON = "2024-Present";
-const CUMULATIVE_SEASONS = ["2024-25", "2025-26", "2026-27"];
 const SUPABASE_PAGE_SIZE = 1000;
-const CALL_EVENT_LIMIT = 10000;
-const CHALLENGE_LIMIT = 10000;
-const ASSIGNMENT_LIMIT = 10000;
+const CALL_EVENT_LIMIT = 100000;
+const CHALLENGE_LIMIT = 25000;
+const ASSIGNMENT_LIMIT = 25000;
 const PROFILE_LIMIT = 500;
 const PROFILE_DETAIL_LIMIT = 10000;
 const CONTEXT_TAG_PAGE_SIZE = 100;
+const MIN_OFFICIAL_GAMES_FOR_PERCENTILES = 10;
+const MIN_CHALLENGE_ATTEMPTS_FOR_PERCENTILES = 5;
 const EXCLUDED_STAT_SEASON_TYPES = new Set(["preseason"]);
 const CONTEXT_TAG_COLUMNS = "id,label";
 const PROFILE_ROLLUP_COLUMNS = "season,id,official_id,name,jersey_number,games,calls,calls_per_game,fouls,fouls_per_game,violations,violations_per_game,technicals,challenges,successful_challenges,whistle_challenges,successful_whistle_challenges,whistle_challenge_rate,crew_chief_challenges,successful_crew_chief_challenges,crew_chief_challenge_rate,crew_challenges,successful_crew_challenges,crew_challenge_rate";
@@ -74,8 +78,24 @@ function percentileFromRank(rank, populationSize) {
   return Math.max(1, Math.min(100, Math.round(((total - numericRank) / (total - 1)) * 99 + 1)));
 }
 
+function percentileForValue(value, values) {
+  const numericValue = Number(value);
+  const population = asArray(values).map(Number).filter(Number.isFinite);
+  if (!Number.isFinite(numericValue) || population.length < 2) return null;
+  const lower = population.filter((candidate) => candidate < numericValue).length;
+  const equal = population.filter((candidate) => candidate === numericValue).length;
+  return Math.max(1, Math.min(100, Math.round(((lower + (equal - 1) / 2) / (population.length - 1)) * 99 + 1)));
+}
+
+function competitionRank(value, values) {
+  const numericValue = Number(value);
+  const population = asArray(values).map(Number).filter(Number.isFinite);
+  if (!Number.isFinite(numericValue) || !population.length) return null;
+  return population.filter((candidate) => candidate > numericValue).length + 1;
+}
+
 function seasonValues(season) {
-  return season === CUMULATIVE_SEASON ? CUMULATIVE_SEASONS : [season || DEFAULT_SEASON];
+  return officiatingSeasonValues(season);
 }
 
 function applySeasonFilter(query, season) {
@@ -268,14 +288,14 @@ export function attachDisplayCategoryMetrics(categoryMapsByEntity) {
   const definitions = displayCategoryRankDefinitions();
   if (!definitions.length) return categoryMapsByEntity;
   definitions.forEach((definition) => {
-    [...categoryMapsByEntity.entries()]
+    const rows = [...categoryMapsByEntity.entries()]
       .map(([entityKey, categoryMap]) => ({
         entityKey,
         value: definition.labels.reduce((total, label) => total + (Number(categoryMap?.[label]?.value) || 0), 0),
       }))
-      .filter((row) => row.value > 0)
-      .sort((left, right) => right.value - left.value || String(left.entityKey).localeCompare(String(right.entityKey)))
-      .forEach((row, index, rows) => {
+      .sort((left, right) => right.value - left.value || String(left.entityKey).localeCompare(String(right.entityKey)));
+    const values = rows.map((row) => row.value);
+    rows.forEach((row) => {
         const categoryMap = categoryMapsByEntity.get(row.entityKey);
         if (!categoryMap) return;
         if (!categoryMap.__displayRanks) {
@@ -284,11 +304,12 @@ export function attachDisplayCategoryMetrics(categoryMapsByEntity) {
         if (!categoryMap.__displayPercentiles) {
           categoryMap.__displayPercentiles = {};
         }
-        categoryMap.__displayRanks[definition.key] = index + 1;
-        const percentile = percentileFromRank(index + 1, rows.length);
+        const rank = competitionRank(row.value, values);
+        categoryMap.__displayRanks[definition.key] = rank;
+        const percentile = percentileForValue(row.value, values);
         categoryMap.__displayPercentiles[definition.key] = percentile;
         if (definition.labels.length === 1 && categoryMap[definition.labels[0]]) {
-          categoryMap[definition.labels[0]].rank = index + 1;
+          categoryMap[definition.labels[0]].rank = rank;
           categoryMap[definition.labels[0]].percentile = percentile;
         }
       });
@@ -311,6 +332,11 @@ function aggregateOfficialCategoryRollups(rows, profileRows) {
       gamesByKey.set(alias, games);
     });
   });
+
+  const eligibleCanonicalKeys = new Set(asArray(profileRows)
+    .filter((row) => (Number(row.games) || 0) >= MIN_OFFICIAL_GAMES_FOR_PERCENTILES)
+    .map(officialProfileCanonicalKey)
+    .filter(Boolean));
 
   const totals = new Map();
   asArray(rows).forEach((row) => {
@@ -338,6 +364,7 @@ function aggregateOfficialCategoryRollups(rows, profileRows) {
   });
 
   const byOfficial = new Map();
+  eligibleCanonicalKeys.forEach((officialKey) => byOfficial.set(officialKey, {}));
   [...totals.values()].forEach((row) => {
     row.value = safeRate(row.calls, row.games);
     if (!byOfficial.has(row.officialKey)) byOfficial.set(row.officialKey, {});
@@ -346,16 +373,13 @@ function aggregateOfficialCategoryRollups(rows, profileRows) {
 
   const categories = new Set([...totals.values()].map((row) => row.category));
   categories.forEach((category) => {
-    [...totals.values()]
-      .filter((row) => row.category === category)
-      .sort((left, right) => right.value - left.value)
-      .forEach((row, index, rows) => {
-        const map = byOfficial.get(row.officialKey);
-        if (map?.[category]) {
-          map[category].rank = index + 1;
-          map[category].percentile = percentileFromRank(index + 1, rows.length);
-        }
-      });
+    const values = [...eligibleCanonicalKeys].map((officialKey) => Number(byOfficial.get(officialKey)?.[category]?.value) || 0);
+    eligibleCanonicalKeys.forEach((officialKey) => {
+      const map = byOfficial.get(officialKey);
+      if (!map?.[category]) map[category] = { value: 0, rank: null, percentile: null };
+      map[category].rank = competitionRank(map[category].value, values);
+      map[category].percentile = percentileForValue(map[category].value, values);
+    });
   });
   attachDisplayCategoryMetrics(byOfficial);
 
@@ -395,6 +419,7 @@ function teamCategoryRollupsToMaps(rows, teamRows) {
   });
 
   const byTeam = new Map();
+  gamesByTeam.forEach((_games, teamKey) => byTeam.set(teamKey, {}));
   [...totals.values()].forEach((row) => {
     row.value = safeRate(row.calls, row.games);
     const teamKey = row.team.toLowerCase();
@@ -404,16 +429,13 @@ function teamCategoryRollupsToMaps(rows, teamRows) {
 
   const categories = new Set([...totals.values()].map((row) => row.category));
   categories.forEach((category) => {
-    [...totals.values()]
-      .filter((row) => row.category === category)
-      .sort((left, right) => right.value - left.value)
-      .forEach((row, index, rows) => {
-        const map = byTeam.get(row.team.toLowerCase());
-        if (map?.[category]) {
-          map[category].rank = index + 1;
-          map[category].percentile = percentileFromRank(index + 1, rows.length);
-        }
-      });
+    const values = [...gamesByTeam.keys()].map((teamKey) => Number(byTeam.get(teamKey)?.[category]?.value) || 0);
+    gamesByTeam.forEach((_games, teamKey) => {
+      const map = byTeam.get(teamKey);
+      if (!map?.[category]) map[category] = { value: 0, rank: null, percentile: null };
+      map[category].rank = competitionRank(map[category].value, values);
+      map[category].percentile = percentileForValue(map[category].value, values);
+    });
   });
   return attachDisplayCategoryMetrics(byTeam);
 }
@@ -462,9 +484,17 @@ function withContextTagFields(row, tags = []) {
 async function fetchChallengeContextRows(challengeIds = []) {
   const ids = [...new Set(asArray(challengeIds).map((id) => String(id || "").trim()).filter(Boolean))];
   if (!supabase || !ids.length) return [];
-  const rows = [];
+  const { data: rpcData, error: rpcError } = await supabase.rpc("nba_challenge_context_tags_for_events", {
+    challenge_ids: ids,
+  });
+  if (!rpcError) return asArray(rpcData);
+  if (!isMissingTableError(rpcError) && rpcError.code !== "PGRST202") throw rpcError;
+
+  const chunks = [];
   for (let index = 0; index < ids.length; index += CONTEXT_TAG_PAGE_SIZE) {
-    const chunk = ids.slice(index, index + CONTEXT_TAG_PAGE_SIZE);
+    chunks.push(ids.slice(index, index + CONTEXT_TAG_PAGE_SIZE));
+  }
+  const results = await Promise.all(chunks.map(async (chunk) => {
     const { data, error } = await supabase
       .from("nba_challenge_context_event_tags")
       .select("challenge_event_id, tag_id")
@@ -473,9 +503,9 @@ async function fetchChallengeContextRows(challengeIds = []) {
       if (isMissingTableError(error)) return [];
       throw error;
     }
-    rows.push(...asArray(data));
-  }
-  return rows;
+    return asArray(data);
+  }));
+  return results.flat();
 }
 
 async function attachChallengeContextTags(rows) {
@@ -564,11 +594,12 @@ function delay(ms) {
   });
 }
 
-async function selectTable(table, queryBuilder, { maxRows = SUPABASE_PAGE_SIZE } = {}) {
+async function selectTable(table, queryBuilder, { maxRows = SUPABASE_PAGE_SIZE, requireComplete = false } = {}) {
   if (!supabase) return { data: [], unavailable: true };
   const rows = [];
-  for (let from = 0; from < maxRows; from += SUPABASE_PAGE_SIZE) {
-    const to = Math.min(from + SUPABASE_PAGE_SIZE - 1, maxRows - 1);
+  let truncated = false;
+  for (let from = 0; from <= maxRows; from += SUPABASE_PAGE_SIZE) {
+    const to = Math.min(from + SUPABASE_PAGE_SIZE - 1, maxRows);
     let data = null;
     let error = null;
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -584,9 +615,17 @@ async function selectTable(table, queryBuilder, { maxRows = SUPABASE_PAGE_SIZE }
     }
     const page = asArray(data);
     rows.push(...page);
+    if (rows.length > maxRows) {
+      truncated = true;
+      rows.length = maxRows;
+      break;
+    }
     if (page.length < SUPABASE_PAGE_SIZE) break;
   }
-  return { data: rows, unavailable: false };
+  if (truncated && requireComplete) {
+    throw new Error(`${table} exceeded its ${maxRows.toLocaleString()} row safety limit. Refusing to calculate from incomplete data.`);
+  }
+  return { data: rows, unavailable: false, truncated };
 }
 
 async function selectPreferredTable(preferredTable, fallbackTable, queryBuilder, options = {}) {
@@ -1081,13 +1120,27 @@ export function buildTeamProfiles(callEvents, challengeEvents) {
   ]));
 }
 
+function metricEligibility(row, rankKey) {
+  if (rankKey === "whistleChallengeRateRank") return Number(row.whistleChallenges) >= MIN_CHALLENGE_ATTEMPTS_FOR_PERCENTILES;
+  if (rankKey === "crewChiefChallengeRateRank") return Number(row.crewChiefChallenges) >= MIN_CHALLENGE_ATTEMPTS_FOR_PERCENTILES;
+  if (rankKey === "crewChallengeRateRank") return Number(row.crewChallenges) >= MIN_CHALLENGE_ATTEMPTS_FOR_PERCENTILES;
+  if (rankKey === "challengeRateRank") return Number(row.challenges) >= MIN_CHALLENGE_ATTEMPTS_FOR_PERCENTILES;
+  if (["callsPerGameRank", "foulsPerGameRank", "violationsPerGameRank"].includes(rankKey)) {
+    return Number(row.games) >= MIN_OFFICIAL_GAMES_FOR_PERCENTILES;
+  }
+  return true;
+}
+
 function addRanks(rows, fields) {
   fields.forEach(([rankKey, valueKey]) => {
-    [...rows]
-      .sort((left, right) => Number(right[valueKey] || 0) - Number(left[valueKey] || 0))
-      .forEach((row, index) => {
-        row[rankKey] = index + 1;
-      });
+    const eligibleRows = rows.filter((row) => metricEligibility(row, rankKey));
+    const values = eligibleRows.map((row) => Number(row[valueKey]) || 0);
+    rows.forEach((row) => {
+      const eligible = metricEligibility(row, rankKey);
+      row[rankKey] = eligible ? competitionRank(row[valueKey], values) : null;
+      row[`${rankKey}Percentile`] = eligible ? percentileForValue(row[valueKey], values) : null;
+      row[`${rankKey}Population`] = values.length;
+    });
   });
   return rows;
 }
@@ -1098,14 +1151,13 @@ function addCategoryRanks(rows) {
     Object.keys(row.callsByCategory || {}).forEach((category) => categories.add(category));
   });
   categories.forEach((category) => {
-    [...rows]
-      .sort((left, right) => Number(right.callsByCategory?.[category]?.value || 0) - Number(left.callsByCategory?.[category]?.value || 0))
-      .forEach((row, index, rankedRows) => {
-        if (row.callsByCategory?.[category]) {
-          row.callsByCategory[category].rank = index + 1;
-          row.callsByCategory[category].percentile = percentileFromRank(index + 1, rankedRows.length);
-        }
-      });
+    const eligibleRows = rows.filter((row) => Number(row.games) >= MIN_OFFICIAL_GAMES_FOR_PERCENTILES);
+    const values = eligibleRows.map((row) => Number(row.callsByCategory?.[category]?.value) || 0);
+    eligibleRows.forEach((row) => {
+      if (!row.callsByCategory?.[category]) return;
+      row.callsByCategory[category].rank = competitionRank(row.callsByCategory[category].value, values);
+      row.callsByCategory[category].percentile = percentileForValue(row.callsByCategory[category].value, values);
+    });
   });
   return rows;
 }
@@ -1116,11 +1168,6 @@ export async function fetchOfficialProfileDetails({ season = DEFAULT_SEASON, pro
   if (!officialId && !officialName) return profile;
   const cumulative = season === CUMULATIVE_SEASON;
 
-  const challengeQuery = (query) => query
-    .select(CHALLENGE_COLUMNS)
-    .in("season", seasonValues(season))
-    .not("season_type", "ilike", "Preseason")
-    .order("game_date", { ascending: false });
   const teamNetQuery = (query) => {
     let next = applySeasonFilter(query.select(TEAM_OFFICIAL_NET_COLUMNS), season);
     if (officialId && officialName) {
@@ -1133,18 +1180,9 @@ export async function fetchOfficialProfileDetails({ season = DEFAULT_SEASON, pro
     return next.order("team", { ascending: true });
   };
   const assignmentQuery = (query) => {
-    let next = applySeasonFilter(query.select(ASSIGNMENT_COLUMNS), season).not("season_type", "ilike", "Preseason");
-    if (officialId && officialName) {
-      next = next.or(`official_id.eq.${officialId},official_name.eq.${officialName}`);
-    } else if (officialId) {
-      next = next.eq("official_id", officialId);
-    } else {
-      next = next.eq("official_name", officialName);
-    }
-    return next.order("game_date", { ascending: false });
-  };
-  const callEventQuery = (query) => {
-    let next = applySeasonFilter(query.select(CALL_EVENT_COLUMNS), season).not("season_type", "ilike", "Preseason");
+    let next = applySeasonFilter(query.select(ASSIGNMENT_COLUMNS), season)
+      .not("season_type", "ilike", "Preseason")
+      .eq("is_alternate", false);
     if (officialId && officialName) {
       next = next.or(`official_id.eq.${officialId},official_name.eq.${officialName}`);
     } else if (officialId) {
@@ -1167,22 +1205,24 @@ export async function fetchOfficialProfileDetails({ season = DEFAULT_SEASON, pro
   };
   const profileQuery = (query) => applySeasonFilter(query.select(PROFILE_ROLLUP_COLUMNS), season);
   const categoryPopulationQuery = (query) => applySeasonFilter(query.select(OFFICIAL_CATEGORY_ROLLUP_COLUMNS), season);
-  const [profileResult, teamNetResult, challengeEventsResult, assignmentsResult, callEventsResult, categoryRollupsResult, categoryPopulationResult] = await Promise.all([
-    selectPreferredTable("nba_official_profiles_cache", "nba_official_profiles", profileQuery, { maxRows: PROFILE_LIMIT })
-      .catch(() => ({ data: [], unavailable: true })),
-    selectPreferredTable("nba_team_official_net_call_rollups_cache", "nba_team_official_net_call_rollups", teamNetQuery, { maxRows: 100 })
-      .catch(() => ({ data: [], unavailable: true })),
-    selectPreferredTable("nba_authoritative_coach_challenge_events_cache", "nba_authoritative_coach_challenge_events", challengeQuery, { maxRows: PROFILE_DETAIL_LIMIT }),
-    selectTable("nba_official_game_assignments", assignmentQuery, { maxRows: PROFILE_DETAIL_LIMIT }),
-    selectTable("nba_official_call_events", callEventQuery, { maxRows: PROFILE_DETAIL_LIMIT })
-      .catch(() => ({ data: [], unavailable: true })),
-    selectPreferredTable("nba_official_call_category_rollups_cache", "nba_official_call_category_rollups", categoryQuery, { maxRows: 200 })
-      .catch(() => ({ data: [], unavailable: true })),
-    selectPreferredTable("nba_official_call_category_rollups_cache", "nba_official_call_category_rollups", categoryPopulationQuery, { maxRows: PROFILE_DETAIL_LIMIT })
-      .catch(() => ({ data: [], unavailable: true })),
+  const [profileResult, teamNetResult, assignmentsResult, categoryRollupsResult, categoryPopulationResult] = await Promise.all([
+    selectPreferredTable("nba_official_profiles_cache", "nba_official_profiles", profileQuery, { maxRows: PROFILE_LIMIT, requireComplete: true }),
+    selectPreferredTable("nba_team_official_net_call_rollups_cache", "nba_team_official_net_call_rollups", teamNetQuery, { maxRows: 100, requireComplete: true }),
+    selectTable("nba_official_game_assignments", assignmentQuery, { maxRows: PROFILE_DETAIL_LIMIT, requireComplete: true }),
+    selectPreferredTable("nba_official_call_category_rollups_cache", "nba_official_call_category_rollups", categoryQuery, { maxRows: 200, requireComplete: true }),
+    selectPreferredTable("nba_official_call_category_rollups_cache", "nba_official_call_category_rollups", categoryPopulationQuery, { maxRows: PROFILE_DETAIL_LIMIT, requireComplete: true }),
   ]);
 
-  if (challengeEventsResult.unavailable || assignmentsResult.unavailable) return profile;
+  if (assignmentsResult.unavailable) throw new Error("Official assignments are unavailable.");
+  const assignedGameIds = [...new Set(assignmentsResult.data.map((row) => row.game_id).filter(Boolean))];
+  const challengeEventsResult = assignedGameIds.length
+    ? await selectPreferredTable("nba_authoritative_coach_challenge_events_cache", "nba_authoritative_coach_challenge_events", (query) => applySeasonFilter(query
+      .select(CHALLENGE_COLUMNS), season)
+      .not("season_type", "ilike", "Preseason")
+      .in("game_id", assignedGameIds)
+      .order("game_date", { ascending: false }), { maxRows: PROFILE_DETAIL_LIMIT, requireComplete: true })
+    : { data: [], unavailable: false };
+  if (challengeEventsResult.unavailable) throw new Error("Official challenge events are unavailable.");
   const challengeRowsWithTags = await attachChallengeContextTags(preferAuthoritativeChallengeEvents(challengeEventsResult.data));
   const baseProfileRows = profileResult.unavailable
     ? []
@@ -1206,7 +1246,7 @@ export async function fetchOfficialProfileDetails({ season = DEFAULT_SEASON, pro
   )) || profile;
   const detail = applyOfficialProfileDetails(
     baseProfile,
-    callEventsResult.unavailable ? [] : callEventsResult.data,
+    [],
     challengeRowsWithTags,
     assignmentsResult.data,
     []
@@ -1235,17 +1275,16 @@ export async function fetchOfficialsReportData({ season = CUMULATIVE_SEASON, off
 
   const [profileResult, categoryResult, assignmentResult] = await Promise.all([
     selectPreferredTable("nba_official_profiles_cache", "nba_official_profiles", (query) => applySeasonFilter(query
-      .select(PROFILE_ROLLUP_COLUMNS), season), { maxRows: PROFILE_LIMIT }),
+      .select(PROFILE_ROLLUP_COLUMNS), season), { maxRows: PROFILE_LIMIT, requireComplete: true }),
     selectPreferredTable("nba_official_call_category_rollups_cache", "nba_official_call_category_rollups", (query) => applySeasonFilter(query
-      .select(OFFICIAL_CATEGORY_ROLLUP_COLUMNS), season), { maxRows: PROFILE_DETAIL_LIMIT })
-      .catch(() => ({ data: [], unavailable: true })),
+      .select(OFFICIAL_CATEGORY_ROLLUP_COLUMNS), season), { maxRows: PROFILE_DETAIL_LIMIT, requireComplete: true }),
     selectTable("nba_official_game_assignments", (query) => applySeasonFilter(query
       .select(ASSIGNMENT_COLUMNS), season)
       .not("season_type", "ilike", "Preseason")
+      .eq("is_alternate", false)
       .in("official_name", names)
       .or("home_team.eq.WAS,away_team.eq.WAS")
-      .order("game_date", { ascending: false }), { maxRows: 100 })
-      .catch(() => ({ data: [], unavailable: true })),
+      .order("game_date", { ascending: false }), { maxRows: 100, requireComplete: true }),
   ]);
 
   if (profileResult.unavailable) {
@@ -1293,31 +1332,21 @@ export async function fetchTeamProfileDetails({ season = DEFAULT_SEASON, profile
   const teamOfficialQuery = (query) => applySeasonFilter(query.select(TEAM_OFFICIAL_NET_COLUMNS), season)
     .eq("team", team)
     .order("net_calls_for_per_game", { ascending: false });
-  const callEventQuery = (query) => applySeasonFilter(query.select(CALL_EVENT_COLUMNS), season)
-    .not("season_type", "ilike", "Preseason")
-    .or(`charged_team.eq.${team},benefiting_team.eq.${team}`)
-    .order("game_date", { ascending: false });
   const profileQuery = (query) => applySeasonFilter(query.select(TEAM_ROLLUP_COLUMNS), season);
-  const [profileResult, teamOfficialResult, challengeEventsResult, callEventsResult, categoryRollupsResult, categoryPopulationResult] = await Promise.all([
-    selectPreferredTable("nba_team_profiles_cache", "nba_team_profiles", profileQuery, { maxRows: PROFILE_LIMIT })
-      .catch(() => ({ data: [], unavailable: true })),
-    selectPreferredTable("nba_team_official_net_call_rollups_cache", "nba_team_official_net_call_rollups", teamOfficialQuery, { maxRows: PROFILE_DETAIL_LIMIT })
-      .catch(() => ({ data: [], unavailable: true })),
+  const [profileResult, teamOfficialResult, challengeEventsResult, categoryRollupsResult, categoryPopulationResult] = await Promise.all([
+    selectPreferredTable("nba_team_profiles_cache", "nba_team_profiles", profileQuery, { maxRows: PROFILE_LIMIT, requireComplete: true }),
+    selectPreferredTable("nba_team_official_net_call_rollups_cache", "nba_team_official_net_call_rollups", teamOfficialQuery, { maxRows: PROFILE_DETAIL_LIMIT, requireComplete: true }),
     selectPreferredTable("nba_authoritative_coach_challenge_events_cache", "nba_authoritative_coach_challenge_events", (query) => query
       .select(CHALLENGE_COLUMNS)
       .in("season", seasonValues(season))
       .not("season_type", "ilike", "Preseason")
       .eq("challenging_team", team)
-      .order("game_date", { ascending: false }), { maxRows: PROFILE_DETAIL_LIMIT }),
-    selectTable("nba_official_call_events", callEventQuery, { maxRows: PROFILE_DETAIL_LIMIT })
-      .catch(() => ({ data: [], unavailable: true })),
-    selectPreferredTable("nba_team_call_category_rollups_cache", "nba_team_call_category_rollups", categoryRollupQuery, { maxRows: 200 })
-      .catch(() => ({ data: [], unavailable: true })),
-    selectPreferredTable("nba_team_call_category_rollups_cache", "nba_team_call_category_rollups", categoryPopulationQuery, { maxRows: PROFILE_DETAIL_LIMIT })
-      .catch(() => ({ data: [], unavailable: true })),
+      .order("game_date", { ascending: false }), { maxRows: PROFILE_DETAIL_LIMIT, requireComplete: true }),
+    selectPreferredTable("nba_team_call_category_rollups_cache", "nba_team_call_category_rollups", categoryRollupQuery, { maxRows: 200, requireComplete: true }),
+    selectPreferredTable("nba_team_call_category_rollups_cache", "nba_team_call_category_rollups", categoryPopulationQuery, { maxRows: PROFILE_DETAIL_LIMIT, requireComplete: true }),
   ]);
 
-  if (challengeEventsResult.unavailable) return profile;
+  if (challengeEventsResult.unavailable) throw new Error("Team challenge events are unavailable.");
   const challengeLog = await attachChallengeContextTags(preferAuthoritativeChallengeEvents(challengeEventsResult.data));
   const baseProfileRows = profileResult.unavailable
     ? []
@@ -1333,15 +1362,12 @@ export async function fetchTeamProfileDetails({ season = DEFAULT_SEASON, profile
   const baseProfile = rankedBaseProfiles.find((row) => (
     String(row.team || "").trim().toLowerCase() === team.toLowerCase()
   )) || profile;
-  const detailProfile = callEventsResult.unavailable
-    ? baseProfile
-    : applyTeamProfileDetails(baseProfile, callEventsResult.data, [], []);
   const populationCategoryMap = categoryPopulation.get(team.toLowerCase()) || {};
   const fallbackCategoryMap = categoryRollupsResult.unavailable || !categoryRollupsResult.data?.length
     ? (hasCategoryMapRows(baseProfile.callsByCategory) ? baseProfile.callsByCategory : profile.callsByCategory)
     : cumulative ? aggregateCategoryRollupsToMap(categoryRollupsResult.data, baseProfile.games) : categoryRollupsToMap(categoryRollupsResult.data);
   return {
-    ...detailProfile,
+    ...baseProfile,
     callsByOfficial: teamOfficialResult.unavailable
       ? baseProfile.callsByOfficial
       : cumulative ? aggregateTeamOfficialNetRollupsToOfficialMap(teamOfficialResult.data) : teamOfficialNetRollupsToOfficialMap(teamOfficialResult.data),
@@ -1382,15 +1408,13 @@ export async function fetchOfficiatingDashboardData({ season = DEFAULT_SEASON, i
     selectPreferredTable("nba_officiating_overview_rollups_cache", "nba_officiating_overview_rollups", (query) => applySeasonFilter(query
       .select(OVERVIEW_ROLLUP_COLUMNS), season), { maxRows: 5 }),
     selectPreferredTable("nba_official_profiles_cache", "nba_official_profiles", (query) => applySeasonFilter(query
-      .select(PROFILE_ROLLUP_COLUMNS), season), { maxRows: PROFILE_LIMIT }),
+      .select(PROFILE_ROLLUP_COLUMNS), season), { maxRows: PROFILE_LIMIT, requireComplete: true }),
     selectPreferredTable("nba_team_profiles_cache", "nba_team_profiles", (query) => applySeasonFilter(query
-      .select(TEAM_ROLLUP_COLUMNS), season), { maxRows: PROFILE_LIMIT }),
+      .select(TEAM_ROLLUP_COLUMNS), season), { maxRows: PROFILE_LIMIT, requireComplete: true }),
     selectPreferredTable("nba_official_call_category_rollups_cache", "nba_official_call_category_rollups", (query) => applySeasonFilter(query
-      .select(OFFICIAL_CATEGORY_ROLLUP_COLUMNS), season), { maxRows: PROFILE_DETAIL_LIMIT })
-      .catch(() => ({ data: [], unavailable: true })),
+      .select(OFFICIAL_CATEGORY_ROLLUP_COLUMNS), season), { maxRows: PROFILE_DETAIL_LIMIT, requireComplete: true }),
     selectPreferredTable("nba_team_call_category_rollups_cache", "nba_team_call_category_rollups", (query) => applySeasonFilter(query
-      .select(TEAM_CATEGORY_ROLLUP_COLUMNS), season), { maxRows: PROFILE_DETAIL_LIMIT })
-      .catch(() => ({ data: [], unavailable: true })),
+      .select(TEAM_CATEGORY_ROLLUP_COLUMNS), season), { maxRows: PROFILE_DETAIL_LIMIT, requireComplete: true }),
   ]);
 
   const hasProfileRollups = !officialRollupsResult.unavailable && !teamRollupsResult.unavailable;
@@ -1399,7 +1423,7 @@ export async function fetchOfficiatingDashboardData({ season = DEFAULT_SEASON, i
     ? await selectPreferredTable("nba_authoritative_coach_challenge_events_cache", "nba_authoritative_coach_challenge_events", (query) => query
       .select(CHALLENGE_COLUMNS)
       .in("season", seasonValues(season))
-      .order("game_date", { ascending: false }), { maxRows: CHALLENGE_LIMIT })
+      .order("game_date", { ascending: false }), { maxRows: CHALLENGE_LIMIT, requireComplete: true })
     : { data: [], unavailable: false };
 
   const challengeEvents = await attachChallengeContextTags(preferAuthoritativeChallengeEvents(challengeEventsResult.data));
@@ -1414,12 +1438,13 @@ export async function fetchOfficiatingDashboardData({ season = DEFAULT_SEASON, i
         .select(CALL_EVENT_COLUMNS)
         .in("season", seasonValues(season))
         .not("season_type", "ilike", "Preseason")
-        .order("game_date", { ascending: false }), { maxRows: CALL_EVENT_LIMIT }),
+        .order("game_date", { ascending: false }), { maxRows: CALL_EVENT_LIMIT, requireComplete: true }),
       selectTable("nba_official_game_assignments", (query) => query
         .select(ASSIGNMENT_COLUMNS)
         .in("season", seasonValues(season))
         .not("season_type", "ilike", "Preseason")
-        .order("game_date", { ascending: false }), { maxRows: ASSIGNMENT_LIMIT }),
+        .eq("is_alternate", false)
+        .order("game_date", { ascending: false }), { maxRows: ASSIGNMENT_LIMIT, requireComplete: true }),
     ]);
     callEvents = callEventsResult.data;
     assignments = assignmentsResult.data;
@@ -1493,7 +1518,7 @@ export async function fetchOfficiatingChallengeLog({ season = DEFAULT_SEASON } =
   const result = await selectPreferredTable("nba_authoritative_coach_challenge_events_cache", "nba_authoritative_coach_challenge_events", (query) => query
     .select(CHALLENGE_COLUMNS)
     .in("season", seasonValues(season))
-    .order("game_date", { ascending: false }), { maxRows: CHALLENGE_LIMIT });
+    .order("game_date", { ascending: false }), { maxRows: CHALLENGE_LIMIT, requireComplete: true });
   return attachChallengeContextTags(preferAuthoritativeChallengeEvents(result.data));
 }
 

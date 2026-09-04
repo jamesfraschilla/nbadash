@@ -19,6 +19,8 @@
     "officiating:refresh:rollups": "node scripts/refresh-officiating-rollups.mjs",
     "officiating:pilot:2024-25": "node scripts/pilot-officiating-2024-25.mjs",
     "officiating:check:cache": "node scripts/check-officiating-cache-health.mjs",
+    "officiating:maintain:daily": "node scripts/run-officiating-daily-maintenance.mjs",
+    "officiating:audit:report-layout": "node scripts/audit-officiating-report-layout.mjs",
     "officiating:import:pgr": "node scripts/import-pgr-workbooks.mjs",
     "pgr:refresh:rollups": "node scripts/refresh-pgr-rollups.mjs",
     "schedule:update": "node scripts/update-nba-schedule.mjs",

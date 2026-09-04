@@ -7,6 +7,7 @@ import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import { assertOutsideWizardsGameWindow } from "./lib/game-window-guard.mjs";
 import { buildOfficialCallEvent, extractOfficialToken, matchOfficialToken } from "../src/officiatingParser.js";
+import { canonicalOfficialIdentity } from "../src/officiatingIdentity.js";
 
 const DEFAULT_SEASON = "2025-26";
 const INSERT_BATCH_SIZE = 1000;
@@ -418,6 +419,10 @@ async function loadLiveCalledEvents({ gameIds, season }) {
 }
 
 function toCallRow(event) {
+  const identity = canonicalOfficialIdentity({
+    officialId: event.officialId,
+    officialName: event.officialName,
+  });
   return {
     season: event.season,
     season_type: event.seasonType,
@@ -434,8 +439,8 @@ function toCallRow(event) {
     descriptor: event.descriptor,
     description: event.description,
     official_token: event.officialToken,
-    official_id: event.officialId,
-    official_name: event.officialName,
+    official_id: identity.officialId,
+    official_name: identity.officialName,
     team_id: event.teamId,
     team_tricode: event.teamTricode,
     player_id: event.playerId,

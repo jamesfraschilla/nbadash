@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createPortal } from "react-dom";
 import { Link, useSearchParams } from "react-router-dom";
@@ -21,6 +21,12 @@ import {
 import { nbaEventVideoUrl, teamLogoUrl } from "../api.js";
 import { CALL_CATEGORY_GROUPS } from "../officiatingCategoryNormalization.js";
 import { loadRefereeHeadshotUrl } from "../refereeHeadshots.js";
+import {
+  CUMULATIVE_OFFICIATING_SEASON as CUMULATIVE_SEASON,
+  OFFICIATING_SEASON_OPTIONS as SEASON_OPTIONS,
+  currentOfficiatingSeasonDefault,
+  defaultOfficiatingSeasonForTab,
+} from "../officiatingSeasons.js";
 import styles from "./Officiating.module.css";
 
 const TABS = [
@@ -31,22 +37,14 @@ const TABS = [
   { key: "pgr-insights", label: "PGR Insights" },
 ];
 
-const DEFAULT_SEASON = "2025-26";
-const CUMULATIVE_SEASON = "2024-Present";
-const SEASON_OPTIONS = [CUMULATIVE_SEASON, "2024-25", "2025-26", "2026-27"];
-const SEASON_2026_27_START = new Date("2026-10-03T00:00:00-04:00");
 const TONIGHT_REPORT_CREW = [
-  { name: "Tyler Ford", role: "Crew Chief" },
-  { name: "Kevin Scott", role: "Referee" },
-  { name: "Karl Lane", role: "Umpire" },
+  { name: "James Williams", role: "Crew Chief" },
+  { name: "JB DeRosa", role: "Referee" },
+  { name: "Natalie Sago", role: "Umpire" },
 ];
 
-function currentOfficiatingSeasonDefault() {
-  return new Date() >= SEASON_2026_27_START ? "2026-27" : DEFAULT_SEASON;
-}
-
 function defaultSeasonForTab(tab) {
-  return tab === "officials" ? CUMULATIVE_SEASON : currentOfficiatingSeasonDefault();
+  return defaultOfficiatingSeasonForTab(tab);
 }
 
 function formatRate(value) {
@@ -590,10 +588,11 @@ function priorWizardsGames(schedule = []) {
 }
 
 function ReportMetric({ label, value, rank, populationSize, percentile, prominent = false }) {
-  const toneClass = percentile
+  const hasPercentile = Number.isFinite(Number(percentile));
+  const toneClass = hasPercentile
     ? metricToneClassFromPercentile(percentile)
     : metricToneClass(rank, populationSize);
-  const percentileLabel = percentile
+  const percentileLabel = hasPercentile
     ? formatPercentileValue(percentile)
     : formatPercentile(rank, populationSize);
   return (
@@ -605,23 +604,20 @@ function ReportMetric({ label, value, rank, populationSize, percentile, prominen
   );
 }
 
-function ReportChallengeMetric({ label, successes, attempts, rank, populationSize }) {
+function ReportChallengeMetric({ label, successes, attempts, rank, populationSize, percentile }) {
   const made = Number(successes) || 0;
   const total = Number(attempts) || 0;
   return (
-    <div className={`${styles.reportMetric} ${styles.reportMetricProminent} ${metricToneClass(rank, populationSize)}`}>
+    <div className={`${styles.reportMetric} ${styles.reportMetricProminent} ${Number.isFinite(Number(percentile)) ? metricToneClassFromPercentile(percentile) : metricToneClass(rank, populationSize)}`}>
       <span>{label}</span>
       <strong>{formatRate(total ? made / total : 0)}</strong>
-      <em>{made}/{total} · {formatPercentile(rank, populationSize)}</em>
+      <em>{made}/{total} · {Number.isFinite(Number(percentile)) ? formatPercentileValue(percentile) : formatPercentile(rank, populationSize)}</em>
     </div>
   );
 }
 
 function OfficialsReportCard({ profile, role, populationSize }) {
   const categories = profile?.callsByCategory || {};
-  const foulGroup = CALL_CATEGORY_GROUPS.find((group) => group.key === "fouls");
-  const foulLabels = [...new Set((foulGroup?.types || []).flatMap((type) => type.labels || []))];
-  const fouls = categoryMetric(categories, foulLabels);
   const shooting = categoryMetric(categories, ["Shooting Foul", "Restricted Area Shooting Foul", "3-Pt Shooting Foul"]);
   const technical = categoryMetric(categories, ["Technical Foul"]);
   const restricted = categoryMetric(categories, ["Restricted Area Shooting Foul"]);
@@ -645,14 +641,15 @@ function OfficialsReportCard({ profile, role, populationSize }) {
           </div>
         </div>
         <div className={styles.reportPrimaryMetrics}>
-          <ReportMetric label="Calls/G" value={profile?.callsPerGame} rank={profile?.callsPerGameRank} populationSize={populationSize} prominent />
-          <ReportMetric label="Fouls/G" value={fouls.value} percentile={fouls.percentile} prominent />
+          <ReportMetric label="Calls/G" value={profile?.callsPerGame} rank={profile?.callsPerGameRank} populationSize={populationSize} percentile={profile?.callsPerGameRankPercentile} prominent />
+          <ReportMetric label="Fouls/G" value={profile?.foulsPerGame} rank={profile?.foulsPerGameRank} populationSize={populationSize} percentile={profile?.foulsPerGameRankPercentile} prominent />
           <ReportChallengeMetric
             label="Challenge (Whistle)"
             successes={profile?.successfulWhistleChallenges}
             attempts={profile?.whistleChallenges}
             rank={profile?.whistleChallengeRateRank}
             populationSize={populationSize}
+            percentile={profile?.whistleChallengeRateRankPercentile}
           />
           <ReportChallengeMetric
             label="Challenge (Crew Chief)"
@@ -660,6 +657,7 @@ function OfficialsReportCard({ profile, role, populationSize }) {
             attempts={profile?.crewChiefChallenges}
             rank={profile?.crewChiefChallengeRateRank}
             populationSize={populationSize}
+            percentile={profile?.crewChiefChallengeRateRankPercentile}
           />
         </div>
       </div>
@@ -685,12 +683,17 @@ function OfficialsReportCard({ profile, role, populationSize }) {
             </div>
           </section>
         </div>
-        <section className={styles.reportWizardsHistory}>
-          <span>Previous Wizards Games</span>
-          {wizardsGames.length ? (
-            <ul>{wizardsGames.map((game) => <li key={game}>{game}</li>)}</ul>
-          ) : <strong>None in 2025-26</strong>}
-        </section>
+        <aside className={styles.reportOfficialAside}>
+          <section className={styles.reportWizardsHistory}>
+            <span>Previous Wizards Games</span>
+            {wizardsGames.length ? (
+              <ul>{wizardsGames.map((game) => <li key={game}>{game}</li>)}</ul>
+            ) : <strong>None in 2025-26</strong>}
+          </section>
+          <section className={styles.reportWizardsHistory}>
+            <span>Trends &amp; Insights</span>
+          </section>
+        </aside>
       </div>
     </article>
   );
@@ -748,9 +751,13 @@ function buildMetricRankMap(rows, key, eligible = () => true) {
   const rankedRows = rows
     .filter((row) => eligible(row) && Number.isFinite(Number(row[key])))
     .sort((left, right) => Number(right[key] || 0) - Number(left[key] || 0));
+  const values = rankedRows.map((row) => Number(row[key]) || 0);
   return {
     total: rankedRows.length,
-    ranks: new Map(rankedRows.map((row, index) => [row.id || row.name || row.team, index + 1])),
+    ranks: new Map(rankedRows.map((row) => [
+      row.id || row.name || row.team,
+      values.filter((value) => value > (Number(row[key]) || 0)).length + 1,
+    ])),
   };
 }
 
@@ -771,7 +778,7 @@ function RankedMetric({ value, rankInfo, rowId, formatter = (metric) => formatNu
   );
 }
 
-function ChallengeVisualMetric({ label, successes, attempts, rank, populationSize }) {
+function ChallengeVisualMetric({ label, successes, attempts, rank, populationSize, percentile }) {
   const total = Number(attempts) || 0;
   const made = Number(successes) || 0;
   const rate = total ? made / total : 0;
@@ -780,7 +787,9 @@ function ChallengeVisualMetric({ label, successes, attempts, rank, populationSiz
       <div>
         <span>{label}</span>
         <strong>{formatRateRecord(made, total)}</strong>
-        {rank ? <em>{formatPercentile(rank, populationSize)}</em> : null}
+        {Number.isFinite(Number(percentile))
+          ? <em>{formatPercentileValue(percentile)}</em>
+          : rank ? <em>{formatPercentile(rank, populationSize)}</em> : null}
       </div>
       <div className={styles.challengeTrack} aria-hidden="true">
         <div
@@ -813,9 +822,9 @@ function OfficialsTable({ rows, sort, onSort, onSelect }) {
     callsPerGame: buildMetricRankMap(rows, "callsPerGame"),
     foulsPerGame: buildMetricRankMap(rows, "foulsPerGame"),
     violationsPerGame: buildMetricRankMap(rows, "violationsPerGame"),
-    whistleChallengeRate: buildMetricRankMap(rows, "whistleChallengeRate", (row) => Number(row.whistleChallenges) > 0),
-    crewChiefChallengeRate: buildMetricRankMap(rows, "crewChiefChallengeRate", (row) => Number(row.crewChiefChallenges) > 0),
-    crewChallengeRate: buildMetricRankMap(rows, "crewChallengeRate", (row) => Number(row.crewChallenges) > 0),
+    whistleChallengeRate: buildMetricRankMap(rows, "whistleChallengeRate", (row) => Number(row.whistleChallenges) >= 5),
+    crewChiefChallengeRate: buildMetricRankMap(rows, "crewChiefChallengeRate", (row) => Number(row.crewChiefChallenges) >= 5),
+    crewChallengeRate: buildMetricRankMap(rows, "crewChallengeRate", (row) => Number(row.crewChallenges) >= 5),
   }), [rows]);
 
   if (!rows.length) {
@@ -1220,7 +1229,7 @@ function ProfileModal({ children, onClose, label }) {
   );
 }
 
-function OfficialProfile({ profile, isLoading, season, onSeasonChange, onClose, onSelectTeam, onEditContext, categoryPopulationSize }) {
+function OfficialProfile({ profile, isLoading, loadError, season, onSeasonChange, onClose, onSelectTeam, onEditContext, categoryPopulationSize }) {
   const [detailSectionsOpen, setDetailSectionsOpen] = useState(true);
   if (!profile) return null;
   return (
@@ -1249,7 +1258,7 @@ function OfficialProfile({ profile, isLoading, season, onSeasonChange, onClose, 
         <ProfileMetric
           label="Calls/G"
           value={formatNumber(profile.callsPerGame, 2)}
-          detail={formatPercentile(profile.callsPerGameRank, categoryPopulationSize)}
+          detail={Number.isFinite(Number(profile.callsPerGameRankPercentile)) ? formatPercentileValue(profile.callsPerGameRankPercentile) : formatPercentile(profile.callsPerGameRank, categoryPopulationSize)}
           style={profile.callsPerGameRank ? metricToneStyle(profile.callsPerGameRank, categoryPopulationSize) : undefined}
         />
         <ChallengeVisualMetric
@@ -1258,6 +1267,7 @@ function OfficialProfile({ profile, isLoading, season, onSeasonChange, onClose, 
           attempts={profile.whistleChallenges}
           rank={profile.whistleChallengeRateRank}
           populationSize={categoryPopulationSize}
+          percentile={profile.whistleChallengeRateRankPercentile}
         />
         <ChallengeVisualMetric
           label="Challenges (Crew Chief)"
@@ -1265,6 +1275,7 @@ function OfficialProfile({ profile, isLoading, season, onSeasonChange, onClose, 
           attempts={profile.crewChiefChallenges}
           rank={profile.crewChiefChallengeRateRank}
           populationSize={categoryPopulationSize}
+          percentile={profile.crewChiefChallengeRateRankPercentile}
         />
         <ChallengeVisualMetric
           label="Challenge (Crew)"
@@ -1272,9 +1283,11 @@ function OfficialProfile({ profile, isLoading, season, onSeasonChange, onClose, 
           attempts={profile.crewChallenges}
           rank={profile.crewChallengeRateRank}
           populationSize={categoryPopulationSize}
+          percentile={profile.crewChallengeRateRankPercentile}
         />
       </div>
       {isLoading ? <p className={styles.profileLoading}>Loading profile details...</p> : null}
+      {loadError ? <p className={styles.notice}>{loadError}</p> : null}
       <div className={`${styles.detailGrid} ${styles.detailGridCategoryWide}`}>
         <SortableTopList
           title="Calls By Team"
@@ -1310,7 +1323,7 @@ function OfficialProfile({ profile, isLoading, season, onSeasonChange, onClose, 
               ) : (
                 <span>{row.game_date} - {[row.away_team, row.home_team].filter(Boolean).join(" @ ")}</span>
               )}
-              <strong>{row.role_key === "crewChief" ? "Crew Chief" : Number(row.assignment_order) === 2 ? "Referee" : Number(row.assignment_order) === 3 ? "Umpire" : `Official ${row.assignment_order || ""}`}</strong>
+              <strong>{row.is_alternate || row.role_key === "alternate" || Number(row.assignment_order) >= 4 ? "Alternate" : row.role_key === "crewChief" ? "Crew Chief" : Number(row.assignment_order) === 2 ? "Referee" : Number(row.assignment_order) === 3 ? "Umpire" : "Official"}</strong>
             </div>
           ))}
         </div>
@@ -1319,7 +1332,7 @@ function OfficialProfile({ profile, isLoading, season, onSeasonChange, onClose, 
   );
 }
 
-function TeamProfile({ profile, isLoading, season, onSeasonChange, onClose, onSelectOfficial, onEditContext, categoryPopulationSize }) {
+function TeamProfile({ profile, isLoading, loadError, season, onSeasonChange, onClose, onSelectOfficial, onEditContext, categoryPopulationSize }) {
   const [detailSectionsOpen, setDetailSectionsOpen] = useState(true);
   if (!profile) return null;
   return (
@@ -1360,6 +1373,7 @@ function TeamProfile({ profile, isLoading, season, onSeasonChange, onClose, onSe
         />
       </div>
       {isLoading ? <p className={styles.profileLoading}>Loading profile details...</p> : null}
+      {loadError ? <p className={styles.notice}>{loadError}</p> : null}
       <div className={`${styles.detailGrid} ${styles.detailGridCategoryWide}`}>
         <SortableTopList
           title="Calls By Official"
@@ -1907,6 +1921,10 @@ export default function Officiating() {
   const [selectedTeamSeason, setSelectedTeamSeason] = useState(currentOfficiatingSeasonDefault());
   const [loadingOfficialDetails, setLoadingOfficialDetails] = useState(false);
   const [loadingTeamDetails, setLoadingTeamDetails] = useState(false);
+  const [officialProfileError, setOfficialProfileError] = useState("");
+  const [teamProfileError, setTeamProfileError] = useState("");
+  const officialRequestId = useRef(0);
+  const teamRequestId = useRef(0);
   const [contextEditorRow, setContextEditorRow] = useState(null);
   const [contextSaveError, setContextSaveError] = useState(null);
   const [isSavingContext, setIsSavingContext] = useState(false);
@@ -2078,20 +2096,24 @@ export default function Officiating() {
   };
   const loadOfficialProfile = async (profile, profileSeason) => {
     if (profile) {
+      const requestId = officialRequestId.current + 1;
+      officialRequestId.current = requestId;
       setSelectedTeam(null);
-      setSelectedOfficial({
-        ...profile,
-        callsByTeam: {},
-        callsByCategory: {},
-        challengeLog: [],
-        schedule: [],
-      });
+      setSelectedOfficial(profile);
+      setOfficialProfileError("");
       setLoadingOfficialDetails(true);
-      const details = await fetchOfficialProfileDetails({ season: profileSeason, profile }).catch(() => profile);
-      setSelectedOfficial((current) => (
-        current && String(current.id) === String(profile.id) ? details : current
-      ));
-      setLoadingOfficialDetails(false);
+      try {
+        const details = await fetchOfficialProfileDetails({ season: profileSeason, profile });
+        if (officialRequestId.current !== requestId) return;
+        setSelectedOfficial((current) => (
+          current && String(current.id) === String(profile.id) ? details : current
+        ));
+      } catch (loadError) {
+        if (officialRequestId.current !== requestId) return;
+        setOfficialProfileError(loadError instanceof Error ? loadError.message : "Unable to load referee profile details.");
+      } finally {
+        if (officialRequestId.current === requestId) setLoadingOfficialDetails(false);
+      }
     }
   };
   const openOfficialProfile = (profile) => {
@@ -2101,19 +2123,24 @@ export default function Officiating() {
   };
   const loadTeamProfile = async (profile, profileSeason) => {
     if (profile) {
+      const requestId = teamRequestId.current + 1;
+      teamRequestId.current = requestId;
       setSelectedOfficial(null);
-      setSelectedTeam({
-        ...profile,
-        callsByOfficial: {},
-        callsByCategory: {},
-        challengeLog: [],
-      });
+      setSelectedTeam(profile);
+      setTeamProfileError("");
       setLoadingTeamDetails(true);
-      const details = await fetchTeamProfileDetails({ season: profileSeason, profile }).catch(() => profile);
-      setSelectedTeam((current) => (
-        current && String(current.team) === String(profile.team) ? details : current
-      ));
-      setLoadingTeamDetails(false);
+      try {
+        const details = await fetchTeamProfileDetails({ season: profileSeason, profile });
+        if (teamRequestId.current !== requestId) return;
+        setSelectedTeam((current) => (
+          current && String(current.team) === String(profile.team) ? details : current
+        ));
+      } catch (loadError) {
+        if (teamRequestId.current !== requestId) return;
+        setTeamProfileError(loadError instanceof Error ? loadError.message : "Unable to load team profile details.");
+      } finally {
+        if (teamRequestId.current === requestId) setLoadingTeamDetails(false);
+      }
     }
   };
   const openTeamProfile = (profile) => {
@@ -2310,6 +2337,7 @@ export default function Officiating() {
       <OfficialProfile
         profile={selectedOfficial}
         isLoading={loadingOfficialDetails || isSelectedOfficialPeerLoading}
+        loadError={officialProfileError}
         season={selectedOfficialSeason}
         onSeasonChange={changeSelectedOfficialSeason}
         onClose={() => setSelectedOfficial(null)}
@@ -2320,6 +2348,7 @@ export default function Officiating() {
       <TeamProfile
         profile={selectedTeam}
         isLoading={loadingTeamDetails || isSelectedTeamPeerLoading}
+        loadError={teamProfileError}
         season={selectedTeamSeason}
         onSeasonChange={changeSelectedTeamSeason}
         onClose={() => setSelectedTeam(null)}

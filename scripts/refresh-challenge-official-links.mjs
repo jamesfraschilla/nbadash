@@ -252,11 +252,12 @@ async function main() {
   const supabase = createSupabaseClient();
   const season = readArg("season") || DEFAULT_SEASON;
   const apply = hasFlag("apply");
+  const skipLiveContext = hasFlag("skip-live-context");
 
   const challenges = await selectAll(supabase, "nba_coach_challenge_events", (query) => query
     .select("*")
     .eq("season", season)
-    .eq("source", "nba_official_challenge_pdf")
+    .in("source", ["nba_official_challenge_pdf", "nba_official_challenge_log"])
     .order("game_date", { ascending: true }));
   const challengeGameIds = [...new Set(challenges.map((row) => row.game_id).filter(Boolean))];
   const [calls, assignments] = await Promise.all([
@@ -276,7 +277,7 @@ async function main() {
     .filter((row) => isFoulChallenge(row))
     .filter((row) => !cleanText(row.matched_call_event_id || row.matchedCallEventId))
     .map((row) => row.game_id);
-  const contextActions = await loadLiveLocationContext(contextGameIds);
+  const contextActions = skipLiveContext ? [] : await loadLiveLocationContext(contextGameIds);
 
   const enriched = enrichChallengeEventsWithOfficials(challenges, calls, assignments, { contextActions });
   const changedRows = enriched.filter((row, index) => rowChanged(challenges[index], row));
@@ -286,6 +287,7 @@ async function main() {
     challenges: challenges.length,
     calls: calls.length,
     assignments: assignments.length,
+    liveContext: !skipLiveContext,
     changedRows: changedRows.length,
     withWhistleBefore: challenges.filter((row) => cleanText(row.whistling_official_name)).length,
     withWhistleAfter: enriched.filter((row) => cleanText(row.whistling_official_name)).length,

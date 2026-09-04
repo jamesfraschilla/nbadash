@@ -10,3 +10,4 @@ supabase/.temp/
 field-inventory-*.txt
 test-results/
 playwright-report/
+tmp/
