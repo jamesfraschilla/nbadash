@@ -358,12 +358,11 @@ export const CALL_CATEGORY_GROUPS = [
       },
       {
         label: "Timing Violation",
-        labels: ["8 Second Violation", "5 Second Violation", "Offensive 3 Second Violation", "Shot Clock Violation", "10 Second Free Throw Violation"],
+        labels: ["8 Second Violation", "5 Second Violation", "Offensive 3 Second Violation", "10 Second Free Throw Violation"],
         subTypes: [
           { label: "8 Second Violation", labels: ["8 Second Violation"] },
           { label: "5 Second Violation", labels: ["5 Second Violation"] },
           { label: "Offensive 3 Second Violation", labels: ["Offensive 3 Second Violation"] },
-          { label: "Shot Clock Violation", labels: ["Shot Clock Violation"] },
           { label: "10 Second Free Throw Violation", labels: ["10 Second Free Throw Violation"] },
         ],
       },

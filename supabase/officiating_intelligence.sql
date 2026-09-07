@@ -622,13 +622,13 @@ as $$
       regexp_replace(lower(coalesce(descriptor, '') || ' ' || coalesce(sub_type, '') || ' ' || coalesce(secondary_category, '')), '[^a-z0-9]', '', 'g') as category_key
   )
   select case
+    when category_key like '%shotclock%' then false
     when primary_key in ('violation', 'turnover') then true
     when category_key like any (array[
       '%3second%',
       '%outofbounds%',
       '%badpass%',
       '%lostball%',
-      '%shotclock%',
       '%5second%',
       '%8second%',
       '%10secondfreethrow%',

@@ -17,6 +17,7 @@ import {
   isDefensiveRimPaintFoulEvent,
   isLikelyMovingScreenEvent,
   isRaChargeEvent,
+  isViolationCallCategory,
 } from "./officiatingCategoryNormalization.js";
 
 test("preferAuthoritativeChallengeEvents keeps daily PBP rows until weekly official rows arrive", () => {
@@ -208,6 +209,13 @@ test("specificCallCategory displays detailed foul and violation types", () => {
     sub_type: "discontinued dribble",
     description: "J. Johnson discontinued dribble TURNOVER (4 TO)",
   }), "Palming");
+
+  assert.equal(specificCallCategory({
+    primary_category: "turnover",
+    secondary_category: "shot_clock",
+    sub_type: "shot clock",
+    description: "WIZARDS shot clock turnover",
+  }), "Shot Clock Violation");
 
   assert.equal(specificCallCategory({
     primary_category: "turnover",
@@ -529,6 +537,50 @@ test("official profile violations per game includes turnover-coded violation fam
   assert.equal(profile.violationsPerGame, 2);
   assert.equal(profile.callsByCategory["Out Of Bounds"].value, 1);
   assert.equal(profile.callsByCategory["Kicked Ball"].value, 1);
+});
+
+test("shot clock violations are excluded from official violation totals and timing groups", () => {
+  const violationGroup = CALL_CATEGORY_GROUPS.find((group) => group.key === "violations");
+  const timingGroup = violationGroup.types.find((type) => type.label === "Timing Violation");
+  assert.equal(timingGroup.labels.includes("Shot Clock Violation"), false);
+  assert.equal(timingGroup.subTypes.some((type) => type.label === "Shot Clock Violation"), false);
+  assert.equal(isViolationCallCategory("Shot Clock Violation"), false);
+
+  const [profile] = buildOfficialProfiles([
+    {
+      game_id: "0022500001",
+      season_type: "Regular Season",
+      official_id: "39",
+      official_name: "Tyler Ford",
+      primary_category: "turnover",
+      secondary_category: "shot_clock",
+      sub_type: "shot clock",
+      charged_team: "WAS",
+      benefiting_team: "BOS",
+    },
+    {
+      game_id: "0022500001",
+      season_type: "Regular Season",
+      official_id: "39",
+      official_name: "Tyler Ford",
+      primary_category: "turnover",
+      secondary_category: "8_second_violation",
+      sub_type: "8-second-violation",
+      charged_team: "WAS",
+      benefiting_team: "BOS",
+    },
+  ], [], [{
+    game_id: "0022500001",
+    season_type: "Regular Season",
+    official_id: "39",
+    official_name: "Tyler Ford",
+    role_key: "referee",
+  }]);
+
+  assert.equal(profile.violations, 1);
+  assert.equal(profile.violationsPerGame, 1);
+  assert.equal(profile.callsByCategory["Shot Clock Violation"].value, 1);
+  assert.equal(profile.callsByCategory["8 Second Violation"].value, 1);
 });
 
 test("official technical counts include standard and double technicals only", () => {
