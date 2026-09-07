@@ -27,7 +27,7 @@ These items were identified in the September 2026 audit but intentionally deferr
 ## UI System
 
 - Reduce oversized data-tool hero/header space and prioritize filters/tables above the fold.
-- Standardize table density, header alignment, numeric alignment, and profile modal scroll behavior across Officiating, PGR, and core dashboard pages.
+- Standardize table density, header alignment, numeric alignment, and profile modal scroll behavior across Officiating and core dashboard pages.
 - Add Playwright visual smoke tests for Officiating tabs/profile modals and live game dashboards.
 
 ## Security/Access

@@ -142,7 +142,7 @@ The screenshots showed an AirPLAi app whose frontend bundle embedded 2026 playof
 
 ## Ingestion Rules Locked From 2025-26 Backfill
 
-- PGR/OIGR uploads remain Wizards-only. League-wide ingestion is only for official-attributed play-by-play call events and coach's challenge logs.
+- League-wide ingestion is only for official-attributed play-by-play call events and coach's challenge logs.
 - Store compact official-call rows in `nba_official_call_events`; do not store full play-by-play feeds.
 - Normalize shufinskiy archive game ids from 8 digits to the NBA Dashboard's canonical 10-digit ids. Examples: `22500001` -> `0022500001`, `42500101` -> `0042500101`.
 - Use cdnnba `officialId` as the authoritative whistling official id. Use stats.nba.com v3 descriptions only to recover the human-readable official token, then resolve that token against local referee asset names when game assignment metadata is unavailable.
@@ -413,7 +413,7 @@ Reason:
 
 Recommended design:
 
-- Keep raw call/challenge/PGR rows for auditability.
+- Keep the compact call and challenge source fields required for auditability.
 - Add physical rollup tables keyed by `season`, plus the relevant dimensions such as official, team, category, game, role, and source.
 - Refresh or upsert only the affected `season` after ingestion.
 - For daily 2026-27 updates, limit refresh work to `2026-27` and, where practical, only the newly imported game IDs.
@@ -560,48 +560,6 @@ First usable version should:
 - Do not build a separate standalone app.
 - Do not depend on screenshots as data sources.
 - Do not fetch league-wide play-by-play from the browser.
-
-## PGR Insights Extension
-
-`PGR Insights` is a new tab inside `/officiating`, to the right of `Challenge Log`.
-
-The PGR import scope is intentionally narrower than the league-wide challenge/call platform:
-
-- ingest only Washington Wizards PGR Excel workbooks,
-- use the workbook `GameID` as the standard NBA GameID,
-- resolve that GameID through the existing NBA Dashboard game metadata source,
-- reject imports when the resolved game is not a Wizards game,
-- store durable normalized records in Supabase rather than keeping workbook data in browser cache.
-
-The PGR workbook hierarchy is:
-
-```text
-GAME -> POSSESSION -> EVENT -> OFFICIATING EVALUATION / RATING
-```
-
-The first two real workbooks confirmed that `GameID + PosId + EventId + RatingSeqNo` is a valid unique evaluation key. Event-level and possession-level counts must remain distinct from evaluation row counts in analytics and UI.
-
-Initial PGR tables:
-
-- `nba_pgr_imports`
-- `nba_pgr_possessions`
-- `nba_pgr_events`
-- `nba_pgr_evaluations`
-
-Initial PGR rollup views:
-
-- `nba_pgr_import_rollups`
-- `nba_pgr_overview_rollups`
-- `nba_pgr_assessment_distribution`
-- `nba_pgr_infraction_type_distribution`
-
-Efficiency rules:
-
-- parse selected Excel files serially rather than all at once,
-- lazy-load the workbook parser only when files are selected,
-- send compact normalized JSON to Supabase through `nba_import_pgr_report`,
-- read dashboard summaries from SQL rollup views with row limits,
-- do not persist full workbook contents in localStorage/sessionStorage.
 
 ## Nightly Current-Season Ingestion
 

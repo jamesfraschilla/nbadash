@@ -1170,196 +1170,6 @@
   justify-self: end;
 }
 
-.pgrInsights {
-  display: grid;
-  gap: 16px;
-}
-
-.pgrGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 16px;
-}
-
-.pgrPanel {
-  min-width: 0;
-  padding: 14px;
-  border: 1px solid var(--oi-border);
-  border-radius: 12px;
-  background: linear-gradient(180deg, var(--oi-panel), #0e141e);
-  box-shadow: var(--oi-shadow);
-}
-
-.pgrPanelHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  margin-bottom: 12px;
-}
-
-.pgrPanelHeader h2 {
-  margin: 0;
-  color: var(--oi-text);
-  font-size: 1rem;
-  line-height: 1.1;
-  text-transform: uppercase;
-}
-
-.pgrPanelHeader span {
-  color: var(--oi-muted);
-  font-size: 0.74rem;
-  font-weight: 850;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.pgrUploadBox {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-width: 0;
-}
-
-.pgrUploadBox input {
-  display: none;
-}
-
-.pgrUploadBox p {
-  margin: 0;
-  color: var(--oi-muted);
-  font-size: 0.9rem;
-  font-weight: 750;
-  line-height: 1.4;
-}
-
-.pgrImportQueue {
-  display: grid;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.pgrImportQueue > div {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 4px 12px;
-  padding: 10px 12px;
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  border-radius: 10px;
-  background: #0b111a;
-}
-
-.pgrImportQueue strong {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--oi-text);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pgrImportQueue span {
-  color: var(--oi-blue);
-  font-weight: 900;
-  text-transform: uppercase;
-}
-
-.pgrImportQueue p {
-  grid-column: 1 / -1;
-  margin: 0;
-  color: var(--oi-muted);
-  font-size: 0.85rem;
-  font-weight: 750;
-}
-
-.pgrAccuracyGrid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.pgrAccuracyGrid .statCard {
-  min-height: 92px;
-  padding: 12px;
-}
-
-.pgrAccuracyGrid .statValue {
-  font-size: 1.4rem;
-}
-
-.pgrFilters {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 10px;
-}
-
-.pgrFilterControl {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-}
-
-.pgrFilterControl span {
-  color: var(--oi-muted);
-  font-size: 0.68rem;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.pgrFilterControl input,
-.pgrFilterControl select {
-  min-height: 38px;
-  min-width: 0;
-  border: 1px solid var(--oi-border-strong);
-  border-radius: 9px;
-  background: #090e15;
-  color: var(--oi-text);
-  padding: 0 10px;
-  font-weight: 800;
-}
-
-.pgrSmartActions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  margin-top: 12px;
-}
-
-.pgrSmartActions span {
-  color: var(--oi-muted);
-  font-size: 0.85rem;
-  font-weight: 800;
-}
-
-.pgrSmartReport {
-  display: grid;
-  gap: 14px;
-  margin-top: 14px;
-  padding: 14px;
-  border: 1px solid rgba(98, 201, 147, 0.2);
-  border-radius: 12px;
-  background: rgba(98, 201, 147, 0.055);
-}
-
-.pgrSmartReport strong {
-  color: var(--oi-text);
-  font-size: 0.9rem;
-}
-
-.pgrSmartReport p {
-  margin: 8px 0 0;
-  color: var(--oi-text);
-  font-size: 0.95rem;
-  font-weight: 760;
-  line-height: 1.45;
-}
-
-.pgrSmartTables {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
 
 .table {
   width: 100%;
@@ -2331,8 +2141,6 @@
   .profileMetrics,
   .detailGrid,
   .detailGridCategoryWide,
-  .pgrGrid,
-  .pgrSmartTables,
   .filterBar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -2358,21 +2166,8 @@
   .profileMetrics,
   .detailGrid,
   .detailGridCategoryWide,
-  .pgrGrid,
-  .pgrAccuracyGrid,
-  .pgrSmartTables,
   .filterBar {
     grid-template-columns: 1fr;
-  }
-
-  .pgrUploadBox {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .pgrSmartActions {
-    align-items: stretch;
-    flex-direction: column;
   }
 
   .profileHeader {

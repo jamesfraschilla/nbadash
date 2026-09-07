@@ -53,16 +53,6 @@ select 'nba_official_call_events.source_payload', count(*), pg_size_pretty(coale
 union all
 select 'nba_coach_challenge_events.source_payload', count(*), pg_size_pretty(coalesce(sum(pg_column_size(source_payload)), 0)::bigint) from public.nba_coach_challenge_events
 union all
-select 'nba_pgr_imports.summary_payload', count(*), pg_size_pretty(coalesce(sum(pg_column_size(summary_payload)), 0)::bigint) from public.nba_pgr_imports
-union all
-select 'nba_pgr_imports.source_payload', count(*), pg_size_pretty(coalesce(sum(pg_column_size(source_payload)), 0)::bigint) from public.nba_pgr_imports
-union all
-select 'nba_pgr_possessions.source_payload', count(*), pg_size_pretty(coalesce(sum(pg_column_size(source_payload)), 0)::bigint) from public.nba_pgr_possessions
-union all
-select 'nba_pgr_events.source_payload', count(*), pg_size_pretty(coalesce(sum(pg_column_size(source_payload)), 0)::bigint) from public.nba_pgr_events
-union all
-select 'nba_pgr_evaluations.raw_row', count(*), pg_size_pretty(coalesce(sum(pg_column_size(raw_row)), 0)::bigint) from public.nba_pgr_evaluations
-union all
 select 'nba_official_game_facts.category_counts', count(*), pg_size_pretty(coalesce(sum(pg_column_size(category_counts)), 0)::bigint) from public.nba_official_game_facts
 union all
 select 'nba_official_game_facts.team_net_calls', count(*), pg_size_pretty(coalesce(sum(pg_column_size(team_net_calls)), 0)::bigint) from public.nba_official_game_facts
@@ -100,14 +90,6 @@ union all
 select 'nba_player_game_facts', season, season_type, count(*) from public.nba_player_game_facts group by season, season_type
 union all
 select 'nba_official_game_facts', season, season_type, count(*) from public.nba_official_game_facts group by season, season_type
-union all
-select 'nba_pgr_imports', season, null::text as season_type, count(*) from public.nba_pgr_imports group by season
-union all
-select 'nba_pgr_possessions', season, null::text, count(*) from public.nba_pgr_possessions group by season
-union all
-select 'nba_pgr_events', season, null::text, count(*) from public.nba_pgr_events group by season
-union all
-select 'nba_pgr_evaluations', season, null::text, count(*) from public.nba_pgr_evaluations group by season
 order by table_name, season, season_type;
 
 -- 6) Storage objects are not Postgres rows, but this checks whether exported
