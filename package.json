@@ -22,6 +22,7 @@
     "officiating:maintain:daily": "node scripts/run-officiating-daily-maintenance.mjs",
     "officiating:ingest:nightly": "node scripts/run-officiating-nightly-ingestion.mjs",
     "officiating:sync:challenges": "node scripts/run-officiating-weekly-challenge-sync.mjs",
+    "officiating:backfill:insight-facts": "node scripts/backfill-officiating-insight-facts.mjs",
     "officiating:audit:report-layout": "node scripts/audit-officiating-report-layout.mjs",
     "officiating:import:pgr": "node scripts/import-pgr-workbooks.mjs",
     "pgr:refresh:rollups": "node scripts/refresh-pgr-rollups.mjs",

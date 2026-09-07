@@ -36,3 +36,6 @@ verify_jwt = true
 
 [functions.game-live-state]
 verify_jwt = true
+
+[functions.officiating-insights]
+verify_jwt = true

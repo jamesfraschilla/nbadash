@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createPortal } from "react-dom";
 import { Link, useSearchParams } from "react-router-dom";
@@ -24,7 +24,13 @@ import { formatDateInputInTimeZone } from "../utils.js";
 import { CALL_CATEGORY_GROUPS } from "../officiatingCategoryNormalization.js";
 import { loadRefereeHeadshotUrl } from "../refereeHeadshots.js";
 import {
+  fetchOfficiatingInsightSimulatorOptions,
+  requestOfficiatingInsightSimulation,
+  submitOfficiatingInsightFeedback,
+} from "../officiatingInsightsData.js";
+import {
   CUMULATIVE_OFFICIATING_SEASON as CUMULATIVE_SEASON,
+  DEFAULT_OFFICIATING_SEASON as DEFAULT_SEASON,
   OFFICIATING_SEASON_OPTIONS as SEASON_OPTIONS,
   currentOfficiatingSeasonDefault,
   defaultOfficiatingSeasonForTab,
@@ -330,6 +336,18 @@ function categoryMetric(items, labels) {
   };
 }
 
+function insightCategoryPercentiles(profiles = []) {
+  return Object.fromEntries(profiles.map((profile) => {
+    const categories = profile.callsByCategory || {};
+    const key = String(profile.officialId || profile.id || profile.name || "").trim();
+    return [key, {
+      restrictedArea: categoryPercentile(categories, ["Restricted Area Shooting Foul"]),
+      threePoint: categoryPercentile(categories, ["3-Pt Shooting Foul"]),
+      shooting: categoryPercentile(categories, ["Shooting Foul", "Restricted Area Shooting Foul", "3-Pt Shooting Foul"]),
+    }];
+  }).filter(([key]) => key));
+}
+
 function CategoryColumn({ group, items, sort, onSort, expanded, onToggle }) {
   const rows = useMemo(() => {
     const direction = sort.direction === "asc" ? 1 : -1;
@@ -564,6 +582,44 @@ function formatReportMetric(value) {
   return formatNumber(value, 2);
 }
 
+function percentileBarColor(percentile) {
+  const value = Math.max(0, Math.min(100, Number(percentile) || 0));
+  if (value < 25) return "#4f7fc1";
+  if (value < 40) return "#7491b7";
+  if (value < 67) return "#8b94a3";
+  if (value < 85) return "#c96b73";
+  return "#e4474f";
+}
+
+function netCallsBarColor(value) {
+  const numericValue = Number(value) || 0;
+  if (Math.abs(numericValue) < 0.05) return "#8b94a3";
+  return numericValue < 0 ? "#d9555f" : "#2ead68";
+}
+
+function percentileBarStyle(percentile) {
+  const value = Math.max(0, Math.min(100, Number(percentile) || 0));
+  return {
+    "--report-bar-pct": `${value}%`,
+    "--report-bar-color": percentileBarColor(value),
+  };
+}
+
+function netCallsBarStyle(value) {
+  const numericValue = Number(value) || 0;
+  const maxAbs = 6;
+  const clamped = Math.max(-maxAbs, Math.min(maxAbs, numericValue));
+  const marker = 50 + (clamped / maxAbs) * 50;
+  const fillLeft = Math.min(50, marker);
+  const fillWidth = Math.abs(marker - 50);
+  return {
+    "--report-net-marker": `${marker}%`,
+    "--report-net-fill-left": `${fillLeft}%`,
+    "--report-net-fill-width": `${fillWidth}%`,
+    "--report-net-color": netCallsBarColor(numericValue),
+  };
+}
+
 function formatShortDate(value) {
   const [year, month, day] = String(value || "").split("-").map((part) => Number(part));
   if (!year || !month || !day) return "";
@@ -591,24 +647,68 @@ function reportGameMetadata(game, fallbackDate) {
     return {
       title: "Officials Report – Washington vs New York",
       date: "12/9/2026",
+      teamOne: "WAS",
+      teamTwo: "NYK",
     };
   }
   const opponent = isWashingtonAway ? home : away;
+  const opponentCode = String(opponent?.teamTricode || "").trim().toUpperCase() || "OPP";
   return {
     title: `Officials Report – Washington ${isWashingtonAway ? "@" : "vs"} ${reportTeamLocation(opponent)}`,
     date: formatReportGameDate(game?.gameDate || fallbackDate),
+    teamOne: "WAS",
+    teamTwo: opponentCode,
   };
 }
 
-function priorWizardsGames(schedule = []) {
+function simulatorGameMetadata(matchup, options, fallbackDate) {
+  const teams = options?.teams || [];
+  const teamOne = teams.find((row) => row.team === matchup.teamOne);
+  const teamTwo = teams.find((row) => row.team === matchup.teamTwo);
+  const first = teamOne?.label || matchup.teamOne || "Team 1";
+  const second = teamTwo?.label || matchup.teamTwo || "Team 2";
+  const firstLocation = matchup.teamOneLocation === "home" ? "vs" : "@";
+  return {
+    title: `Officials Report – ${first} ${firstLocation} ${second}`,
+    date: formatReportGameDate(fallbackDate),
+    teamOne: matchup.teamOne,
+    teamTwo: matchup.teamTwo,
+  };
+}
+
+function formatPreviousOfficialGame(row) {
+  const away = String(row.away_team || "").trim();
+  const home = String(row.home_team || "").trim();
+  if (!away || !home) return "";
+  return `${formatShortDate(row.game_date)} ${away} @ ${home}`;
+}
+
+function isPreviousReportGame(row, reportDate) {
+  const gameDate = String(row?.game_date || "").slice(0, 10);
+  const cutoffDate = String(reportDate || "").slice(0, 10);
+  return !cutoffDate || (gameDate && gameDate < cutoffDate);
+}
+
+function priorOfficialGames(schedule = [], reportDate) {
+  return schedule
+    .filter((row) => row.season === DEFAULT_SEASON && isPreviousReportGame(row, reportDate))
+    .sort((left, right) => String(right.game_date || "").localeCompare(String(left.game_date || "")))
+    .slice(0, 5)
+    .map(formatPreviousOfficialGame)
+    .filter(Boolean);
+}
+
+function priorWizardsGames(schedule = [], reportDate) {
   return schedule
     .filter((row) => {
       const away = String(row.away_team || "").trim();
       const home = String(row.home_team || "").trim();
-      return row.season === "2025-26" && (away === "WAS" || home === "WAS");
+      return row.season === DEFAULT_SEASON
+        && isPreviousReportGame(row, reportDate)
+        && (away === "WAS" || home === "WAS");
     })
     .sort((left, right) => String(right.game_date || "").localeCompare(String(left.game_date || "")))
-    .slice(0, 4)
+    .slice(0, 5)
     .map((row) => {
       const away = String(row.away_team || "").trim();
       const home = String(row.home_team || "").trim();
@@ -648,18 +748,288 @@ function ReportChallengeMetric({ label, successes, attempts, rank, populationSiz
   );
 }
 
-function OfficialsReportCard({ profile, role, populationSize }) {
+function ReportBarMetric({ label, value, percentile, formatter = formatReportMetric, detail, centerDetail = false }) {
+  const percentileValue = Number.isFinite(Number(percentile)) ? Math.round(Number(percentile)) : null;
+  const metricRef = useRef(null);
+  const labelRaisedRef = useRef(false);
+  const [labelRaised, setLabelRaised] = useState(false);
+
+  useLayoutEffect(() => {
+    const metric = metricRef.current;
+    if (!metric || !label || centerDetail) return undefined;
+    let disposed = false;
+    const defaultToRaisedOffset = 0.06 * 96;
+    const updateCollision = () => {
+      if (disposed) return;
+      const labelElement = metric.querySelector(`.${styles.reportBarMetricLabel}`);
+      const markerElement = metric.querySelector(`.${styles.reportMetricBarMarker}`);
+      if (!labelElement || !markerElement) return;
+      const labelRange = document.createRange();
+      labelRange.selectNodeContents(labelElement);
+      const labelRect = labelRange.getBoundingClientRect();
+      const markerRect = markerElement.getBoundingClientRect();
+      const defaultLabelTop = labelRect.top + (labelRaisedRef.current ? defaultToRaisedOffset : 0);
+      const defaultLabelBottom = labelRect.bottom + (labelRaisedRef.current ? defaultToRaisedOffset : 0);
+      const overlapsMarker = (
+        labelRect.left < markerRect.right
+        && labelRect.right > markerRect.left
+        && defaultLabelTop < markerRect.bottom
+        && defaultLabelBottom > markerRect.top
+      );
+      if (overlapsMarker !== labelRaisedRef.current) {
+        labelRaisedRef.current = overlapsMarker;
+        setLabelRaised(overlapsMarker);
+      }
+    };
+    updateCollision();
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(updateCollision) : null;
+    observer?.observe(metric);
+    document.fonts?.ready.then(updateCollision);
+    window.addEventListener("resize", updateCollision);
+    return () => {
+      disposed = true;
+      observer?.disconnect();
+      window.removeEventListener("resize", updateCollision);
+    };
+  }, [centerDetail, label, percentile]);
+
+  return (
+    <div ref={metricRef} className={`${styles.reportBarMetric} ${centerDetail ? styles.reportChallengeBarMetric : ""}`} style={percentileBarStyle(percentile)}>
+      {label ? (
+        <span
+          className={`${styles.reportBarMetricLabel} ${labelRaised ? styles.reportBarMetricLabelRaised : ""}`}
+          data-label-raised={labelRaised ? "true" : undefined}
+        >
+          {label}
+        </span>
+      ) : null}
+      <div className={styles.reportBarMetricBody}>
+        <div className={styles.reportMetricBarTrack} aria-hidden="true">
+          <div className={styles.reportMetricBarFill} />
+          <div className={styles.reportMetricBarMarker}>{percentileValue ?? "--"}</div>
+        </div>
+        <div className={styles.reportBarMetricValue}>
+          <strong>{formatter(value)}</strong>
+          {detail ? <em>{detail}</em> : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReportChallengeBarMetric({ label, successes, attempts, percentile }) {
+  const made = Number(successes) || 0;
+  const total = Number(attempts) || 0;
+  const rate = total ? made / total : 0;
+  return (
+    <ReportBarMetric
+      label={label}
+      value={rate}
+      percentile={percentile}
+      formatter={formatRate}
+      detail={`${made}/${total}`}
+      centerDetail
+    />
+  );
+}
+
+function ReportNetCallsBarMetric({ label, value, percentile }) {
+  const numericValue = Number(value) || 0;
+  return (
+    <div className={styles.reportNetBarMetric} style={netCallsBarStyle(numericValue)}>
+      <span className={styles.reportBarMetricLabel}>{label}</span>
+      <div className={styles.reportNetBarBody}>
+        <div className={styles.reportNetBarTrack} aria-hidden="true">
+          <div className={styles.reportNetBarZero} />
+          <div className={styles.reportNetBarFill} />
+          <div className={styles.reportNetBarMarker}>{Math.round(Number(percentile) || 0)}</div>
+        </div>
+        <strong>{formatSignedDecimal(numericValue)}</strong>
+      </div>
+    </div>
+  );
+}
+
+function verifiedReportInsights(profile) {
+  return (Array.isArray(profile?.reportInsights) ? profile.reportInsights : [])
+    .map((insight) => String(insight?.text || insight || "").trim())
+    .filter(Boolean)
+    .slice(0, 4);
+}
+
+function netMetricFromProfile(profile, team) {
+  const teamCode = String(team || "").trim().toUpperCase();
+  const metric = profile?.netCallsForByTeam?.[teamCode];
+  return {
+    value: Number.isFinite(Number(metric?.value)) ? Number(metric.value) : 0,
+    percentile: Number.isFinite(Number(metric?.percentile)) ? Number(metric.percentile) : null,
+  };
+}
+
+function SimulatorSelect({ label, value, onChange, options, placeholder }) {
+  return (
+    <label className={styles.simulatorField}>
+      <span>{label}</span>
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        <option value="">{placeholder}</option>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function OfficiatingInsightsSimulator({
+  open,
+  onToggle,
+  options,
+  isLoadingOptions,
+  draft,
+  onDraftChange,
+  onGenerate,
+  onFeedback,
+  feedbackStatus,
+  isGenerating,
+  error,
+  result,
+}) {
+  const officialOptions = (options?.officials || []).map((official) => ({
+    value: official.id,
+    label: `${official.jerseyNumber ? `#${official.jerseyNumber} ` : ""}${official.name}`,
+  }));
+  const teamOptions = (options?.teams || []).map((team) => ({ value: team.team, label: `${team.team} - ${team.label}` }));
+  const candidateCounts = result?.candidateCounts || {};
+  const candidateCountSummary = Object.entries(candidateCounts)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([family, count]) => `${family}: ${count}`)
+    .join(" | ");
+  const renderInsight = (insight) => (
+    <li key={insight.id}>
+      <span>{insight.text}</span>
+      <em>n={insight.evidence?.sampleSize || 0}, {insight.evidence?.confidence || "medium"}, {insight.family}</em>
+      <details className={styles.insightAudit}>
+        <summary>Audit</summary>
+        <dl>
+          <dt>Scope</dt>
+          <dd>{insight.evidence?.scope || "Unavailable"}</dd>
+          <dt>Formula</dt>
+          <dd>{insight.evidence?.formula || "Stored candidate calculation"}</dd>
+          <dt>Value</dt>
+          <dd>{Number(insight.evidence?.currentValue || 0).toFixed(3)} vs {Number(insight.evidence?.comparisonValue || 0).toFixed(3)} {insight.evidence?.unit || ""}</dd>
+          <dt>Sources</dt>
+          <dd>{(insight.evidence?.sourceTables || []).join(", ") || "Insight fact cache"}</dd>
+        </dl>
+      </details>
+      {onFeedback ? (
+        <div className={styles.insightFeedback}>
+          {["Useful", "Not useful", "Wrong", "Repetitive", "Too obvious"].map((verdict) => (
+            <button
+              type="button"
+              key={verdict}
+              onClick={() => onFeedback(insight, verdict)}
+              disabled={feedbackStatus?.id === insight.id && feedbackStatus?.saving}
+            >
+              {verdict}
+            </button>
+          ))}
+          {feedbackStatus?.id === insight.id ? <small>{feedbackStatus.message}</small> : null}
+        </div>
+      ) : null}
+    </li>
+  );
+  return (
+    <section className={styles.insightSimulator}>
+      <button type="button" className={styles.simulatorToggle} onClick={onToggle} aria-expanded={open}>
+        <span>Report Simulator</span>
+        <strong>{open ? "Hide" : "Open"}</strong>
+      </button>
+      {open ? (
+        <div className={styles.simulatorBody}>
+          {isLoadingOptions ? <p className={styles.simulatorStatus}>Loading officials...</p> : (
+            <>
+              <div className={styles.simulatorGrid}>
+                {draft.officialIds.map((officialId, index) => (
+                  <SimulatorSelect
+                    key={`official-${index}`}
+                    label={["Crew Chief", "Referee", "Umpire"][index]}
+                    value={officialId}
+                    onChange={(value) => onDraftChange({ ...draft, officialIds: draft.officialIds.map((id, position) => position === index ? value : id) })}
+                    options={officialOptions}
+                    placeholder="Select official"
+                  />
+                ))}
+                <SimulatorSelect label="Team 1" value={draft.teamOne} onChange={(value) => onDraftChange({ ...draft, teamOne: value })} options={teamOptions} placeholder="Select team" />
+                <SimulatorSelect label="Team 2" value={draft.teamTwo} onChange={(value) => onDraftChange({ ...draft, teamTwo: value })} options={teamOptions} placeholder="Select team" />
+                <label className={styles.simulatorField}>
+                  <span>Location</span>
+                  <select value={draft.teamOneLocation} onChange={(event) => onDraftChange({ ...draft, teamOneLocation: event.target.value })}>
+                    <option value="away">Team 1 away</option>
+                    <option value="home">Team 1 home</option>
+                  </select>
+                </label>
+              </div>
+              <div className={styles.simulatorActions}>
+                <label className={styles.simulatorCheckbox}>
+                  <input type="checkbox" checked={draft.useAi} onChange={(event) => onDraftChange({ ...draft, useAi: event.target.checked })} />
+                  <span>Use OpenAI to select verified evidence</span>
+                </label>
+                <button type="button" className={styles.primaryButton} onClick={onGenerate} disabled={isGenerating}>
+                  {isGenerating ? "Generating..." : "Generate Insights"}
+                </button>
+              </div>
+              {error ? <p className={styles.simulatorError}>{error}</p> : null}
+              {result ? (
+                <div className={styles.simulatorEvidence}>
+                  <div>
+                    <strong>{result.source === "openai-selection" ? "OpenAI selected verified candidates" : "Deterministic candidate selection"}</strong>
+                    <span>{result.persisted ? "Saved" : "Not saved"}{result.warning ? ` · ${result.warning}` : ""}</span>
+                    {candidateCountSummary ? <span>Candidate pool: {candidateCountSummary}</span> : null}
+                  </div>
+                  {(result.profiles || []).map((profile) => {
+                    const official = options.officials.find((row) => row.id === profile.officialId);
+                    return (
+                      <section key={profile.officialId}>
+                        <h3>{official?.name || profile.officialId}</h3>
+                        {(profile.insights || []).length ? (
+                          <ul>{profile.insights.map(renderInsight)}</ul>
+                        ) : <p>No evidence cleared the current thresholds.</p>}
+                      </section>
+                    );
+                  })}
+                  {(result.crewInsights || []).length || result.crewInsight ? (
+                    <section className={styles.crewInsightPanel}>
+                      <h3>Crew Insights</h3>
+                      <ul>{(result.crewInsights?.length ? result.crewInsights : [result.crewInsight]).filter(Boolean).map(renderInsight)}</ul>
+                    </section>
+                  ) : null}
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function OfficialsReportCard({ profile, role, populationSize, teamOne = "WAS", teamTwo = "OPP", reportDate }) {
   const categories = profile?.callsByCategory || {};
   const shooting = categoryMetric(categories, ["Shooting Foul", "Restricted Area Shooting Foul", "3-Pt Shooting Foul"]);
   const technical = categoryMetric(categories, ["Technical Foul"]);
   const restricted = categoryMetric(categories, ["Restricted Area Shooting Foul"]);
+  const raCharge = categoryMetric(categories, ["RA Charge Rate"]);
+  const movingScreens = categoryMetric(categories, ["Moving Screens"]);
   const threePoint = categoryMetric(categories, ["3-Pt Shooting Foul"]);
-  const floor = categoryMetric(categories, ["Foul on Floor", "Away From Play Foul", "Loose Ball Foul", "Double Personal Foul"]);
   const offensive = categoryMetric(categories, ["Offensive Foul"]);
+  const flagrant = categoryMetric(categories, ["Flagrant Type 1 Foul", "Flagrant Type 2 Foul"]);
   const handling = categoryMetric(categories, ["Traveling", "Double Dribble", "Palming", "Backcourt", "Offensive Goaltending"]);
   const threeSeconds = categoryMetric(categories, ["Offensive 3 Second Violation", "Defensive 3 Second Violation"]);
   const goaltending = categoryMetric(categories, ["Offensive Goaltending", "Defensive Goaltending"]);
-  const wizardsGames = priorWizardsGames(profile?.schedule);
+  const previousGames = priorOfficialGames(profile?.schedule, reportDate);
+  const wizardsGames = priorWizardsGames(profile?.schedule, reportDate);
+  const teamOneNetMetric = netMetricFromProfile(profile, teamOne);
+  const teamTwoNetMetric = netMetricFromProfile(profile, teamTwo);
 
   return (
     <article className={styles.reportOfficialCard}>
@@ -668,76 +1038,85 @@ function OfficialsReportCard({ profile, role, populationSize }) {
           <RefereeHeadshot name={profile?.name} eager />
           <div>
             <span>{role}</span>
-            <h3>{profile?.name || "Official unavailable"}</h3>
-            <p>{profile?.jerseyNumber ? `#${profile.jerseyNumber}` : "Number unavailable"}</p>
+            <h3>{profile?.jerseyNumber ? `#${profile.jerseyNumber} ` : ""}{profile?.name || "Official unavailable"}</h3>
           </div>
         </div>
-        <div className={styles.reportPrimaryMetrics}>
-          <ReportChallengeMetric
-            label="Challenge (Crew)"
-            successes={profile?.successfulCrewChallenges}
-            attempts={profile?.crewChallenges}
-            rank={profile?.crewChallengeRateRank}
-            populationSize={populationSize}
-            percentile={profile?.crewChallengeRateRankPercentile}
-          />
-          <ReportChallengeMetric
-            label="Challenge (Crew Chief)"
-            successes={profile?.successfulCrewChiefChallenges}
-            attempts={profile?.crewChiefChallenges}
-            rank={profile?.crewChiefChallengeRateRank}
-            populationSize={populationSize}
-            percentile={profile?.crewChiefChallengeRateRankPercentile}
-          />
-          <ReportMetric label="Fouls/G" value={profile?.foulsPerGame} rank={profile?.foulsPerGameRank} populationSize={populationSize} percentile={profile?.foulsPerGameRankPercentile} prominent />
-          <ReportMetric
-            label="Net Calls For (WAS)"
-            value={profile?.wizardsNetCallsFor}
-            percentile={profile?.wizardsNetCallsForPercentile}
-            prominent
-            formatter={formatSignedDecimal}
-          />
+        <section className={`${styles.reportWizardsHistory} ${styles.reportPreviousGames}`}>
+          <div className={styles.reportPreviousGameColumns}>
+            <div className={styles.reportPreviousGameColumn}>
+              <b>Last 5 Games</b>
+              {previousGames.length ? (
+                <ul>{previousGames.map((game) => <li key={game}>{game}</li>)}</ul>
+              ) : <strong>None this season.</strong>}
+            </div>
+            <div className={styles.reportPreviousGameColumn}>
+              <b>WAS Games</b>
+              {wizardsGames.length ? (
+                <ul>{wizardsGames.map((game) => <li key={game}>{game}</li>)}</ul>
+              ) : <strong>None this season.</strong>}
+            </div>
+          </div>
+        </section>
+        <div className={styles.reportPrimarySections}>
+          <section className={styles.reportPrimarySection}>
+            <h4>Net Calls For</h4>
+            <div className={styles.reportPrimaryMetrics}>
+              <ReportNetCallsBarMetric
+                label={teamOne}
+                value={teamOneNetMetric.value}
+                percentile={teamOneNetMetric.percentile}
+              />
+              <ReportNetCallsBarMetric
+                label={teamTwo}
+                value={teamTwoNetMetric.value}
+                percentile={teamTwoNetMetric.percentile}
+              />
+            </div>
+          </section>
+          <section className={styles.reportPrimarySection}>
+            <h4>Challenge Overturn Rate</h4>
+            <div className={styles.reportPrimaryMetrics}>
+              <ReportChallengeBarMetric
+                label=""
+                successes={profile?.successfulCrewChallenges}
+                attempts={profile?.crewChallenges}
+                percentile={profile?.crewChallengeRateRankPercentile}
+              />
+            </div>
+          </section>
         </div>
       </div>
       <div className={styles.reportOfficialDetails}>
         <div className={styles.reportStatProfiles}>
           <section>
-            <h4>Foul Profile</h4>
+            <h4>Fouls</h4>
             <div className={styles.reportFoulMetrics}>
-              <ReportMetric label="Shooting Fouls/G" value={shooting.value} percentile={shooting.percentile} />
-              <ReportMetric label="Technical Fouls/G" value={technical.value} percentile={technical.percentile} />
-              <ReportMetric label="Restricted Area/G" value={restricted.value} percentile={restricted.percentile} />
-              <ReportMetric label="3-PT Fouls/G" value={threePoint.value} percentile={threePoint.percentile} />
-              <ReportMetric label="Fouls on Floor/G" value={floor.value} percentile={floor.percentile} />
-              <ReportMetric label="Offensive Fouls/G" value={offensive.value} percentile={offensive.percentile} />
+              <ReportBarMetric label="Fouls" value={profile?.foulsPerGame} percentile={profile?.foulsPerGameRankPercentile} />
+              <ReportBarMetric label="Offensive Fouls" value={offensive.value} percentile={offensive.percentile} />
+              <ReportBarMetric label="Shooting Fouls" value={shooting.value} percentile={shooting.percentile} />
+              <ReportBarMetric label="Restricted Area Fouls" value={restricted.value} percentile={restricted.percentile} />
+              <ReportBarMetric label="3-Pt Shooting Fouls" value={threePoint.value} percentile={threePoint.percentile} />
+              <ReportBarMetric label="Restricted Area Charge Rate" value={raCharge.value} percentile={raCharge.percentile} formatter={formatReportMetric} />
+              <ReportBarMetric label="Flagrant Fouls" value={flagrant.value} percentile={flagrant.percentile} />
+              <ReportBarMetric label="Moving Screens" value={movingScreens.value} percentile={movingScreens.percentile} />
             </div>
           </section>
           <section>
-            <h4>Violation Profile</h4>
+            <h4>Violations</h4>
             <div className={styles.reportViolationMetrics}>
-              <ReportMetric label="Handling Violations/G" value={handling.value} percentile={handling.percentile} />
-              <ReportMetric label="3 Seconds/G" value={threeSeconds.value} percentile={threeSeconds.percentile} />
-              <ReportMetric label="Goaltending/G" value={goaltending.value} percentile={goaltending.percentile} />
+              <ReportBarMetric label="Technical Fouls" value={technical.value} percentile={technical.percentile} />
+              <ReportBarMetric label="Handling" value={handling.value} percentile={handling.percentile} />
+              <ReportBarMetric label="3 Seconds" value={threeSeconds.value} percentile={threeSeconds.percentile} />
+              <ReportBarMetric label="Goaltending" value={goaltending.value} percentile={goaltending.percentile} />
             </div>
           </section>
         </div>
-        <aside className={styles.reportOfficialAside}>
-          <section className={styles.reportWizardsHistory}>
-            <span>Previous WAS Games</span>
-            {wizardsGames.length ? (
-              <ul>{wizardsGames.map((game) => <li key={game}>{game}</li>)}</ul>
-            ) : <strong>None in 2025-26</strong>}
-          </section>
-          <section className={styles.reportWizardsHistory}>
-            <span>Trends &amp; Insights</span>
-          </section>
-        </aside>
       </div>
     </article>
   );
 }
 
-function TonightOfficialsReport({ rows, isLoading, onExportPdf, populationSize, gameMetadata }) {
+function TonightOfficialsReport({ rows, crew, isLoading, onExportPdf, populationSize, gameMetadata, reportDate, simulator }) {
   return (
     <section className={styles.tonightReportPanel}>
       <div className={styles.reportToolbar}>
@@ -749,6 +1128,7 @@ function TonightOfficialsReport({ rows, isLoading, onExportPdf, populationSize, 
           Export PDF
         </button>
       </div>
+      {simulator ? <OfficiatingInsightsSimulator {...simulator} /> : null}
       <div className={styles.officialsReportSheet}>
         <header className={styles.officialsReportHeader}>
           <div>
@@ -763,21 +1143,26 @@ function TonightOfficialsReport({ rows, isLoading, onExportPdf, populationSize, 
           <div className={styles.reportLoading}>Loading report data...</div>
         ) : (
           <div className={styles.reportCards}>
-            {TONIGHT_REPORT_CREW.map((slot) => {
-              const profile = rows.find((row) => String(row?.name || "").toLowerCase() === slot.name.toLowerCase());
-              return (
-                <OfficialsReportCard
-                  key={slot.name}
-                  profile={profile || { name: slot.name }}
-                  role={slot.role}
-                  populationSize={populationSize}
-                />
-              );
-            })}
+            <div className={styles.reportOfficialColumns}>
+              {crew.map((slot) => {
+                const profile = rows.find((row) => String(row?.name || "").toLowerCase() === slot.name.toLowerCase());
+                return (
+                  <OfficialsReportCard
+                    key={slot.name}
+                    profile={profile || { name: slot.name }}
+                    role={slot.role}
+                    populationSize={populationSize}
+                    teamOne={gameMetadata?.teamOne || "WAS"}
+                    teamTwo={gameMetadata?.teamTwo || "OPP"}
+                    reportDate={reportDate}
+                  />
+                );
+              })}
+            </div>
           </div>
         )}
         <footer className={styles.officialsReportFooter}>
-          Stats use 2024-Present regular season + playoffs. Percentiles compare eligible officials in the selected data set.
+          2024-Present regular season + playoffs · Percentiles: low blue / average grey / high red · Net calls: red negative / green positive
         </footer>
       </div>
     </section>
@@ -1965,6 +2350,20 @@ export default function Officiating() {
   const [contextEditorRow, setContextEditorRow] = useState(null);
   const [contextSaveError, setContextSaveError] = useState(null);
   const [isSavingContext, setIsSavingContext] = useState(false);
+  const [simulatorOpen, setSimulatorOpen] = useState(false);
+  const [simulatorDraft, setSimulatorDraft] = useState({
+    officialIds: ["", "", ""],
+    teamOne: "WAS",
+    teamTwo: "NYK",
+    teamOneLocation: "home",
+    useAi: true,
+  });
+  const [reportCrew, setReportCrew] = useState(TONIGHT_REPORT_CREW);
+  const [reportMatchup, setReportMatchup] = useState(null);
+  const [insightResult, setInsightResult] = useState(null);
+  const [simulatorError, setSimulatorError] = useState("");
+  const [isGeneratingInsights, setIsGeneratingInsights] = useState(false);
+  const [insightFeedbackStatus, setInsightFeedbackStatus] = useState(null);
   const activeTab = TABS.some((tab) => tab.key === selectedTab)
     ? selectedTab
     : "tonight";
@@ -1980,7 +2379,34 @@ export default function Officiating() {
     String(game?.awayTeam?.teamTricode || "").trim() === "WAS"
     || String(game?.homeTeam?.teamTricode || "").trim() === "WAS"
   ));
-  const tonightGameMetadata = reportGameMetadata(reportGame, reportDate);
+  const {
+    data: simulatorOptions,
+    isLoading: isSimulatorOptionsLoading,
+  } = useQuery({
+    queryKey: ["officiating-insight-simulator-options"],
+    queryFn: fetchOfficiatingInsightSimulatorOptions,
+    enabled: activeTab === "tonight" && isAdmin && simulatorOpen,
+    staleTime: 60 * 60_000,
+    gcTime: 4 * 60 * 60_000,
+    retry: 1,
+  });
+  useEffect(() => {
+    if (!simulatorOptions?.officials?.length) return;
+    setSimulatorDraft((current) => {
+      if (current.officialIds.every(Boolean)) return current;
+      const defaults = TONIGHT_REPORT_CREW.map((slot) => (
+        simulatorOptions.officials.find((official) => official.name.toLowerCase() === slot.name.toLowerCase())?.id || ""
+      ));
+      return { ...current, officialIds: defaults };
+    });
+  }, [simulatorOptions]);
+  const tonightGameMetadata = reportMatchup
+    ? simulatorGameMetadata(reportMatchup, simulatorOptions, reportDate)
+    : reportGameMetadata(reportGame, reportDate);
+  const tonightReportTeamCodes = [
+    tonightGameMetadata?.teamOne || "WAS",
+    tonightGameMetadata?.teamTwo || "NYK",
+  ].map((team) => String(team || "").trim().toUpperCase()).filter(Boolean);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["officiating-dashboard", season],
@@ -1994,10 +2420,11 @@ export default function Officiating() {
     data: tonightReportData,
     isLoading: isTonightReportLoading,
   } = useQuery({
-    queryKey: ["officiating-tonight-report", CUMULATIVE_SEASON],
+    queryKey: ["officiating-tonight-report", CUMULATIVE_SEASON, reportCrew.map((slot) => slot.name).join("|"), tonightReportTeamCodes.join("|")],
     queryFn: () => fetchOfficialsReportData({
       season: CUMULATIVE_SEASON,
-      officialNames: TONIGHT_REPORT_CREW.map((slot) => slot.name),
+      officialNames: reportCrew.map((slot) => slot.name),
+      teamCodes: tonightReportTeamCodes,
     }),
     enabled: activeTab === "tonight",
     staleTime: 5 * 60_000,
@@ -2106,6 +2533,13 @@ export default function Officiating() {
     () => sortRows(filteredChallengeRows, challengeSort, "game_id"),
     [filteredChallengeRows, challengeSort]
   );
+  const tonightReportRows = useMemo(() => {
+    const selectedByOfficial = new Map((insightResult?.profiles || []).map((row) => [String(row.officialId), row.insights || []]));
+    return (tonightReportData?.profiles || []).map((profile) => {
+      const profileInsights = selectedByOfficial.get(String(profile.officialId || profile.id)) || [];
+      return { ...profile, reportInsights: profileInsights.slice(0, 4) };
+    });
+  }, [insightResult, tonightReportData?.profiles]);
   const officialCategoryPeers = selectedOfficialSeason === season
     ? data?.officialProfiles || []
     : selectedOfficialPeerData?.officialProfiles || [];
@@ -2283,6 +2717,77 @@ export default function Officiating() {
       window.setTimeout(clearPrintMode, 1000);
     }, 60);
   };
+  const generateSimulatedInsights = async () => {
+    const selectedOfficials = simulatorDraft.officialIds.map((id, index) => {
+      const official = simulatorOptions?.officials?.find((row) => row.id === id);
+      return official ? { id: official.id, name: official.name, role: ["Crew Chief", "Referee", "Umpire"][index] } : null;
+    });
+    if (selectedOfficials.some((row) => !row) || new Set(simulatorDraft.officialIds).size !== 3) {
+      setSimulatorError("Select three unique officials.");
+      return;
+    }
+    if (!simulatorDraft.teamOne || !simulatorDraft.teamTwo || simulatorDraft.teamOne === simulatorDraft.teamTwo) {
+      setSimulatorError("Select two different teams.");
+      return;
+    }
+    const selectedTeams = [simulatorDraft.teamOne, simulatorDraft.teamTwo].map((team) => {
+      const option = simulatorOptions.teams.find((row) => row.team === team);
+      return { team, label: option?.label || team };
+    });
+    setIsGeneratingInsights(true);
+    setSimulatorError("");
+    setInsightResult(null);
+    try {
+      const reportData = await fetchOfficialsReportData({
+        season: CUMULATIVE_SEASON,
+        officialNames: selectedOfficials.map((official) => official.name),
+        teamCodes: [simulatorDraft.teamOne, simulatorDraft.teamTwo],
+      });
+      const nextReportCrew = selectedOfficials.map(({ name, role }) => ({ name, role }));
+      queryClient.setQueryData(
+        ["officiating-tonight-report", CUMULATIVE_SEASON, nextReportCrew.map((slot) => slot.name).join("|"), [simulatorDraft.teamOne, simulatorDraft.teamTwo].map((team) => String(team || "").trim().toUpperCase()).filter(Boolean).join("|")],
+        reportData,
+      );
+      const result = await requestOfficiatingInsightSimulation({
+        officials: selectedOfficials,
+        teams: selectedTeams,
+        useAi: simulatorDraft.useAi,
+        asOfDate: reportDate,
+        officialCategoryPercentiles: insightCategoryPercentiles(reportData.profiles),
+      });
+      setInsightResult(result);
+      setReportCrew(nextReportCrew);
+      setReportMatchup({
+        teamOne: simulatorDraft.teamOne,
+        teamTwo: simulatorDraft.teamTwo,
+        teamOneLocation: simulatorDraft.teamOneLocation,
+      });
+    } catch (generationError) {
+      setInsightResult(null);
+      setSimulatorError(generationError?.message || "Unable to generate insights.");
+    } finally {
+      setIsGeneratingInsights(false);
+    }
+  };
+  const saveInsightFeedback = async (candidate, verdict) => {
+    setInsightFeedbackStatus({ id: candidate.id, saving: true, message: "Saving..." });
+    try {
+      await submitOfficiatingInsightFeedback({
+        candidate,
+        verdict,
+        context: {
+          officials: simulatorDraft.officialIds,
+          teamOne: simulatorDraft.teamOne,
+          teamTwo: simulatorDraft.teamTwo,
+          teamOneLocation: simulatorDraft.teamOneLocation,
+          source: insightResult?.source || "unknown",
+        },
+      });
+      setInsightFeedbackStatus({ id: candidate.id, saving: false, message: "Saved" });
+    } catch (feedbackError) {
+      setInsightFeedbackStatus({ id: candidate.id, saving: false, message: feedbackError?.message || "Unable to save feedback" });
+    }
+  };
 
   return (
     <div className={styles.page}>
@@ -2333,11 +2838,27 @@ export default function Officiating() {
         <EmptyPanel title="Unable to load officiating data">{error.message}</EmptyPanel>
       ) : activeTab === "tonight" ? (
         <TonightOfficialsReport
-          rows={tonightReportData?.profiles || []}
+          rows={tonightReportRows}
+          crew={reportCrew}
           isLoading={isTonightReportLoading}
           onExportPdf={exportTonightReportPdf}
           populationSize={tonightReportData?.populationSize || 0}
           gameMetadata={tonightGameMetadata}
+          reportDate={reportDate}
+          simulator={isAdmin ? {
+            open: simulatorOpen,
+            onToggle: () => setSimulatorOpen((current) => !current),
+            options: simulatorOptions,
+            isLoadingOptions: isSimulatorOptionsLoading,
+            draft: simulatorDraft,
+            onDraftChange: setSimulatorDraft,
+            onGenerate: generateSimulatedInsights,
+            onFeedback: saveInsightFeedback,
+            feedbackStatus: insightFeedbackStatus,
+            isGenerating: isGeneratingInsights,
+            error: simulatorError,
+            result: insightResult,
+          } : null}
         />
       ) : activeTab === "officials" ? (
         <div>

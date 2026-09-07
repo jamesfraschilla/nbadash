@@ -51,6 +51,32 @@ async function exactCount(supabase, table, buildQuery) {
   return count || 0;
 }
 
+async function shootingFoulIntegrityMismatch(supabase) {
+  const [rawShootingFouls, rollupRows] = await Promise.all([
+    exactCount(supabase, "nba_official_call_events", (query) => query
+      .eq("season", CURRENT_SEASON)
+      .or("season_type.is.null,season_type.not.ilike.Preseason")
+      .eq("primary_category", "foul")
+      .eq("secondary_category", "shooting_personal")),
+    supabase
+      .from("nba_official_call_category_rollups_cache")
+      .select("category,calls")
+      .eq("season", CURRENT_SEASON)
+      .in("category", ["Shooting Foul", "Restricted Area Shooting Foul", "3-Pt Shooting Foul"]),
+  ]);
+  if (rollupRows.error) {
+    throw new Error(`Failed auditing shooting foul rollups: ${rollupRows.error.message}`);
+  }
+
+  const normalizedShootingFouls = (rollupRows.data || [])
+    .reduce((sum, row) => sum + (Number(row.calls) || 0), 0);
+  return {
+    rawShootingFouls,
+    normalizedShootingFouls,
+    mismatch: rawShootingFouls !== normalizedShootingFouls,
+  };
+}
+
 async function main() {
   await loadEnvFile(path.join(process.cwd(), ".env"));
   await loadEnvFile(path.join(process.cwd(), ".env.local"));
@@ -103,7 +129,7 @@ async function main() {
     refreshed = true;
   }
 
-  const [badAlternates, missingCallOfficials, missingChallengeCrew] = await Promise.all([
+  const [badAlternates, missingCallOfficials, missingChallengeCrew, shootingFoulIntegrity] = await Promise.all([
     exactCount(supabase, "nba_official_game_assignments", (query) => query
       .eq("season", CURRENT_SEASON)
       .gte("assignment_order", 4)
@@ -118,11 +144,12 @@ async function main() {
       .not("season_type", "ilike", "Preseason")
       .is("crew_chief_id", null)
       .is("crew_chief_name", null)),
+    shootingFoulIntegrityMismatch(supabase),
   ]);
 
-  const audit = { season: CURRENT_SEASON, refreshed, badAlternates, missingCallOfficials, missingChallengeCrew };
+  const audit = { season: CURRENT_SEASON, refreshed, badAlternates, missingCallOfficials, missingChallengeCrew, shootingFoulIntegrity };
   console.log(JSON.stringify(audit, null, 2));
-  if (badAlternates || missingCallOfficials || missingChallengeCrew) process.exitCode = 1;
+  if (badAlternates || missingCallOfficials || missingChallengeCrew || shootingFoulIntegrity.mismatch) process.exitCode = 1;
 }
 
 main().catch((error) => {

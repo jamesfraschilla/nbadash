@@ -40,3 +40,9 @@ jobs:
           else
             npm run officiating:ingest:nightly -- --lookback-days="${LOOKBACK_DAYS}"
           fi
+      - name: Refresh compact insight facts for recent games
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          LOOKBACK_DAYS: ${{ inputs.lookback_days || '3' }}
+        run: npm run officiating:backfill:insight-facts -- --season=2026-27 --lookback-days="${LOOKBACK_DAYS}" --concurrency=2 --replace --apply

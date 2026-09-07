@@ -10,7 +10,13 @@ import {
   TEAM_CATEGORY_ROLLUP_COLUMNS,
   TEAM_ROLLUP_COLUMNS,
 } from "./officiatingData.js";
-import { CALL_CATEGORY_GROUPS, challengeFoulSubtype } from "./officiatingCategoryNormalization.js";
+import {
+  CALL_CATEGORY_GROUPS,
+  challengeFoulSubtype,
+  isDefensiveRimPaintFoulEvent,
+  isLikelyMovingScreenEvent,
+  isRaChargeEvent,
+} from "./officiatingCategoryNormalization.js";
 
 test("preferAuthoritativeChallengeEvents keeps daily PBP rows until weekly official rows arrive", () => {
   const events = preferAuthoritativeChallengeEvents([
@@ -254,13 +260,55 @@ test("call category groups keep out of bounds under violations and location foul
   const fouls = CALL_CATEGORY_GROUPS.find((group) => group.key === "fouls");
   const violations = CALL_CATEGORY_GROUPS.find((group) => group.key === "violations");
   const shootingFoul = fouls.types.find((type) => type.label === "Shooting Foul");
+  const offensiveFoul = fouls.types.find((type) => type.label === "Offensive Foul");
   const outOfBounds = violations.types.find((type) => type.label === "Out of Bounds");
 
   assert.ok(shootingFoul);
   assert.deepEqual(shootingFoul.subTypes.map((subType) => subType.label), ["Restricted Area", "3-Pt"]);
+  assert.ok(offensiveFoul);
+  assert.deepEqual(offensiveFoul.subTypes.map((subType) => subType.label), ["Moving Screens", "RA Charge Rate"]);
   assert.ok(outOfBounds);
   assert.deepEqual(outOfBounds.labels, ["Out Of Bounds"]);
   assert.equal(fouls.types.some((type) => type.label === "Out of Bounds"), false);
+});
+
+test("special offensive foul metrics detect moving screens and RA charge opportunities", () => {
+  assert.equal(isLikelyMovingScreenEvent({
+    primary_category: "foul",
+    secondary_category: "off_the_ball_offensive",
+    area: "Above the Break 3",
+  }), true);
+  assert.equal(isLikelyMovingScreenEvent({
+    primary_category: "foul",
+    secondary_category: "offensive_charge",
+    area: "Restricted Area",
+  }), false);
+
+  assert.equal(isRaChargeEvent({
+    primary_category: "foul",
+    secondary_category: "offensive_charge",
+    area: "Restricted Area",
+  }), true);
+  assert.equal(isRaChargeEvent({
+    primary_category: "foul",
+    secondary_category: "offensive",
+    area: "In The Paint (Non-RA)",
+  }), true);
+  assert.equal(isRaChargeEvent({
+    primary_category: "foul",
+    secondary_category: "offensive",
+    area: "Above the Break 3",
+  }), false);
+  assert.equal(isDefensiveRimPaintFoulEvent({
+    primary_category: "foul",
+    secondary_category: "shooting_personal",
+    area: "Restricted Area",
+  }), true);
+  assert.equal(isDefensiveRimPaintFoulEvent({
+    primary_category: "foul",
+    secondary_category: "offensive_charge",
+    area: "Restricted Area",
+  }), false);
 });
 
 test("official and team category rollup queries use their own table schemas", () => {
@@ -431,6 +479,43 @@ test("official profiles count crew challenges for every assigned crew member", (
   assert.equal(kirkland.crewChiefChallenges, 0);
   assert.equal(kirkland.whistleChallenges, 0);
   assert.equal(kirkland.challengeLog[0].profileChallengeRole, "crew");
+});
+
+test("official profile violations per game includes turnover-coded violation families", () => {
+  const [profile] = buildOfficialProfiles([
+    {
+      game_id: "0022500001",
+      season_type: "Regular Season",
+      official_id: "39",
+      official_name: "Tyler Ford",
+      primary_category: "turnover",
+      secondary_category: "lost_ball",
+      descriptor: "out_of_bounds",
+      charged_team: "WAS",
+      benefiting_team: "BOS",
+    },
+    {
+      game_id: "0022500001",
+      season_type: "Regular Season",
+      official_id: "39",
+      official_name: "Tyler Ford",
+      primary_category: "violation",
+      secondary_category: "kicked_ball",
+      charged_team: "BOS",
+      benefiting_team: "WAS",
+    },
+  ], [], [{
+    game_id: "0022500001",
+    season_type: "Regular Season",
+    official_id: "39",
+    official_name: "Tyler Ford",
+    role_key: "referee",
+  }]);
+
+  assert.equal(profile.violations, 2);
+  assert.equal(profile.violationsPerGame, 2);
+  assert.equal(profile.callsByCategory["Out Of Bounds"].value, 1);
+  assert.equal(profile.callsByCategory["Kicked Ball"].value, 1);
 });
 
 test("official technical counts include standard and double technicals only", () => {

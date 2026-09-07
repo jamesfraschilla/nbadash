@@ -138,6 +138,17 @@ on public.nba_official_call_events (season, benefiting_team, game_date desc);
 create index if not exists nba_official_call_events_category_idx
 on public.nba_official_call_events (primary_category, secondary_category);
 
+create index if not exists nba_official_call_events_season_player_category_idx
+on public.nba_official_call_events (season, player_id, secondary_category)
+where coalesce(player_id, '') <> '';
+
+create index if not exists nba_official_call_events_season_official_secondary_idx
+on public.nba_official_call_events (season, official_id, secondary_category)
+where coalesce(official_id, '') <> '';
+
+create index if not exists nba_official_call_events_season_secondary_idx
+on public.nba_official_call_events (season, secondary_category);
+
 drop trigger if exists nba_official_call_events_set_updated_at on public.nba_official_call_events;
 create trigger nba_official_call_events_set_updated_at
 before update on public.nba_official_call_events
@@ -1063,6 +1074,49 @@ on public.nba_authoritative_coach_challenge_events_cache (
   game_date desc
 );
 
+create or replace function public.nba_is_official_violation_call(
+  primary_category text,
+  secondary_category text,
+  descriptor text,
+  sub_type text
+)
+returns boolean
+language sql
+immutable
+as $$
+  with normalized as (
+    select
+      regexp_replace(lower(coalesce(primary_category, '')), '[^a-z0-9]', '', 'g') as primary_key,
+      regexp_replace(lower(coalesce(descriptor, '') || ' ' || coalesce(sub_type, '') || ' ' || coalesce(secondary_category, '')), '[^a-z0-9]', '', 'g') as category_key
+  )
+  select case
+    when primary_key in ('violation', 'turnover') then true
+    when category_key like any (array[
+      '%3second%',
+      '%outofbounds%',
+      '%badpass%',
+      '%lostball%',
+      '%shotclock%',
+      '%5second%',
+      '%8second%',
+      '%10secondfreethrow%',
+      '%doubledribble%',
+      '%discontinueddribble%',
+      '%palming%',
+      '%backcourt%',
+      '%goaltending%',
+      '%kickedball%',
+      '%punchedball%',
+      '%illegalassist%',
+      '%jumpball%',
+      '%inbound%',
+      '%lane%'
+    ]) then true
+    else false
+  end
+  from normalized;
+$$;
+
 create or replace view public.nba_official_call_rollups as
 select
   season,
@@ -1072,7 +1126,9 @@ select
   count(*)::integer as call_events,
   count(distinct game_id)::integer as games,
   count(*) filter (where primary_category = 'foul')::integer as fouls,
-  count(*) filter (where primary_category = 'violation')::integer as violations,
+  count(*) filter (
+    where public.nba_is_official_violation_call(primary_category, secondary_category, descriptor, sub_type)
+  )::integer as violations,
   count(*) filter (
     where (
       regexp_replace(lower(coalesce(primary_category, '')), '[^a-z0-9]', '', 'g') = 'technical'
@@ -1095,7 +1151,9 @@ select
     else 0
   end as fouls_per_game,
   case
-    when count(distinct game_id) > 0 then count(*) filter (where primary_category = 'violation')::numeric / count(distinct game_id)
+    when count(distinct game_id) > 0 then count(*) filter (
+      where public.nba_is_official_violation_call(primary_category, secondary_category, descriptor, sub_type)
+    )::numeric / count(distinct game_id)
     else 0
   end as violations_per_game
 from public.nba_official_call_events
@@ -1175,6 +1233,131 @@ as $$
   from normalized;
 $$;
 
+create or replace function public.nba_is_likely_moving_screen_call(
+  primary_category text,
+  secondary_category text,
+  descriptor text,
+  sub_type text,
+  area text default '',
+  area_detail text default ''
+)
+returns boolean
+language sql
+immutable
+as $$
+  with normalized as (
+    select
+      regexp_replace(lower(coalesce(primary_category, '')), '[^a-z0-9]', '', 'g') as primary_key,
+      regexp_replace(lower(coalesce(descriptor, '') || ' ' || coalesce(sub_type, '') || ' ' || coalesce(secondary_category, '')), '[^a-z0-9]', '', 'g') as category_key,
+      regexp_replace(lower(coalesce(area, '') || ' ' || coalesce(area_detail, '')), '[^a-z0-9]', '', 'g') as area_key
+  )
+  select primary_key = 'foul'
+    and category_key like '%offensive%'
+    and category_key not like '%charge%'
+    and category_key not like '%transitiontake%'
+    and category_key not like '%clearpath%'
+    and category_key not like '%personaltake%'
+    and category_key not like '%flagrant%'
+    and category_key not like '%awayfromplay%'
+    and category_key not like '%looseball%'
+    and category_key not like '%doublepersonal%'
+    and (
+      (
+        category_key like '%offtheballoffensive%'
+        and area_key not like '%restricted%'
+        and area_key not like '%paint%'
+        and area_key not like '%08center%'
+      )
+      or (
+        area_key like any (array[
+          '%3pt%',
+          '%3point%',
+          '%threepoint%',
+          '%corner3%',
+          '%abovethebreak%',
+          '%midrange%',
+          '%1624%',
+          '%24plus%'
+        ])
+      )
+    )
+  from normalized;
+$$;
+
+create or replace function public.nba_is_ra_charge_call(
+  primary_category text,
+  secondary_category text,
+  descriptor text,
+  sub_type text,
+  area text default '',
+  area_detail text default ''
+)
+returns boolean
+language sql
+immutable
+as $$
+  with normalized as (
+    select
+      regexp_replace(lower(coalesce(primary_category, '')), '[^a-z0-9]', '', 'g') as primary_key,
+      regexp_replace(lower(coalesce(descriptor, '') || ' ' || coalesce(sub_type, '') || ' ' || coalesce(secondary_category, '')), '[^a-z0-9]', '', 'g') as category_key,
+      regexp_replace(lower(coalesce(area, '') || ' ' || coalesce(area_detail, '')), '[^a-z0-9]', '', 'g') as area_key
+  )
+  select primary_key = 'foul'
+    and (category_key like '%offensive%' or category_key like '%charge%')
+    and category_key not like '%offtheball%'
+    and category_key not like '%looseball%'
+    and category_key not like '%transitiontake%'
+    and category_key not like '%clearpath%'
+    and category_key not like '%personaltake%'
+    and category_key not like '%flagrant%'
+    and category_key not like '%awayfromplay%'
+    and category_key not like '%doublepersonal%'
+    and (
+      area_key like '%restricted%'
+      or area_key like '%paint%'
+      or area_key like '%08center%'
+    )
+  from normalized;
+$$;
+
+create or replace function public.nba_is_defensive_rim_paint_foul_call(
+  primary_category text,
+  secondary_category text,
+  descriptor text,
+  sub_type text,
+  area text default '',
+  area_detail text default ''
+)
+returns boolean
+language sql
+immutable
+as $$
+  with normalized as (
+    select
+      regexp_replace(lower(coalesce(primary_category, '')), '[^a-z0-9]', '', 'g') as primary_key,
+      regexp_replace(lower(coalesce(descriptor, '') || ' ' || coalesce(sub_type, '') || ' ' || coalesce(secondary_category, '')), '[^a-z0-9]', '', 'g') as category_key,
+      regexp_replace(lower(coalesce(area, '') || ' ' || coalesce(area_detail, '')), '[^a-z0-9]', '', 'g') as area_key
+  )
+  select primary_key = 'foul'
+    and (category_key like '%shooting%' or category_key like '%personal%')
+    and category_key not like '%offensive%'
+    and category_key not like '%charge%'
+    and category_key not like '%offtheball%'
+    and category_key not like '%looseball%'
+    and category_key not like '%transitiontake%'
+    and category_key not like '%clearpath%'
+    and category_key not like '%personaltake%'
+    and category_key not like '%flagrant%'
+    and category_key not like '%awayfromplay%'
+    and category_key not like '%doublepersonal%'
+    and (
+      area_key like '%restricted%'
+      or area_key like '%paint%'
+      or area_key like '%08center%'
+    )
+  from normalized;
+$$;
+
 update public.nba_coach_challenge_events challenges
 set challenge_sub_type = case
   when public.nba_normalized_official_call_category(
@@ -1247,7 +1430,7 @@ categorized_calls as (
   where coalesce(official_id, official_name, '') <> ''
     and lower(coalesce(season_type, '')) <> 'preseason'
 ),
-category_counts as (
+base_category_counts as (
   select
     season,
     official_key,
@@ -1259,11 +1442,59 @@ category_counts as (
   from categorized_calls
   group by season, official_key, category
 ),
+moving_screen_counts as (
+  select
+    season,
+    coalesce(nullif(official_id, ''), official_name) as official_key,
+    max(nullif(official_id, '')) as official_id,
+    max(official_name) as official_name,
+    'Moving Screens'::text as category,
+    count(*)::integer as calls,
+    count(distinct game_id)::integer as category_games
+  from public.nba_official_call_events calls
+  where coalesce(official_id, official_name, '') <> ''
+    and lower(coalesce(season_type, '')) <> 'preseason'
+    and public.nba_is_likely_moving_screen_call(primary_category, secondary_category, descriptor, sub_type, area, area_detail)
+  group by season, coalesce(nullif(official_id, ''), official_name)
+),
+ra_charge_counts as (
+  select
+    season,
+    coalesce(nullif(official_id, ''), official_name) as official_key,
+    max(nullif(official_id, '')) as official_id,
+    max(official_name) as official_name,
+    'RA Charge Rate'::text as category,
+    count(*) filter (where public.nba_is_ra_charge_call(primary_category, secondary_category, descriptor, sub_type, area, area_detail))::integer as calls,
+    count(*) filter (
+      where public.nba_is_ra_charge_call(primary_category, secondary_category, descriptor, sub_type, area, area_detail)
+        or public.nba_is_defensive_rim_paint_foul_call(primary_category, secondary_category, descriptor, sub_type, area, area_detail)
+    )::integer as category_games
+  from public.nba_official_call_events calls
+  where coalesce(official_id, official_name, '') <> ''
+    and lower(coalesce(season_type, '')) <> 'preseason'
+    and (
+      public.nba_is_ra_charge_call(primary_category, secondary_category, descriptor, sub_type, area, area_detail)
+      or public.nba_is_defensive_rim_paint_foul_call(primary_category, secondary_category, descriptor, sub_type, area, area_detail)
+    )
+  group by season, coalesce(nullif(official_id, ''), official_name)
+),
+category_counts as (
+  select * from base_category_counts
+  union all
+  select * from moving_screen_counts
+  union all
+  select * from ra_charge_counts
+),
 rated_counts as (
 select
   category_counts.*,
-  coalesce(official_games.games, category_counts.category_games, 0)::integer as games,
   case
+    when category_counts.category = 'RA Charge Rate' then category_counts.category_games
+    else coalesce(official_games.games, category_counts.category_games, 0)::integer
+  end as games,
+  case
+    when category_counts.category = 'RA Charge Rate' and category_counts.category_games > 0
+      then category_counts.calls::numeric / category_counts.category_games
     when coalesce(official_games.games, category_counts.category_games, 0) > 0
       then category_counts.calls::numeric / coalesce(official_games.games, category_counts.category_games)
     else 0
@@ -1329,7 +1560,7 @@ categorized_calls as (
   where coalesce(charged_team, team_tricode, benefiting_team, '') <> ''
     and lower(coalesce(season_type, '')) <> 'preseason'
 ),
-category_counts as (
+base_category_counts as (
   select
     season,
     team,
@@ -1339,11 +1570,55 @@ category_counts as (
   from categorized_calls
   group by season, team, category
 ),
+moving_screen_counts as (
+  select
+    season,
+    coalesce(charged_team, team_tricode, benefiting_team) as team,
+    'Moving Screens'::text as category,
+    count(*)::integer as calls,
+    count(distinct game_id)::integer as category_games
+  from public.nba_official_call_events calls
+  where coalesce(charged_team, team_tricode, benefiting_team, '') <> ''
+    and lower(coalesce(season_type, '')) <> 'preseason'
+    and public.nba_is_likely_moving_screen_call(primary_category, secondary_category, descriptor, sub_type, area, area_detail)
+  group by season, coalesce(charged_team, team_tricode, benefiting_team)
+),
+ra_charge_counts as (
+  select
+    season,
+    coalesce(charged_team, team_tricode, benefiting_team) as team,
+    'RA Charge Rate'::text as category,
+    count(*) filter (where public.nba_is_ra_charge_call(primary_category, secondary_category, descriptor, sub_type, area, area_detail))::integer as calls,
+    count(*) filter (
+      where public.nba_is_ra_charge_call(primary_category, secondary_category, descriptor, sub_type, area, area_detail)
+        or public.nba_is_defensive_rim_paint_foul_call(primary_category, secondary_category, descriptor, sub_type, area, area_detail)
+    )::integer as category_games
+  from public.nba_official_call_events calls
+  where coalesce(charged_team, team_tricode, benefiting_team, '') <> ''
+    and lower(coalesce(season_type, '')) <> 'preseason'
+    and (
+      public.nba_is_ra_charge_call(primary_category, secondary_category, descriptor, sub_type, area, area_detail)
+      or public.nba_is_defensive_rim_paint_foul_call(primary_category, secondary_category, descriptor, sub_type, area, area_detail)
+    )
+  group by season, coalesce(charged_team, team_tricode, benefiting_team)
+),
+category_counts as (
+  select * from base_category_counts
+  union all
+  select * from moving_screen_counts
+  union all
+  select * from ra_charge_counts
+),
 rated_counts as (
 select
   category_counts.*,
-  coalesce(team_games.games, category_counts.category_games, 0)::integer as games,
   case
+    when category_counts.category = 'RA Charge Rate' then category_counts.category_games
+    else coalesce(team_games.games, category_counts.category_games, 0)::integer
+  end as games,
+  case
+    when category_counts.category = 'RA Charge Rate' and category_counts.category_games > 0
+      then category_counts.calls::numeric / category_counts.category_games
     when coalesce(team_games.games, category_counts.category_games, 0) > 0
       then category_counts.calls::numeric / coalesce(team_games.games, category_counts.category_games)
     else 0
@@ -1608,7 +1883,9 @@ call_rollups as (
     count(*)::integer as calls,
     count(distinct game_id)::integer as call_games,
     count(*) filter (where primary_category = 'foul')::integer as fouls,
-    count(*) filter (where primary_category = 'violation')::integer as violations,
+    count(*) filter (
+      where public.nba_is_official_violation_call(primary_category, secondary_category, descriptor, sub_type)
+    )::integer as violations,
     count(*) filter (
       where (
         regexp_replace(lower(coalesce(primary_category, '')), '[^a-z0-9]', '', 'g') = 'technical'

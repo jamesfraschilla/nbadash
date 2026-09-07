@@ -1,5 +1,13 @@
 import { supabase } from "./supabaseClient.js";
-import { CALL_CATEGORY_GROUPS, isCountedTechnicalEvent, normalizeOfficialCallCategory } from "./officiatingCategoryNormalization.js";
+import {
+  CALL_CATEGORY_GROUPS,
+  isDefensiveRimPaintFoulEvent,
+  isCountedTechnicalEvent,
+  isLikelyMovingScreenEvent,
+  isRaChargeEvent,
+  isViolationCallCategory,
+  normalizeOfficialCallCategory,
+} from "./officiatingCategoryNormalization.js";
 import {
   CUMULATIVE_OFFICIATING_SEASON as CUMULATIVE_SEASON,
   DEFAULT_OFFICIATING_SEASON as DEFAULT_SEASON,
@@ -29,6 +37,7 @@ const CALL_EVENT_COLUMNS = "id,season,season_type,game_id,game_date,home_team,aw
 const OFFICIAL_REPORT_CATEGORY_DEFINITIONS = [
   ["Offensive 3 Second Violation", "Defensive 3 Second Violation"],
 ];
+const RATE_CATEGORY_LABELS = new Set(["RA Charge Rate"]);
 const NBA_TEAM_ID_BY_TRICODE = {
   ATL: "1610612737",
   BOS: "1610612738",
@@ -136,6 +145,34 @@ function formatRankedCategoryMap(categoryTotals, games) {
   ]));
 }
 
+function isRateCategory(category) {
+  return RATE_CATEGORY_LABELS.has(String(category || "").trim());
+}
+
+function applyFallbackSpecialCategoryCounts(profile, event) {
+  if (isLikelyMovingScreenEvent(event)) {
+    profile.callsByCategory["Moving Screens"] = (profile.callsByCategory["Moving Screens"] || 0) + 1;
+  }
+  if (isRaChargeEvent(event)) {
+    profile.raChargeCalls = (Number(profile.raChargeCalls) || 0) + 1;
+    profile.raChargeOpportunities = (Number(profile.raChargeOpportunities) || 0) + 1;
+  } else if (isDefensiveRimPaintFoulEvent(event)) {
+    profile.raChargeOpportunities = (Number(profile.raChargeOpportunities) || 0) + 1;
+  }
+}
+
+function finalizeFallbackSpecialCategoryCounts(categoryMap, profile) {
+  const opportunities = Number(profile.raChargeOpportunities) || 0;
+  if (opportunities > 0) {
+    categoryMap["RA Charge Rate"] = {
+      value: safeRate(Number(profile.raChargeCalls) || 0, opportunities),
+      rank: null,
+      percentile: null,
+    };
+  }
+  return categoryMap;
+}
+
 function categoryRollupsToMap(rows) {
   return Object.fromEntries(asArray(rows).map((row) => [
     String(row.category || "Unknown").trim(),
@@ -196,14 +233,17 @@ function aggregateCategoryRollupsToMap(rows, denominator) {
   const totals = new Map();
   asArray(rows).forEach((row) => {
     const category = String(row.category || "Unknown").trim();
-    if (!totals.has(category)) totals.set(category, { calls: 0 });
+    if (!totals.has(category)) totals.set(category, { calls: 0, opportunities: 0 });
     const total = totals.get(category);
     total.calls += Number(row.calls) || 0;
+    if (isRateCategory(category)) total.opportunities += Number(row.games) || 0;
   });
   return Object.fromEntries([...totals.entries()].map(([category, total]) => [
     category,
     {
-      value: safeRate(total.calls, denominator),
+      value: isRateCategory(category)
+        ? safeRate(total.calls, total.opportunities)
+        : safeRate(total.calls, denominator),
       rank: null,
       percentile: null,
     },
@@ -357,16 +397,21 @@ function aggregateOfficialCategoryRollups(rows, profileRows) {
         aliases: [...aliases],
         category,
         calls: 0,
+        opportunities: 0,
         games: gamesByKey.get(officialKey) || 0,
       });
     }
-    totals.get(key).calls += Number(row.calls) || 0;
+    const total = totals.get(key);
+    total.calls += Number(row.calls) || 0;
+    if (isRateCategory(category)) total.opportunities += Number(row.games) || 0;
   });
 
   const byOfficial = new Map();
   eligibleCanonicalKeys.forEach((officialKey) => byOfficial.set(officialKey, {}));
   [...totals.values()].forEach((row) => {
-    row.value = safeRate(row.calls, row.games);
+    row.value = isRateCategory(row.category)
+      ? safeRate(row.calls, row.opportunities)
+      : safeRate(row.calls, row.games);
     if (!byOfficial.has(row.officialKey)) byOfficial.set(row.officialKey, {});
     byOfficial.get(row.officialKey)[row.category] = { value: row.value, rank: null, percentile: null };
   });
@@ -412,16 +457,21 @@ function teamCategoryRollupsToMaps(rows, teamRows) {
         team,
         category,
         calls: 0,
+        opportunities: 0,
         games: gamesByTeam.get(team.toLowerCase()) || 0,
       });
     }
-    totals.get(key).calls += Number(row.calls) || 0;
+    const total = totals.get(key);
+    total.calls += Number(row.calls) || 0;
+    if (isRateCategory(category)) total.opportunities += Number(row.games) || 0;
   });
 
   const byTeam = new Map();
   gamesByTeam.forEach((_games, teamKey) => byTeam.set(teamKey, {}));
   [...totals.values()].forEach((row) => {
-    row.value = safeRate(row.calls, row.games);
+    row.value = isRateCategory(row.category)
+      ? safeRate(row.calls, row.opportunities)
+      : safeRate(row.calls, row.games);
     const teamKey = row.team.toLowerCase();
     if (!byTeam.has(teamKey)) byTeam.set(teamKey, {});
     byTeam.get(teamKey)[row.category] = { value: row.value, rank: null, percentile: null };
@@ -905,6 +955,8 @@ export function buildOfficialProfiles(callEvents, challengeEvents, assignments) 
         callsByTeam: emptyTeamNetMap(),
         teamGames: Object.fromEntries(NBA_TEAM_CODES.map((team) => [team, new Set()])),
         callsByCategory: {},
+        raChargeCalls: 0,
+        raChargeOpportunities: 0,
         schedule: [],
         recentCalls: [],
         challengeLog: [],
@@ -931,7 +983,7 @@ export function buildOfficialProfiles(callEvents, challengeEvents, assignments) 
     const category = normalizeStatus(event.primary_category);
     const categoryLabel = specificCallCategory(event);
     if (category === "foul") profile.fouls += 1;
-    else if (category === "violation") profile.violations += 1;
+    else if (isViolationCallCategory(categoryLabel)) profile.violations += 1;
     if (isCountedTechnicalEvent(event)) profile.technicals += 1;
     const chargedTeam = String(event.charged_team || event.team_tricode || "").trim();
     const benefitingTeam = String(event.benefiting_team || "").trim();
@@ -943,6 +995,7 @@ export function buildOfficialProfiles(callEvents, challengeEvents, assignments) 
       if (event.game_id) profile.teamGames[teamKey].add(event.game_id);
     });
     profile.callsByCategory[categoryLabel] = (profile.callsByCategory[categoryLabel] || 0) + 1;
+    applyFallbackSpecialCategoryCounts(profile, event);
     profile.recentCalls.push(event);
   });
 
@@ -1011,7 +1064,10 @@ export function buildOfficialProfiles(callEvents, challengeEvents, assignments) 
         callsByTeam,
         foulsPerGame: safeRate(profile.fouls, games),
         violationsPerGame: safeRate(profile.violations, games),
-        callsByCategory: formatRankedCategoryMap(profile.callsByCategory, games),
+        callsByCategory: finalizeFallbackSpecialCategoryCounts(
+          formatRankedCategoryMap(profile.callsByCategory, games),
+          profile,
+        ),
         callsPerGame: safeRate(profile.calls, games),
         challengeRate: safeRate(profile.successfulChallenges, profile.challenges),
         whistleChallengeRate: safeRate(profile.successfulWhistleChallenges, profile.whistleChallenges),
@@ -1058,6 +1114,8 @@ export function buildTeamProfiles(callEvents, challengeEvents) {
         callsByOfficial: {},
         officialGames: {},
         callsByCategory: {},
+        raChargeCalls: 0,
+        raChargeOpportunities: 0,
         challengeLog: [],
         recentCalls: [],
       });
@@ -1081,6 +1139,7 @@ export function buildTeamProfiles(callEvents, challengeEvents) {
       if (!profile.officialGames[official]) profile.officialGames[official] = new Set();
       if (event.game_id) profile.officialGames[official].add(event.game_id);
       profile.callsByCategory[category] = (profile.callsByCategory[category] || 0) + 1;
+      applyFallbackSpecialCategoryCounts(profile, event);
       profile.recentCalls.push(event);
     });
   });
@@ -1101,7 +1160,10 @@ export function buildTeamProfiles(callEvents, challengeEvents) {
         ...team,
         games,
         callsByOfficial,
-        callsByCategory: formatRankedCategoryMap(team.callsByCategory, games),
+        callsByCategory: finalizeFallbackSpecialCategoryCounts(
+          formatRankedCategoryMap(team.callsByCategory, games),
+          team,
+        ),
         netCallsFor: safeRate(team.callsFor - team.callsAgainst, games),
         challengeRate: safeRate(team.successfulChallenges, team.challenges),
         challengeLog: team.challengeLog
@@ -1268,26 +1330,29 @@ export async function fetchOfficialProfileDetails({ season = DEFAULT_SEASON, pro
   };
 }
 
-export async function fetchOfficialsReportData({ season = CUMULATIVE_SEASON, officialNames = [] } = {}) {
+export async function fetchOfficialsReportData({ season = CUMULATIVE_SEASON, officialNames = [], teamCodes = ["WAS"] } = {}) {
   const names = [...new Set(asArray(officialNames).map((name) => String(name || "").trim()).filter(Boolean))];
   if (!names.length) return { profiles: [], populationSize: 0 };
+  const reportTeams = [...new Set(asArray(teamCodes)
+    .map((team) => String(team || "").trim().toUpperCase())
+    .filter((team) => NBA_TEAM_CODES.includes(team)))];
+  if (!reportTeams.includes("WAS")) reportTeams.unshift("WAS");
   const cumulative = season === CUMULATIVE_SEASON;
 
-  const [profileResult, categoryResult, assignmentResult, wizardsNetResult] = await Promise.all([
+  const [profileResult, categoryResult, assignmentResult, teamNetResult] = await Promise.all([
     selectPreferredTable("nba_official_profiles_cache", "nba_official_profiles", (query) => applySeasonFilter(query
       .select(PROFILE_ROLLUP_COLUMNS), season), { maxRows: PROFILE_LIMIT, requireComplete: true }),
     selectPreferredTable("nba_official_call_category_rollups_cache", "nba_official_call_category_rollups", (query) => applySeasonFilter(query
       .select(OFFICIAL_CATEGORY_ROLLUP_COLUMNS), season), { maxRows: PROFILE_DETAIL_LIMIT, requireComplete: true }),
     selectTable("nba_official_game_assignments", (query) => applySeasonFilter(query
-      .select(ASSIGNMENT_COLUMNS), season)
+      .select(ASSIGNMENT_COLUMNS)
       .not("season_type", "ilike", "Preseason")
       .eq("is_alternate", false)
-      .in("official_name", names)
-      .or("home_team.eq.WAS,away_team.eq.WAS")
-      .order("game_date", { ascending: false }), { maxRows: 100, requireComplete: true }),
+      .in("official_name", names), DEFAULT_SEASON)
+      .order("game_date", { ascending: false }), { maxRows: 500, requireComplete: true }),
     selectPreferredTable("nba_team_official_net_call_rollups_cache", "nba_team_official_net_call_rollups", (query) => applySeasonFilter(query
       .select(TEAM_OFFICIAL_NET_COLUMNS), season)
-      .eq("team", "WAS"), { maxRows: PROFILE_LIMIT, requireComplete: true }),
+      .in("team", reportTeams), { maxRows: PROFILE_LIMIT * Math.max(1, reportTeams.length), requireComplete: true }),
   ]);
 
   if (profileResult.unavailable) {
@@ -1314,23 +1379,39 @@ export async function fetchOfficialsReportData({ season = CUMULATIVE_SEASON, off
   }));
   const profilesByName = new Map(rankedProfiles.map((profile) => [normalizedEntityKey(profile.name), profile]));
   const assignments = assignmentResult.data || [];
-  const wizardsNetTotals = new Map();
-  asArray(wizardsNetResult.data).forEach((row) => {
+  const teamNetTotals = new Map(reportTeams.map((team) => [team, new Map()]));
+  asArray(teamNetResult.data).forEach((row) => {
+    const team = String(row.team || "").trim().toUpperCase();
+    if (!reportTeams.includes(team)) return;
+    if (!teamNetTotals.has(team)) teamNetTotals.set(team, new Map());
+    const totals = teamNetTotals.get(team);
     const keys = [...new Set([
       row.official_key,
       row.official_id,
       row.official_name,
     ].map(normalizedEntityKey).filter(Boolean))];
     if (!keys.length) return;
-    const total = keys.map((key) => wizardsNetTotals.get(key)).find(Boolean)
+    const total = keys.map((key) => totals.get(key)).find(Boolean)
       || { net: 0, games: 0 };
     total.net += Number(row.net_calls_for) || 0;
     total.games += Number(row.games) || 0;
-    keys.forEach((alias) => wizardsNetTotals.set(alias, total));
+    keys.forEach((alias) => totals.set(alias, total));
   });
-  const eligibleWizardsNetValues = [...new Set(wizardsNetTotals.values())]
-    .filter((total) => total.games >= MIN_OFFICIAL_GAMES_FOR_PERCENTILES)
-    .map((total) => safeRate(total.net, total.games));
+  const teamNetPopulations = new Map([...teamNetTotals.entries()].map(([team, totals]) => [
+    team,
+    [...new Set(totals.values())]
+      .filter((total) => total.games >= MIN_OFFICIAL_GAMES_FOR_PERCENTILES)
+      .map((total) => safeRate(total.net, total.games)),
+  ]));
+  const netMetricForKeys = (team, keys) => {
+    const totals = teamNetTotals.get(team);
+    const total = totals ? keys.map((key) => totals.get(key)).find(Boolean) : null;
+    const value = total ? safeRate(total.net, total.games) : 0;
+    return {
+      value,
+      percentile: percentileForValue(value, teamNetPopulations.get(team) || []),
+    };
+  };
 
   return {
     profiles: names.map((name) => ({
@@ -1339,12 +1420,13 @@ export async function fetchOfficialsReportData({ season = CUMULATIVE_SEASON, off
         const keys = [profile.officialId, profile.id, profile.name, name]
           .map(normalizedEntityKey)
           .filter(Boolean);
-        const total = keys.map((key) => wizardsNetTotals.get(key)).find(Boolean);
-        const value = total ? safeRate(total.net, total.games) : 0;
+        const netCallsForByTeam = Object.fromEntries(reportTeams.map((team) => [team, netMetricForKeys(team, keys)]));
+        const wizardsNet = netCallsForByTeam.WAS || { value: 0, percentile: null };
         return {
           ...profile,
-          wizardsNetCallsFor: value,
-          wizardsNetCallsForPercentile: percentileForValue(value, eligibleWizardsNetValues),
+          netCallsForByTeam,
+          wizardsNetCallsFor: wizardsNet.value,
+          wizardsNetCallsForPercentile: wizardsNet.percentile,
         };
       })(),
       schedule: assignments.filter((row) => normalizedEntityKey(row.official_name) === normalizedEntityKey(name)),

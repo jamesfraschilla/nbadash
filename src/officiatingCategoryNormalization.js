@@ -81,6 +81,65 @@ function isThreePointArea(event = {}) {
   ));
 }
 
+function compactEventCategoryKey(event = {}) {
+  return [
+    event.descriptor,
+    event.sub_type || event.subType,
+    event.secondary_category || event.secondaryCategory,
+    event.primary_category || event.primaryCategory,
+  ].map(cleanCallCategoryPart).join(" ").replace(/[^a-z0-9]+/g, "");
+}
+
+function isPaintOrRimArea(event = {}) {
+  return eventAreaParts(event).some((part) => (
+    part.includes("restricted")
+    || part.includes("paint")
+    || part.includes("0 8 center")
+    || part.includes("0-8 center")
+    || part.includes("0 8")
+    || part.includes("0-8")
+  ));
+}
+
+function isPerimeterScreenArea(event = {}) {
+  return eventAreaParts(event).some((part) => (
+    part.includes("3 pt")
+    || part.includes("three point")
+    || part.includes("corner 3")
+    || part.includes("above the break")
+    || part.includes("mid range")
+    || part.includes("16 24")
+    || part.includes("16-24")
+    || part.includes("24 plus")
+    || part.includes("24+")
+  ));
+}
+
+export function isRaChargeEvent(event = {}) {
+  const primary = cleanCallCategoryPart(event.primary_category || event.primaryCategory);
+  const key = compactEventCategoryKey(event);
+  if (primary !== "foul" || !isPaintOrRimArea(event)) return false;
+  if (!key.includes("offensive") && !key.includes("charge")) return false;
+  return !/(offtheball|looseball|transitiontake|clearpath|personaltake|flagrant|awayfromplay|doublepersonal)/.test(key);
+}
+
+export function isDefensiveRimPaintFoulEvent(event = {}) {
+  const primary = cleanCallCategoryPart(event.primary_category || event.primaryCategory);
+  const key = compactEventCategoryKey(event);
+  if (primary !== "foul" || !isPaintOrRimArea(event)) return false;
+  if (/(offensive|charge|offtheball|looseball|transitiontake|clearpath|personaltake|flagrant|awayfromplay|doublepersonal)/.test(key)) return false;
+  return key.includes("shooting") || key.includes("personal");
+}
+
+export function isLikelyMovingScreenEvent(event = {}) {
+  const primary = cleanCallCategoryPart(event.primary_category || event.primaryCategory);
+  const key = compactEventCategoryKey(event);
+  if (primary !== "foul") return false;
+  if (/(charge|transitiontake|clearpath|personaltake|flagrant|awayfromplay|looseball|doublepersonal)/.test(key)) return false;
+  if (key.includes("offtheballoffensive")) return !isPaintOrRimArea(event);
+  return key.includes("offensive") && isPerimeterScreenArea(event);
+}
+
 export function shootingFoulLocationSubtype(event = {}, category = "") {
   const label = String(category || normalizeOfficialCallCategory(event));
   const isShooting = label === "Shooting Foul";
@@ -231,7 +290,14 @@ export const CALL_CATEGORY_GROUPS = [
           { label: "3-Pt", labels: ["3-Pt Shooting Foul"] },
         ],
       },
-      { label: "Offensive Foul", labels: ["Offensive Foul"] },
+      {
+        label: "Offensive Foul",
+        labels: ["Offensive Foul"],
+        subTypes: [
+          { label: "Moving Screens", labels: ["Moving Screens"] },
+          { label: "RA Charge Rate", labels: ["RA Charge Rate"] },
+        ],
+      },
       {
         label: "Foul on Floor",
         labels: ["Foul on Floor", "Away From Play Foul", "Loose Ball Foul", "Double Personal Foul"],
@@ -332,3 +398,14 @@ export const CALL_CATEGORY_GROUPS = [
     ],
   },
 ];
+
+const VIOLATION_CATEGORY_LABELS = new Set(
+  CALL_CATEGORY_GROUPS
+    .find((group) => group.key === "violations")
+    .types
+    .flatMap((type) => type.labels || []),
+);
+
+export function isViolationCallCategory(category) {
+  return VIOLATION_CATEGORY_LABELS.has(String(category || "").trim());
+}

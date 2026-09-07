@@ -225,6 +225,227 @@
   font-weight: 750;
 }
 
+.insightSimulator {
+  overflow: hidden;
+  border: 1px solid var(--oi-border);
+  border-radius: 10px;
+  background: var(--oi-panel);
+  box-shadow: var(--oi-shadow);
+}
+
+.simulatorToggle {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: transparent;
+  color: var(--oi-text);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+}
+
+.simulatorToggle strong {
+  color: #58a0ff;
+  font-size: 0.82rem;
+}
+
+.simulatorBody {
+  padding: 14px 16px 16px;
+  border-top: 1px solid var(--oi-border);
+}
+
+.simulatorGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.simulatorField {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.simulatorField > span {
+  color: var(--oi-muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.simulatorField select {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--oi-border);
+  border-radius: 7px;
+  background: var(--oi-panel-soft);
+  color: var(--oi-text);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.simulatorActions {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.simulatorCheckbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--oi-text);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.simulatorCheckbox input {
+  width: 16px;
+  height: 16px;
+}
+
+.simulatorStatus,
+.simulatorError {
+  margin: 0;
+  color: var(--oi-muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.simulatorError {
+  margin-top: 10px;
+  color: #ff7b86;
+}
+
+.simulatorEvidence {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--oi-border);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.simulatorEvidence > div {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--oi-text);
+  font-size: 0.8rem;
+}
+
+.simulatorEvidence > div span {
+  color: var(--oi-muted);
+}
+
+.simulatorEvidence section {
+  min-width: 0;
+}
+
+.crewInsightPanel {
+  grid-column: 1 / -1;
+  padding-top: 10px;
+  border-top: 1px solid var(--oi-border);
+}
+
+.simulatorEvidence h3 {
+  margin: 0 0 6px;
+  color: var(--oi-text);
+  font-size: 0.9rem;
+}
+
+.simulatorEvidence ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+}
+
+.simulatorEvidence li,
+.simulatorEvidence p {
+  margin: 0;
+  color: var(--oi-muted);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.simulatorEvidence li {
+  display: grid;
+  gap: 6px;
+}
+
+.simulatorEvidence em {
+  color: #58a0ff;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.insightAudit {
+  color: var(--oi-muted);
+  font-size: 0.7rem;
+}
+
+.insightAudit summary {
+  cursor: pointer;
+  color: #58a0ff;
+  font-weight: 800;
+}
+
+.insightAudit dl {
+  margin: 6px 0 0;
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 4px 8px;
+}
+
+.insightAudit dt {
+  color: var(--oi-muted);
+  text-transform: uppercase;
+}
+
+.insightAudit dd {
+  margin: 0;
+  color: var(--oi-text);
+}
+
+.insightFeedback {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+
+.insightFeedback button {
+  border: 1px solid rgba(88, 160, 255, 0.35);
+  border-radius: 999px;
+  background: rgba(88, 160, 255, 0.1);
+  color: #58a0ff;
+  font: inherit;
+  font-size: 0.66rem;
+  font-weight: 800;
+  padding: 3px 7px;
+  cursor: pointer;
+}
+
+.insightFeedback button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.insightFeedback small {
+  color: var(--oi-muted);
+  font-size: 0.66rem;
+}
+
 .primaryButton {
   min-height: 38px;
   padding: 0 15px;
@@ -246,10 +467,10 @@
   height: 11in;
   min-height: 11in;
   margin: 0 auto;
-  padding: 0.24in;
+  padding: 0.2in 0.24in 0.18in;
   display: grid;
   grid-template-rows: auto 1fr auto;
-  gap: 0.1in;
+  gap: 0.07in;
   overflow: hidden;
   border: 1px solid rgba(11, 28, 55, 0.14);
   border-radius: 12px;
@@ -259,8 +480,8 @@
 }
 
 .officialsReportHeader {
-  min-height: 0.54in;
-  padding-bottom: 0.08in;
+  min-height: 0.46in;
+  padding-bottom: 0.06in;
   border-bottom: 2px solid #172033;
   display: flex;
   align-items: end;
@@ -286,9 +507,9 @@
 }
 
 .officialsReportHeader h2 {
-  margin: 0.03in 0 0;
+  margin: 0.025in 0 0;
   color: #111827;
-  font-size: 0.27in;
+  font-size: 0.255in;
   line-height: 1;
   overflow-wrap: anywhere;
 }
@@ -313,34 +534,41 @@
 
 .reportCards {
   display: grid;
-  grid-template-rows: repeat(3, minmax(0, 1fr));
-  gap: 0.08in;
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
+}
+
+.reportOfficialColumns {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  gap: 0.34in;
 }
 
 .reportOfficialCard {
   min-height: 0;
-  padding: 0.08in;
+  padding: 0.065in;
   display: grid;
-  grid-template-rows: auto 1fr;
-  gap: 0.055in;
   overflow: hidden;
-  border: 1px solid #cbd5e1;
-  border-radius: 0.1in;
+  border: 1px solid #c4cfdd;
+  border-radius: 0.09in;
   background: #fff;
+  grid-template-rows: 0.66in minmax(0, 1fr);
+  gap: 0.055in;
 }
 
 .reportOfficialTop {
   display: grid;
-  grid-template-columns: 2.28in minmax(0, 1fr);
-  align-items: center;
+  grid-template-columns: minmax(2.18in, 0.94fr) minmax(1.12in, 0.48fr) minmax(0, 2.1fr);
+  align-items: stretch;
   gap: 0.055in;
 }
 
 .reportOfficialIdentity {
   display: flex;
   align-items: center;
-  gap: 0.11in;
+  gap: 0.08in;
+  min-width: 0;
 }
 
 .reportOfficialIdentity > div {
@@ -348,103 +576,196 @@
 }
 
 .reportOfficialIdentity .headshot {
-  width: 0.72in;
-  height: 0.72in;
-  flex: 0 0 0.72in;
+  width: 0.58in;
+  height: 0.58in;
+  flex: 0 0 0.58in;
   border-color: #cbd5e1;
   background: #e9eef6;
   color: #172033;
-  font-size: 0.18in;
+  font-size: 0.16in;
 }
 
 .reportOfficialIdentity h3 {
-  margin: 0.02in 0;
+  margin: 0.018in 0 0;
   color: #0f172a;
-  font-size: 0.215in;
+  font-size: 0.18in;
   line-height: 1.05;
   overflow-wrap: anywhere;
 }
 
-.reportOfficialIdentity p {
-  margin: 0;
-  color: #5f6877;
-  font-size: 0.13in;
-  font-weight: 900;
-}
-
 .reportWizardsHistory {
   min-width: 0;
-  padding: 0.06in 0.07in;
+  padding: 0.025in 0.012in;
   align-self: stretch;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  align-items: center;
+  justify-items: center;
   border: 1px solid #e2e8f0;
   border-radius: 0.07in;
   background: #f8fafc;
+  text-align: center;
 }
 
 .reportOfficialAside {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-rows: minmax(0, 1fr);
-  gap: 0.04in;
+  grid-template-columns: minmax(0, 1fr);
 }
 
-.reportWizardsHistory > span {
-  color: #5f6877;
-  font-size: 0.09in;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.reportPreviousGames {
+  min-height: 0;
+}
+
+.reportInsights {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .reportWizardsHistory strong {
   display: block;
-  margin-top: 0.03in;
+  margin: 0;
   color: #111827;
-  font-size: 0.105in;
-  line-height: 1.2;
+  font-size: 0.068in;
+  line-height: 1.1;
+  text-align: center;
 }
 
 .reportWizardsHistory ul {
-  margin: 0.035in 0 0;
+  width: 100%;
+  margin: 0;
   padding: 0;
   display: grid;
-  gap: 0.02in;
+  align-content: center;
+  gap: 0.006in;
   list-style: none;
 }
 
 .reportWizardsHistory li {
   color: #111827;
-  font-size: 0.1in;
+  font-size: 0.068in;
   font-weight: 850;
-  line-height: 1.2;
+  line-height: 1.05;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.reportPreviousGameColumns {
+  width: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 0.025in;
+}
+
+.reportPreviousGameColumn {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: start;
+  justify-items: center;
+}
+
+.reportPreviousGameColumn b {
+  margin-bottom: 0.045in;
+  color: #111827;
+  font-size: 0.07in;
+  font-weight: 950;
+  letter-spacing: 0.025em;
+  line-height: 1;
+  text-align: center;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.reportInsightList {
+  margin-top: 0.045in !important;
+  padding-left: 0.13in !important;
+  gap: 0.035in !important;
+  list-style: disc !important;
+}
+
+.reportInsightList li {
+  font-size: 0.085in;
+  line-height: 1.22;
+}
+
+.reportInsightsDense .reportInsightList {
+  margin-top: 0.03in !important;
+  gap: 0.02in !important;
+}
+
+.reportInsightsDense .reportInsightList li {
+  font-size: 0.07in;
+  line-height: 1.08;
+}
+
+.reportInsightsUnavailable {
+  color: #64748b !important;
+  font-size: 0.085in !important;
+  font-weight: 750 !important;
+}
+
+.reportPrimarySections {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(1.28in, 0.9fr);
+  gap: 0.055in;
+}
+
+.reportPrimarySection {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.018in;
+  padding: 0.035in 0.045in 0.04in;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.07in;
+  background: #f8fafc;
+}
+
+.reportPrimarySection h4 {
+  margin: 0;
+  color: #172033;
+  font-size: 0.086in;
+  font-weight: 950;
+  letter-spacing: 0.07em;
+  line-height: 1;
+  text-align: center;
+  text-transform: uppercase;
 }
 
 .reportPrimaryMetrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.05in;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.055in;
+}
+
+.reportPrimarySection:last-child .reportPrimaryMetrics {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .reportOfficialDetails {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-  gap: 0.055in;
+  grid-template-columns: minmax(0, 1fr);
   min-height: 0;
 }
 
 .reportStatProfiles {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-  gap: 0.075in;
+  grid-template-columns: minmax(0, 3.05fr) minmax(1.72in, 1fr);
+  gap: 0.085in;
   min-width: 0;
+  min-height: 0;
 }
 
 .reportStatProfiles section {
   min-width: 0;
   min-height: 0;
-  padding: 0.045in;
+  padding: 0.065in 0.055in 0.04in;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   border: 1px solid #e2e8f0;
@@ -453,34 +774,271 @@
 }
 
 .reportStatProfiles h4 {
-  margin: 0 0 0.035in;
+  margin: 0 0 0.03in;
   color: #172033;
-  font-size: 0.12in;
+  font-size: 0.15in;
   letter-spacing: 0.07em;
   text-align: center;
   text-transform: uppercase;
+  transform: translateY(0.075in);
 }
 
 .reportFoulMetrics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-rows: repeat(3, minmax(0, 1fr));
-  gap: 0.035in;
+  grid-template-rows: repeat(4, minmax(0, 0.38in));
+  align-content: center;
+  column-gap: 0.075in;
+  row-gap: 0;
   min-height: 0;
 }
 
 .reportViolationMetrics {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: repeat(3, minmax(0, 1fr));
-  gap: 0.035in;
+  grid-template-rows: repeat(4, minmax(0, 0.38in));
+  align-content: center;
+  gap: 0;
   min-height: 0;
+}
+
+.reportBarMetric,
+.reportNetBarMetric {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.006in;
+  align-content: center;
+}
+
+.reportFoulMetrics .reportBarMetric,
+.reportViolationMetrics .reportBarMetric {
+  grid-template-rows: auto auto;
+  align-content: center;
+}
+
+.reportNetBarMetric {
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.006in;
+}
+
+.reportPrimaryMetrics .reportBarMetric,
+.reportPrimaryMetrics .reportNetBarMetric {
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.008in;
+}
+
+.reportChallengeBarMetric {
+  grid-template-rows: minmax(0, 1fr) !important;
+}
+
+.reportChallengeBarMetric .reportBarMetricValue {
+  justify-items: center;
+  text-align: center;
+}
+
+.reportPrimaryMetrics .reportNetBarMetric {
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.006in;
+}
+
+.reportBarMetricLabel {
+  min-width: 0;
+  display: block;
+  align-self: end;
+  margin: 0;
+  color: #111827;
+  font-size: 0.085in;
+  font-weight: 900;
+  letter-spacing: 0.045em;
+  line-height: 1;
+  text-transform: uppercase;
+  position: relative;
+  z-index: 1;
+}
+
+.reportFoulMetrics .reportBarMetricLabel,
+.reportViolationMetrics .reportBarMetricLabel {
+  transform: translateY(-0.01in);
+}
+
+.reportFoulMetrics .reportBarMetricLabelRaised,
+.reportViolationMetrics .reportBarMetricLabelRaised {
+  transform: translateY(-0.07in);
+}
+
+.reportBarMetricBody,
+.reportNetBarBody {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 0.34in;
+  align-items: center;
+  gap: 0.065in;
+}
+
+.reportFoulMetrics .reportBarMetricBody,
+.reportViolationMetrics .reportBarMetricBody {
+  gap: 0.035in;
+}
+
+.reportFoulMetrics .reportBarMetricValue,
+.reportViolationMetrics .reportBarMetricValue {
+  justify-items: start;
+  text-align: left;
+}
+
+.reportPrimaryMetrics .reportBarMetricBody,
+.reportPrimaryMetrics .reportNetBarBody {
+  grid-template-columns: minmax(0, 1fr) 0.38in;
+  gap: 0.06in;
+}
+
+.reportPrimaryMetrics .reportBarMetricLabel {
+  padding-right: 0.44in;
+  text-align: center;
+}
+
+.reportBarMetricValue {
+  min-width: 0;
+  display: grid;
+  gap: 0.008in;
+  justify-items: end;
+  text-align: right;
+}
+
+.reportBarMetricValue strong,
+.reportNetBarBody strong {
+  color: #111827;
+  font-size: 0.125in;
+  line-height: 1;
+}
+
+.reportPrimaryMetrics .reportBarMetricValue strong,
+.reportPrimaryMetrics .reportNetBarBody strong {
+  font-size: 0.14in;
+}
+
+.reportBarMetricValue em {
+  color: #475569;
+  font-size: 0.06in;
+  line-height: 1;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.reportChallengeBarMetric .reportBarMetricValue em {
+  font-size: 0.065in;
+}
+
+.reportMetricBarTrack {
+  position: relative;
+  min-width: 0;
+  height: 0.09in;
+  overflow: visible;
+  border-radius: 999px;
+  background: #e5e7eb;
+}
+
+.reportMetricBarFill {
+  width: var(--report-bar-pct, 0%);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--report-bar-color, #94a3b8);
+}
+
+.reportMetricBarMarker {
+  position: absolute;
+  top: 50%;
+  left: var(--report-bar-pct, 0%);
+  width: 0.18in;
+  height: 0.18in;
+  display: grid;
+  place-items: center;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(15, 23, 42, 0.25);
+  border-radius: 999px;
+  background: var(--report-bar-color, #94a3b8);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.92), 0 1px 2px rgba(15, 23, 42, 0.2);
+  color: #fff;
+  font-size: 0.08in;
+  font-weight: 950;
+  line-height: 1;
+  text-align: center;
+  text-shadow: 0 1px 1px rgba(15, 23, 42, 0.45);
+}
+
+.reportFoulMetrics .reportMetricBarMarker,
+.reportViolationMetrics .reportMetricBarMarker {
+  left: clamp(0.09in, var(--report-bar-pct, 0%), calc(100% - 0.09in));
+}
+
+.reportPrimaryMetrics .reportMetricBarTrack {
+  height: 0.08in;
+}
+
+.reportPrimaryMetrics .reportMetricBarMarker {
+  width: 0.15in;
+  height: 0.15in;
+  font-size: 0.062in;
+}
+
+.reportNetBarTrack {
+  position: relative;
+  min-width: 0;
+  height: 0.075in;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #fee2e2, #e5e7eb 50%, #dcfce7);
+}
+
+.reportPrimaryMetrics .reportNetBarTrack {
+  height: 0.08in;
+}
+
+.reportNetBarZero {
+  position: absolute;
+  top: -0.012in;
+  bottom: -0.012in;
+  left: 50%;
+  width: 1px;
+  background: #64748b;
+}
+
+.reportNetBarFill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--report-net-fill-left, 50%);
+  width: var(--report-net-fill-width, 0%);
+  border-radius: 999px;
+  background: var(--report-net-color, #94a3b8);
+}
+
+.reportNetBarMarker {
+  position: absolute;
+  top: 50%;
+  left: var(--report-net-marker, 50%);
+  width: 0.15in;
+  height: 0.15in;
+  display: grid;
+  place-items: center;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(15, 23, 42, 0.25);
+  border-radius: 999px;
+  background: var(--report-net-color, #94a3b8);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.92), 0 1px 2px rgba(15, 23, 42, 0.2);
+  color: #fff;
+  font-size: 0.062in;
+  font-weight: 950;
+  line-height: 1;
+  text-align: center;
+  text-shadow: 0 1px 1px rgba(15, 23, 42, 0.45);
+  white-space: nowrap;
 }
 
 .reportMetric {
   min-width: 0;
-  min-height: 0.43in;
-  padding: 0.03in 0.045in;
+  min-height: 0.36in;
+  padding: 0.025in 0.04in;
   display: grid;
   gap: 0.008in;
   align-content: center;
@@ -492,27 +1050,27 @@
 }
 
 .reportMetricProminent {
-  min-height: 0.6in;
+  min-height: 0.52in;
 }
 
 .reportMetric span {
-  font-size: 0.09in;
+  font-size: 0.078in;
   line-height: 1.05;
 }
 
 .reportMetric strong {
   color: #111827;
-  font-size: 0.185in;
+  font-size: 0.16in;
   line-height: 1;
 }
 
 .reportMetricProminent strong {
-  font-size: 0.22in;
+  font-size: 0.19in;
 }
 
 .reportMetric em {
   color: #475569;
-  font-size: 0.09in;
+  font-size: 0.074in;
   line-height: 1.05;
   font-style: normal;
   font-weight: 850;
@@ -543,10 +1101,15 @@
 }
 
 .officialsReportFooter {
-  padding-top: 0.05in;
+  padding-top: 0.04in;
   border-top: 1px solid #cbd5e1;
   text-align: center;
-  font-size: 0.085in;
+  color: #5f6877;
+  font-size: 0.08in;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
 }
 
 .tableWrap {
@@ -1777,6 +2340,17 @@
   .categoryBreakdownGrid {
     grid-template-columns: 1fr;
   }
+
+  .simulatorGrid,
+  .simulatorEvidence {
+    grid-template-columns: 1fr;
+  }
+
+  .simulatorActions,
+  .simulatorEvidence > div {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 @media (max-width: 560px) {
@@ -1885,7 +2459,7 @@
     height: 11in;
     min-height: 11in;
     margin: 0;
-    padding: 0.24in;
+    padding: 0.22in 0.24in;
     border: 0;
     border-radius: 0;
     box-shadow: none;
