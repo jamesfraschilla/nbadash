@@ -295,7 +295,7 @@ export const CALL_CATEGORY_GROUPS = [
         labels: ["Offensive Foul"],
         subTypes: [
           { label: "Moving Screens", labels: ["Moving Screens"] },
-          { label: "RA Charge Rate", labels: ["RA Charge Rate"] },
+          { label: "Charges", labels: ["Paint/Rim Charge Fouls"] },
         ],
       },
       {

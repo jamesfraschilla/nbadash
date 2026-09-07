@@ -279,13 +279,13 @@ test("call category groups keep out of bounds under violations and location foul
   assert.ok(shootingFoul);
   assert.deepEqual(shootingFoul.subTypes.map((subType) => subType.label), ["Restricted Area", "3-Pt"]);
   assert.ok(offensiveFoul);
-  assert.deepEqual(offensiveFoul.subTypes.map((subType) => subType.label), ["Moving Screens", "RA Charge Rate"]);
+  assert.deepEqual(offensiveFoul.subTypes.map((subType) => subType.label), ["Moving Screens", "Charges"]);
   assert.ok(outOfBounds);
   assert.deepEqual(outOfBounds.labels, ["Out Of Bounds"]);
   assert.equal(fouls.types.some((type) => type.label === "Out of Bounds"), false);
 });
 
-test("special offensive foul metrics detect moving screens and RA charge opportunities", () => {
+test("special offensive foul metrics detect moving screens and paint/rim charges", () => {
   assert.equal(isLikelyMovingScreenEvent({
     primary_category: "foul",
     secondary_category: "off_the_ball_offensive",

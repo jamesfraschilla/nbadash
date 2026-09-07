@@ -1,7 +1,6 @@
 import { supabase } from "./supabaseClient.js";
 import {
   CALL_CATEGORY_GROUPS,
-  isDefensiveRimPaintFoulEvent,
   isCountedTechnicalEvent,
   isLikelyMovingScreenEvent,
   isRaChargeEvent,
@@ -38,7 +37,7 @@ const CALL_EVENT_COLUMNS = "id,season,season_type,game_id,game_date,home_team,aw
 const OFFICIAL_REPORT_CATEGORY_DEFINITIONS = [
   ["Offensive 3 Second Violation", "Defensive 3 Second Violation"],
 ];
-const RATE_CATEGORY_LABELS = new Set(["RA Charge Rate"]);
+const RATE_CATEGORY_LABELS = new Set();
 const NBA_TEAM_ID_BY_TRICODE = {
   ATL: "1610612737",
   BOS: "1610612738",
@@ -168,22 +167,11 @@ function applyFallbackSpecialCategoryCounts(profile, event) {
     profile.callsByCategory["Moving Screens"] = (profile.callsByCategory["Moving Screens"] || 0) + 1;
   }
   if (isRaChargeEvent(event)) {
-    profile.raChargeCalls = (Number(profile.raChargeCalls) || 0) + 1;
-    profile.raChargeOpportunities = (Number(profile.raChargeOpportunities) || 0) + 1;
-  } else if (isDefensiveRimPaintFoulEvent(event)) {
-    profile.raChargeOpportunities = (Number(profile.raChargeOpportunities) || 0) + 1;
+    profile.callsByCategory["Paint/Rim Charge Fouls"] = (profile.callsByCategory["Paint/Rim Charge Fouls"] || 0) + 1;
   }
 }
 
-function finalizeFallbackSpecialCategoryCounts(categoryMap, profile) {
-  const opportunities = Number(profile.raChargeOpportunities) || 0;
-  if (opportunities > 0) {
-    categoryMap["RA Charge Rate"] = {
-      value: safeRate(Number(profile.raChargeCalls) || 0, opportunities),
-      rank: null,
-      percentile: null,
-    };
-  }
+function finalizeFallbackSpecialCategoryCounts(categoryMap) {
   return categoryMap;
 }
 
@@ -971,8 +959,6 @@ export function buildOfficialProfiles(callEvents, challengeEvents, assignments) 
         callsByTeam: emptyTeamNetMap(),
         teamGames: Object.fromEntries(NBA_TEAM_CODES.map((team) => [team, new Set()])),
         callsByCategory: {},
-        raChargeCalls: 0,
-        raChargeOpportunities: 0,
         schedule: [],
         recentCalls: [],
         challengeLog: [],
@@ -1082,7 +1068,6 @@ export function buildOfficialProfiles(callEvents, challengeEvents, assignments) 
         violationsPerGame: safeRate(profile.violations, games),
         callsByCategory: finalizeFallbackSpecialCategoryCounts(
           formatRankedCategoryMap(profile.callsByCategory, games),
-          profile,
         ),
         callsPerGame: safeRate(profile.calls, games),
         challengeRate: safeRate(profile.successfulChallenges, profile.challenges),
@@ -1130,8 +1115,6 @@ export function buildTeamProfiles(callEvents, challengeEvents) {
         callsByOfficial: {},
         officialGames: {},
         callsByCategory: {},
-        raChargeCalls: 0,
-        raChargeOpportunities: 0,
         challengeLog: [],
         recentCalls: [],
       });
@@ -1178,7 +1161,6 @@ export function buildTeamProfiles(callEvents, challengeEvents) {
         callsByOfficial,
         callsByCategory: finalizeFallbackSpecialCategoryCounts(
           formatRankedCategoryMap(team.callsByCategory, games),
-          team,
         ),
         netCallsFor: safeRate(team.callsFor - team.callsAgainst, games),
         challengeRate: safeRate(team.successfulChallenges, team.challenges),

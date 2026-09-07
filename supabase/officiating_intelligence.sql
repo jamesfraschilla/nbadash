@@ -989,25 +989,19 @@ moving_screen_counts as (
     and public.nba_is_likely_moving_screen_call(primary_category, secondary_category, descriptor, sub_type, area, area_detail)
   group by season, coalesce(nullif(official_id, ''), official_name)
 ),
-ra_charge_counts as (
+paint_rim_charge_counts as (
   select
     season,
     coalesce(nullif(official_id, ''), official_name) as official_key,
     max(nullif(official_id, '')) as official_id,
     max(official_name) as official_name,
-    'RA Charge Rate'::text as category,
-    count(*) filter (where public.nba_is_ra_charge_call(primary_category, secondary_category, descriptor, sub_type, area, area_detail))::integer as calls,
-    count(*) filter (
-      where public.nba_is_ra_charge_call(primary_category, secondary_category, descriptor, sub_type, area, area_detail)
-        or public.nba_is_defensive_rim_paint_foul_call(primary_category, secondary_category, descriptor, sub_type, area, area_detail)
-    )::integer as category_games
+    'Paint/Rim Charge Fouls'::text as category,
+    count(*)::integer as calls,
+    count(distinct game_id)::integer as category_games
   from public.nba_official_call_events calls
   where coalesce(official_id, official_name, '') <> ''
     and lower(coalesce(season_type, '')) <> 'preseason'
-    and (
-      public.nba_is_ra_charge_call(primary_category, secondary_category, descriptor, sub_type, area, area_detail)
-      or public.nba_is_defensive_rim_paint_foul_call(primary_category, secondary_category, descriptor, sub_type, area, area_detail)
-    )
+    and public.nba_is_ra_charge_call(primary_category, secondary_category, descriptor, sub_type, area, area_detail)
   group by season, coalesce(nullif(official_id, ''), official_name)
 ),
 category_counts as (
@@ -1015,18 +1009,13 @@ category_counts as (
   union all
   select * from moving_screen_counts
   union all
-  select * from ra_charge_counts
+  select * from paint_rim_charge_counts
 ),
 rated_counts as (
 select
   category_counts.*,
+  coalesce(official_games.games, category_counts.category_games, 0)::integer as games,
   case
-    when category_counts.category = 'RA Charge Rate' then category_counts.category_games
-    else coalesce(official_games.games, category_counts.category_games, 0)::integer
-  end as games,
-  case
-    when category_counts.category = 'RA Charge Rate' and category_counts.category_games > 0
-      then category_counts.calls::numeric / category_counts.category_games
     when coalesce(official_games.games, category_counts.category_games, 0) > 0
       then category_counts.calls::numeric / coalesce(official_games.games, category_counts.category_games)
     else 0
@@ -1115,23 +1104,17 @@ moving_screen_counts as (
     and public.nba_is_likely_moving_screen_call(primary_category, secondary_category, descriptor, sub_type, area, area_detail)
   group by season, coalesce(charged_team, team_tricode, benefiting_team)
 ),
-ra_charge_counts as (
+paint_rim_charge_counts as (
   select
     season,
     coalesce(charged_team, team_tricode, benefiting_team) as team,
-    'RA Charge Rate'::text as category,
-    count(*) filter (where public.nba_is_ra_charge_call(primary_category, secondary_category, descriptor, sub_type, area, area_detail))::integer as calls,
-    count(*) filter (
-      where public.nba_is_ra_charge_call(primary_category, secondary_category, descriptor, sub_type, area, area_detail)
-        or public.nba_is_defensive_rim_paint_foul_call(primary_category, secondary_category, descriptor, sub_type, area, area_detail)
-    )::integer as category_games
+    'Paint/Rim Charge Fouls'::text as category,
+    count(*)::integer as calls,
+    count(distinct game_id)::integer as category_games
   from public.nba_official_call_events calls
   where coalesce(charged_team, team_tricode, benefiting_team, '') <> ''
     and lower(coalesce(season_type, '')) <> 'preseason'
-    and (
-      public.nba_is_ra_charge_call(primary_category, secondary_category, descriptor, sub_type, area, area_detail)
-      or public.nba_is_defensive_rim_paint_foul_call(primary_category, secondary_category, descriptor, sub_type, area, area_detail)
-    )
+    and public.nba_is_ra_charge_call(primary_category, secondary_category, descriptor, sub_type, area, area_detail)
   group by season, coalesce(charged_team, team_tricode, benefiting_team)
 ),
 category_counts as (
@@ -1139,18 +1122,13 @@ category_counts as (
   union all
   select * from moving_screen_counts
   union all
-  select * from ra_charge_counts
+  select * from paint_rim_charge_counts
 ),
 rated_counts as (
 select
   category_counts.*,
+  coalesce(team_games.games, category_counts.category_games, 0)::integer as games,
   case
-    when category_counts.category = 'RA Charge Rate' then category_counts.category_games
-    else coalesce(team_games.games, category_counts.category_games, 0)::integer
-  end as games,
-  case
-    when category_counts.category = 'RA Charge Rate' and category_counts.category_games > 0
-      then category_counts.calls::numeric / category_counts.category_games
     when coalesce(team_games.games, category_counts.category_games, 0) > 0
       then category_counts.calls::numeric / coalesce(team_games.games, category_counts.category_games)
     else 0

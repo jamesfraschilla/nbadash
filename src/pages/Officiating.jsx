@@ -1022,7 +1022,7 @@ function OfficialsReportCard({ profile, role, populationSize, teamOne = "WAS", t
   const shooting = categoryMetric(categories, ["Shooting Foul", "Restricted Area Shooting Foul", "3-Pt Shooting Foul"]);
   const technical = categoryMetric(categories, ["Technical Foul"]);
   const restricted = categoryMetric(categories, ["Restricted Area Shooting Foul"]);
-  const raCharge = categoryMetric(categories, ["RA Charge Rate"]);
+  const charges = categoryMetric(categories, ["Paint/Rim Charge Fouls"]);
   const movingScreens = categoryMetric(categories, ["Moving Screens"]);
   const threePoint = categoryMetric(categories, ["3-Pt Shooting Foul"]);
   const offensive = categoryMetric(categories, ["Offensive Foul"]);
@@ -1101,7 +1101,7 @@ function OfficialsReportCard({ profile, role, populationSize, teamOne = "WAS", t
               <ReportBarMetric label="Shooting Fouls" value={shooting.value} percentile={shooting.percentile} />
               <ReportBarMetric label="Restricted Area Fouls" value={restricted.value} percentile={restricted.percentile} />
               <ReportBarMetric label="3-Pt Shooting Fouls" value={threePoint.value} percentile={threePoint.percentile} />
-              <ReportBarMetric label="Restricted Area Charge Rate" value={raCharge.value} percentile={raCharge.percentile} formatter={formatReportMetric} />
+              <ReportBarMetric label="Charges" value={charges.value} percentile={charges.percentile} formatter={formatReportMetric} />
               <ReportBarMetric label="Flagrant Fouls" value={flagrant.value} percentile={flagrant.percentile} />
               <ReportBarMetric label="Moving Screens" value={movingScreens.value} percentile={movingScreens.percentile} />
             </div>
