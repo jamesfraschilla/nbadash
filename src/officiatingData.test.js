@@ -4,6 +4,7 @@ import {
   attachDisplayCategoryMetrics,
   buildOfficialProfiles,
   buildTeamProfiles,
+  eligibleRateMetric,
   OFFICIAL_CATEGORY_ROLLUP_COLUMNS,
   preferAuthoritativeChallengeEvents,
   specificCallCategory,
@@ -52,6 +53,18 @@ test("preferAuthoritativeChallengeEvents keeps daily PBP rows until weekly offic
   assert.equal(events.length, 2);
   assert.equal(events.find((event) => event.game_id === "0022500109").source, "nba_official_challenge_pdf");
   assert.equal(events.find((event) => event.game_id === "0022500123").source, "play_by_play");
+});
+
+test("team net percentiles apply the four-game minimum to both subject and peers", () => {
+  const population = [
+    { net: -8, games: 4 },
+    { net: 0, games: 4 },
+    { net: 5, games: 5 },
+    { net: 6, games: 3 },
+  ];
+  assert.equal(eligibleRateMetric({ net: 6, games: 3 }, population).percentile, null);
+  assert.equal(eligibleRateMetric(null, population).percentile, null);
+  assert.equal(eligibleRateMetric({ net: 5, games: 5 }, population).percentile, 100);
 });
 
 test("specificCallCategory displays detailed foul and violation types", () => {

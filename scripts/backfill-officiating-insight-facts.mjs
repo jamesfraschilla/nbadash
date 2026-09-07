@@ -308,12 +308,15 @@ async function main() {
 
   const gameSet = new Set(gameIds);
   const selectedAssignments = validAssignments.filter((row) => gameSet.has(row.game_id));
-  const calls = (await Promise.all(chunks(gameIds, 100).map((gameIdChunk) => selectAll(
-    client,
-    "nba_official_call_events",
-    "season,season_type,game_id,official_id,primary_category,secondary_category,sub_type,descriptor,charged_team,benefiting_team,area,area_detail",
-    (query) => query.eq("season", season).in("game_id", gameIdChunk).not("season_type", "ilike", "Preseason")
-  )))).flat();
+  const calls = [];
+  for (const gameIdChunk of chunks(gameIds, 100)) {
+    calls.push(...await selectAll(
+      client,
+      "nba_official_call_events",
+      "season,season_type,game_id,official_id,primary_category,secondary_category,sub_type,descriptor,charged_team,benefiting_team,area,area_detail",
+      (query) => query.eq("season", season).in("game_id", gameIdChunk).not("season_type", "ilike", "Preseason")
+    ));
+  }
 
   console.log(JSON.stringify({ season, games: gameIds.length, assignments: selectedAssignments.length, calls: calls.length, apply, includePlayers, officialsOnly }, null, 2));
   if (!gameIds.length) return;

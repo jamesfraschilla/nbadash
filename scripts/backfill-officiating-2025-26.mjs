@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import { assertOutsideWizardsGameWindow } from "./lib/game-window-guard.mjs";
+import { markParticipatingAssignments } from "../src/officiatingAssignments.js";
 import { canonicalOfficialIdentity } from "../src/officiatingIdentity.js";
 import { enrichChallengeEventsWithOfficials } from "../src/officiatingChallengeMatcher.js";
 import { detectCoachChallengeActions, extractOfficialCallEvents } from "../src/officiatingParser.js";
@@ -663,38 +664,6 @@ function officialKey(row) {
   return String(row.official_id || row.official_name || "").trim();
 }
 
-function markAlternateAssignments(assignmentRows, callRows) {
-  const assignmentsByGame = groupBy(assignmentRows, (row) => row.game_id);
-  const callsByGame = groupBy(callRows, (row) => row.game_id);
-
-  assignmentsByGame.forEach((assignments, gameId) => {
-    if (assignments.length <= 3) return;
-    assignments.forEach((assignment) => {
-      if (Number(assignment.assignment_order) >= 4) {
-        assignment.is_alternate = true;
-        assignment.role_key = "alternate";
-      }
-    });
-    const calls = callsByGame.get(gameId) || [];
-    const callCounts = calls.reduce((counts, row) => {
-      const key = officialKey(row);
-      if (!key) return counts;
-      counts[key] = (counts[key] || 0) + 1;
-      return counts;
-    }, {});
-    const zeroCallAssignments = assignments.filter((assignment) => (
-      !callCounts[officialKey(assignment)] && !callCounts[assignment.official_name]
-    ));
-    const alternatesNeeded = assignments.length - 3;
-    zeroCallAssignments.slice(0, alternatesNeeded).forEach((assignment) => {
-      assignment.is_alternate = true;
-      assignment.role_key = "alternate";
-    });
-  });
-
-  return assignmentRows;
-}
-
 function buildGameAuditRows({ loadedGames, assignmentRows, callRows, challengeRows }) {
   const assignmentsByGame = groupBy(assignmentRows, (row) => row.game_id);
   const callsByGame = groupBy(callRows, (row) => row.game_id);
@@ -830,7 +799,7 @@ async function main() {
     seasonType: gameRef.seasonType,
     gameDate: gameRef.gameDate,
   }).map(toCallRow));
-  markAlternateAssignments(assignmentRows, callRows);
+  markParticipatingAssignments(assignmentRows, callRows);
   const detectedChallengeRows = loadedGames.flatMap(({ game, gameRef }) => detectCoachChallengeActions(game, {
     season,
     seasonType: gameRef.seasonType,

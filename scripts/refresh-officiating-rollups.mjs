@@ -4,6 +4,15 @@ import { promisify } from "node:util";
 import { assertOutsideWizardsGameWindow } from "./lib/game-window-guard.mjs";
 
 const execFileAsync = promisify(execFile);
+const CACHE_NAMES = [
+  "nba_authoritative_coach_challenge_events_cache",
+  "nba_official_call_category_rollups_cache",
+  "nba_team_call_category_rollups_cache",
+  "nba_team_official_net_call_rollups_cache",
+  "nba_officiating_overview_rollups_cache",
+  "nba_official_profiles_cache",
+  "nba_team_profiles_cache",
+];
 
 function readArg(name) {
   const prefix = `--${name}=`;
@@ -45,13 +54,17 @@ async function main() {
   const startedAt = Date.now();
   process.stdout.write(`Refreshing officiating rollup caches for ${season}... `);
   try {
-    const { stdout } = await runSql(
-      `select * from public.refresh_nba_officiating_rollup_caches_for_season('${safeSeason}');`
-    );
+    const outputs = [];
+    for (const cacheName of CACHE_NAMES) {
+      const { stdout } = await runSql(
+        `select public.refresh_nba_officiating_cache_for_season('${safeSeason}', '${cacheName}') as row_count;`
+      );
+      outputs.push(stdout.trim());
+    }
     const durationMs = Date.now() - startedAt;
     await recordRefreshJob({ cacheName: `season:${season}`, durationMs, status: "success" });
     process.stdout.write(`${(durationMs / 1000).toFixed(1)}s\n`);
-    if (stdout.trim()) console.log(stdout.trim());
+    outputs.filter(Boolean).forEach((output) => console.log(output));
   } catch (error) {
     await recordRefreshJob({
       cacheName: `season:${season}`,

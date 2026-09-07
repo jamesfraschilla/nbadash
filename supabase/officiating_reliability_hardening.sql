@@ -7,13 +7,6 @@ grant execute on function public.refresh_nba_officiating_rollup_caches_for_seaso
 
 update public.nba_official_game_assignments
 set
-  is_alternate = true,
-  role_key = 'alternate'
-where assignment_order >= 4
-  and (is_alternate = false or coalesce(role_key, '') <> 'alternate');
-
-update public.nba_official_game_assignments
-set
   official_id = case official_id
     when '11629177' then '1629177'
     when '196295108' then '1629171'

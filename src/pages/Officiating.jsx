@@ -28,6 +28,7 @@ import {
   OFFICIATING_SEASON_OPTIONS as SEASON_OPTIONS,
   currentOfficiatingSeasonDefault,
   defaultOfficiatingSeasonForTab,
+  officiatingSeasonForDateKey,
 } from "../officiatingSeasons.js";
 import styles from "./Officiating.module.css";
 
@@ -591,10 +592,11 @@ function netCallsBarColor(value) {
 }
 
 function percentileBarStyle(percentile) {
-  const value = Math.max(0, Math.min(100, Number(percentile) || 0));
+  const hasPercentile = percentile !== null && percentile !== undefined && percentile !== "" && Number.isFinite(Number(percentile));
+  const value = hasPercentile ? Math.max(0, Math.min(100, Number(percentile))) : 50;
   return {
     "--report-bar-pct": `${value}%`,
-    "--report-bar-color": percentileBarColor(value),
+    "--report-bar-color": hasPercentile ? percentileBarColor(value) : "#8b94a3",
   };
 }
 
@@ -682,21 +684,21 @@ function isPreviousReportGame(row, reportDate) {
   return !cutoffDate || (gameDate && gameDate < cutoffDate);
 }
 
-function priorOfficialGames(schedule = [], reportDate) {
+function priorOfficialGames(schedule = [], reportDate, reportSeason) {
   return schedule
-    .filter((row) => row.season === DEFAULT_SEASON && isPreviousReportGame(row, reportDate))
+    .filter((row) => row.season === reportSeason && isPreviousReportGame(row, reportDate))
     .sort((left, right) => String(right.game_date || "").localeCompare(String(left.game_date || "")))
     .slice(0, 5)
     .map(formatPreviousOfficialGame)
     .filter(Boolean);
 }
 
-function priorWizardsGames(schedule = [], reportDate) {
+function priorWizardsGames(schedule = [], reportDate, reportSeason) {
   return schedule
     .filter((row) => {
       const away = String(row.away_team || "").trim();
       const home = String(row.home_team || "").trim();
-      return row.season === DEFAULT_SEASON
+      return row.season === reportSeason
         && isPreviousReportGame(row, reportDate)
         && (away === "WAS" || home === "WAS");
     })
@@ -713,7 +715,7 @@ function priorWizardsGames(schedule = [], reportDate) {
 }
 
 function ReportMetric({ label, value, rank, populationSize, percentile, prominent = false, formatter = formatReportMetric }) {
-  const hasPercentile = Number.isFinite(Number(percentile));
+  const hasPercentile = percentile !== null && percentile !== undefined && percentile !== "" && Number.isFinite(Number(percentile));
   const toneClass = hasPercentile
     ? metricToneClassFromPercentile(percentile)
     : metricToneClass(rank, populationSize);
@@ -732,17 +734,20 @@ function ReportMetric({ label, value, rank, populationSize, percentile, prominen
 function ReportChallengeMetric({ label, successes, attempts, rank, populationSize, percentile }) {
   const made = Number(successes) || 0;
   const total = Number(attempts) || 0;
+  const hasPercentile = percentile !== null && percentile !== undefined && percentile !== "" && Number.isFinite(Number(percentile));
   return (
-    <div className={`${styles.reportMetric} ${styles.reportMetricProminent} ${Number.isFinite(Number(percentile)) ? metricToneClassFromPercentile(percentile) : metricToneClass(rank, populationSize)}`}>
+    <div className={`${styles.reportMetric} ${styles.reportMetricProminent} ${hasPercentile ? metricToneClassFromPercentile(percentile) : metricToneClass(rank, populationSize)}`}>
       <span>{label}</span>
       <strong>{formatRate(total ? made / total : 0)}</strong>
-      <em>{made}/{total} · {Number.isFinite(Number(percentile)) ? formatPercentileValue(percentile) : formatPercentile(rank, populationSize)}</em>
+      <em>{made}/{total} · {hasPercentile ? formatPercentileValue(percentile) : formatPercentile(rank, populationSize)}</em>
     </div>
   );
 }
 
 function ReportBarMetric({ label, value, percentile, formatter = formatReportMetric, detail, centerDetail = false }) {
-  const percentileValue = Number.isFinite(Number(percentile)) ? Math.round(Number(percentile)) : null;
+  const percentileValue = percentile !== null && percentile !== undefined && percentile !== "" && Number.isFinite(Number(percentile))
+    ? Math.round(Number(percentile))
+    : null;
   const metricRef = useRef(null);
   const labelRaisedRef = useRef(false);
   const [labelRaised, setLabelRaised] = useState(false);
@@ -835,7 +840,11 @@ function ReportNetCallsBarMetric({ label, value, percentile }) {
         <div className={styles.reportNetBarTrack} aria-hidden="true">
           <div className={styles.reportNetBarZero} />
           <div className={styles.reportNetBarFill} />
-          <div className={styles.reportNetBarMarker}>{Math.round(Number(percentile) || 0)}</div>
+          <div className={styles.reportNetBarMarker}>
+            {percentile !== null && percentile !== undefined && percentile !== "" && Number.isFinite(Number(percentile))
+              ? Math.round(Number(percentile))
+              : "--"}
+          </div>
         </div>
         <strong>{formatSignedDecimal(numericValue)}</strong>
       </div>
@@ -855,7 +864,9 @@ function netMetricFromProfile(profile, team) {
   const metric = profile?.netCallsForByTeam?.[teamCode];
   return {
     value: Number.isFinite(Number(metric?.value)) ? Number(metric.value) : 0,
-    percentile: Number.isFinite(Number(metric?.percentile)) ? Number(metric.percentile) : null,
+    percentile: metric?.percentile !== null && metric?.percentile !== undefined && metric?.percentile !== "" && Number.isFinite(Number(metric.percentile))
+      ? Number(metric.percentile)
+      : null,
   };
 }
 
@@ -1019,8 +1030,9 @@ function OfficialsReportCard({ profile, role, populationSize, teamOne = "WAS", t
   const handling = categoryMetric(categories, ["Traveling", "Double Dribble", "Palming", "Backcourt", "Offensive Goaltending"]);
   const threeSeconds = categoryMetric(categories, ["Offensive 3 Second Violation", "Defensive 3 Second Violation"]);
   const goaltending = categoryMetric(categories, ["Offensive Goaltending", "Defensive Goaltending"]);
-  const previousGames = priorOfficialGames(profile?.schedule, reportDate);
-  const wizardsGames = priorWizardsGames(profile?.schedule, reportDate);
+  const reportSeason = officiatingSeasonForDateKey(reportDate);
+  const previousGames = priorOfficialGames(profile?.schedule, reportDate, reportSeason);
+  const wizardsGames = priorWizardsGames(profile?.schedule, reportDate, reportSeason);
   const teamOneNetMetric = netMetricFromProfile(profile, teamOne);
   const teamTwoNetMetric = netMetricFromProfile(profile, teamTwo);
 
@@ -1202,7 +1214,7 @@ function ChallengeVisualMetric({ label, successes, attempts, rank, populationSiz
       <div>
         <span>{label}</span>
         <strong>{formatRateRecord(made, total)}</strong>
-        {Number.isFinite(Number(percentile))
+        {percentile !== null && percentile !== undefined && percentile !== "" && Number.isFinite(Number(percentile))
           ? <em>{formatPercentileValue(percentile)}</em>
           : rank ? <em>{formatPercentile(rank, populationSize)}</em> : null}
       </div>
@@ -1903,6 +1915,7 @@ export default function Officiating() {
     tonightGameMetadata?.teamOne || "WAS",
     tonightGameMetadata?.teamTwo || "NYK",
   ].map((team) => String(team || "").trim().toUpperCase()).filter(Boolean);
+  const tonightReportSeason = officiatingSeasonForDateKey(reportDate);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["officiating-dashboard", season],
@@ -1916,9 +1929,10 @@ export default function Officiating() {
     data: tonightReportData,
     isLoading: isTonightReportLoading,
   } = useQuery({
-    queryKey: ["officiating-tonight-report", CUMULATIVE_SEASON, reportCrew.map((slot) => slot.name).join("|"), tonightReportTeamCodes.join("|")],
+    queryKey: ["officiating-tonight-report", CUMULATIVE_SEASON, tonightReportSeason, reportCrew.map((slot) => slot.name).join("|"), tonightReportTeamCodes.join("|")],
     queryFn: () => fetchOfficialsReportData({
       season: CUMULATIVE_SEASON,
+      scheduleSeason: tonightReportSeason,
       officialNames: reportCrew.map((slot) => slot.name),
       teamCodes: tonightReportTeamCodes,
     }),
@@ -2236,12 +2250,13 @@ export default function Officiating() {
     try {
       const reportData = await fetchOfficialsReportData({
         season: CUMULATIVE_SEASON,
+        scheduleSeason: tonightReportSeason,
         officialNames: selectedOfficials.map((official) => official.name),
         teamCodes: [simulatorDraft.teamOne, simulatorDraft.teamTwo],
       });
       const nextReportCrew = selectedOfficials.map(({ name, role }) => ({ name, role }));
       queryClient.setQueryData(
-        ["officiating-tonight-report", CUMULATIVE_SEASON, nextReportCrew.map((slot) => slot.name).join("|"), [simulatorDraft.teamOne, simulatorDraft.teamTwo].map((team) => String(team || "").trim().toUpperCase()).filter(Boolean).join("|")],
+        ["officiating-tonight-report", CUMULATIVE_SEASON, tonightReportSeason, nextReportCrew.map((slot) => slot.name).join("|"), [simulatorDraft.teamOne, simulatorDraft.teamTwo].map((team) => String(team || "").trim().toUpperCase()).filter(Boolean).join("|")],
         reportData,
       );
       const result = await requestOfficiatingInsightSimulation({

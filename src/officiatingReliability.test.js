@@ -6,6 +6,7 @@ import {
   CUMULATIVE_OFFICIATING_SEASON,
   currentOfficiatingSeasonDefault,
   defaultOfficiatingSeasonForTab,
+  officiatingSeasonForDateKey,
   officiatingSeasonValues,
 } from "./officiatingSeasons.js";
 
@@ -32,4 +33,6 @@ test("officiating season defaults roll over on October 3 while officials stay cu
   assert.equal(defaultOfficiatingSeasonForTab("officials", afterRollover), CUMULATIVE_OFFICIATING_SEASON);
   assert.equal(defaultOfficiatingSeasonForTab("teams", afterRollover), "2026-27");
   assert.deepEqual(officiatingSeasonValues(CUMULATIVE_OFFICIATING_SEASON), ["2024-25", "2025-26", "2026-27"]);
+  assert.equal(officiatingSeasonForDateKey("2026-10-02"), "2025-26");
+  assert.equal(officiatingSeasonForDateKey("2026-10-03"), "2026-27");
 });

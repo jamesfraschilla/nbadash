@@ -229,3 +229,50 @@ begin
   return next;
 end;
 $$;
+
+create or replace function public.refresh_nba_officiating_cache_for_season(target_season text, target_cache text)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  affected_rows integer;
+begin
+  if coalesce(nullif(target_season, ''), '') = '' then
+    raise exception 'target_season is required';
+  end if;
+
+  case target_cache
+    when 'nba_official_call_category_rollups_cache' then
+      delete from public.nba_official_call_category_rollups_cache where season = target_season;
+      insert into public.nba_official_call_category_rollups_cache select * from public.nba_official_call_category_rollups where season = target_season;
+    when 'nba_authoritative_coach_challenge_events_cache' then
+      delete from public.nba_authoritative_coach_challenge_events_cache where season = target_season;
+      insert into public.nba_authoritative_coach_challenge_events_cache select * from public.nba_authoritative_coach_challenge_events where season = target_season;
+    when 'nba_team_call_category_rollups_cache' then
+      delete from public.nba_team_call_category_rollups_cache where season = target_season;
+      insert into public.nba_team_call_category_rollups_cache select * from public.nba_team_call_category_rollups where season = target_season;
+    when 'nba_team_official_net_call_rollups_cache' then
+      delete from public.nba_team_official_net_call_rollups_cache where season = target_season;
+      insert into public.nba_team_official_net_call_rollups_cache select * from public.nba_team_official_net_call_rollups where season = target_season;
+    when 'nba_officiating_overview_rollups_cache' then
+      delete from public.nba_officiating_overview_rollups_cache where season = target_season;
+      insert into public.nba_officiating_overview_rollups_cache select * from public.nba_officiating_overview_rollups where season = target_season;
+    when 'nba_official_profiles_cache' then
+      delete from public.nba_official_profiles_cache where season = target_season;
+      insert into public.nba_official_profiles_cache select * from public.nba_official_profiles where season = target_season;
+    when 'nba_team_profiles_cache' then
+      delete from public.nba_team_profiles_cache where season = target_season;
+      insert into public.nba_team_profiles_cache select * from public.nba_team_profiles where season = target_season;
+    else
+      raise exception 'Unsupported officiating cache: %', target_cache;
+  end case;
+
+  get diagnostics affected_rows = row_count;
+  return affected_rows;
+end;
+$$;
+
+revoke all on function public.refresh_nba_officiating_cache_for_season(text, text) from public, anon, authenticated;
+grant execute on function public.refresh_nba_officiating_cache_for_season(text, text) to service_role;

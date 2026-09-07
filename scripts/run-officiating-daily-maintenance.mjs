@@ -7,6 +7,15 @@ import { assertOutsideWizardsGameWindow } from "./lib/game-window-guard.mjs";
 
 const CURRENT_SEASON = "2026-27";
 const SEASON_START = Date.parse("2026-10-03T00:00:00-04:00");
+const CACHE_NAMES = [
+  "nba_authoritative_coach_challenge_events_cache",
+  "nba_official_call_category_rollups_cache",
+  "nba_team_call_category_rollups_cache",
+  "nba_team_official_net_call_rollups_cache",
+  "nba_officiating_overview_rollups_cache",
+  "nba_official_profiles_cache",
+  "nba_team_profiles_cache",
+];
 
 function hasFlag(name) {
   return process.argv.includes(`--${name}`);
@@ -49,6 +58,23 @@ async function exactCount(supabase, table, buildQuery) {
   const { count, error } = await buildQuery(supabase.from(table).select("id", { count: "exact", head: true }));
   if (error) throw new Error(`Failed auditing ${table}: ${error.message}`);
   return count || 0;
+}
+
+async function thinActiveCrewCount(supabase) {
+  const counts = new Map();
+  for (let start = 0; ; start += 1000) {
+    const { data, error } = await supabase
+      .from("nba_official_game_assignments")
+      .select("game_id")
+      .eq("season", CURRENT_SEASON)
+      .not("season_type", "ilike", "Preseason")
+      .eq("is_alternate", false)
+      .range(start, start + 999);
+    if (error) throw new Error(`Failed auditing active crews: ${error.message}`);
+    (data || []).forEach((row) => counts.set(row.game_id, (counts.get(row.game_id) || 0) + 1));
+    if (!data || data.length < 1000) break;
+  }
+  return [...counts.values()].filter((count) => count < 3).length;
 }
 
 async function shootingFoulIntegrityMismatch(supabase) {
@@ -111,10 +137,13 @@ async function main() {
   let refreshed = false;
   if (sourceTime > cacheTime) {
     const startedAt = Date.now();
-    const { error } = await supabase.rpc("refresh_nba_officiating_rollup_caches_for_season", {
-      target_season: CURRENT_SEASON,
-    });
-    if (error) throw new Error(`Season cache refresh failed: ${error.message}`);
+    for (const cacheName of CACHE_NAMES) {
+      const { error } = await supabase.rpc("refresh_nba_officiating_cache_for_season", {
+        target_season: CURRENT_SEASON,
+        target_cache: cacheName,
+      });
+      if (error) throw new Error(`${cacheName} refresh failed: ${error.message}`);
+    }
     const { error: recordError } = await supabase
       .from("nba_officiating_cache_refreshes")
       .upsert({
@@ -129,11 +158,7 @@ async function main() {
     refreshed = true;
   }
 
-  const [badAlternates, missingCallOfficials, missingChallengeCrew, shootingFoulIntegrity] = await Promise.all([
-    exactCount(supabase, "nba_official_game_assignments", (query) => query
-      .eq("season", CURRENT_SEASON)
-      .gte("assignment_order", 4)
-      .eq("is_alternate", false)),
+  const [missingCallOfficials, missingChallengeCrew, shootingFoulIntegrity, thinCrews] = await Promise.all([
     exactCount(supabase, "nba_official_call_events", (query) => query
       .eq("season", CURRENT_SEASON)
       .not("season_type", "ilike", "Preseason")
@@ -145,11 +170,12 @@ async function main() {
       .is("crew_chief_id", null)
       .is("crew_chief_name", null)),
     shootingFoulIntegrityMismatch(supabase),
+    thinActiveCrewCount(supabase),
   ]);
 
-  const audit = { season: CURRENT_SEASON, refreshed, badAlternates, missingCallOfficials, missingChallengeCrew, shootingFoulIntegrity };
+  const audit = { season: CURRENT_SEASON, refreshed, thinCrews, missingCallOfficials, missingChallengeCrew, shootingFoulIntegrity };
   console.log(JSON.stringify(audit, null, 2));
-  if (badAlternates || missingCallOfficials || missingChallengeCrew || shootingFoulIntegrity.mismatch) process.exitCode = 1;
+  if (thinCrews || missingCallOfficials || missingChallengeCrew || shootingFoulIntegrity.mismatch) process.exitCode = 1;
 }
 
 main().catch((error) => {

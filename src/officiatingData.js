@@ -21,7 +21,8 @@ const ASSIGNMENT_LIMIT = 25000;
 const PROFILE_LIMIT = 500;
 const PROFILE_DETAIL_LIMIT = 10000;
 const CONTEXT_TAG_PAGE_SIZE = 100;
-const MIN_OFFICIAL_GAMES_FOR_PERCENTILES = 10;
+export const MIN_OFFICIAL_GAMES_FOR_PERCENTILES = 4;
+export const MIN_TEAM_OFFICIAL_GAMES_FOR_PERCENTILES = MIN_OFFICIAL_GAMES_FOR_PERCENTILES;
 const MIN_CHALLENGE_ATTEMPTS_FOR_PERCENTILES = 5;
 const EXCLUDED_STAT_SEASON_TYPES = new Set(["preseason"]);
 const CONTEXT_TAG_COLUMNS = "id,label";
@@ -94,6 +95,19 @@ function percentileForValue(value, values) {
   const lower = population.filter((candidate) => candidate < numericValue).length;
   const equal = population.filter((candidate) => candidate === numericValue).length;
   return Math.max(1, Math.min(100, Math.round(((lower + (equal - 1) / 2) / (population.length - 1)) * 99 + 1)));
+}
+
+export function eligibleRateMetric(total, populationTotals, minimumGames = MIN_TEAM_OFFICIAL_GAMES_FOR_PERCENTILES) {
+  const games = Number(total?.games) || 0;
+  const value = games > 0 ? safeRate(Number(total?.net) || 0, games) : 0;
+  const eligibleTotals = asArray(populationTotals).filter((row) => (Number(row?.games) || 0) >= minimumGames);
+  return {
+    value,
+    games,
+    percentile: games >= minimumGames
+      ? percentileForValue(value, eligibleTotals.map((row) => safeRate(Number(row?.net) || 0, Number(row.games) || 0)))
+      : null,
+  };
 }
 
 function competitionRank(value, values) {
@@ -426,7 +440,9 @@ function aggregateOfficialCategoryRollups(rows, profileRows) {
       map[category].percentile = percentileForValue(map[category].value, values);
     });
   });
-  attachDisplayCategoryMetrics(byOfficial);
+  attachDisplayCategoryMetrics(new Map(
+    [...eligibleCanonicalKeys].map((officialKey) => [officialKey, byOfficial.get(officialKey)]),
+  ));
 
   [...totals.values()].forEach((row) => {
     const source = byOfficial.get(row.officialKey);
@@ -1330,7 +1346,12 @@ export async function fetchOfficialProfileDetails({ season = DEFAULT_SEASON, pro
   };
 }
 
-export async function fetchOfficialsReportData({ season = CUMULATIVE_SEASON, officialNames = [], teamCodes = ["WAS"] } = {}) {
+export async function fetchOfficialsReportData({
+  season = CUMULATIVE_SEASON,
+  scheduleSeason = DEFAULT_SEASON,
+  officialNames = [],
+  teamCodes = ["WAS"],
+} = {}) {
   const names = [...new Set(asArray(officialNames).map((name) => String(name || "").trim()).filter(Boolean))];
   if (!names.length) return { profiles: [], populationSize: 0 };
   const reportTeams = [...new Set(asArray(teamCodes)
@@ -1348,7 +1369,7 @@ export async function fetchOfficialsReportData({ season = CUMULATIVE_SEASON, off
       .select(ASSIGNMENT_COLUMNS)
       .not("season_type", "ilike", "Preseason")
       .eq("is_alternate", false)
-      .in("official_name", names), DEFAULT_SEASON)
+      .in("official_name", names), scheduleSeason)
       .order("game_date", { ascending: false }), { maxRows: 500, requireComplete: true }),
     selectPreferredTable("nba_team_official_net_call_rollups_cache", "nba_team_official_net_call_rollups", (query) => applySeasonFilter(query
       .select(TEAM_OFFICIAL_NET_COLUMNS), season)
@@ -1400,17 +1421,12 @@ export async function fetchOfficialsReportData({ season = CUMULATIVE_SEASON, off
   const teamNetPopulations = new Map([...teamNetTotals.entries()].map(([team, totals]) => [
     team,
     [...new Set(totals.values())]
-      .filter((total) => total.games >= MIN_OFFICIAL_GAMES_FOR_PERCENTILES)
-      .map((total) => safeRate(total.net, total.games)),
+      .filter((total) => total.games >= MIN_TEAM_OFFICIAL_GAMES_FOR_PERCENTILES),
   ]));
   const netMetricForKeys = (team, keys) => {
     const totals = teamNetTotals.get(team);
     const total = totals ? keys.map((key) => totals.get(key)).find(Boolean) : null;
-    const value = total ? safeRate(total.net, total.games) : 0;
-    return {
-      value,
-      percentile: percentileForValue(value, teamNetPopulations.get(team) || []),
-    };
+    return eligibleRateMetric(total, teamNetPopulations.get(team) || []);
   };
 
   return {

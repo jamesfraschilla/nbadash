@@ -1392,6 +1392,25 @@ with official_keys as (
   where coalesce(whistling_official_id, whistling_official_name, '') <> ''
     and lower(coalesce(season_type, '')) <> 'preseason'
 ),
+official_games as (
+  select
+    season,
+    official_key,
+    count(distinct game_id)::integer as games
+  from (
+    select season, coalesce(nullif(official_id, ''), official_name) as official_key, game_id
+    from public.nba_official_game_assignments
+    where coalesce(official_id, official_name, '') <> ''
+      and is_alternate = false
+      and lower(coalesce(season_type, '')) <> 'preseason'
+    union
+    select season, coalesce(nullif(official_id, ''), official_name) as official_key, game_id
+    from public.nba_official_call_events
+    where coalesce(official_id, official_name, '') <> ''
+      and lower(coalesce(season_type, '')) <> 'preseason'
+  ) participating_games
+  group by season, official_key
+),
 assignment_rollups as (
   select
     season,
@@ -1462,21 +1481,30 @@ crew_challenge_rollups as (
     and lower(coalesce(season_type, '')) <> 'preseason'
   group by season, coalesce(nullif(crew_chief_id, ''), crew_chief_name)
 ),
+participating_official_games as (
+  select season, game_id, coalesce(nullif(official_id, ''), official_name) as official_key
+  from public.nba_official_game_assignments
+  where coalesce(official_id, official_name, '') <> ''
+    and is_alternate = false
+    and lower(coalesce(season_type, '')) <> 'preseason'
+  union
+  select season, game_id, coalesce(nullif(official_id, ''), official_name) as official_key
+  from public.nba_official_call_events
+  where coalesce(official_id, official_name, '') <> ''
+    and lower(coalesce(season_type, '')) <> 'preseason'
+),
 crew_member_challenge_rollups as (
   select
-    assignments.season,
-    coalesce(nullif(assignments.official_id, ''), assignments.official_name) as official_key,
+    participating.season,
+    participating.official_key,
     count(distinct challenges.id)::integer as crew_challenges,
     count(distinct challenges.id) filter (where challenges.challenge_outcome = 'successful')::integer as successful_crew_challenges
-  from public.nba_official_game_assignments assignments
+  from participating_official_games participating
   join public.nba_authoritative_coach_challenge_events challenges
-    on challenges.season = assignments.season
-    and challenges.game_id = assignments.game_id
-  where coalesce(assignments.official_id, assignments.official_name, '') <> ''
-    and assignments.is_alternate = false
-    and lower(coalesce(assignments.season_type, '')) <> 'preseason'
-    and lower(coalesce(challenges.season_type, '')) <> 'preseason'
-  group by assignments.season, coalesce(nullif(assignments.official_id, ''), assignments.official_name)
+    on challenges.season = participating.season
+    and challenges.game_id = participating.game_id
+  where lower(coalesce(challenges.season_type, '')) <> 'preseason'
+  group by participating.season, participating.official_key
 ),
 unique_challenge_rollups as (
   select season, official_key, count(*)::integer as challenges, sum(successful)::integer as successful_challenges
@@ -1506,11 +1534,11 @@ select
   coalesce(assignments.official_id, calls.official_id, keys.official_key) as official_id,
   coalesce(assignments.official_name, calls.official_name, keys.official_key) as name,
   assignments.jersey_number,
-  greatest(coalesce(assignments.assigned_games, 0), coalesce(calls.call_games, 0))::integer as games,
+  coalesce(official_games.games, 0)::integer as games,
   coalesce(calls.calls, 0)::integer as calls,
   case
-    when greatest(coalesce(assignments.assigned_games, 0), coalesce(calls.call_games, 0)) > 0
-      then coalesce(calls.calls, 0)::numeric / greatest(coalesce(assignments.assigned_games, 0), coalesce(calls.call_games, 0))
+    when coalesce(official_games.games, 0) > 0
+      then coalesce(calls.calls, 0)::numeric / official_games.games
     else 0
   end as calls_per_game,
   coalesce(calls.fouls, 0)::integer as fouls,
@@ -1533,13 +1561,13 @@ select
     else 0
   end as crew_chief_challenge_rate,
   case
-    when greatest(coalesce(assignments.assigned_games, 0), coalesce(calls.call_games, 0)) > 0
-      then coalesce(calls.fouls, 0)::numeric / greatest(coalesce(assignments.assigned_games, 0), coalesce(calls.call_games, 0))
+    when coalesce(official_games.games, 0) > 0
+      then coalesce(calls.fouls, 0)::numeric / official_games.games
     else 0
   end as fouls_per_game,
   case
-    when greatest(coalesce(assignments.assigned_games, 0), coalesce(calls.call_games, 0)) > 0
-      then coalesce(calls.violations, 0)::numeric / greatest(coalesce(assignments.assigned_games, 0), coalesce(calls.call_games, 0))
+    when coalesce(official_games.games, 0) > 0
+      then coalesce(calls.violations, 0)::numeric / official_games.games
     else 0
   end as violations_per_game,
   coalesce(crew_member_challenges.crew_challenges, 0)::integer as crew_challenges,
@@ -1550,6 +1578,7 @@ select
     else 0
   end as crew_challenge_rate
 from official_keys keys
+left join official_games using (season, official_key)
 left join assignment_rollups assignments using (season, official_key)
 left join call_rollups calls using (season, official_key)
 left join whistle_challenge_rollups whistle_challenges using (season, official_key)

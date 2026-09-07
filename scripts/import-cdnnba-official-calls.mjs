@@ -311,7 +311,9 @@ function actionFromLiveAction(action) {
   };
 }
 
-function normalizeGameDate(row) {
+function normalizeGameDate(row, fallback = "") {
+  const metadataDate = cleanText(fallback).slice(0, 10);
+  if (metadataDate) return metadataDate;
   const actual = cleanText(row.timeActual);
   return actual ? actual.slice(0, 10) : null;
 }
@@ -349,7 +351,7 @@ async function loadCdnCalledEvents({ cdnArchivePath, statsTokenByAction, officia
         officials: [],
         officialNameById,
         gameId,
-        gameDate: normalizeGameDate(row),
+        gameDate: normalizeGameDate(row, meta.gameDate),
         season,
         seasonType,
         homeTeam: fallbackHome,

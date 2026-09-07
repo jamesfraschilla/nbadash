@@ -11,6 +11,12 @@ export function currentOfficiatingSeasonDefault(now = new Date()) {
   return SEASON_STARTS.find(({ startsAt }) => now >= startsAt)?.season || DEFAULT_OFFICIATING_SEASON;
 }
 
+export function officiatingSeasonForDateKey(dateKey) {
+  const normalized = String(dateKey || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return currentOfficiatingSeasonDefault();
+  return currentOfficiatingSeasonDefault(new Date(`${normalized}T12:00:00-04:00`));
+}
+
 export function defaultOfficiatingSeasonForTab(tab, now = new Date()) {
   return tab === "officials" ? CUMULATIVE_OFFICIATING_SEASON : currentOfficiatingSeasonDefault(now);
 }
