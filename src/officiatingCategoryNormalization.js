@@ -39,6 +39,7 @@ export function cleanCallCategoryPart(value) {
     nonunsportsmanliketechnical: "non unsportsmanlike technical",
     rimhangingtechnical: "rim hanging technical",
     excesstimeouttechnical: "excess timeout technical",
+    toomanyplayerstechnical: "too many players technical",
     defensivegoaltending: "defensive goaltending",
     offensivegoaltending: "offensive goaltending",
     looseball: "loose ball",
@@ -119,7 +120,7 @@ export function isRaChargeEvent(event = {}) {
   const primary = cleanCallCategoryPart(event.primary_category || event.primaryCategory);
   const key = compactEventCategoryKey(event);
   if (primary !== "foul" || !isPaintOrRimArea(event)) return false;
-  if (!key.includes("offensive") && !key.includes("charge")) return false;
+  if (!key.includes("charge")) return false;
   return !/(offtheball|looseball|transitiontake|clearpath|personaltake|flagrant|awayfromplay|doublepersonal)/.test(key);
 }
 
@@ -195,6 +196,7 @@ function isExcludedTechnicalCategory(value) {
     "rim hanging technical",
     "non unsportsmanlike technical",
     "excess timeout technical",
+    "too many players technical",
   ].includes(cleanCallCategoryPart(value));
 }
 
@@ -204,13 +206,15 @@ export function isCountedTechnicalEvent(event = {}) {
   const subType = event.sub_type || event.subType;
   if ([secondary, descriptor, subType].some(isExcludedTechnicalCategory)) return false;
   return cleanCallCategoryPart(event.primary_category || event.primaryCategory) === "technical"
-    || isCountedTechnicalCategory(secondary);
+    || [secondary, descriptor, subType].some(isCountedTechnicalCategory)
+    || [secondary, descriptor, subType].some((value) => cleanCallCategoryPart(value).includes("technical"));
 }
 
 function normalizedFoulCategory(parts) {
   const uniqueParts = [...new Set(parts.filter(Boolean).filter((part) => part !== "foul"))];
   const partSet = new Set(uniqueParts);
   if (partSet.has("defense 3 second")) return "Defensive 3 Second Violation";
+  if (partSet.has("too many players technical")) return "Too Many Players";
   if (partSet.has("delay technical") || partSet.has("delay") || partSet.has("excess timeout technical")) return "Delay Of Game";
   if (partSet.has("flopping technical")) return "Flopping Technical";
   if (partSet.has("rim hanging technical")) return "Rim Hanging Technical";

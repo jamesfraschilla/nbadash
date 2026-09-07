@@ -664,7 +664,7 @@ select
   count(*) filter (
     where (
       regexp_replace(lower(coalesce(primary_category, '')), '[^a-z0-9]', '', 'g') = 'technical'
-      or regexp_replace(lower(coalesce(secondary_category, '')), '[^a-z0-9]', '', 'g') in ('technical', 'doubletechnical')
+      or regexp_replace(lower(coalesce(secondary_category, '') || ' ' || coalesce(descriptor, '') || ' ' || coalesce(sub_type, '')), '[^a-z0-9]', '', 'g') like '%technical%'
     )
     and not (
       regexp_replace(lower(coalesce(secondary_category, '') || ' ' || coalesce(descriptor, '') || ' ' || coalesce(sub_type, '')), '[^a-z0-9]', '', 'g')
@@ -674,7 +674,8 @@ select
         '%floppingtechnical%',
         '%rimhangingtechnical%',
         '%nonunsportsmanliketechnical%',
-        '%excesstimeouttechnical%'
+        '%excesstimeouttechnical%',
+        '%toomanyplayerstechnical%'
       ])
     )
   )::integer as technicals,
@@ -733,6 +734,7 @@ as $$
     when category_key like '%jumpball%' then 'Jump Ball'
     when category_key like '%inbound%' then 'Inbound'
     when category_key like '%lane%' then 'Lane'
+    when category_key like '%toomanyplayerstechnical%' then 'Too Many Players'
     when category_key like '%delaytechnical%' or category_key like '%delay%' or category_key like '%excesstimeouttechnical%' then 'Delay Of Game'
     when category_key like '%floppingtechnical%' then 'Flopping Technical'
     when category_key like '%rimhangingtechnical%' then 'Rim Hanging Technical'
@@ -835,7 +837,7 @@ as $$
       regexp_replace(lower(coalesce(area, '') || ' ' || coalesce(area_detail, '')), '[^a-z0-9]', '', 'g') as area_key
   )
   select primary_key = 'foul'
-    and (category_key like '%offensive%' or category_key like '%charge%')
+    and category_key like '%charge%'
     and category_key not like '%offtheball%'
     and category_key not like '%looseball%'
     and category_key not like '%transitiontake%'
@@ -1418,7 +1420,7 @@ call_rollups as (
     count(*) filter (
       where (
         regexp_replace(lower(coalesce(primary_category, '')), '[^a-z0-9]', '', 'g') = 'technical'
-        or regexp_replace(lower(coalesce(secondary_category, '')), '[^a-z0-9]', '', 'g') in ('technical', 'doubletechnical')
+        or regexp_replace(lower(coalesce(secondary_category, '') || ' ' || coalesce(descriptor, '') || ' ' || coalesce(sub_type, '')), '[^a-z0-9]', '', 'g') like '%technical%'
       )
       and not (
         regexp_replace(lower(coalesce(secondary_category, '') || ' ' || coalesce(descriptor, '') || ' ' || coalesce(sub_type, '')), '[^a-z0-9]', '', 'g')
@@ -1428,7 +1430,8 @@ call_rollups as (
           '%floppingtechnical%',
           '%rimhangingtechnical%',
           '%nonunsportsmanliketechnical%',
-          '%excesstimeouttechnical%'
+          '%excesstimeouttechnical%',
+          '%toomanyplayerstechnical%'
         ])
       )
     )::integer as technicals

@@ -306,7 +306,7 @@ test("special offensive foul metrics detect moving screens and paint/rim charges
     primary_category: "foul",
     secondary_category: "offensive",
     area: "In The Paint (Non-RA)",
-  }), true);
+  }), false);
   assert.equal(isRaChargeEvent({
     primary_category: "foul",
     secondary_category: "offensive",
@@ -558,6 +558,16 @@ test("official technical counts include standard and double technicals only", ()
       official_id: "25",
       official_name: "Scott Foster",
       primary_category: "foul",
+      secondary_category: "bench_technical",
+      descriptor: "bench",
+      sub_type: "technical",
+    },
+    {
+      game_id: "0022500001",
+      season_type: "Regular Season",
+      official_id: "25",
+      official_name: "Scott Foster",
+      primary_category: "foul",
       secondary_category: "defensive_3_second_technical",
       descriptor: "defensive-3-second",
       sub_type: "technical",
@@ -618,17 +628,28 @@ test("official technical counts include standard and double technicals only", ()
       official_id: "25",
       official_name: "Scott Foster",
       primary_category: "foul",
+      secondary_category: "too_many_players_technical",
+      descriptor: "too-many-players",
+      sub_type: "technical",
+    },
+    {
+      game_id: "0022500001",
+      season_type: "Regular Season",
+      official_id: "25",
+      official_name: "Scott Foster",
+      primary_category: "foul",
       secondary_category: "excess_timeout_technical",
       descriptor: "excess timeout",
       sub_type: "technical",
     },
   ], [], []);
 
-  assert.equal(profile.technicals, 2);
-  assert.equal(profile.callsByCategory["Technical Foul"].value, 2);
+  assert.equal(profile.technicals, 3);
+  assert.equal(profile.callsByCategory["Technical Foul"].value, 3);
   assert.equal(profile.callsByCategory["Defensive 3 Second Violation"].value, 1);
   assert.equal(profile.callsByCategory["Delay Of Game"].value, 2);
   assert.equal(profile.callsByCategory["Flopping Technical"].value, 2);
+  assert.equal(profile.callsByCategory["Too Many Players"].value, 1);
 });
 
 test("official profiles exclude preseason calls, assignments, and challenges from cumulative stats", () => {

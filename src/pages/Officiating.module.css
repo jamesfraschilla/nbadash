@@ -785,6 +785,7 @@
 
 .reportFoulMetrics {
   display: grid;
+  grid-auto-flow: column;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-template-rows: repeat(4, minmax(0, 0.38in));
   align-content: center;
@@ -2214,8 +2215,8 @@
   :global(body.officiating-report-print #root > div > main) {
     width: 8.5in;
     height: 11in;
-    min-height: 11in;
-    overflow: visible !important;
+    min-height: 0;
+    overflow: hidden !important;
   }
 
   :global(body.officiating-report-print #root > div > header) {
@@ -2225,6 +2226,23 @@
   :global(body.officiating-report-print #root > div > main) {
     margin: 0 !important;
     padding: 0 !important;
+  }
+
+  :global(body.officiating-report-print) .header,
+  :global(body.officiating-report-print) .notice,
+  :global(body.officiating-report-print) .tabBar,
+  :global(body.officiating-report-print) .reportToolbar,
+  :global(body.officiating-report-print) .insightSimulator {
+    display: none !important;
+  }
+
+  :global(body.officiating-report-print) .tonightReportPanel {
+    display: block !important;
+    width: 8.5in;
+    height: 11in;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
   }
 
   :global(body.officiating-report-print *) {
@@ -2240,15 +2258,15 @@
     position: static;
     width: 8.5in;
     height: 11in;
-    min-height: 11in;
-    overflow: visible !important;
+    min-height: 0;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
     clip-path: none !important;
   }
 
   :global(body.officiating-report-print) .officialsReportSheet {
-    position: fixed;
-    top: 0;
-    left: 0;
+    position: relative;
     z-index: 1000;
     width: 8.5in;
     height: 11in;
@@ -2260,6 +2278,13 @@
     box-shadow: none;
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
+  }
+
+  :global(body.officiating-report-print) .reportMetricBarMarker,
+  :global(body.officiating-report-print) .reportNetBarMarker {
+    box-shadow: none !important;
+    outline: 1px solid rgba(255, 255, 255, 0.95);
+    text-shadow: none !important;
   }
 
   :global(body.officiating-report-print) .officialsReportHeader,

@@ -1097,12 +1097,12 @@ function OfficialsReportCard({ profile, role, populationSize, teamOne = "WAS", t
             <h4>Fouls</h4>
             <div className={styles.reportFoulMetrics}>
               <ReportBarMetric label="Fouls" value={profile?.foulsPerGame} percentile={profile?.foulsPerGameRankPercentile} />
-              <ReportBarMetric label="Offensive Fouls" value={offensive.value} percentile={offensive.percentile} />
               <ReportBarMetric label="Shooting Fouls" value={shooting.value} percentile={shooting.percentile} />
-              <ReportBarMetric label="Restricted Area Fouls" value={restricted.value} percentile={restricted.percentile} />
               <ReportBarMetric label="3-Pt Shooting Fouls" value={threePoint.value} percentile={threePoint.percentile} />
-              <ReportBarMetric label="Charges" value={charges.value} percentile={charges.percentile} formatter={formatReportMetric} />
               <ReportBarMetric label="Flagrant Fouls" value={flagrant.value} percentile={flagrant.percentile} />
+              <ReportBarMetric label="Offensive Fouls" value={offensive.value} percentile={offensive.percentile} />
+              <ReportBarMetric label="Restricted Area Fouls" value={restricted.value} percentile={restricted.percentile} />
+              <ReportBarMetric label="Charges" value={charges.value} percentile={charges.percentile} formatter={formatReportMetric} />
               <ReportBarMetric label="Moving Screens" value={movingScreens.value} percentile={movingScreens.percentile} />
             </div>
           </section>
