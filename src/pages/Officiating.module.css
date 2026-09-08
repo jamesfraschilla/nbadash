@@ -849,7 +849,7 @@
   align-self: end;
   margin: 0;
   color: #111827;
-  font-size: 0.085in;
+  font-size: 0.095in;
   font-weight: 900;
   letter-spacing: 0.045em;
   line-height: 1;
@@ -1904,7 +1904,7 @@
 .categorySubhead .sortButton {
   justify-content: flex-start;
   color: var(--oi-muted);
-  font-size: 0.62rem;
+  font-size: 0.68rem;
 }
 
 .categorySubhead .sortButton:last-child {
@@ -1946,7 +1946,7 @@
 }
 
 .categoryRow span {
-  font-size: 0.78rem;
+  font-size: 0.84rem;
   font-weight: 850;
 }
 
@@ -1970,7 +1970,7 @@
 }
 
 .categorySubRow span {
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   font-weight: 800;
 }
 
