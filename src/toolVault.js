@@ -12,7 +12,11 @@ const TOOL_VAULT_EVICTION_PREFIXES = [
 const TOOL_VAULT_REMOTE_TIMEOUT_MS = 12_000;
 const TOOL_VAULT_REMOTE_LIST_LIMIT = 200;
 const TOOL_VAULT_REMOTE_MAX_LIST_LIMIT = 500;
+const TOOL_VAULT_REMOTE_SAVE_FAILURE_LIMIT = 2;
+const TOOL_VAULT_REMOTE_SAVE_MIN_COOLDOWN_MS = 15_000;
+const TOOL_VAULT_REMOTE_SAVE_MAX_COOLDOWN_MS = 5 * 60_000;
 const remoteToolSaveRequests = new Map();
+const remoteToolSaveFailures = new Map();
 
 export const TOOL_RECORD_TYPES = {
   MATCHUP_GRAPHIC: "matchup_graphic",
@@ -127,6 +131,80 @@ async function runRemoteToolRequest(queryBuilder, timeoutMessage) {
   } finally {
     cleanup();
   }
+}
+
+function remoteSaveFailureKey(userId, recordId) {
+  return `${String(userId || "").trim()}:${String(recordId || "").trim()}`;
+}
+
+function remoteSaveCircuitState(userId, recordId) {
+  return remoteToolSaveFailures.get(remoteSaveFailureKey(userId, recordId)) || {
+    failures: 0,
+    blockedUntil: 0,
+    lastError: "",
+  };
+}
+
+function assertRemoteSaveCircuitClosed(userId, recordId) {
+  const state = remoteSaveCircuitState(userId, recordId);
+  const now = Date.now();
+  if (state.blockedUntil > now) {
+    const seconds = Math.max(1, Math.ceil((state.blockedUntil - now) / 1000));
+    throw new Error(`Supabase save is cooling down after repeated failures. Try again in ${seconds}s.`);
+  }
+}
+
+function resetRemoteSaveCircuit(userId, recordId) {
+  remoteToolSaveFailures.delete(remoteSaveFailureKey(userId, recordId));
+}
+
+function recordRemoteSaveFailure(userId, recordId, error) {
+  const key = remoteSaveFailureKey(userId, recordId);
+  const current = remoteToolSaveFailures.get(key) || { failures: 0, blockedUntil: 0, lastError: "" };
+  const failures = current.failures + 1;
+  const message = String(error?.message || error || "Remote save failed.");
+  const shouldCoolDown = failures >= TOOL_VAULT_REMOTE_SAVE_FAILURE_LIMIT;
+  const cooldownMs = shouldCoolDown
+    ? Math.min(
+      TOOL_VAULT_REMOTE_SAVE_MAX_COOLDOWN_MS,
+      TOOL_VAULT_REMOTE_SAVE_MIN_COOLDOWN_MS * (2 ** Math.max(0, failures - TOOL_VAULT_REMOTE_SAVE_FAILURE_LIMIT))
+    )
+    : 0;
+  remoteToolSaveFailures.set(key, {
+    failures,
+    blockedUntil: cooldownMs ? Date.now() + cooldownMs : 0,
+    lastError: message,
+  });
+}
+
+function normalizeRemoteToolRecord(row) {
+  return normalizeRecord({
+    id: row?.id,
+    type: row?.type,
+    title: row?.title,
+    payload: row?.payload,
+    createdAt: row?.created_at,
+    updatedAt: row?.updated_at,
+    revision: row?.revision,
+  });
+}
+
+function remoteToolSaveResponseError(data) {
+  const code = data?.error || data?._error;
+  if (!code) return null;
+  if (code === "TOOL_RECORD_CONFLICT") {
+    return new Error(data?.message || "This saved tool changed in another browser. Reload it before saving again.");
+  }
+  if (code === "TOOL_RECORD_BUSY") {
+    return new Error(data?.message || "This saved tool is already saving. Wait a moment and try again.");
+  }
+  if (code === "AUTH_REQUIRED") {
+    return new Error(data?.message || "Sign in before saving to My Vault.");
+  }
+  if (code === "NOT_AUTHORIZED") {
+    return new Error(data?.message || "Not authorized to update this saved tool.");
+  }
+  return new Error(data?.message || "Unable to save this tool to Supabase.");
 }
 
 function evictToolVaultStorageCaches() {
@@ -284,6 +362,7 @@ export async function saveToolRecordRemote(userId, record) {
   const normalized = normalizeRecord(record);
   if (!normalized) return null;
   const requestKey = `${userId}:${normalized.id}`;
+  assertRemoteSaveCircuitClosed(userId, normalized.id);
   const activeRequest = remoteToolSaveRequests.get(requestKey);
   if (activeRequest) return activeRequest;
 
@@ -316,22 +395,25 @@ export async function saveToolRecordRemote(userId, record) {
       }
       throw error;
     }
-    const saved = normalizeRecord({
-      id: data.id,
-      type: data.type,
-      title: data.title,
-      payload: data.payload,
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
-      revision: data.revision,
-    });
+    const responseError = remoteToolSaveResponseError(data);
+    if (responseError) {
+      const latestRecord = normalizeRemoteToolRecord(data?.record);
+      if (latestRecord) saveToolRecord(userId, latestRecord);
+      throw responseError;
+    }
+    const saved = normalizeRemoteToolRecord(data);
+    if (!saved) throw new Error("Supabase did not return a saved tool record.");
     saveToolRecord(userId, saved);
+    resetRemoteSaveCircuit(userId, normalized.id);
     return saved;
   })();
 
   remoteToolSaveRequests.set(requestKey, request);
   try {
     return await request;
+  } catch (error) {
+    recordRemoteSaveFailure(userId, normalized.id, error);
+    throw error;
   } finally {
     if (remoteToolSaveRequests.get(requestKey) === request) {
       remoteToolSaveRequests.delete(requestKey);

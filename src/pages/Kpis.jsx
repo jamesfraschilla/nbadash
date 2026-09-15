@@ -13,6 +13,9 @@ const STAGE_WIDTH = 3840;
 const STAGE_HEIGHT = 2160;
 const KPI_REMOTE_SAVE_DEBOUNCE_MS = 750;
 const KPI_REMOTE_POLL_INTERVAL_MS = 5000;
+const KPI_REMOTE_SAVE_FAILURE_LIMIT = 2;
+const KPI_REMOTE_SAVE_MIN_COOLDOWN_MS = 10_000;
+const KPI_REMOTE_SAVE_MAX_COOLDOWN_MS = 2 * 60_000;
 const DEFAULT_METRICS = [
   { id: "kpi-1", name: "KPI #1", value: "50", nameUpdatedAt: 0, valueUpdatedAt: 0 },
   { id: "kpi-2", name: "KPI #2", value: "127", nameUpdatedAt: 0, valueUpdatedAt: 0 },
@@ -211,6 +214,8 @@ export default function Kpis() {
   const skipNextSaveRef = useRef(false);
   const hydratedRef = useRef(false);
   const activeFieldRef = useRef("");
+  const remoteSaveFailuresRef = useRef(0);
+  const remoteSaveBlockedUntilRef = useRef(0);
 
   const { data: game, isLoading, error } = useGame(gameId);
 
@@ -219,12 +224,7 @@ export default function Kpis() {
     const awayTeam = game?.awayTeam;
     return isWashingtonTeam(homeTeam) || isWashingtonTeam(awayTeam) || isCapitalCityTeam(homeTeam) || isCapitalCityTeam(awayTeam);
   }, [game]);
-  const washingtonKpiGame = useMemo(() => {
-    const homeTeam = game?.homeTeam;
-    const awayTeam = game?.awayTeam;
-    return isWashingtonTeam(homeTeam) || isWashingtonTeam(awayTeam);
-  }, [game]);
-  const remoteSyncEnabled = washingtonKpiGame && Number(game?.gameStatus || 0) === 2;
+  const remoteSyncEnabled = supportedTeamGame && Boolean(gameId);
 
   const backUrl = dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`;
   const titleLine = useMemo(() => {
@@ -363,8 +363,17 @@ export default function Kpis() {
     }
 
     const timeoutId = window.setTimeout(() => {
+      const now = Date.now();
+      if (remoteSaveBlockedUntilRef.current > now) {
+        const seconds = Math.max(1, Math.ceil((remoteSaveBlockedUntilRef.current - now) / 1000));
+        setSyncError(`Supabase sync is cooling down after repeated failures. Retrying is paused for ${seconds}s.`);
+        return;
+      }
+
       saveRemoteMetricsPayload(gameId, metricsPayload)
         .then((savedPayload) => {
+          remoteSaveFailuresRef.current = 0;
+          remoteSaveBlockedUntilRef.current = 0;
           setSyncError("");
           setMetricsPayload((current) => {
             const baseMerged = mergeMetricsPayload(current, savedPayload);
@@ -404,6 +413,14 @@ export default function Kpis() {
         })
         .catch((saveError) => {
           console.error("Failed to save KPI state.", saveError);
+          remoteSaveFailuresRef.current += 1;
+          if (remoteSaveFailuresRef.current >= KPI_REMOTE_SAVE_FAILURE_LIMIT) {
+            const cooldownMs = Math.min(
+              KPI_REMOTE_SAVE_MAX_COOLDOWN_MS,
+              KPI_REMOTE_SAVE_MIN_COOLDOWN_MS * (2 ** (remoteSaveFailuresRef.current - KPI_REMOTE_SAVE_FAILURE_LIMIT))
+            );
+            remoteSaveBlockedUntilRef.current = Date.now() + cooldownMs;
+          }
           setSyncError(saveError?.message || "Unable to sync KPI changes.");
         });
     }, KPI_REMOTE_SAVE_DEBOUNCE_MS);
