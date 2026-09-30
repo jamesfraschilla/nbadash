@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../auth/useAuth.js";
-import { getNbaTeamRoster } from "../data/nbaTeams.js";
 import {
   TABLE_GRAPHIC_MAX_COLUMNS,
   TABLE_GRAPHIC_MAX_ROWS,
@@ -30,21 +29,40 @@ import {
 import { exportTableGraphic } from "./tableGraphicExport.js";
 import styles from "./TableGraphicAdmin.module.css";
 
-const WIZARDS_TEAM_ID = "1610612764";
-
 function rosterLabel(player) {
   const jersey = String(player?.jerseyNum || "").trim();
   const name = String(player?.fullName || "").trim();
   return jersey ? `#${jersey} ${name}` : name;
 }
 
-export default function TableGraphicAdmin() {
+function buildSortableJersey(value) {
+  const parsed = Number.parseInt(String(value || "").trim(), 10);
+  return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
+}
+
+function rosterStatusLabel(metadata) {
+  const fetchedAt = String(metadata?.fetchedAt || "").trim();
+  const date = fetchedAt ? new Date(fetchedAt) : null;
+  const hasValidDate = date && Number.isFinite(date.getTime());
+  const season = String(metadata?.season || "").trim();
+  if (!hasValidDate) return "Live roster unavailable — using the local roster snapshot";
+  const source = metadata?.cacheFallback ? "Cached roster" : "Live roster";
+  return `${source}${season ? ` (${season})` : ""} updated ${date.toLocaleString()}`;
+}
+
+export default function TableGraphicAdmin({ roster: rosterSource = [], rosterMetadata = null }) {
   const [params, setParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { accountsEnabled, profile, user } = useAuth();
   const vaultUserId = user?.id || profile?.id || "local";
   const tableParam = String(params.get("table") || "").trim();
-  const roster = useMemo(() => getNbaTeamRoster(WIZARDS_TEAM_ID), []);
+  const roster = useMemo(() => (
+    [...(Array.isArray(rosterSource) ? rosterSource : [])].sort((left, right) => {
+      const jerseyCompare = buildSortableJersey(left?.jerseyNum) - buildSortableJersey(right?.jerseyNum);
+      if (jerseyCompare !== 0) return jerseyCompare;
+      return String(left?.fullName || "").localeCompare(String(right?.fullName || ""));
+    })
+  ), [rosterSource]);
   const [draft, setDraft] = useState(() => createTableGraphicDraft());
   const [recordId, setRecordId] = useState("");
   const [status, setStatus] = useState("");
@@ -266,6 +284,8 @@ export default function TableGraphicAdmin() {
           placeholder="Add graphic title"
         />
       </label>
+
+      <div className={styles.rosterStatus}>{rosterStatusLabel(rosterMetadata)}</div>
 
       <div className={styles.tableShell}>
         <div className={styles.columnControl}>

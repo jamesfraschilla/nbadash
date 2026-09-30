@@ -607,6 +607,7 @@ export default function Tools({ section = "tools" }) {
     && [TOOL_TABS.PERSONNEL, TOOL_TABS.DEPTH_CHART].includes(activeGraphic);
   const needsNbaRosters = canUseTools && (
     graphicsNeedBothLeagues
+    || (activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.TABLE)
     || (activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.MATCHUP && draftLeague === "nba")
     || (activeTab === TOOL_TABS.SCOUTING && scoutingDraft.league !== "gleague")
   );
@@ -624,9 +625,11 @@ export default function Tools({ section = "tools" }) {
       : []
   ), [draft.leftTeamId, draft.rightTeamId, draftLeague]);
   const nbaRosterTeamIds = useMemo(() => (
-    activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.MATCHUP && draftLeague === "nba"
-      ? nbaMatchupDefaultTeamIds
-      : []
+    activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.TABLE
+      ? [WIZARDS_TEAM_ID]
+      : activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.MATCHUP && draftLeague === "nba"
+        ? nbaMatchupDefaultTeamIds
+        : []
   ), [activeGraphic, activeTab, draftLeague, nbaMatchupDefaultTeamIds]);
   const needsWizardsOpponentDefault = needsSharedMatchupLineups && draftLeague === "nba" && !draftParam;
   const { data: selectedDateGames = [] } = useGamesByDate(dateInput, {
@@ -1775,7 +1778,14 @@ export default function Tools({ section = "tools" }) {
         </section>
       ) : activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.TABLE ? (
         <section className={styles.workspace}>
-          <TableGraphicAdmin />
+          <TableGraphicAdmin
+            roster={nbaRosterMap[WIZARDS_TEAM_ID] || []}
+            rosterMetadata={{
+              fetchedAt: remoteNbaRostersPayload?.fetchedAt,
+              season: remoteNbaRostersPayload?.season,
+              cacheFallback: remoteNbaRostersPayload?.cacheFallback,
+            }}
+          />
         </section>
       ) : activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.PERSONNEL ? (
         <section className={styles.workspace}>

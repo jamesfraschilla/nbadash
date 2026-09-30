@@ -56,6 +56,11 @@
   font-weight: 800;
 }
 
+.rosterStatus {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
 .primaryButton,
 .secondaryButton,
 .secondaryLink {
