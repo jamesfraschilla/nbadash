@@ -780,7 +780,8 @@ async function fetchRemotePublicRotationVersions(teamScope, periodMinutes = DEFA
     .eq("scope_type", ROTATIONS_SCOPE_PUBLIC_VERSIONS)
     .eq("scope_key", publicVersionsScopeKey(teamScope))
     .maybeSingle();
-  if (error || !data?.payload) return [];
+  if (error) throw error;
+  if (!data?.payload) return [];
   const parsed = parseSharedStateRow(data);
   return (Array.isArray(parsed.payload?.versions) ? parsed.payload.versions : [])
     .map((version) => normalizeSharedRotationVersion(version, teamScope, periodMinutes))
@@ -837,7 +838,7 @@ async function fetchLegacyRemotePlayers(teamScope) {
     .eq("scope_type", ROTATIONS_SCOPE_PLAYERS)
     .eq("scope_key", globalScopeKey(teamScope))
     .maybeSingle();
-  if (error) return null;
+  if (error) throw error;
   if (!data?.payload) return null;
   const parsed = parseSharedStateRow(data);
   return {
@@ -854,7 +855,7 @@ async function fetchRemoteSavedLineups(teamScope) {
     .eq("scope_type", ROTATIONS_SCOPE_SAVED_LINEUPS)
     .eq("scope_key", globalScopeKey(teamScope))
     .maybeSingle();
-  if (error) return null;
+  if (error) throw error;
   if (!data?.payload) return null;
   const parsed = parseSharedStateRow(data);
   return {
@@ -954,7 +955,7 @@ async function fetchRemoteGameState(gameId, teamScope, periodMinutes = DEFAULT_P
     .eq("scope_type", ROTATIONS_SCOPE_GAME)
     .eq("scope_key", String(gameId))
     .maybeSingle();
-  if (error) return null;
+  if (error) throw error;
   if (!data?.payload) return null;
   const parsed = parseSharedStateRow(data);
   return {
@@ -983,7 +984,7 @@ async function fetchRemoteDepthTemplate(teamScope) {
     .eq("scope_type", ROTATIONS_SCOPE_DEPTH_TEMPLATE)
     .eq("scope_key", globalScopeKey(teamScope))
     .maybeSingle();
-  if (error) return null;
+  if (error) throw error;
   if (!data?.payload) return null;
   const parsed = parseSharedStateRow(data);
   return {
@@ -1888,7 +1889,7 @@ export default function Rotations({ standalone = false }) {
     && rotationsAvailable
     && Number(game?.gameStatus || 0) === 2;
 
-  const { data: legacyRemotePlayers, isFetched: legacyRemotePlayersFetched } = useQuery({
+  const { data: legacyRemotePlayers, isFetched: legacyRemotePlayersFetched, error: legacyRemotePlayersError } = useQuery({
     queryKey: ["rotations-players-legacy-remote", monitoredTeamScope],
     queryFn: () => fetchLegacyRemotePlayers(monitoredTeamScope),
     enabled: Boolean(supabase && monitoredTeamScope),
@@ -1896,7 +1897,7 @@ export default function Rotations({ standalone = false }) {
     refetchOnWindowFocus: false,
   });
 
-  const { data: remotePregamePlayers, isFetched: remotePregamePlayersFetched } = useQuery({
+  const { data: remotePregamePlayers, isFetched: remotePregamePlayersFetched, error: remotePregamePlayersError } = useQuery({
     queryKey: ["pregame-players-remote", monitoredTeamScope],
     queryFn: () => fetchRemotePregamePlayers(monitoredTeamScope),
     enabled: Boolean(supabase && monitoredTeamScope),
@@ -1904,7 +1905,7 @@ export default function Rotations({ standalone = false }) {
     refetchOnWindowFocus: false,
   });
 
-  const { data: remoteSavedLineups, isFetched: remoteSavedLineupsFetched } = useQuery({
+  const { data: remoteSavedLineups, isFetched: remoteSavedLineupsFetched, error: remoteSavedLineupsError } = useQuery({
     queryKey: ["rotations-saved-lineups-remote", monitoredTeamScope],
     queryFn: () => fetchRemoteSavedLineups(monitoredTeamScope),
     enabled: Boolean(supabase && monitoredTeamScope),
@@ -1912,7 +1913,7 @@ export default function Rotations({ standalone = false }) {
     refetchOnWindowFocus: true,
   });
 
-  const { data: remoteGameState, isFetched: remoteGameFetched } = useQuery({
+  const { data: remoteGameState, isFetched: remoteGameFetched, error: remoteGameError } = useQuery({
     queryKey: ["rotations-game-remote", gameId, monitoredTeamScope, periodMinuteCount],
     queryFn: () => fetchRemoteGameState(gameId, monitoredTeamScope, periodMinuteCount),
     enabled: Boolean(!standalone && supabase && gameId && monitoredTeamScope),
@@ -1922,7 +1923,7 @@ export default function Rotations({ standalone = false }) {
     refetchOnWindowFocus: true,
   });
 
-  const { data: remoteDepthTemplate, isFetched: remoteDepthFetched } = useQuery({
+  const { data: remoteDepthTemplate, isFetched: remoteDepthFetched, error: remoteDepthError } = useQuery({
     queryKey: ["rotations-depth-template-remote", monitoredTeamScope],
     queryFn: () => fetchRemoteDepthTemplate(monitoredTeamScope),
     enabled: Boolean(supabase && monitoredTeamScope),
@@ -1948,7 +1949,7 @@ export default function Rotations({ standalone = false }) {
     refetchOnWindowFocus: true,
   });
 
-  const { data: publicRotationVersions = [] } = useQuery({
+  const { data: publicRotationVersions = [], error: publicVersionsError } = useQuery({
     queryKey: ["standalone-rotations-public-versions", monitoredTeamScope, periodMinuteCount],
     queryFn: () => fetchRemotePublicRotationVersions(monitoredTeamScope, periodMinuteCount),
     enabled: Boolean(standalone && supabase && monitoredTeamScope),
@@ -1963,6 +1964,15 @@ export default function Rotations({ standalone = false }) {
   const activeVersionId = activeVersion.id;
   const depthChart = activeVersion.depthChart;
   const lineups = activeVersion.lineups;
+  const remoteReadError = legacyRemotePlayersError
+    || remotePregamePlayersError
+    || remoteSavedLineupsError
+    || remoteGameError
+    || remoteDepthError
+    || publicVersionsError;
+  const visibleSyncError = syncError || (remoteReadError
+    ? `Unable to load shared rotations data: ${remoteReadError.message || "Supabase request failed."}`
+    : "");
   const inheritDepthTemplate = activeVersion.inheritDepthTemplate;
   const versionDisplayOptions = normalizeVersionOptions(activeVersion.options);
 
@@ -3733,9 +3743,9 @@ export default function Rotations({ standalone = false }) {
         </div>
       </div>
 
-      {syncError ? (
+      {visibleSyncError ? (
         <div className={styles.stateMessage} style={{ marginBottom: 12 }}>
-          Sync issue: {syncError}
+          Sync issue: {visibleSyncError}
         </div>
       ) : null}
 

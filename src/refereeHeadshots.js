@@ -745,6 +745,12 @@ export async function uploadRefereeHeadshotAssets({
       upsert: false,
     });
   if (fullUpload.error) {
+    const { error: cleanupError } = await supabase.storage
+      .from(REFEREE_HEADSHOT_PREVIEW_BUCKET)
+      .remove([previewPath]);
+    if (cleanupError) {
+      throw new Error(`${fullUpload.error.message}. The partial preview upload also could not be removed: ${cleanupError.message}`);
+    }
     throw fullUpload.error;
   }
 
@@ -766,11 +772,13 @@ export async function deleteUploadedRefereeHeadshotAssets(uploadedRecord) {
   const fullBucket = String(uploadedRecord.fullBucket || "").trim();
   const fullPath = String(uploadedRecord.fullPath || "").trim();
 
-  if (previewBucket && previewPath) {
-    await supabase.storage.from(previewBucket).remove([previewPath]).catch(() => {});
-  }
-  if (fullBucket && fullPath) {
-    await supabase.storage.from(fullBucket).remove([fullPath]).catch(() => {});
+  const removals = [];
+  if (previewBucket && previewPath) removals.push(supabase.storage.from(previewBucket).remove([previewPath]));
+  if (fullBucket && fullPath) removals.push(supabase.storage.from(fullBucket).remove([fullPath]));
+  const results = await Promise.all(removals);
+  const errors = results.map((result) => result.error).filter(Boolean);
+  if (errors.length) {
+    throw new Error(`Unable to remove ${errors.length} referee headshot file${errors.length === 1 ? "" : "s"}: ${errors.map((error) => error.message).join("; ")}`);
   }
 }
 

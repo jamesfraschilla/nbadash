@@ -249,12 +249,6 @@ function loadTemplatePayload() {
   return null;
 }
 
-function isPbpHighlightsRlsError(error) {
-  const message = String(error?.message || "").toLowerCase();
-  return message.includes("row-level security policy")
-    && message.includes("pbp_highlights");
-}
-
 async function fetchRemoteSchedule(gameId) {
   if (!supabase || !gameId) return null;
   const { data, error } = await supabase
@@ -263,7 +257,7 @@ async function fetchRemoteSchedule(gameId) {
     .eq("game_id", String(gameId))
     .eq("action_number", PREGAME_ACTION_PAYLOAD)
     .maybeSingle();
-  if (error) return null;
+  if (error) throw error;
   const payload = parseRemotePayload(data?.note, "slots");
   return {
     updatedAt: payload.updatedAt,
@@ -279,7 +273,7 @@ async function fetchRemoteTemplate() {
     .eq("game_id", PREGAME_GLOBAL_TEMPLATE_GAME_ID)
     .eq("action_number", PREGAME_ACTION_PAYLOAD)
     .maybeSingle();
-  if (error) return null;
+  if (error) throw error;
   const payload = parseRemotePayload(data?.note, "template");
   return {
     updatedAt: payload.updatedAt,
@@ -692,7 +686,7 @@ export default function PreGame({ standalone = false }) {
     [game, standalone, standaloneTeamScope]
   );
 
-  const { data: remotePlayers, isFetched: remotePlayersFetched } = useQuery({
+  const { data: remotePlayers, isFetched: remotePlayersFetched, error: remotePlayersError } = useQuery({
     queryKey: ["pregame-players-remote", trackedTeamScope],
     queryFn: () => fetchRemotePregamePlayers(trackedTeamScope),
     enabled: Boolean(supabase && trackedTeamScope),
@@ -700,7 +694,7 @@ export default function PreGame({ standalone = false }) {
     refetchOnWindowFocus: true,
   });
 
-  const { data: remoteSchedule, isFetched: remoteScheduleFetched } = useQuery({
+  const { data: remoteSchedule, isFetched: remoteScheduleFetched, error: remoteScheduleError } = useQuery({
     queryKey: ["pregame-schedule-remote", gameId],
     queryFn: () => fetchRemoteSchedule(gameId),
     enabled: Boolean(!standalone && supabase && gameId),
@@ -710,7 +704,7 @@ export default function PreGame({ standalone = false }) {
     refetchOnWindowFocus: true,
   });
 
-  const { data: remoteTemplate, isFetched: remoteTemplateFetched } = useQuery({
+  const { data: remoteTemplate, isFetched: remoteTemplateFetched, error: remoteTemplateError } = useQuery({
     queryKey: ["pregame-template-remote"],
     queryFn: fetchRemoteTemplate,
     enabled: Boolean(!standalone && supabase),
@@ -726,6 +720,10 @@ export default function PreGame({ standalone = false }) {
     () => getTeamBoxScorePlayers(game, trackedTeamScope),
     [game, trackedTeamScope]
   );
+  const remoteReadError = remotePlayersError || remoteScheduleError || remoteTemplateError;
+  const visibleSyncError = syncError || (remoteReadError
+    ? `Unable to load shared pre-game data: ${remoteReadError.message || "Supabase request failed."}`
+    : "");
 
   useEffect(() => {
     setPlayersHydrated(false);
@@ -905,10 +903,6 @@ export default function PreGame({ standalone = false }) {
     ])
       .then(() => setSyncError(""))
       .catch((saveError) => {
-        if (isPbpHighlightsRlsError(saveError)) {
-          setSyncError("");
-          return;
-        }
         console.error("Failed to save pregame schedule/template", saveError);
         setSyncError(saveError?.message || "Unable to sync pre-game schedule changes.");
       });
@@ -1126,9 +1120,9 @@ export default function PreGame({ standalone = false }) {
         <Link className={styles.backButton} to={backUrl}>Back</Link>
       </div>
 
-      {syncError ? (
+      {visibleSyncError ? (
         <div className={styles.stateMessage} style={{ marginBottom: 12 }}>
-          Sync issue: {syncError}
+          Sync issue: {visibleSyncError}
         </div>
       ) : null}
 

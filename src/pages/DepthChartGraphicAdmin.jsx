@@ -435,7 +435,7 @@ export default function DepthChartGraphicAdmin({ rosterSources }) {
         customHeadshotUrl: uploaded.publicUrl,
         customHeadshotStoragePath: uploaded.storagePath,
       });
-      setStatus("");
+      setStatus(uploaded.cleanupWarning || "");
     } catch (error) {
       setStatus(error?.message || "Unable to load headshot.");
     }

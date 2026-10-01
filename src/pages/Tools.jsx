@@ -1097,7 +1097,7 @@ export default function Tools({ section = "tools" }) {
         headshotUrl: uploaded.publicUrl,
         headshotStoragePath: uploaded.storagePath,
       });
-      setSaveStatus("");
+      setSaveStatus(uploaded.cleanupWarning || "");
     } catch (error) {
       setSaveStatus(error?.message || "Unable to load headshot.");
     }

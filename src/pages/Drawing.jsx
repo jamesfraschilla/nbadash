@@ -288,7 +288,10 @@ export default function Drawing() {
       setSavingBoard(true);
       setStatusMessage("Saving...");
       const saved = selectedDrawing
-        ? await updateDrawingRecord(selectedDrawing.id, payload, user?.id)
+        ? await updateDrawingRecord(selectedDrawing.id, {
+          ...payload,
+          revision: selectedDrawing.revision,
+        }, user?.id)
         : await createDrawing(payload, user?.id);
       await invalidateDrawings();
       loadDrawing(saved);

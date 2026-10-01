@@ -317,8 +317,9 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
         savedOverridesSignatureRef.current = serializeRefereeHeadshotOverrides(remoteState.overrides);
         savedPreferencesSignatureRef.current = serializeRefereeHeadshotPreferences(remoteState.preferences);
       })
-      .catch(() => {
+      .catch((error) => {
         remoteHydrationCompleteRef.current = true;
+        setSaveMessage(error?.message || "Unable to load shared referee headshot settings.");
       });
     return () => {
       cancelled = true;
@@ -342,6 +343,7 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
         })
         .catch((error) => {
           console.warn("Unable to auto-save referee headshot changes.", error);
+          setSaveMessage(error?.message || "Unable to auto-save referee headshot changes.");
         });
     }, 1200);
 
@@ -571,11 +573,7 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
     try {
       const localSaveResult = writeStoredRefereeHeadshotState(overrides, preferences);
       if (user?.id) {
-        try {
-          await saveRemoteRefereeHeadshotState(user.id, { overrides, preferences });
-        } catch (remoteError) {
-          console.warn("Remote save failed, but local save succeeded:", remoteError);
-        }
+        await saveRemoteRefereeHeadshotState(user.id, { overrides, preferences });
       }
       savedOverridesSignatureRef.current = nextOverridesSignature;
       savedPreferencesSignatureRef.current = nextPreferencesSignature;
@@ -625,24 +623,28 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
 
   const removeUploadedReplacement = async () => {
     if (!selectedAssignedNameKey) return;
-    const uploadedRecord = selectedUploadedImage;
-    if (uploadedRecord) {
-      await deleteUploadedRefereeHeadshotAssets(uploadedRecord);
-    }
-    setPreferences((current) => {
-      const nextUploads = { ...(current.uploadedImagesByNameKey || {}) };
-      const nextPreferred = { ...(current.preferredImageIdsByNameKey || {}) };
-      delete nextUploads[selectedAssignedNameKey];
-      if (nextPreferred[selectedAssignedNameKey] === buildUploadedRefereeImageId(selectedAssignedNameKey)) {
-        delete nextPreferred[selectedAssignedNameKey];
+    try {
+      const uploadedRecord = selectedUploadedImage;
+      if (uploadedRecord) {
+        await deleteUploadedRefereeHeadshotAssets(uploadedRecord);
       }
-      return sanitizeRefereeHeadshotPreferences({
-        ...current,
-        preferredImageIdsByNameKey: nextPreferred,
-        uploadedImagesByNameKey: nextUploads,
+      setPreferences((current) => {
+        const nextUploads = { ...(current.uploadedImagesByNameKey || {}) };
+        const nextPreferred = { ...(current.preferredImageIdsByNameKey || {}) };
+        delete nextUploads[selectedAssignedNameKey];
+        if (nextPreferred[selectedAssignedNameKey] === buildUploadedRefereeImageId(selectedAssignedNameKey)) {
+          delete nextPreferred[selectedAssignedNameKey];
+        }
+        return sanitizeRefereeHeadshotPreferences({
+          ...current,
+          preferredImageIdsByNameKey: nextPreferred,
+          uploadedImagesByNameKey: nextUploads,
+        });
       });
-    });
-    setUploadMessage("Uploaded replacement removed.");
+      setUploadMessage("Uploaded replacement removed.");
+    } catch (error) {
+      setUploadMessage(error?.message || "Unable to remove the uploaded replacement.");
+    }
   };
 
   const chooseUploadedPhoto = () => {

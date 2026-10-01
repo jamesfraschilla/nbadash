@@ -97,6 +97,12 @@ async function invokeAtomicRpc(name, args) {
     }
     throw error;
   }
+  if (data?.error) {
+    const rpcError = new Error(data.message || "Supabase could not save this record.");
+    rpcError.code = data.error;
+    rpcError.latestRecord = data.record || null;
+    throw rpcError;
+  }
   return data;
 }
 
@@ -381,6 +387,7 @@ export async function updateNoteRecord(noteId, updates, actorId) {
   if (updates.seconds !== undefined) payload.seconds = updates.seconds;
   if (updates.sourceMeta !== undefined) payload.source_meta = normalizeNoteSourceMeta(updates.sourceMeta);
   if (updates.sharingScope !== undefined) payload.sharing_scope = updates.sharingScope;
+  if (updates.revision !== undefined) payload._expected_revision = Math.max(1, Number(updates.revision) || 1);
   const saved = await invokeAtomicRpc("update_user_note_atomic", {
     p_note_id: noteId,
     p_updates: payload,
@@ -474,6 +481,7 @@ export async function updateDrawingRecord(drawingId, updates, actorId) {
   if (updates.courtMode !== undefined) payload.court_mode = updates.courtMode === "full" ? "full" : "half";
   if (updates.strokes !== undefined) payload.strokes = Array.isArray(updates.strokes) ? updates.strokes : [];
   if (updates.sharingScope !== undefined) payload.sharing_scope = updates.sharingScope;
+  if (updates.revision !== undefined) payload._expected_revision = Math.max(1, Number(updates.revision) || 1);
   return invokeAtomicRpc("update_user_drawing_atomic", {
     p_drawing_id: drawingId,
     p_updates: payload,

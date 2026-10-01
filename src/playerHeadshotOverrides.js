@@ -243,6 +243,7 @@ export async function deleteUploadedPlayerHeadshotAsset(record) {
   const bucket = String(record.bucket || PLAYER_HEADSHOT_BUCKET).trim();
   const path = String(record.path || "").trim();
   if (bucket && path) {
-    await supabase.storage.from(bucket).remove([path]).catch(() => {});
+    const { error } = await supabase.storage.from(bucket).remove([path]);
+    if (error) throw error;
   }
 }

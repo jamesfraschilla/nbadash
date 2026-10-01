@@ -222,10 +222,15 @@ export default function PlayerHeadshotsAdmin() {
       if (fileInputRef.current) fileInputRef.current.value = "";
       setStatus(previousRecord ? "Headshot replaced." : "Headshot uploaded.");
     } catch (error) {
+      let cleanupMessage = "";
       if (uploadedRecord) {
-        await deleteUploadedPlayerHeadshotAsset(uploadedRecord);
+        try {
+          await deleteUploadedPlayerHeadshotAsset(uploadedRecord);
+        } catch (cleanupError) {
+          cleanupMessage = ` The failed upload also could not be cleaned up: ${cleanupError?.message || "storage removal failed."}`;
+        }
       }
-      setStatus(error?.message || "Upload failed.");
+      setStatus(`${error?.message || "Upload failed."}${cleanupMessage}`);
     } finally {
       setLoading(false);
     }

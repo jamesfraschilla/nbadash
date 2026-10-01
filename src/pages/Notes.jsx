@@ -135,6 +135,7 @@ export default function Notes() {
       await updateNoteRecord(editNote.id, {
         text: String(editDraft.text || "").trim(),
         tags: Array.isArray(editDraft.tags) ? editDraft.tags : [],
+        revision: editNote.revision,
       }, user?.id);
       await invalidateNotes();
       closeEdit();

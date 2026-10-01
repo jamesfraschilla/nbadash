@@ -124,10 +124,14 @@ export async function uploadGraphicHeadshot({ userId, file, toolType, slotKey, p
   if (!publicUrl) throw new Error("Supabase did not return the uploaded headshot URL.");
 
   const oldPath = String(previousPath || "").trim();
+  let cleanupWarning = "";
   if (oldPath && oldPath.startsWith(`${userId}/`) && oldPath !== path) {
-    void supabase.storage.from(GRAPHIC_HEADSHOT_BUCKET).remove([oldPath]);
+    const { error: cleanupError } = await supabase.storage.from(GRAPHIC_HEADSHOT_BUCKET).remove([oldPath]);
+    if (cleanupError) {
+      cleanupWarning = `The new headshot was saved, but the previous file could not be removed: ${cleanupError.message}`;
+    }
   }
-  return { storagePath: path, publicUrl };
+  return { storagePath: path, publicUrl, cleanupWarning };
 }
 
 export function getGraphicHeadshotPublicUrl(storagePath) {

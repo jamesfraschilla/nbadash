@@ -3,6 +3,12 @@
 alter table public.user_tool_records
 add column if not exists revision integer not null default 1;
 
+alter table public.user_notes
+add column if not exists revision integer not null default 1;
+
+alter table public.user_drawings
+add column if not exists revision integer not null default 1;
+
 create or replace function public.create_user_note_atomic(p_note jsonb)
 returns jsonb
 language plpgsql
@@ -60,11 +66,23 @@ declare
   saved public.user_notes;
   next_tags text[];
   next_version integer;
+  expected_revision integer;
 begin
   select * into existing from public.user_notes where id = p_note_id for update;
   if existing.id is null then raise exception 'Note not found'; end if;
   if actor is null or (existing.owner_id <> actor and not public.is_admin_user(actor)) then
     raise exception 'Not authorized to update this note';
+  end if;
+  expected_revision := case
+    when p_updates ? '_expected_revision' then (p_updates ->> '_expected_revision')::integer
+    else existing.revision
+  end;
+  if existing.revision <> expected_revision then
+    return jsonb_build_object(
+      'error', 'NOTE_CONFLICT',
+      'message', 'This note changed in another browser. Reload it before saving again.',
+      'record', to_jsonb(existing)
+    );
   end if;
 
   if p_updates ? 'tags' then
@@ -85,7 +103,8 @@ begin
       when 'Halftime' = any(next_tags) or 'Concept' = any(next_tags) then 'shared'
       when p_updates ->> 'sharing_scope' = 'shared' then 'shared'
       when p_updates ? 'sharing_scope' then 'private'
-      else existing.sharing_scope end
+      else existing.sharing_scope end,
+    revision = existing.revision + 1
   where id = p_note_id
   returning * into saved;
 
@@ -95,7 +114,7 @@ begin
   values (p_note_id, next_version, to_jsonb(saved), actor);
 
   insert into public.audit_logs (actor_id, entity_type, entity_id, action, detail)
-  values (actor, 'note', saved.id, 'updated', p_updates);
+  values (actor, 'note', saved.id, 'updated', p_updates - '_expected_revision');
   return to_jsonb(saved);
 end;
 $$;
@@ -193,25 +212,38 @@ security definer
 set search_path = public
 as $$
 declare
-  actor uuid := auth.uid(); existing public.user_drawings; saved public.user_drawings; next_version integer;
+  actor uuid := auth.uid(); existing public.user_drawings; saved public.user_drawings;
+  next_version integer; expected_revision integer;
 begin
   select * into existing from public.user_drawings where id = p_drawing_id for update;
   if existing.id is null then raise exception 'Drawing not found'; end if;
   if actor is null or (existing.owner_id <> actor and not public.is_admin_user(actor)) then
     raise exception 'Not authorized to update this drawing';
   end if;
+  expected_revision := case
+    when p_updates ? '_expected_revision' then (p_updates ->> '_expected_revision')::integer
+    else existing.revision
+  end;
+  if existing.revision <> expected_revision then
+    return jsonb_build_object(
+      'error', 'DRAWING_CONFLICT',
+      'message', 'This board changed in another browser. Reload it before saving again.',
+      'record', to_jsonb(existing)
+    );
+  end if;
   update public.user_drawings set
     title = case when p_updates ? 'title' then coalesce(nullif(p_updates ->> 'title', ''), 'Untitled') else existing.title end,
     court_mode = case when p_updates ->> 'court_mode' = 'full' then 'full' when p_updates ? 'court_mode' then 'half' else existing.court_mode end,
     strokes = case when p_updates ? 'strokes' then coalesce(p_updates -> 'strokes', '[]'::jsonb) else existing.strokes end,
-    sharing_scope = case when p_updates ->> 'sharing_scope' = 'shared' then 'shared' when p_updates ? 'sharing_scope' then 'private' else existing.sharing_scope end
+    sharing_scope = case when p_updates ->> 'sharing_scope' = 'shared' then 'shared' when p_updates ? 'sharing_scope' then 'private' else existing.sharing_scope end,
+    revision = existing.revision + 1
   where id = p_drawing_id returning * into saved;
   select coalesce(max(version_number), 0) + 1 into next_version
   from public.user_drawing_versions where drawing_id = p_drawing_id;
   insert into public.user_drawing_versions (drawing_id, version_number, snapshot, created_by)
   values (p_drawing_id, next_version, to_jsonb(saved), actor);
   insert into public.audit_logs (actor_id, entity_type, entity_id, action, detail)
-  values (actor, 'drawing', saved.id, 'updated', p_updates);
+  values (actor, 'drawing', saved.id, 'updated', p_updates - '_expected_revision');
   return to_jsonb(saved);
 end;
 $$;

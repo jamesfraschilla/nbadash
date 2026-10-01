@@ -19,6 +19,10 @@ test("account-data migration defines atomic version, share, and revision contrac
     "TOOL_RECORD_CONFLICT",
   ].forEach((value) => assert.match(atomicSql, new RegExp(value)));
   assert.match(atomicSql, /add column if not exists revision integer not null default 1/i);
+  assert.match(atomicSql, /alter table public\.user_notes\s+add column if not exists revision/i);
+  assert.match(atomicSql, /alter table public\.user_drawings\s+add column if not exists revision/i);
+  assert.match(atomicSql, /NOTE_CONFLICT/);
+  assert.match(atomicSql, /DRAWING_CONFLICT/);
 });
 
 test("graphic headshot bucket enforces owner folders and PNG size limits", () => {

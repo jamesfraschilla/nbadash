@@ -300,7 +300,7 @@ function TeamRosterCard({ teamScope, title }) {
   const [saveMessage, setSaveMessage] = useState("");
   const [localRosterVersion, setLocalRosterVersion] = useState(0);
 
-  const { data: remoteRoster, isLoading } = useQuery({
+  const { data: remoteRoster, isLoading, error: remoteRosterError } = useQuery({
     queryKey: ["admin-team-roster", teamScope],
     queryFn: () => fetchRemotePregamePlayers(teamScope),
   });
@@ -374,6 +374,11 @@ function TeamRosterCard({ teamScope, title }) {
         <div className={styles.noticeCard}>Loading roster...</div>
       ) : (
         <>
+          {remoteRosterError ? (
+            <div className={styles.noticeCard}>
+              Unable to load the shared roster: {remoteRosterError.message || "Supabase request failed."}
+            </div>
+          ) : null}
           <div className={styles.rosterGridHeader}>
             <span>Name</span>
             <span>Display</span>

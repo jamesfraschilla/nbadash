@@ -247,7 +247,7 @@ export async function fetchRemotePregamePlayers(teamScope) {
     .eq("scope_type", SHARED_ROSTER_SCOPE_TYPE)
     .eq("scope_key", teamScope)
     .maybeSingle();
-  if (error) return null;
+  if (error) throw error;
   const payload = {
     updatedAt: data?.updated_at ? new Date(data.updated_at).getTime() : 0,
     players: normalizePregamePlayers(data?.payload?.players || []),
