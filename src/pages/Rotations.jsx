@@ -336,7 +336,7 @@ function normalizePlayerNameInput(value) {
 }
 
 function normalizePlayers(rawPlayers, teamScope = "washington") {
-  const normalized = (Array.isArray(rawPlayers) ? rawPlayers : []).slice(0, 17).map((player, index) => ({
+  const normalized = (Array.isArray(rawPlayers) ? rawPlayers : []).map((player, index) => ({
     id: String(player?.id || `p${index + 1}`),
     name: normalizePlayerNameInput(player?.name),
     display: normalizePlayerNameInput(player?.display || player?.name),
@@ -605,7 +605,7 @@ function mergePlayersWithPregameRoster(currentPlayers, rosterPlayers, teamScope 
       .filter(([display]) => display)
   );
 
-  const merged = normalizedRoster.slice(0, 17).map((player, index) => {
+  const merged = normalizedRoster.map((player, index) => {
     const existing = currentById.get(player.id) || currentByDisplay.get(player.display) || normalizedCurrent[index];
     return {
       id: player.id || existing?.id || `p${index + 1}`,
@@ -2262,7 +2262,6 @@ export default function Rotations({ standalone = false }) {
 
   useEffect(() => {
     if (!playersHydrated || !monitoredTeamScope) return;
-    if (standalone && rotationParam) return;
     if (supabase && !remotePregamePlayersFetched) return;
 
     const localPregamePayload = loadPregamePlayersPayload(monitoredTeamScope);
@@ -2276,7 +2275,7 @@ export default function Rotations({ standalone = false }) {
       playersStateKeyRef.current = nextKey;
       return next;
     });
-  }, [playersHydrated, monitoredTeamScope, remotePregamePlayers, remotePregamePlayersFetched, rotationParam, standalone]);
+  }, [playersHydrated, monitoredTeamScope, remotePregamePlayers, remotePregamePlayersFetched]);
 
   useEffect(() => {
     if (!playersHydrated || !monitoredTeamScope || !trackedApiPlayers.length) return;

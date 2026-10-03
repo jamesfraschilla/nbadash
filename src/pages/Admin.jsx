@@ -356,6 +356,8 @@ function TeamRosterCard({ teamScope, title }) {
       setLocalRosterVersion(updatedAt);
       await saveRemotePregamePlayers(teamScope, normalized, updatedAt);
       await queryClient.invalidateQueries({ queryKey: ["admin-team-roster", teamScope] });
+      await queryClient.invalidateQueries({ queryKey: ["pregame-players-remote", teamScope] });
+      await queryClient.invalidateQueries({ queryKey: ["game-roster-caps", teamScope] });
       setSaveMessage("Roster saved.");
     } catch (error) {
       setSaveMessage(error?.message || "Unable to save roster.");
