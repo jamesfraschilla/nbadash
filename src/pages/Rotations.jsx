@@ -1931,7 +1931,7 @@ export default function Rotations({ standalone = false }) {
     refetchOnWindowFocus: true,
   });
 
-  const { data: ownedRotationRecords = [] } = useQuery({
+  const { data: ownedRotationRecords = [], isFetched: ownedRotationRecordsFetched } = useQuery({
     queryKey: ["standalone-rotations-owned-records", vaultUserId],
     queryFn: async () => {
       if (!vaultUserId) return [];
@@ -1948,6 +1948,13 @@ export default function Rotations({ standalone = false }) {
     staleTime: ROTATIONS_REMOTE_REFERENCE_STALE_TIME_MS,
     refetchOnWindowFocus: true,
   });
+
+  const standaloneRecordRedirectPending = Boolean(
+    standalone
+    && !rotationParam
+    && vaultUserId
+    && (!ownedRotationRecordsFetched || ownedRotationRecords.length)
+  );
 
   const { data: publicRotationVersions = [], error: publicVersionsError } = useQuery({
     queryKey: ["standalone-rotations-public-versions", monitoredTeamScope, periodMinuteCount],
@@ -2048,6 +2055,24 @@ export default function Rotations({ standalone = false }) {
     window.addEventListener("pointerdown", handlePointerDown);
     return () => window.removeEventListener("pointerdown", handlePointerDown);
   }, [savedLineupMenu]);
+
+  useEffect(() => {
+    if (!standalone || rotationParam || !vaultUserId || !ownedRotationRecordsFetched) return;
+    const latestRecord = ownedRotationRecords[0];
+    if (!latestRecord?.id) return;
+    const nextParams = new URLSearchParams(params);
+    nextParams.set("tab", "rotations");
+    nextParams.set("rotation", latestRecord.id);
+    setParams(nextParams, { replace: true });
+  }, [
+    ownedRotationRecords,
+    ownedRotationRecordsFetched,
+    params,
+    rotationParam,
+    setParams,
+    standalone,
+    vaultUserId,
+  ]);
 
   useEffect(() => {
     if (!standalone) return undefined;
@@ -2188,6 +2213,7 @@ export default function Rotations({ standalone = false }) {
 
   useEffect(() => {
     if (playersHydrated) return;
+    if (standaloneRecordRedirectPending) return;
     if (standalone && rotationParam) return;
     if (!monitoredTeamScope) return;
     if (supabase && (!remotePregamePlayersFetched || !legacyRemotePlayersFetched)) return;
@@ -2231,6 +2257,7 @@ export default function Rotations({ standalone = false }) {
     legacyRemotePlayersFetched,
     rotationParam,
     standalone,
+    standaloneRecordRedirectPending,
   ]);
 
   useEffect(() => {
@@ -2264,6 +2291,7 @@ export default function Rotations({ standalone = false }) {
 
   useEffect(() => {
     if (savedLineupsHydrated) return;
+    if (standaloneRecordRedirectPending) return;
     if (standalone && rotationParam) return;
     if (supabase && !remoteSavedLineupsFetched) return;
 
@@ -2289,10 +2317,11 @@ export default function Rotations({ standalone = false }) {
     }
 
     setSavedLineupsHydrated(true);
-  }, [savedLineupsHydrated, remoteSavedLineups, remoteSavedLineupsFetched, monitoredTeamScope, rotationParam, standalone]);
+  }, [savedLineupsHydrated, remoteSavedLineups, remoteSavedLineupsFetched, monitoredTeamScope, rotationParam, standalone, standaloneRecordRedirectPending]);
 
   useEffect(() => {
     if (depthTemplateHydrated) return;
+    if (standaloneRecordRedirectPending) return;
     if (standalone && rotationParam) return;
     if (supabase && !remoteDepthFetched) return;
 
@@ -2321,10 +2350,11 @@ export default function Rotations({ standalone = false }) {
     }
 
     setDepthTemplateHydrated(true);
-  }, [depthTemplateHydrated, remoteDepthTemplate, remoteDepthFetched, monitoredTeamScope, rotationParam, standalone]);
+  }, [depthTemplateHydrated, remoteDepthTemplate, remoteDepthFetched, monitoredTeamScope, rotationParam, standalone, standaloneRecordRedirectPending]);
 
   useEffect(() => {
     if (gameHydrated || !effectiveGameId) return;
+    if (standaloneRecordRedirectPending) return;
     if (standalone && rotationParam) return;
     if (!standalone && supabase && !remoteGameFetched) return;
     if (!depthTemplateHydrated) return;
@@ -2355,7 +2385,7 @@ export default function Rotations({ standalone = false }) {
     }
 
     setGameHydrated(true);
-  }, [gameHydrated, effectiveGameId, standalone, remoteGameState, remoteGameFetched, depthTemplateHydrated, depthTemplate, monitoredTeamScope]);
+  }, [gameHydrated, effectiveGameId, standalone, remoteGameState, remoteGameFetched, depthTemplateHydrated, depthTemplate, monitoredTeamScope, standaloneRecordRedirectPending]);
 
   useEffect(() => {
     if (!gameHydrated || !effectiveGameId || !depthTemplateHydrated || !monitoredTeamScope) return;
