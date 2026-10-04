@@ -2,6 +2,14 @@ import { expect, test } from "@playwright/test";
 
 const appUrl = (hash) => `http://127.0.0.1:4174/nbadash/#${hash}`;
 
+test("Graphics opens on a neutral landing page with Rotations first", async ({ page }) => {
+  await page.goto(appUrl("/graphics"));
+  const tabs = page.locator('[aria-label="Graphic tools"] button');
+  await expect(tabs.first()).toHaveText("Rotations");
+  await expect(page.getByText("Select a graphics tool from above.", { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/#\/graphics$/);
+});
+
 test("Rotations reopens the guest user's most recently saved Graphics draft", async ({ page }) => {
   await page.route("**/functions/v1/**", (route) => route.fulfill({ status: 503, contentType: "application/json", body: "{}" }));
   await page.route("**/rest/v1/**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "[]" }));

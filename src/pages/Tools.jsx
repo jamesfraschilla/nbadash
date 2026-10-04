@@ -602,7 +602,7 @@ export default function Tools({ section = "tools" }) {
   const legacyGraphicTab = isGraphicToolTab(rawTab)
     ? rawTab
     : "";
-  const activeGraphic = normalizeGraphicToolTab(rawGraphic, legacyGraphicTab || TOOL_TABS.MATCHUP);
+  const activeGraphic = isGraphicToolTab(rawGraphic) ? rawGraphic : legacyGraphicTab;
   const draftLeague = draft.league === "gleague" ? "gleague" : "nba";
   const graphicsNeedBothLeagues = activeTab === TOOL_TABS.GRAPHICS
     && [TOOL_TABS.PERSONNEL, TOOL_TABS.DEPTH_CHART].includes(activeGraphic);
@@ -1170,7 +1170,7 @@ export default function Tools({ section = "tools" }) {
     const nextParams = new URLSearchParams(params);
     nextParams.set("tab", normalized);
     if (normalized === TOOL_TABS.GRAPHICS && !nextParams.get("graphic")) {
-      nextParams.set("graphic", activeGraphic);
+      nextParams.delete("graphic");
     }
     setParams(nextParams, { replace: true });
   };
@@ -1374,8 +1374,8 @@ export default function Tools({ section = "tools" }) {
   if (!isGraphicsRoute && (rawTab === TOOL_TABS.GRAPHICS || legacyGraphicTab)) {
     const nextParams = new URLSearchParams(params);
     nextParams.delete("tab");
-    if (!nextParams.get("graphic")) {
-      nextParams.set("graphic", legacyGraphicTab || activeGraphic);
+    if (!nextParams.get("graphic") && legacyGraphicTab) {
+      nextParams.set("graphic", legacyGraphicTab);
     }
     const search = nextParams.toString();
     return <Navigate to={`/graphics${search ? `?${search}` : ""}`} replace />;
@@ -1673,7 +1673,11 @@ export default function Tools({ section = "tools" }) {
       ) : null}
 
       <Suspense fallback={<section className={styles.workspace}><div className={styles.statusNote}>Loading...</div></section>}>
-      {activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.MATCHUP ? (
+      {activeTab === TOOL_TABS.GRAPHICS && !activeGraphic ? (
+        <section className={styles.graphicsLanding}>
+          Select a graphics tool from above.
+        </section>
+      ) : activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.MATCHUP ? (
         <section className={styles.workspace}>
           {!remoteRostersPayload?.teams && league === "gleague" ? (
             <p className={styles.statusNote}>

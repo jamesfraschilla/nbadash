@@ -124,6 +124,12 @@
   box-shadow: var(--shadow-panel);
 }
 
+.graphicsLanding {
+  padding: 4px 2px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
 .matchupBuilder {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
