@@ -22,6 +22,7 @@ import {
 import { getNbaCupInfo } from "./nbaCup.js";
 import { supabase } from "./supabaseClient.js";
 import { readLocalStorage, writeLocalStorage, writeLocalStorageWithEviction } from "./storage.js";
+import { isRosterFallbackUsable, rosterPayloadTimestampMs } from "./rosterFallback.js";
 import { currentSeasonString, formatDateInput } from "./utils.js";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
@@ -99,6 +100,7 @@ function mergeAndCacheRosterFeed(league, payload) {
     ...(payload || {}),
     teams: nextTeams,
     cacheFallback: Boolean(payload?.cacheFallback),
+    cachedAt: payload?.cacheFallback ? rosterPayloadTimestampMs(payload) : Date.now(),
   };
   writeLocalStorage(`${ROSTER_CACHE_PREFIX}${league}`, JSON.stringify(nextPayload));
   return nextPayload;
@@ -106,7 +108,11 @@ function mergeAndCacheRosterFeed(league, payload) {
 
 function cachedRosterFeedOrThrow(league, error) {
   const cached = readRosterFeedCache(league);
-  if (!cached) throw error;
+  if (!isRosterFallbackUsable(cached)) {
+    const staleError = new Error("The saved roster fallback is more than 24 hours old. Reconnect to refresh current rosters.");
+    staleError.cause = error;
+    throw staleError;
+  }
   return {
     ...cached,
     stale: true,

@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { deleteDrawingRecord, deleteNoteRecord, listOwnedDrawings, listOwnedNotes } from "../accountData.js";
 import { fetchGamesMetadataByIds } from "../api.js";
 import { useAuth } from "../auth/useAuth.js";
+import { resolveFeatureAccess } from "../featureAccess.js";
 import { getLeagueTeam } from "../data/nbaTeams.js";
 import {
   GRAPHIC_TOOL_TABS,
@@ -39,6 +40,7 @@ const GRAPHIC_TOOL_RECORD_TYPES = [
   TOOL_RECORD_TYPES.PERSONNEL_GRAPHIC,
   TOOL_RECORD_TYPES.DEPTH_CHART_GRAPHIC,
   TOOL_RECORD_TYPES.TABLE_GRAPHIC,
+  TOOL_RECORD_TYPES.ROTATIONS_TOOL,
 ];
 const LATE_GAME_TOOL_RECORD_TYPES = [
   TOOL_RECORD_TYPES.LATE_GAME_FEEDBACK,
@@ -47,7 +49,6 @@ const LATE_GAME_TOOL_RECORD_TYPES = [
 
 function vaultToolRecordTypesForTab(tab, canUseAdminTools) {
   if (tab === "graphics") return GRAPHIC_TOOL_RECORD_TYPES;
-  if (tab === "rotations") return [TOOL_RECORD_TYPES.ROTATIONS_TOOL];
   if (tab === "late-game") return LATE_GAME_TOOL_RECORD_TYPES;
   if (tab === "tools") {
     return [
@@ -264,25 +265,23 @@ export default function UserContent() {
   const { user, profile, hasFeature, accountsEnabled, isAdmin } = useAuth();
   const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
-  const canUseTools = !accountsEnabled || hasFeature("tools");
+  const { tools: canUseTools, graphics: canUseGraphics } = resolveFeatureAccess({ accountsEnabled, hasFeature });
   const canUseAdminTools = !accountsEnabled || isAdmin;
   const vaultUserId = user?.id || (!accountsEnabled ? "guest" : "");
   const rawTab = params.get("tab");
   const tab = rawTab === "drawings"
     ? "drawings"
-    : rawTab === "graphics" && canUseTools
+    : (rawTab === "graphics" || rawTab === "rotations") && canUseGraphics
       ? "graphics"
-    : rawTab === "rotations" && canUseTools
-      ? "rotations"
     : rawTab === "late-game" && canUseTools && canUseAdminTools
       ? "late-game"
       : rawTab === "tools" && canUseTools
         ? "tools"
-      : canUseTools
+      : canUseGraphics
         ? "graphics"
         : "notes";
   const rawGraphic = String(params.get("graphic") || "").trim();
-  const activeGraphicTab = normalizeGraphicToolTab(rawGraphic);
+  const activeGraphicTab = normalizeGraphicToolTab(rawGraphic || (rawTab === "rotations" ? TOOL_TABS.ROTATIONS : ""));
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [opponentFilter, setOpponentFilter] = useState("all");
@@ -310,9 +309,9 @@ export default function UserContent() {
 
   const { data: savedTools = [] } = useQuery({
     queryKey: ["owned-tools", vaultUserId, activeToolRecordTypes],
-    enabled: Boolean(vaultUserId && canUseTools && activeToolRecordTypes.length),
+    enabled: Boolean(vaultUserId && (tab === "graphics" ? canUseGraphics : canUseTools) && activeToolRecordTypes.length),
     queryFn: async () => {
-      if (!vaultUserId || !canUseTools) return [];
+      if (!vaultUserId || (tab === "graphics" ? !canUseGraphics : !canUseTools)) return [];
       const options = { types: activeToolRecordTypes, limit: VAULT_RECORD_LIMIT };
       if (!accountsEnabled || !user?.id) return listSavedToolRecords(vaultUserId, options);
       try {
@@ -607,22 +606,13 @@ export default function UserContent() {
       </section>
 
       <div className={styles.tabRow}>
-        {canUseTools ? (
+        {canUseGraphics ? (
           <button
             type="button"
             className={`${styles.tabButton} ${tab === "graphics" ? styles.tabButtonActive : ""}`}
             onClick={() => setTab("graphics")}
           >
             Graphics
-          </button>
-        ) : null}
-        {canUseTools ? (
-          <button
-            type="button"
-            className={`${styles.tabButton} ${tab === "rotations" ? styles.tabButtonActive : ""}`}
-            onClick={() => setTab("rotations")}
-          >
-            Rotations
           </button>
         ) : null}
         <button
@@ -661,7 +651,7 @@ export default function UserContent() {
 
       {contentStatus ? <div className={styles.toolToolbarStatus}>{contentStatus}</div> : null}
 
-      {tab === "graphics" || tab === "rotations" || tab === "tools" || tab === "late-game" ? null : (
+      {tab === "graphics" || tab === "tools" || tab === "late-game" ? null : (
         <section className={styles.filterPanel}>
         <div className={styles.filterGrid}>
           <label className={styles.filterField}>
@@ -895,6 +885,51 @@ export default function UserContent() {
               deletingKey={deletingKey}
               onDelete={handleDeleteTool}
             />
+          ) : activeGraphicTab === TOOL_TABS.ROTATIONS ? (
+            <div className={styles.section}>
+              {rotationToolRecords.length === 0 ? (
+                <div className={styles.emptyState}>You have not saved any rotations yet.</div>
+              ) : (
+                <div className={styles.list}>
+                  {rotationToolRecords.map((toolRecord) => {
+                    const isDeleting = deletingKey === `tool:${toolRecord.id}`;
+                    const payload = toolRecord.payload && typeof toolRecord.payload === "object" ? toolRecord.payload : {};
+                    const opponentLine = String(payload.opponentLine || "").trim();
+                    const versionCount = Array.isArray(payload.gameState?.versions) ? payload.gameState.versions.length : 0;
+                    const lineupCount = Array.isArray(payload.savedLineups) ? payload.savedLineups.length : 0;
+                    return (
+                      <article key={toolRecord.id} className={styles.card}>
+                        <div className={styles.cardHeader}>
+                          <div className={styles.cardTitleGroup}>
+                            <div className={styles.cardTitle}>{toolRecord.title || "Untitled"}</div>
+                            <div className={styles.cardMeta}>Rotations · Saved draft</div>
+                          </div>
+                          <div className={styles.cardActions}>
+                            <Link className={styles.cardLink} to={`/graphics?graphic=rotations&rotation=${encodeURIComponent(toolRecord.id)}`}>
+                              Open Graphic
+                            </Link>
+                            <button
+                              type="button"
+                              className={styles.deleteButton}
+                              onClick={() => handleDeleteTool(toolRecord)}
+                              disabled={isDeleting}
+                            >
+                              {isDeleting ? "Deleting..." : "Delete"}
+                            </button>
+                          </div>
+                        </div>
+                        <div className={styles.cardBody}>
+                          {opponentLine || "Saved rotations draft."}
+                          {versionCount ? ` · ${versionCount} version${versionCount === 1 ? "" : "s"}` : ""}
+                          {lineupCount ? ` · ${lineupCount} saved lineup${lineupCount === 1 ? "" : "s"}` : ""}
+                        </div>
+                        <div className={styles.cardFooter}>Updated {formatTimestamp(toolRecord.updatedAt)}</div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           ) : (
             <SavedGraphicArea
               title="Match-Up Graphics"
@@ -902,52 +937,6 @@ export default function UserContent() {
               deletingKey={deletingKey}
               onDelete={handleDeleteTool}
             />
-          )}
-        </section>
-      ) : tab === "rotations" ? (
-        <section className={styles.section}>
-          {toolVaultStatus ? <div className={styles.toolToolbarStatus}>{toolVaultStatus}</div> : null}
-          {rotationToolRecords.length === 0 ? (
-            <div className={styles.emptyState}>You have not saved any rotations yet.</div>
-          ) : (
-            <div className={styles.list}>
-              {rotationToolRecords.map((toolRecord) => {
-                const isDeleting = deletingKey === `tool:${toolRecord.id}`;
-                const payload = toolRecord.payload && typeof toolRecord.payload === "object" ? toolRecord.payload : {};
-                const opponentLine = String(payload.opponentLine || "").trim();
-                const versionCount = Array.isArray(payload.gameState?.versions) ? payload.gameState.versions.length : 0;
-                const lineupCount = Array.isArray(payload.savedLineups) ? payload.savedLineups.length : 0;
-                return (
-                  <article key={toolRecord.id} className={styles.card}>
-                    <div className={styles.cardHeader}>
-                      <div className={styles.cardTitleGroup}>
-                        <div className={styles.cardTitle}>{toolRecord.title || "Untitled"}</div>
-                        <div className={styles.cardMeta}>Rotations · Saved draft</div>
-                      </div>
-                      <div className={styles.cardActions}>
-                        <Link className={styles.cardLink} to={`/tools?tab=rotations&rotation=${encodeURIComponent(toolRecord.id)}`}>
-                          Open Tool
-                        </Link>
-                        <button
-                          type="button"
-                          className={styles.deleteButton}
-                          onClick={() => handleDeleteTool(toolRecord)}
-                          disabled={isDeleting}
-                        >
-                          {isDeleting ? "Deleting..." : "Delete"}
-                        </button>
-                      </div>
-                    </div>
-                    <div className={styles.cardBody}>
-                      {opponentLine || "Saved rotations draft."}
-                      {versionCount ? ` · ${versionCount} version${versionCount === 1 ? "" : "s"}` : ""}
-                      {lineupCount ? ` · ${lineupCount} saved lineup${lineupCount === 1 ? "" : "s"}` : ""}
-                    </div>
-                    <div className={styles.cardFooter}>Updated {formatTimestamp(toolRecord.updatedAt)}</div>
-                  </article>
-                );
-              })}
-            </div>
           )}
         </section>
       ) : tab === "tools" ? (

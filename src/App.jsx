@@ -5,6 +5,7 @@ import AuthGate from "./components/AuthGate.jsx";
 import LegacyNotesImportPrompt from "./components/LegacyNotesImportPrompt.jsx";
 import PasswordResetGate from "./components/PasswordResetGate.jsx";
 import { useAuth } from "./auth/useAuth.js";
+import { resolveFeatureAccess } from "./featureAccess.js";
 import { syncRemotePlayerHeadshotState } from "./playerHeadshotOverrides.js";
 import { readLocalStorage, writeLocalStorage } from "./storage.js";
 
@@ -76,7 +77,9 @@ export default function App() {
     isAdmin,
     hasFeature,
   } = useAuth();
-  const canUseTools = !accountsEnabled || hasFeature("tools");
+  const { tools: canUseTools, graphics: canUseGraphics } = resolveFeatureAccess({ accountsEnabled, hasFeature });
+  const isLegacyRotationsToolRoute = location.pathname === "/tools"
+    && new URLSearchParams(location.search).get("tab") === "rotations";
   const isOfficiatingRoute = location.pathname === "/officiating";
 
   useEffect(() => {
@@ -271,6 +274,7 @@ export default function App() {
         profile={profile}
         isAdmin={isAdmin}
         canUseTools={canUseTools}
+        canUseGraphics={canUseGraphics}
       />
       <main className={isOfficiatingRoute ? "officiating-shell" : undefined}>
         <Suspense fallback={<RouteLoadingFallback />}>
@@ -283,11 +287,11 @@ export default function App() {
             />
             <Route
               path="/tools"
-              element={canUseTools ? <Tools /> : <AccessRequired>An admin needs to grant the Tools feature flag before you can use this page.</AccessRequired>}
+              element={canUseTools || (canUseGraphics && isLegacyRotationsToolRoute) ? <Tools /> : <AccessRequired>An admin needs to grant the Tools feature flag before you can use this page.</AccessRequired>}
             />
             <Route
               path="/graphics"
-              element={canUseTools ? <Tools section="graphics" /> : <AccessRequired>An admin needs to grant the Tools feature flag before you can use this page.</AccessRequired>}
+              element={canUseGraphics ? <Tools section="graphics" /> : <AccessRequired>An admin needs to grant the Graphics feature flag before you can use this page.</AccessRequired>}
             />
             <Route
               path="/officiating"

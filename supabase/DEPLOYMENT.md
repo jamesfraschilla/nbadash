@@ -4,7 +4,9 @@ The application changes in this repository depend on database and Edge Function 
 
 ## SQL Editor
 
-Run these idempotent scripts in the Supabase SQL Editor:
+`supabase/deployment-manifest.json` is the authoritative, checksummed deployment inventory. Run `npm run supabase:manifest:check` before every deployment. Any added or changed SQL script or Edge Function makes verification fail until `npm run supabase:manifest:update` is run and the updated manifest is reviewed and committed.
+
+Run the database scripts in the exact order recorded by the manifest. Do not deploy only the abbreviated list below; it is descriptive rather than exhaustive.
 
 1. `account_data_atomic.sql` — atomic note/drawing saves and sharing, note/drawing conflict revisions, drawing version snapshots, and tool-vault revision checks.
 2. `graphic_headshots_storage.sql` — the bounded PNG bucket and owner-scoped Storage policies for custom graphic headshots.
@@ -14,7 +16,7 @@ Run these idempotent scripts in the Supabase SQL Editor:
 
 ## Edge Functions
 
-Deploy the current repository versions of:
+Deploy every Edge Function recorded by the manifest. The functions below are the most operationally sensitive examples:
 
 - `nba-rosters` — bounded global deadline and partial team results.
 - `nba-player-stats` — nullable statistics and partial player results.

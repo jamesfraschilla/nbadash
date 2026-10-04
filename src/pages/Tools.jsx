@@ -8,6 +8,7 @@ import {
   teamLogoUrl,
 } from "../api.js";
 import { useAuth } from "../auth/useAuth.js";
+import { resolveFeatureAccess } from "../featureAccess.js";
 import {
   deleteGraphicHeadshot,
   getGraphicHeadshotPublicUrl,
@@ -573,9 +574,10 @@ export default function Tools({ section = "tools" }) {
   const [customRequestResult, setCustomRequestResult] = useState(null);
   const [customTableSort, setCustomTableSort] = useState({ table: "", column: "", direction: "asc" });
 
-  const canUseTools = !accountsEnabled || hasFeature("tools");
+  const { tools: canUseTools, graphics: canUseGraphics } = resolveFeatureAccess({ accountsEnabled, hasFeature });
   const canUseAdminTools = !accountsEnabled || isAdmin;
   const isGraphicsRoute = section === "graphics";
+  const canUseSection = isGraphicsRoute ? canUseGraphics : canUseTools;
   const vaultUserId = user?.id || (!accountsEnabled ? "guest" : "");
   const draftParam = String(params.get("draft") || "").trim();
   const packetParam = String(params.get("packet") || "").trim();
@@ -592,8 +594,6 @@ export default function Tools({ section = "tools" }) {
       ? TOOL_TABS.SCOUTING
     : rawTab === TOOL_TABS.CUSTOM_REQUESTS
       ? TOOL_TABS.CUSTOM_REQUESTS
-    : rawTab === TOOL_TABS.ROTATIONS
-      ? TOOL_TABS.ROTATIONS
     : rawTab === TOOL_TABS.ANALYTICS_REPORT
       ? TOOL_TABS.ANALYTICS_REPORT
     : rawTab === TOOL_TABS.VISUAL_DRILL
@@ -606,18 +606,18 @@ export default function Tools({ section = "tools" }) {
   const draftLeague = draft.league === "gleague" ? "gleague" : "nba";
   const graphicsNeedBothLeagues = activeTab === TOOL_TABS.GRAPHICS
     && [TOOL_TABS.PERSONNEL, TOOL_TABS.DEPTH_CHART].includes(activeGraphic);
-  const needsNbaRosters = canUseTools && (
+  const needsNbaRosters = canUseSection && (
     graphicsNeedBothLeagues
     || (activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.TABLE)
     || (activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.MATCHUP && draftLeague === "nba")
     || (activeTab === TOOL_TABS.SCOUTING && scoutingDraft.league !== "gleague")
   );
-  const needsGLeagueRosters = canUseTools && (
+  const needsGLeagueRosters = canUseSection && (
     graphicsNeedBothLeagues
     || (activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.MATCHUP && draftLeague === "gleague")
     || (activeTab === TOOL_TABS.SCOUTING && scoutingDraft.league === "gleague")
   );
-  const needsSharedMatchupLineups = canUseTools
+  const needsSharedMatchupLineups = canUseSection
     && activeTab === TOOL_TABS.GRAPHICS
     && activeGraphic === TOOL_TABS.MATCHUP;
   const nbaMatchupDefaultTeamIds = useMemo(() => (
@@ -1162,8 +1162,6 @@ export default function Tools({ section = "tools" }) {
         ? TOOL_TABS.SCOUTING
       : nextTab === TOOL_TABS.CUSTOM_REQUESTS
         ? TOOL_TABS.CUSTOM_REQUESTS
-      : nextTab === TOOL_TABS.ROTATIONS
-        ? TOOL_TABS.ROTATIONS
       : nextTab === TOOL_TABS.ANALYTICS_REPORT
         ? TOOL_TABS.ANALYTICS_REPORT
       : nextTab === TOOL_TABS.VISUAL_DRILL
@@ -1353,13 +1351,21 @@ export default function Tools({ section = "tools" }) {
     });
   }, [customRequestResult, customTableSort]);
 
-  if (accountsEnabled && !canUseTools) {
+  if (!isGraphicsRoute && rawTab === TOOL_TABS.ROTATIONS && canUseGraphics) {
+    const nextParams = new URLSearchParams(params);
+    nextParams.delete("tab");
+    nextParams.set("graphic", TOOL_TABS.ROTATIONS);
+    const search = nextParams.toString();
+    return <Navigate to={`/graphics${search ? `?${search}` : ""}`} replace />;
+  }
+
+  if (accountsEnabled && !canUseSection) {
     return (
       <div className={styles.page}>
         <section className={styles.hero}>
-          <div className={styles.kicker}>Tools</div>
+          <div className={styles.kicker}>{isGraphicsRoute ? "Graphics" : "Tools"}</div>
           <h1 className={styles.title}>Access Required</h1>
-          <p className={styles.subtitle}>An admin needs to grant the Tools feature flag before you can use this page.</p>
+          <p className={styles.subtitle}>An admin needs to grant the {isGraphicsRoute ? "Graphics" : "Tools"} feature flag before you can use this page.</p>
         </section>
       </div>
     );
@@ -1618,13 +1624,6 @@ export default function Tools({ section = "tools" }) {
         </button>
         <button
           type="button"
-          className={`${styles.tabButton} ${activeTab === TOOL_TABS.ROTATIONS ? styles.tabButtonActive : ""}`}
-          onClick={() => handleToolTabChange(TOOL_TABS.ROTATIONS)}
-        >
-          Rotations
-        </button>
-        <button
-          type="button"
           className={`${styles.tabButton} ${activeTab === TOOL_TABS.ANALYTICS_REPORT ? styles.tabButtonActive : ""}`}
           onClick={() => handleToolTabChange(TOOL_TABS.ANALYTICS_REPORT)}
         >
@@ -1845,13 +1844,13 @@ export default function Tools({ section = "tools" }) {
             }}
           />
         </section>
+      ) : activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.ROTATIONS ? (
+        <section className={styles.workspace}>
+          <Rotations standalone />
+        </section>
       ) : activeTab === TOOL_TABS.VISUAL_DRILL ? (
         <section className={styles.workspace}>
           <VisualDrillGenerator />
-        </section>
-      ) : activeTab === TOOL_TABS.ROTATIONS ? (
-        <section className={styles.workspace}>
-          <Rotations standalone />
         </section>
       ) : activeTab === TOOL_TABS.ANALYTICS_REPORT ? (
         <section className={styles.workspace}>

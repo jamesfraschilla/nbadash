@@ -11,6 +11,8 @@ import {
 import { PERSONNEL_LAYOUT } from "./personnelGraphicLayout.js";
 import { createSerialTaskQueue } from "./serialTaskQueue.js";
 import { saveToolRecordRemote } from "./toolVault.js";
+import { buildGameAlerts, selectPrimaryGameAlert } from "./gameAlerts.js";
+import { resolveFeatureAccess } from "./featureAccess.js";
 
 const player = {
   personId: "",
@@ -27,6 +29,43 @@ const stats = {
   threePointAttemptsPerGame: 3.2,
 };
 const selectedStats = ["ppg", "threePointPercentage", "rpg", "apg"];
+
+window.runLiveAlertRegression = () => {
+  const awayTeam = { teamId: "1", teamName: "Nets", teamTricode: "BKN" };
+  const homeTeam = { teamId: "2", teamName: "Thunder", teamTricode: "OKC" };
+  const unfinishedActions = [
+    { actionNumber: 1, orderNumber: 1, period: 1, clock: "PT09M00.00S", possession: "1", teamId: "1", actionType: "turnover", personId: 101 },
+    { actionNumber: 2, orderNumber: 2, period: 1, clock: "PT08M45.00S", possession: "2", teamId: "2", actionType: "2pt", shotResult: "Made", scoreAway: "0", scoreHome: "2", personId: 201 },
+    { actionNumber: 3, orderNumber: 3, period: 1, clock: "PT08M20.00S", possession: "1", teamId: "1", actionType: "turnover", personId: 101 },
+    { actionNumber: 4, orderNumber: 4, period: 1, clock: "PT08M00.00S", possession: "2", teamId: "2", actionType: "2pt", shotResult: "Made", scoreAway: "0", scoreHome: "4", personId: 201 },
+    { actionNumber: 5, orderNumber: 5, period: 1, clock: "PT07M40.00S", possession: "1", teamId: "1", actionType: "2pt", shotResult: "Missed", personId: 101 },
+    { actionNumber: 6, orderNumber: 6, period: 1, clock: "PT07M38.00S", possession: "1", teamId: "1", actionType: "rebound", subType: "offensive", personId: 101 },
+  ];
+  const unfinishedAlerts = buildGameAlerts({
+    game: { gameId: "0022600001", gameStatus: 2, period: 1, gameClock: "PT07M38.00S", playByPlayActions: unfinishedActions },
+    awayTeam,
+    homeTeam,
+  });
+  const halftimeActions = [
+    { actionNumber: 1, orderNumber: 1, period: 1, clock: "PT08M00.00S", teamId: "1", actionType: "2pt", shotResult: "Made", scoreAway: "2", scoreHome: "0", personId: 101 },
+    { actionNumber: 2, orderNumber: 2, period: 2, clock: "PT08M00.00S", teamId: "2", actionType: "2pt", shotResult: "Made", scoreAway: "2", scoreHome: "2", personId: 201 },
+    { actionNumber: 3, orderNumber: 3, period: 2, clock: "PT00M00.00S", actionType: "period", subType: "end", scoreAway: "2", scoreHome: "2" },
+  ];
+  const halftimeAlerts = buildGameAlerts({
+    game: { gameId: "0012600009", gameStatus: 2, period: 2, gameClock: "PT08M51.00S", playByPlayActions: halftimeActions },
+    awayTeam,
+    homeTeam,
+  });
+  return {
+    unfinishedHasEmptyAlert: unfinishedAlerts.some((alert) => alert.category === "Empty Possessions" || alert.category === "Kill"),
+    halftimePrimaryCategory: selectPrimaryGameAlert(halftimeAlerts)?.category || "",
+  };
+};
+
+window.runFeatureAccessRegression = () => {
+  const flags = new Set(["graphics"]);
+  return resolveFeatureAccess({ accountsEnabled: true, hasFeature: (flag) => flags.has(flag) });
+};
 
 async function makeDeterministicHeadshot() {
   const canvas = document.createElement("canvas");

@@ -1759,7 +1759,7 @@ export default function Rotations({ standalone = false }) {
   const rotationParam = String(params.get("rotation") || "").trim();
   const effectiveGameId = standalone ? `${STANDALONE_ROTATIONS_GAME_ID}:${rotationParam || "draft"}` : gameId;
   const vaultUserId = user?.id || (!accountsEnabled ? "guest" : "");
-  const backUrl = standalone ? "/tools?tab=rotations" : (dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`);
+  const backUrl = standalone ? "/graphics?graphic=rotations" : (dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`);
 
   const [players, setPlayers] = useState(createDefaultPlayers());
   const [playerNameDrafts, setPlayerNameDrafts] = useState(() => buildPlayerNameDrafts(createDefaultPlayers()));
@@ -2061,7 +2061,8 @@ export default function Rotations({ standalone = false }) {
     const latestRecord = ownedRotationRecords[0];
     if (!latestRecord?.id) return;
     const nextParams = new URLSearchParams(params);
-    nextParams.set("tab", "rotations");
+    nextParams.set("tab", "graphics");
+    nextParams.set("graphic", "rotations");
     nextParams.set("rotation", latestRecord.id);
     setParams(nextParams, { replace: true });
   }, [
@@ -3417,7 +3418,8 @@ export default function Rotations({ standalone = false }) {
       await queryClient.invalidateQueries({ queryKey: ["owned-tools", vaultUserId] });
       await queryClient.invalidateQueries({ queryKey: ["standalone-rotations-owned-records", vaultUserId] });
       const nextParams = new URLSearchParams(params);
-      nextParams.set("tab", "rotations");
+      nextParams.set("tab", "graphics");
+      nextParams.set("graphic", "rotations");
       nextParams.set("rotation", savedRecord.id);
       setParams(nextParams, { replace: true });
       setVaultStatus(`Saved to My Vault as ${savedRecord.title}.`);
@@ -3664,7 +3666,7 @@ export default function Rotations({ standalone = false }) {
           <div className={styles.topRowActions}>
             {standalone ? (
               <>
-                <Link className={styles.secondaryButton} to="/me?tab=rotations">
+                <Link className={styles.secondaryButton} to="/me?tab=graphics&graphic=rotations">
                   My Vault
                 </Link>
                 <button

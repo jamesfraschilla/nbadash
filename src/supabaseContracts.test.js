@@ -6,6 +6,7 @@ const atomicSql = readFileSync(new URL("../supabase/account_data_atomic.sql", im
 const storageSql = readFileSync(new URL("../supabase/graphic_headshots_storage.sql", import.meta.url), "utf8");
 const rosterSnapshotsSql = readFileSync(new URL("../supabase/roster_feed_snapshots.sql", import.meta.url), "utf8");
 const gameLiveStateSql = readFileSync(new URL("../supabase/game_live_state.sql", import.meta.url), "utf8");
+const gameLiveStateAtomicSql = readFileSync(new URL("../supabase/game_live_state_atomic.sql", import.meta.url), "utf8");
 
 test("account-data migration defines atomic version, share, and revision contracts", () => {
   [
@@ -45,4 +46,12 @@ test("game live state stores compact authenticated-readable snapshots", () => {
   assert.match(gameLiveStateSql, /diagnostics jsonb not null/i);
   assert.match(gameLiveStateSql, /league in \('nba', 'gleague', 'summer', 'unknown'\)/i);
   assert.match(gameLiveStateSql, /for select\s+to authenticated\s+using \(true\)/i);
+});
+
+test("game live state writes are atomically deduplicated across viewers", () => {
+  assert.match(gameLiveStateAtomicSql, /upsert_game_live_state_if_changed/i);
+  assert.match(gameLiveStateAtomicSql, /pg_advisory_xact_lock/i);
+  assert.match(gameLiveStateAtomicSql, /existing\.source_signature = incoming_signature/i);
+  assert.match(gameLiveStateAtomicSql, /grant execute .* to service_role/is);
+  assert.match(gameLiveStateAtomicSql, /revoke all .* from authenticated/is);
 });

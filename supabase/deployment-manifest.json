@@ -1,0 +1,202 @@
+{
+  "version": 1,
+  "databaseScripts": [
+    {
+      "order": 1,
+      "path": "supabase/accounts_auth.sql",
+      "sha256": "5021eb18a30e836cb0cfb225088bfbd2927292d58d8cbf9beb1e871b6b91a823"
+    },
+    {
+      "order": 2,
+      "path": "supabase/account_data_atomic.sql",
+      "sha256": "68a1c714a8d202c807f9c6ee32c84199dc194f9865128b6e6414a6c733dba6fc"
+    },
+    {
+      "order": 3,
+      "path": "supabase/tool_record_save_lock_guard.sql",
+      "sha256": "7f0966f24fa44ce032775b399f91f55c95ee1a7f03a84bbb396755a054f76bd7"
+    },
+    {
+      "order": 4,
+      "path": "supabase/rotations_shared_state.sql",
+      "sha256": "34f8589fcb1b6cdf9c2e8fd3cdf617c2c8873e36233b1400eb920172784c8225"
+    },
+    {
+      "order": 5,
+      "path": "supabase/roster_feed_snapshots.sql",
+      "sha256": "a65b2393ea6cf50fd49e145b5b2a4da4659baa2565863e572708c0b093cbdbaa"
+    },
+    {
+      "order": 6,
+      "path": "supabase/game_analysis_segments.sql",
+      "sha256": "fa3da571ae1db6f491c19a293d2589924284ad3865c9806a23daff539707711f"
+    },
+    {
+      "order": 7,
+      "path": "supabase/game_live_state.sql",
+      "sha256": "54151ee42b989264ecfb9a1ccd28cd41dd124bb56d317c20ce23fa5f8d662ded"
+    },
+    {
+      "order": 8,
+      "path": "supabase/game_live_state_atomic.sql",
+      "sha256": "964b5ca2debb43daa809d072b413f5098dbcd2552813be8c4025aa87d2f31d3c"
+    },
+    {
+      "order": 9,
+      "path": "supabase/graphic_headshots_storage.sql",
+      "sha256": "2f43317e995a77a56e027ffe1e970d3ba6861e10af460058224101b2040b2e1a"
+    },
+    {
+      "order": 10,
+      "path": "supabase/player_headshots_storage.sql",
+      "sha256": "116a142f565f4625b4c6fc6711c95432033069d002ded53a98af32c1eaf74306"
+    },
+    {
+      "order": 11,
+      "path": "supabase/visual_drill_images_storage.sql",
+      "sha256": "583fbe0bf079c6bbfd6e8c567e30a55f4274dfb04889df67a6ec4a1c18939220"
+    },
+    {
+      "order": 12,
+      "path": "supabase/officiating_intelligence.sql",
+      "sha256": "a6abd52a0f7ac8d55cff800edb8b7b84360e36285070401f18db1ae2652bcad2"
+    },
+    {
+      "order": 13,
+      "path": "supabase/officiating_intelligence_hardening.sql",
+      "sha256": "d2cbe1a17c6cf54c98a2663bfd99b5131ec5dbb25e034243fb170b47d699e3b5"
+    },
+    {
+      "order": 14,
+      "path": "supabase/officiating_reliability_hardening.sql",
+      "sha256": "05cdf22a19fa29fe7a49fbc6b8fa00e12e5c12739dbd79c60fddf3db575a51c0"
+    },
+    {
+      "order": 15,
+      "path": "supabase/officiating_season_scoped_rollup_caches.sql",
+      "sha256": "293c6086df91772cf0f928ee7fca62f681ae1e96408e4b60bea785917c0ad132"
+    },
+    {
+      "order": 16,
+      "path": "supabase/officiating_insights.sql",
+      "sha256": "b0eeb7d36eb424a4485054ebe646d3c871aa010906e9a2affe20dfa22322f10e"
+    },
+    {
+      "order": 17,
+      "path": "supabase/officiating_insight_feedback.sql",
+      "sha256": "aeaec87180a7de84d138cbe69418456bd2b11c692afc3e2977aefebeac3ec3ef"
+    },
+    {
+      "order": 18,
+      "path": "supabase/officiating_cache_rls.sql",
+      "sha256": "e0db5984273feebae1bba747f6c5b0e3995ffcacbf308524219cc0b860c6bcff"
+    },
+    {
+      "order": 19,
+      "path": "supabase/fix_officiating_stat_accuracy.sql",
+      "sha256": "081972a0b2e8254dc51e27e0cc9b91308beb355e1f353f3264262b9e014b1fc8"
+    },
+    {
+      "order": 20,
+      "path": "supabase/remove_pgr_insights.sql",
+      "sha256": "3ace6b2e11e2e917917b4a8aef0a91326671fa9f71266f19e62cfad17e6721a3"
+    },
+    {
+      "order": 21,
+      "path": "supabase/challenge_context_tag_save_rpc.sql",
+      "sha256": "0333462ca4e496aa67243176088732d5ea62869e9af95f5e0ac6bc65f8eed63e"
+    },
+    {
+      "order": 22,
+      "path": "supabase/database_storage_audit.sql",
+      "sha256": "71b69f0988cbc0fc82bd4c227706ab5d2c105d63a5597776b3ac90f3686da995"
+    },
+    {
+      "order": 23,
+      "path": "supabase/wizards_analysis_prewarm_schedule.sql",
+      "sha256": "1764a8ef8efd85d9462588d201be039dbcb56d2120bcee056b3bc171aabe8879"
+    }
+  ],
+  "edgeFunctions": [
+    {
+      "name": "admin-users",
+      "entrypoint": "supabase/functions/admin-users/index.ts",
+      "sha256": "02d72ecbd6409f0551b2c90890c7f297aff79a92ba3f9408bab6620d864e9654"
+    },
+    {
+      "name": "custom-requests",
+      "entrypoint": "supabase/functions/custom-requests/index.ts",
+      "sha256": "92cfaf488cc6d876fabb5d2e493a796f1abf0c226d8fbddd8d83021eb7230b9a"
+    },
+    {
+      "name": "export-image",
+      "entrypoint": "supabase/functions/export-image/index.ts",
+      "sha256": "b8503c465105625aae1bbe05a32e6e751bb27a13037080510dc86d7d6bd747d2"
+    },
+    {
+      "name": "game-analysis",
+      "entrypoint": "supabase/functions/game-analysis/index.ts",
+      "sha256": "9e37ad588deefc9f4386a93db57ea52e66ee3fdf1dc04bbc3a564ff51330ad54"
+    },
+    {
+      "name": "game-live-state",
+      "entrypoint": "supabase/functions/game-live-state/index.ts",
+      "sha256": "2d20cfb436dd62affd81e0ba7d162fada273c1bff53e3c5af9bd1692163d387c"
+    },
+    {
+      "name": "game-metadata",
+      "entrypoint": "supabase/functions/game-metadata/index.ts",
+      "sha256": "35142c16437d5b6d9a63d2781ddb4c6e836fa96772c3946b25061e2a3cfc980f"
+    },
+    {
+      "name": "gleague-rosters",
+      "entrypoint": "supabase/functions/gleague-rosters/index.ts",
+      "sha256": "54d22d74328cc7fab72ed1ef72f02abe3ed9095575451ab6933c871a3aab3611"
+    },
+    {
+      "name": "nba-analytics-report",
+      "entrypoint": "supabase/functions/nba-analytics-report/index.ts",
+      "sha256": "2c1c8c0e07c8afccff622debf603dbc1bf841305686c2e7e715977a037a4f8a4"
+    },
+    {
+      "name": "nba-matchup-defaults",
+      "entrypoint": "supabase/functions/nba-matchup-defaults/index.ts",
+      "sha256": "411b65cdfe38457d655f6858400a06c1ecd8d4e2d65fa4ed3b3c595e5f4103e5"
+    },
+    {
+      "name": "nba-player-stats",
+      "entrypoint": "supabase/functions/nba-player-stats/index.ts",
+      "sha256": "f2daf25eb5204d831ffbc46f900d72cbce069de7633d4a828b3fcbd9a3ff6960"
+    },
+    {
+      "name": "nba-rosters",
+      "entrypoint": "supabase/functions/nba-rosters/index.ts",
+      "sha256": "f1751b7e12d3bf516346ebbe9ff945bb7bc710a6f15d6cbcbf30faa2dbce0a46"
+    },
+    {
+      "name": "officiating-insights",
+      "entrypoint": "supabase/functions/officiating-insights/index.ts",
+      "sha256": "4d6a5f7b968c670b23e8281d0c8db86c910cfbe83bfd70fc1992b343f95617d9"
+    },
+    {
+      "name": "player-headshot",
+      "entrypoint": "supabase/functions/player-headshot/index.ts",
+      "sha256": "c0adde64cc05f4bcaca643b6e3f7a483d957714ea110ca69f9d4f3e91b4da13f"
+    },
+    {
+      "name": "pregame-scouting",
+      "entrypoint": "supabase/functions/pregame-scouting/index.ts",
+      "sha256": "9ab4d5bcbf52ef55de30de7fbd888dd23114964ac255e04062ef164737cbdd2e"
+    },
+    {
+      "name": "team-games",
+      "entrypoint": "supabase/functions/team-games/index.ts",
+      "sha256": "0cbad56a1799cf20a2d8d9f8191e47e67d841154335e6cfefb45ca987d8a43a8"
+    },
+    {
+      "name": "wizards-analysis-prewarm",
+      "entrypoint": "supabase/functions/wizards-analysis-prewarm/index.ts",
+      "sha256": "56aef9b460086f85f7c27336384c2f76cd79ecbfbffdb475a9f4af4bf306d487"
+    }
+  ]
+}

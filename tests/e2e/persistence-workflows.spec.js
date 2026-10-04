@@ -2,17 +2,23 @@ import { expect, test } from "@playwright/test";
 
 const appUrl = (hash) => `http://127.0.0.1:4174/nbadash/#${hash}`;
 
-test("Rotations reopens the guest user's most recently saved draft", async ({ page }) => {
-  await page.goto(appUrl("/tools?tab=rotations"));
+test("Rotations reopens the guest user's most recently saved Graphics draft", async ({ page }) => {
+  await page.goto(appUrl("/graphics?graphic=rotations"));
   await page.getByLabel("Opponent line").fill("VS PERSISTENCE TEST");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page).toHaveURL(/rotation=[0-9a-f-]+/);
 
   await page.goto(appUrl("/tools?tab=visual-drill"));
-  await page.goto(appUrl("/tools?tab=rotations"));
+  await page.goto(appUrl("/graphics?graphic=rotations"));
 
   await expect(page).toHaveURL(/rotation=[0-9a-f-]+/);
   await expect(page.getByLabel("Opponent line")).toHaveValue("VS PERSISTENCE TEST");
+});
+
+test("legacy Rotations tool links redirect into Graphics", async ({ page }) => {
+  await page.goto(appUrl("/tools?tab=rotations"));
+  await expect(page).toHaveURL(/\/graphics\?graphic=rotations/);
+  await expect(page.getByRole("button", { name: "Rotations", exact: true })).toBeVisible();
 });
 
 test("saved Court Time graphics refresh their players from the shared roster", async ({ page }) => {

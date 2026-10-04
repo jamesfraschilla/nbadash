@@ -33,6 +33,12 @@ jobs:
         run: npm ci
       - name: Check Edge Functions
         run: npm run check:edge-functions
+      - name: Check Supabase deployment manifest
+        run: npm run supabase:manifest:check
+      - name: Test Edge Functions
+        run: npm run test:edge
+      - name: Typecheck Edge Functions
+        run: npm run typecheck
       - name: Test
         run: npm test -- --test-reporter=spec
       - name: Lint

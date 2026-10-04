@@ -490,6 +490,41 @@ test("empty-possession alerts update within a streak and reset for a new streak"
   assert.ok(emptyAlerts.some((alert) => alert.title.includes("3 consecutive possessions")));
 });
 
+test("an unfinished live possession is not counted as empty", () => {
+  const actions = [
+    { actionNumber: 1, orderNumber: 1, period: 1, clock: "PT09M00.00S", possession: AWAY.teamId, teamId: AWAY.teamId, actionType: "turnover", personId: 101 },
+    { actionNumber: 2, orderNumber: 2, period: 1, clock: "PT08M45.00S", possession: HOME.teamId, teamId: HOME.teamId, actionType: "2pt", shotResult: "Made", personId: 201 },
+    { actionNumber: 3, orderNumber: 3, period: 1, clock: "PT08M20.00S", possession: AWAY.teamId, teamId: AWAY.teamId, actionType: "turnover", personId: 101 },
+    { actionNumber: 4, orderNumber: 4, period: 1, clock: "PT08M00.00S", possession: HOME.teamId, teamId: HOME.teamId, actionType: "2pt", shotResult: "Made", personId: 201 },
+    { actionNumber: 5, orderNumber: 5, period: 1, clock: "PT07M40.00S", possession: AWAY.teamId, teamId: AWAY.teamId, actionType: "2pt", shotResult: "Missed", personId: 101 },
+    { actionNumber: 6, orderNumber: 6, period: 1, clock: "PT07M38.00S", possession: AWAY.teamId, teamId: AWAY.teamId, actionType: "rebound", subType: "offensive", personId: 101 },
+  ];
+  const liveAlerts = buildGameAlerts({
+    game: { gameId: "0022600001", gameStatus: 2, period: 1, gameClock: "PT07M38.00S", playByPlayActions: actions },
+    awayTeam: AWAY,
+    homeTeam: HOME,
+  });
+  assert.equal(liveAlerts.some((alert) => alert.category === "Empty Possessions"), false);
+  assert.equal(liveAlerts.some((alert) => alert.category === "Kill"), false);
+
+  const endedAlerts = buildGameAlerts({
+    game: {
+      gameId: "0022600001",
+      gameStatus: 2,
+      period: 1,
+      gameClock: "PT07M20.00S",
+      playByPlayActions: [
+        ...actions,
+        { actionNumber: 7, orderNumber: 7, period: 1, clock: "PT07M20.00S", possession: HOME.teamId, teamId: HOME.teamId, actionType: "rebound", subType: "defensive", personId: 201 },
+      ],
+    },
+    awayTeam: AWAY,
+    homeTeam: HOME,
+  });
+  assert.equal(endedAlerts.some((alert) => alert.category === "Empty Possessions"), true);
+  assert.equal(endedAlerts.some((alert) => alert.category === "Kill"), true);
+});
+
 test("Kill alerts fire for each completed group of three defensive stops", () => {
   const actions = [];
   let order = 0;

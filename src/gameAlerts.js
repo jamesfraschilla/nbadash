@@ -828,7 +828,7 @@ function ordinal(value) {
   return `${number}th`;
 }
 
-function addPossessionPressureAlerts({ alerts, seen, orderedActions, teamsById, homeTeamId, awayTeamId, gameId }) {
+function addPossessionPressureAlerts({ alerts, seen, orderedActions, teamsById, homeTeamId, awayTeamId, gameId, gameStatus }) {
   const emptyStreaks = new Map([[homeTeamId, 0], [awayTeamId, 0]]);
   const emptyAlertByTeam = new Map();
   const killTotals = new Map([[homeTeamId, 0], [awayTeamId, 0]]);
@@ -957,7 +957,16 @@ function addPossessionPressureAlerts({ alerts, seen, orderedActions, teamsById, 
       possession.offensiveRebounds += 1;
     }
   });
-  finishPossession();
+  const trailingAction = possession?.lastAction;
+  const trailingType = String(trailingAction?.actionType || "").toLowerCase();
+  const trailingSubtype = String(trailingAction?.subType || "").toLowerCase();
+  const trailingTeamId = normalizeTeamId(trailingAction?.teamId);
+  const possessionEnded = safeNumber(gameStatus, 0) === 3
+    || (trailingType === "period" && trailingSubtype === "end")
+    || trailingType === "turnover"
+    || possession?.points > 0
+    || (trailingType === "rebound" && trailingSubtype === "defensive" && trailingTeamId !== possession?.teamId);
+  if (possessionEnded) finishPossession();
 }
 
 function buildPeriodEndSummary({
@@ -2065,6 +2074,7 @@ export function buildGameAlerts({
     homeTeamId,
     awayTeamId,
     gameId: game?.gameId,
+    gameStatus: game?.gameStatus,
   });
 
   const finalPeriod = Math.max(...orderedActions.map((action) => safeNumber(action?.period, 0)), 0);

@@ -27,9 +27,11 @@
     "schedule:update": "node scripts/update-nba-schedule.mjs",
     "schedule:prewarm:update": "node scripts/update-wizards-analysis-prewarm-schedule.mjs",
     "test": "node --test \"src/**/*.test.js\"",
-    "test:edge": "npx -y deno test --allow-env --config supabase/deno.json supabase/functions/**/*.test.ts",
+    "test:edge": "npx -y deno test --allow-env --allow-read=supabase --config supabase/deno.json supabase/functions/**/*.test.ts",
     "test:e2e": "playwright test",
-    "verify": "npm run lint && npm test && npm run test:edge && npm run typecheck && npm run test:e2e && npm run build && npm audit --audit-level=high",
+    "supabase:manifest:update": "node scripts/supabase-deployment-manifest.mjs --write",
+    "supabase:manifest:check": "node scripts/supabase-deployment-manifest.mjs",
+    "verify": "npm run supabase:manifest:check && npm run lint && npm test && npm run test:edge && npm run typecheck && npm run test:e2e && npm run build && npm audit --audit-level=high",
     "preview": "vite preview"
   },
   "dependencies": {

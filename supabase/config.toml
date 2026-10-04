@@ -1,3 +1,9 @@
+[functions.admin-users]
+verify_jwt = true
+
+[functions.custom-requests]
+verify_jwt = true
+
 [functions.player-headshot]
 verify_jwt = false
 

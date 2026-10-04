@@ -310,14 +310,8 @@ async function readSnapshot(admin: SupabaseAdminClient, gameId: string) {
 }
 
 async function upsertSnapshot(admin: SupabaseAdminClient, normalized: Awaited<ReturnType<typeof normalizeGameLiveState>>) {
-  const existing = await readSnapshot(admin, normalized.gameId).catch(() => null);
-  if (existing?.sourceSignature === normalized.sourceSignature) {
-    return { snapshot: existing, changed: false };
-  }
-
-  const { data, error } = await admin
-    .from(TABLE)
-    .upsert({
+  const { data, error } = await admin.rpc("upsert_game_live_state_if_changed", {
+    p_snapshot: {
       game_id: normalized.gameId,
       league: normalized.league,
       season_year: normalized.seasonYear,
@@ -330,12 +324,15 @@ async function upsertSnapshot(admin: SupabaseAdminClient, normalized: Awaited<Re
       normalized_at: normalized.normalizedAt,
       payload: normalized.payload,
       diagnostics: normalized.diagnostics,
-    }, { onConflict: "game_id" })
-    .select(SNAPSHOT_COLUMNS)
-    .abortSignal(AbortSignal.timeout(WRITE_TIMEOUT_MS))
-    .single();
+    },
+  })
+    .abortSignal(AbortSignal.timeout(WRITE_TIMEOUT_MS));
   if (error) throw error;
-  return { snapshot: rowToSnapshot(data as JsonRecord), changed: true };
+  const result = data as JsonRecord;
+  return {
+    snapshot: rowToSnapshot((result?.row || null) as JsonRecord | null),
+    changed: Boolean(result?.changed),
+  };
 }
 
 export async function handleRequest(req: Request) {

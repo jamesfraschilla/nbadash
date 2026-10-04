@@ -11,6 +11,7 @@ export const ACCOUNT_TEAM_SCOPES = [
 ];
 export const ACCOUNT_FEATURE_FLAGS = [
   { key: "match_ups", label: "Match-Ups" },
+  { key: "graphics", label: "Graphics" },
   { key: "tools", label: "Tools" },
 ];
 
