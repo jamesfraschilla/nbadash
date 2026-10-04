@@ -3,6 +3,8 @@ import { expect, test } from "@playwright/test";
 const appUrl = (hash) => `http://127.0.0.1:4174/nbadash/#${hash}`;
 
 test("Rotations reopens the guest user's most recently saved Graphics draft", async ({ page }) => {
+  await page.route("**/functions/v1/**", (route) => route.fulfill({ status: 503, contentType: "application/json", body: "{}" }));
+  await page.route("**/rest/v1/**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
   await page.goto(appUrl("/graphics?graphic=rotations"));
   await page.getByLabel("Opponent line").fill("VS PERSISTENCE TEST");
   await page.getByRole("button", { name: "Save", exact: true }).click();
