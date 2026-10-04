@@ -1003,6 +1003,60 @@ function buildLeaderSummary(cumulativePlayerStats, awayTeam, homeTeam) {
   ].filter(Boolean).join(" Meanwhile, ");
 }
 
+function buildFinalGameRecap({
+  action,
+  awayTeam,
+  homeTeam,
+  cumulativePlayerStats,
+  cumulativeTeamStats,
+  scoringEvents,
+}) {
+  const awayScore = parseScoreValue(action?.scoreAway) ?? safeNumber(awayTeam?.score, 0);
+  const homeScore = parseScoreValue(action?.scoreHome) ?? safeNumber(homeTeam?.score, 0);
+  const awayLabel = teamLabel(awayTeam);
+  const homeLabel = teamLabel(homeTeam);
+  const details = [];
+  let title;
+
+  if (awayScore === homeScore) {
+    title = `${awayLabel} and ${homeLabel} finished tied at ${awayScore}`;
+  } else {
+    const winner = awayScore > homeScore ? awayTeam : homeTeam;
+    const loser = awayScore > homeScore ? homeTeam : awayTeam;
+    title = `${teamLabel(winner)} defeated ${teamLabel(loser)}, ${Math.max(awayScore, homeScore)}-${Math.min(awayScore, homeScore)}`;
+  }
+
+  const secondHalfPoints = new Map();
+  scoringEvents.filter((event) => event.period >= 3).forEach((event) => {
+    secondHalfPoints.set(event.teamId, safeNumber(secondHalfPoints.get(event.teamId), 0) + event.points);
+  });
+  const awaySecondHalf = safeNumber(secondHalfPoints.get(normalizeTeamId(awayTeam?.teamId)), 0);
+  const homeSecondHalf = safeNumber(secondHalfPoints.get(normalizeTeamId(homeTeam?.teamId)), 0);
+  if (awaySecondHalf !== homeSecondHalf && awaySecondHalf + homeSecondHalf > 0) {
+    const strongerTeam = awaySecondHalf > homeSecondHalf ? awayTeam : homeTeam;
+    const weakerTeam = awaySecondHalf > homeSecondHalf ? homeTeam : awayTeam;
+    details.push(`${teamLabel(strongerTeam)} won the second half ${Math.max(awaySecondHalf, homeSecondHalf)}-${Math.min(awaySecondHalf, homeSecondHalf)} over ${teamLabel(weakerTeam)}.`);
+  }
+
+  const awayStats = cumulativeTeamStats.get(normalizeTeamId(awayTeam?.teamId));
+  const homeStats = cumulativeTeamStats.get(normalizeTeamId(homeTeam?.teamId));
+  if (awayStats?.fieldGoalsAttempted >= 10 && homeStats?.fieldGoalsAttempted >= 10) {
+    const awayPct = (awayStats.fieldGoalsMade / awayStats.fieldGoalsAttempted) * 100;
+    const homePct = (homeStats.fieldGoalsMade / homeStats.fieldGoalsAttempted) * 100;
+    if (Math.abs(awayPct - homePct) >= 5) {
+      const betterTeam = awayPct > homePct ? awayTeam : homeTeam;
+      details.push(`${teamLabel(betterTeam)} held the shooting edge, ${formatPercent(Math.max(awayPct, homePct))} to ${formatPercent(Math.min(awayPct, homePct))}.`);
+    }
+  }
+
+  const leaders = buildLeaderSummary(cumulativePlayerStats, awayTeam, homeTeam);
+  if (leaders) details.push(leaders);
+  return {
+    title,
+    detail: details.join(" "),
+  };
+}
+
 function findTeamLeader(cumulativePlayerStats, teamId) {
   return [...cumulativePlayerStats.values()]
     .filter((player) => player.teamId === teamId && player.points > 0)
@@ -1137,6 +1191,34 @@ function addPeriodEndAlerts({
         detail: candidate.detail,
       });
     });
+
+  if (safeNumber(game?.gameStatus, 0) === 3) {
+    const finalAction = [...orderedActions].reverse().find((action) => (
+      parseScoreValue(action?.scoreAway) != null && parseScoreValue(action?.scoreHome) != null
+    )) || orderedActions[orderedActions.length - 1];
+    const finalPeriod = Math.max(finalCompletedPeriod, safeNumber(finalAction?.period, 0));
+    const recap = buildFinalGameRecap({
+      action: finalAction,
+      awayTeam,
+      homeTeam,
+      cumulativePlayerStats: cumulativeSnapshotsByPeriod.get(finalPeriod) || new Map(),
+      cumulativeTeamStats: new Map([
+        [normalizeTeamId(awayTeam?.teamId), teamCumulativeStatsByPeriod.get(`${normalizeTeamId(awayTeam?.teamId)}:${finalPeriod}`)],
+        [normalizeTeamId(homeTeam?.teamId), teamCumulativeStatsByPeriod.get(`${normalizeTeamId(homeTeam?.teamId)}:${finalPeriod}`)],
+      ]),
+      scoringEvents,
+    });
+    addAlert(alerts, seen, {
+      id: "final-game-recap",
+      category: "Final",
+      period: finalPeriod,
+      clock: "0:00",
+      elapsed: actionElapsedSeconds({ period: finalPeriod, clock: "0:00" }, game?.gameId) + 0.9,
+      title: recap.title,
+      detail: recap.detail,
+      isPrimary: true,
+    });
+  }
 }
 
 function addTeamTrendCandidate(candidates, candidate) {
@@ -1430,6 +1512,7 @@ function alertPruneScore(alert) {
     case "First Score":
     case "Quarter":
     case "Halftime":
+    case "Final":
       return 0;
     default:
       return 50;

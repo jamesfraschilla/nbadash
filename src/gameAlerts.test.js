@@ -397,6 +397,32 @@ test("a completed Q2 summary is primary until Q3 starts", () => {
   assert.equal(thirdQuarterAlerts.find((alert) => alert.category === "Halftime")?.isPrimary, false);
 });
 
+test("a completed game ends with a primary full-game recap", () => {
+  const actions = [
+    scoringAction({ actionNumber: 1, orderNumber: 1, period: 1, clock: "PT10M00.00S", scoreAway: "2", scoreHome: "0" }),
+    scoringAction({ actionNumber: 2, orderNumber: 2, period: 2, clock: "PT08M00.00S", scoreAway: "4", scoreHome: "0" }),
+    scoringAction({ actionNumber: 3, orderNumber: 3, period: 3, clock: "PT06M00.00S", teamId: HOME.teamId, personId: 201, playerName: "Home Leader", scoreAway: "4", scoreHome: "2" }),
+    scoringAction({ actionNumber: 4, orderNumber: 4, period: 4, clock: "PT02M00.00S", actionType: "3pt", scoreAway: "7", scoreHome: "2" }),
+    scoringAction({ actionNumber: 5, orderNumber: 5, period: 4, clock: "PT01M00.00S", teamId: HOME.teamId, personId: 201, playerName: "Home Leader", scoreAway: "7", scoreHome: "4" }),
+    { actionNumber: 6, orderNumber: 6, actionType: "period", subType: "end", period: 4, clock: "PT00M00.00S", scoreAway: "7", scoreHome: "4" },
+  ];
+  const alerts = buildGameAlerts({
+    game: { gameId: "0022600001", gameStatus: 3, period: 4, gameClock: "PT00M00.00S", playByPlayActions: actions },
+    awayTeam: AWAY,
+    homeTeam: HOME,
+    basePlayers: [
+      { personId: 101, firstName: "John", familyName: "Ukomadu", teamId: AWAY.teamId },
+      { personId: 201, firstName: "Home", familyName: "Leader", teamId: HOME.teamId },
+    ],
+  });
+  const recap = alerts.find((alert) => alert.category === "Final");
+  assert.ok(recap);
+  assert.equal(recap.title, "Nets defeated Thunder, 7-4");
+  assert.match(recap.detail, /John Ukomadu leads the Nets/);
+  assert.equal(selectPrimaryGameAlert(alerts)?.id, "final-game-recap");
+  assert.equal(alerts.at(-1)?.id, "final-game-recap");
+});
+
 test("every timeout creates an alert with recent game context", () => {
   const alerts = buildGameAlerts({
     game: {
