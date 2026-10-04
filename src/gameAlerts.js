@@ -830,7 +830,6 @@ function ordinal(value) {
 
 function addPossessionPressureAlerts({ alerts, seen, orderedActions, teamsById, homeTeamId, awayTeamId, gameId, gameStatus }) {
   const emptyStreaks = new Map([[homeTeamId, 0], [awayTeamId, 0]]);
-  const emptyAlertByTeam = new Map();
   const killTotals = new Map([[homeTeamId, 0], [awayTeamId, 0]]);
   const secondChanceTotals = new Map();
   const secondChanceAlertByKey = new Map();
@@ -844,35 +843,9 @@ function addPossessionPressureAlerts({ alerts, seen, orderedActions, teamsById, 
 
     if (possession.points > 0) {
       emptyStreaks.set(possession.teamId, 0);
-      emptyAlertByTeam.delete(possession.teamId);
     } else {
       const streak = safeNumber(emptyStreaks.get(possession.teamId), 0) + 1;
       emptyStreaks.set(possession.teamId, streak);
-      if (streak >= 3) {
-        let alert = emptyAlertByTeam.get(possession.teamId);
-        if (!alert) {
-          alert = {
-            id: `empty-possession:${possession.teamId}:${possession.startKey}`,
-            category: "Empty Possessions",
-            period: possession.lastAction.period,
-            clock: possession.lastAction.clock,
-            elapsed: actionElapsedSeconds(possession.lastAction, gameId),
-            teamId: possession.teamId,
-            title: "",
-            detail: "",
-          };
-          addAlert(alerts, seen, alert);
-          alert = alerts[alerts.length - 1];
-          emptyAlertByTeam.set(possession.teamId, alert);
-        }
-        alert.period = safeNumber(possession.lastAction.period, 0);
-        alert.clock = possession.lastAction.clock || "";
-        alert.periodLabel = periodShortLabel(alert.period);
-        alert.timeLabel = `${periodShortLabel(alert.period)} ${clockLabel(alert.clock)}`;
-        alert.elapsed = actionElapsedSeconds(possession.lastAction, gameId);
-        alert.title = `${teamLabel(offense)} have come up empty on ${streak} consecutive possessions`;
-        alert.detail = `The streak includes missed shots and turnovers without a scoring recovery.`;
-      }
       if (streak >= 3 && streak % 3 === 0) {
         const total = safeNumber(killTotals.get(defenseId), 0) + 1;
         killTotals.set(defenseId, total);
@@ -926,7 +899,6 @@ function addPossessionPressureAlerts({ alerts, seen, orderedActions, teamsById, 
       finishPossession();
       possession = {
         teamId: actionPossession,
-        startKey: action?.actionNumber ?? action?.orderNumber ?? `${action?.period}:${action?.clock}`,
         lastAction: action,
         hasOutcome: false,
         points: 0,
@@ -1514,7 +1486,6 @@ function alertPruneScore(alert) {
     case "Bonus Pressure":
       return 10;
     case "Milestone":
-    case "Empty Possessions":
     case "Kill":
       return 5;
     case "Timeout":

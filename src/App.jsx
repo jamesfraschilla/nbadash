@@ -295,7 +295,7 @@ export default function App() {
             />
             <Route
               path="/officiating"
-              element={canUseTools ? <Officiating /> : <AccessRequired>An admin needs to grant the Tools feature flag before you can use this page.</AccessRequired>}
+              element={<Officiating />}
             />
             <Route path="/g/:gameId" element={<Game />} />
             <Route path="/g/:gameId/atc" element={<Game variant="atc" />} />

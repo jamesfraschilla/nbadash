@@ -451,7 +451,7 @@ test("every timeout creates an alert with recent game context", () => {
   assert.ok(timeoutAlerts.every((alert) => alert.detail));
 });
 
-test("empty-possession alerts update within a streak and reset for a new streak", () => {
+test("empty-possession streaks produce Kill alerts without redundant offensive alerts", () => {
   let order = 0;
   const action = (teamId, actionType, shotResult = undefined) => ({
     actionNumber: ++order,
@@ -484,10 +484,8 @@ test("empty-possession alerts update within a streak and reset for a new streak"
     awayTeam: AWAY,
     homeTeam: HOME,
   });
-  const emptyAlerts = alerts.filter((alert) => alert.category === "Empty Possessions" && alert.teamId === AWAY.teamId);
-  assert.equal(emptyAlerts.length, 2);
-  assert.ok(emptyAlerts.some((alert) => alert.title.includes("4 consecutive possessions")));
-  assert.ok(emptyAlerts.some((alert) => alert.title.includes("3 consecutive possessions")));
+  assert.equal(alerts.some((alert) => alert.category === "Empty Possessions"), false);
+  assert.equal(alerts.filter((alert) => alert.category === "Kill").length, 2);
 });
 
 test("an unfinished live possession is not counted as empty", () => {
@@ -521,7 +519,7 @@ test("an unfinished live possession is not counted as empty", () => {
     awayTeam: AWAY,
     homeTeam: HOME,
   });
-  assert.equal(endedAlerts.some((alert) => alert.category === "Empty Possessions"), true);
+  assert.equal(endedAlerts.some((alert) => alert.category === "Empty Possessions"), false);
   assert.equal(endedAlerts.some((alert) => alert.category === "Kill"), true);
 });
 

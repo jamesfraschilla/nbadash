@@ -15,7 +15,6 @@ const WIZARDS_TEAM_ID = "1610612764";
 const DEFAULT_SEASON = "2025-26";
 const DEFAULT_GAME_IDS = ["0042500131"];
 const DEFAULT_SEASON_TYPES = ["Regular Season", "Playoffs"];
-const EXCLUDED_STAT_SEASON_TYPES = new Set(["preseason"]);
 const NBA_TEAM_IDS = [
   "1610612737", "1610612738", "1610612751", "1610612766", "1610612741", "1610612739",
   "1610612742", "1610612743", "1610612765", "1610612744", "1610612745", "1610612754",
@@ -336,10 +335,6 @@ function confidenceCounts(events) {
 
 function normalizedSeasonType(game, fallback = "") {
   return String(game.seasonType || fallback || "").replace(/^playoffs$/i, "Playoffs");
-}
-
-function isIncludedStatSeasonType(seasonType) {
-  return !EXCLUDED_STAT_SEASON_TYPES.has(String(seasonType || "").trim().toLowerCase());
 }
 
 function normalizedGameDate(game, fallback = "") {
@@ -742,10 +737,7 @@ async function main() {
   const league = hasFlag("league");
   const teamIds = readListArg("team-ids", league ? NBA_TEAM_IDS : [teamId]);
   const requestedSeasonTypes = readListArg("season-types", DEFAULT_SEASON_TYPES);
-  const seasonTypes = requestedSeasonTypes.filter(isIncludedStatSeasonType);
-  if (seasonTypes.length !== requestedSeasonTypes.length) {
-    console.error("Ignoring preseason for officiating stat backfill. Preseason challenges can be imported through import-nba-challenge-log.");
-  }
+  const seasonTypes = requestedSeasonTypes;
   const gameIdsArg = readListArg("game-ids");
   const maxGames = readIntegerArg("max-games", 0);
   const concurrency = readIntegerArg("concurrency", 4);
@@ -758,6 +750,7 @@ async function main() {
   const skipStatsPlayByPlay = hasFlag("skip-stats-playbyplay");
   const apply = hasFlag("apply");
   const requireComplete = hasFlag("require-complete");
+  const allowIncompletePreseason = hasFlag("allow-incomplete-preseason");
   const discover = hasFlag("discover") || !gameIdsArg.length;
 
   const discoveredGames = discover && gameIdSource === "generated"
@@ -771,7 +764,7 @@ async function main() {
         matchup: "",
       }));
   const gameRefs = (discoveredGames.length ? discoveredGames : DEFAULT_GAME_IDS.map((gameId) => ({ gameId, seasonType: "", gameDate: "", matchup: "" })))
-    .filter((gameRef) => isIncludedStatSeasonType(gameRef.seasonType || inferSeasonTypeFromGameId(gameRef.gameId)));
+    .filter((gameRef) => gameRef.gameId);
   console.error(`Discovered ${gameRefs.length} games for ${league ? "league" : teamId} via ${gameIdSource}.`);
   const errors = [];
   let processedCount = 0;
@@ -809,7 +802,9 @@ async function main() {
   const processedGameIds = loadedGames.map(({ gameRef }) => gameRef.gameId);
   const gameAudits = buildGameAuditRows({ loadedGames, assignmentRows, callRows, challengeRows });
   const flaggedGames = gameAudits.filter((row) => row.flags.length);
-  const incompleteGameIds = new Set(requireComplete ? flaggedGames.map((row) => row.gameId) : []);
+  const incompleteGameIds = new Set(requireComplete ? flaggedGames
+    .filter((row) => !(allowIncompletePreseason && inferSeasonTypeFromGameId(row.gameId) === "Preseason"))
+    .map((row) => row.gameId) : []);
   const appliedGameIds = processedGameIds.filter((gameId) => !incompleteGameIds.has(gameId));
   let generatedSqlChunks = [];
   if (sqlOutputDir) {

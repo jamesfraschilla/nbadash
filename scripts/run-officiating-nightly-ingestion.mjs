@@ -85,6 +85,7 @@ function runImporter(gameIds) {
       "--concurrency=3",
       "--apply",
       "--require-complete",
+      "--allow-incomplete-preseason",
     ], { stdio: "inherit", env: process.env });
     child.once("error", reject);
     child.once("exit", (code) => {
@@ -118,7 +119,7 @@ async function main() {
     dateKeys,
   });
   if (!completedGames.length) {
-    console.log(`No completed non-preseason games found for ${dateKeys.join(", ")}.`);
+    console.log(`No completed games found for ${dateKeys.join(", ")}.`);
     return;
   }
 

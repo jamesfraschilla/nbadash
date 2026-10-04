@@ -51,12 +51,6 @@ function gameDate(game) {
   ).slice(0, 10);
 }
 
-function isPreseason(game) {
-  const gameId = String(game?.gameId || "");
-  const labels = `${game?.seasonType || ""} ${game?.gameLabel || ""} ${game?.gameSubLabel || ""}`.toLowerCase();
-  return gameId.startsWith("001") || labels.includes("preseason");
-}
-
 export function selectCompletedScheduleGames(payload, {
   dateKeys,
   season = "",
@@ -69,7 +63,6 @@ export function selectCompletedScheduleGames(payload, {
     .filter((game) => String(game?.gameId || ""))
     .filter((game) => wantedDates.has(gameDate(game)))
     .filter((game) => Number(game?.gameStatus || 0) === 3)
-    .filter((game) => !isPreseason(game))
     .map((game) => ({
       gameId: String(game.gameId),
       gameDate: gameDate(game),

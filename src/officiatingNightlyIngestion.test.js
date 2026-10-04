@@ -17,7 +17,7 @@ test("builds Eastern date keys across UTC midnight", () => {
   ]);
 });
 
-test("selects only final, recent, non-preseason games", () => {
+test("selects final recent games, including preseason validation games", () => {
   const payload = {
     leagueSchedule: {
       seasonYear: "2026-27",
@@ -32,7 +32,7 @@ test("selects only final, recent, non-preseason games", () => {
   assert.deepEqual(selectCompletedScheduleGames(payload, {
     season: "2026-27",
     dateKeys: ["2026-10-28"],
-  }).map((game) => game.gameId), ["0022600001"]);
+  }).map((game) => game.gameId), ["0012600003", "0022600001"]);
 });
 
 test("retries games with missing assignments or suspiciously few calls", () => {
