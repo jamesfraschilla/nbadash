@@ -1262,8 +1262,16 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
     var(--panel);
 }
 
+.strategyPanelTopbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-right: 16px;
+}
+
 .strategyPanelToggle {
-  width: 100%;
+  min-width: 0;
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1443,7 +1451,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 
 .strategyPanelBody {
   display: grid;
-  gap: 14px;
+  gap: 10px;
   padding: 0 16px 16px;
 }
 
@@ -1515,12 +1523,9 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 }
 
 .strategyFeedPanel {
+  order: 2;
   display: grid;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--bg) 84%, var(--panel) 16%);
+  gap: 10px;
 }
 
 .strategyFeedHeader {
@@ -1584,7 +1589,7 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 
 .strategyOverrideControls {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
   flex-wrap: wrap;
 }
@@ -1611,6 +1616,10 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   background: var(--highlight-text);
   border-color: var(--highlight-text);
   color: var(--bg);
+}
+
+.strategyOverrideControls .strategySaveButton {
+  margin-left: auto;
 }
 
 .strategyManualOverride {
@@ -1868,9 +1877,16 @@ html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
 }
 
 .strategyRecommendation {
-  display: grid;
-  gap: 10px;
-  padding: 16px;
+  order: 1;
+  padding: 14px 16px;
+}
+
+.strategyDecisionText {
+  margin: 0;
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
 .strategyCurrentLabel {

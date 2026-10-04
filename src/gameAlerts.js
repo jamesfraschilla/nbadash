@@ -49,6 +49,11 @@ function teamLabel(team) {
   return team?.teamName || team?.teamTricode || "Team";
 }
 
+function possessiveTeamLabel(team) {
+  const label = teamLabel(team);
+  return `${label}${/s$/i.test(label) ? "’" : "’s"}`;
+}
+
 function teamCode(team) {
   return team?.teamTricode || team?.teamName || "TEAM";
 }
@@ -1697,6 +1702,7 @@ export function buildGameAlerts({
         foulPressurePeriods.add(pressureKey);
         const opponent = teamsById.get(opponentTeamId(teamId, homeTeamId, awayTeamId));
         const inFinalTwo = safeNumber(parsePeriodClockSeconds(action.clock), Infinity) <= 2 * 60;
+        const hasFoulToGive = inFinalTwo && foulInfo.rawCount <= 3;
         addAlert(alerts, seen, {
           id: `bonus-pressure:${pressureKey}`,
           category: "Bonus Pressure",
@@ -1704,8 +1710,10 @@ export function buildGameAlerts({
           clock: action.clock,
           elapsed: actionElapsedSeconds(action, game?.gameId),
           teamId,
-          title: `${teamLabel(team)} have one foul to give`,
-          detail: inFinalTwo && foulInfo.rawCount < 4
+          title: hasFoulToGive
+            ? `${teamLabel(team)} have one foul to give`
+            : `${possessiveTeamLabel(team)} next foul will put ${teamLabel(opponent)} in the penalty`,
+          detail: hasFoulToGive
             ? `Their first team foul inside the final 2:00 means the next puts ${teamLabel(opponent)} in the penalty.`
             : `Their ${ordinal(foulInfo.rawCount)} team foul means the next puts ${teamLabel(opponent)} in the penalty.`,
         });

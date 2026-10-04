@@ -521,8 +521,44 @@ test("bonus pressure matches the yellow foul indicator thresholds", () => {
   });
   const pressure = alerts.filter((alert) => alert.category === "Bonus Pressure");
   assert.equal(pressure.length, 2);
-  assert.match(pressure.find((alert) => alert.teamId === AWAY.teamId)?.detail, /4th team foul/);
-  assert.match(pressure.find((alert) => alert.teamId === HOME.teamId)?.detail, /first team foul inside the final 2:00/);
+  const awayPressure = pressure.find((alert) => alert.teamId === AWAY.teamId);
+  const homePressure = pressure.find((alert) => alert.teamId === HOME.teamId);
+  assert.equal(awayPressure?.title, "Nets’ next foul will put Thunder in the penalty");
+  assert.match(awayPressure?.detail, /4th team foul/);
+  assert.equal(homePressure?.title, "Thunder have one foul to give");
+  assert.match(homePressure?.detail, /first team foul inside the final 2:00/);
+});
+
+test("bonus pressure does not call a fourth team foul inside 2:00 a foul to give", () => {
+  const foul = (actionNumber, clock) => ({
+    actionNumber,
+    orderNumber: actionNumber,
+    period: 4,
+    clock,
+    teamId: AWAY.teamId,
+    actionType: "foul",
+    subType: "personal",
+    personId: 101,
+  });
+  const alert = buildGameAlerts({
+    game: {
+      gameId: "0022600001",
+      gameStatus: 2,
+      period: 4,
+      gameClock: "PT01M30.00S",
+      playByPlayActions: [
+        foul(1, "PT08M00.00S"),
+        foul(2, "PT06M00.00S"),
+        foul(3, "PT04M00.00S"),
+        foul(4, "PT01M30.00S"),
+      ],
+    },
+    awayTeam: AWAY,
+    homeTeam: HOME,
+  }).find((candidate) => candidate.category === "Bonus Pressure");
+
+  assert.equal(alert?.title, "Nets’ next foul will put Thunder in the penalty");
+  assert.doesNotMatch(alert?.title || "", /foul to give/i);
 });
 
 test("buildGameAlerts keeps late-quarter rebound alerts before period-end alerts", () => {
