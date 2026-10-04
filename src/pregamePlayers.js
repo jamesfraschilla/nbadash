@@ -1,9 +1,9 @@
 import { supabase } from "./supabaseClient.js";
 import { readLocalStorage, writeLocalStorage } from "./storage.js";
+import { fetchSharedStateRow, saveSharedStateRow } from "./sharedState.js";
 
 const LEGACY_PLAYERS_STORAGE_KEY = "pregame:players:v1";
 const PLAYERS_STORAGE_KEY_PREFIX = "pregame:players:v2:";
-const SHARED_ROSTER_TABLE = "rotations_shared_state";
 const SHARED_ROSTER_SCOPE_TYPE = "shared_roster";
 
 function isSummerLeagueGame(game) {
@@ -241,35 +241,30 @@ export function persistPregamePlayers(teamScope, players, updatedAt = Date.now()
 
 export async function fetchRemotePregamePlayers(teamScope) {
   if (!supabase || !teamScope) return null;
-  const { data, error } = await supabase
-    .from(SHARED_ROSTER_TABLE)
-    .select("payload,updated_at")
-    .eq("scope_type", SHARED_ROSTER_SCOPE_TYPE)
-    .eq("scope_key", teamScope)
-    .maybeSingle();
-  if (error) throw error;
+  const row = await fetchSharedStateRow(SHARED_ROSTER_SCOPE_TYPE, teamScope);
   const payload = {
-    updatedAt: data?.updated_at ? new Date(data.updated_at).getTime() : 0,
-    players: normalizePregamePlayers(data?.payload?.players || []),
+    updatedAt: row?.version ? new Date(row.version).getTime() : 0,
+    players: normalizePregamePlayers(row?.payload?.players || []),
   };
   return {
     updatedAt: payload.updatedAt,
     players: payload.players,
+    version: row?.version || "",
   };
 }
 
-export async function saveRemotePregamePlayers(teamScope, players, updatedAt = Date.now()) {
+export async function saveRemotePregamePlayers(teamScope, players, updatedAt = Date.now(), expectedVersion) {
   if (!supabase || !teamScope) return;
-  const { error } = await supabase.from(SHARED_ROSTER_TABLE).upsert(
-    {
-      scope_type: SHARED_ROSTER_SCOPE_TYPE,
-      scope_key: teamScope,
-      payload: {
-        updatedAt,
-        players: sortPregamePlayersByLastName(players),
-      },
+  const version = expectedVersion === undefined
+    ? (await fetchSharedStateRow(SHARED_ROSTER_SCOPE_TYPE, teamScope))?.version || ""
+    : expectedVersion;
+  return saveSharedStateRow({
+    scopeType: SHARED_ROSTER_SCOPE_TYPE,
+    scopeKey: teamScope,
+    expectedVersion: version,
+    payload: {
+      updatedAt,
+      players: sortPregamePlayersByLastName(players),
     },
-    { onConflict: "scope_type,scope_key" }
-  );
-  if (error) throw error;
+  });
 }

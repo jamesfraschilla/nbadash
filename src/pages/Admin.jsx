@@ -50,6 +50,7 @@ function buildEmptyMatchupProfileDraft() {
     avoidOffensiveRoles: [],
     preferOpponentIds: [],
     avoidOpponentIds: [],
+    updatedAt: "",
   };
 }
 
@@ -354,7 +355,7 @@ function TeamRosterCard({ teamScope, title }) {
     try {
       persistPregamePlayers(teamScope, normalized, updatedAt);
       setLocalRosterVersion(updatedAt);
-      await saveRemotePregamePlayers(teamScope, normalized, updatedAt);
+      await saveRemotePregamePlayers(teamScope, normalized, updatedAt, remoteRoster?.version || "");
       await queryClient.invalidateQueries({ queryKey: ["admin-team-roster", teamScope] });
       await queryClient.invalidateQueries({ queryKey: ["pregame-players-remote", teamScope] });
       await queryClient.invalidateQueries({ queryKey: ["game-roster-caps", teamScope] });
@@ -539,6 +540,7 @@ function MatchupProfileCard({
         avoidOffensiveRoles: [...(existing.avoidOffensiveRoles || [])],
         preferOpponentIds: [...(existing.preferOpponentIds || [])],
         avoidOpponentIds: [...(existing.avoidOpponentIds || [])],
+        updatedAt: existing.updatedAt || "",
       });
       setUseHeightOverride(existingHeight !== "" && String(existingHeight) !== String(selectedHeight));
       setSaveMessage("");
@@ -552,6 +554,7 @@ function MatchupProfileCard({
       heightIn: "",
       preferOpponentIds: [],
       avoidOpponentIds: [],
+      updatedAt: "",
     }));
     setUseHeightOverride(false);
     setSaveMessage("");
@@ -575,6 +578,7 @@ function MatchupProfileCard({
       avoidOffensiveRoles: [...(profile.avoidOffensiveRoles || [])],
       preferOpponentIds: [...(profile.preferOpponentIds || [])],
       avoidOpponentIds: [...(profile.avoidOpponentIds || [])],
+      updatedAt: profile.updatedAt || "",
     });
     setUseHeightOverride(profile.heightIn != null && String(profile.heightIn) !== "" && String(profile.heightIn) !== String(selectedHeight));
     setSaveMessage("");

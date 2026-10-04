@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -41,7 +41,7 @@ import {
   buildStrategyOverrideDraft,
   getMarginOptionLabel,
 } from "../components/lateGamePanelHelpers.js";
-import { exportMatchupGraphic } from "./matchupGraphicExport.js";
+import { exportMatchupGraphic, renderMatchupGraphicCanvas } from "./matchupGraphicExport.js";
 import { requestCustomDashboardRequest } from "../customRequestsData.js";
 import {
   GRAPHIC_TOOL_TABS,
@@ -544,6 +544,7 @@ function ToolColumn({
 }
 
 export default function Tools({ section = "tools" }) {
+  const matchupPreviewRef = useRef(null);
   const { accountsEnabled, user, profile, hasFeature, isAdmin } = useAuth();
   const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
@@ -771,6 +772,32 @@ export default function Tools({ section = "tools" }) {
     selectedLeftPlayers.every(Boolean) &&
     selectedRightPlayers.every(Boolean)
   );
+
+  useEffect(() => {
+    if (activeTab !== TOOL_TABS.GRAPHICS || activeGraphic !== TOOL_TABS.MATCHUP) return undefined;
+    let cancelled = false;
+
+    renderMatchupGraphicCanvas({
+      league,
+      leftPlayers: selectedLeftPlayers,
+      rightPlayers: selectedRightPlayers,
+      logoTeamId: draft.logoTeamId,
+      width: 960,
+      height: 540,
+    }).then((renderedCanvas) => {
+      const previewCanvas = matchupPreviewRef.current;
+      if (cancelled || !previewCanvas) return;
+      const context = previewCanvas.getContext("2d");
+      context.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+      context.drawImage(renderedCanvas, 0, 0, previewCanvas.width, previewCanvas.height);
+    }).catch((error) => {
+      if (!cancelled) console.error("Failed to render match-up preview.", error);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeGraphic, activeTab, draft.logoTeamId, league, selectedLeftPlayers, selectedRightPlayers]);
 
   useEffect(() => {
     if (!lateGameAwayTeam?.teamId || !lateGameHomeTeam?.teamId) return;
@@ -1385,7 +1412,10 @@ export default function Tools({ section = "tools" }) {
       const sharedLineupsToSave = [
         buildMatchupGraphicLineupFromDraft(saveDraft, "left", leftRoster),
         buildMatchupGraphicLineupFromDraft(saveDraft, "right", rightRoster),
-      ].filter(Boolean);
+      ].filter(Boolean).map((lineup) => ({
+        ...lineup,
+        version: sharedMatchupLineupMap[getMatchupGraphicLineupKey(lineup.league, lineup.teamId)]?.version || "",
+      }));
       const savedRecord = accountsEnabled && user?.id
         ? await saveToolRecordRemote(user.id, record)
         : saveToolRecord(vaultUserId, record);
@@ -1752,6 +1782,16 @@ export default function Tools({ section = "tools" }) {
                     {busyAction === "export" ? "Exporting..." : "Export"}
                   </button>
                 </div>
+              </div>
+
+              <div className={styles.matchupPreviewFrame}>
+                <canvas
+                  ref={matchupPreviewRef}
+                  className={styles.matchupPreviewCanvas}
+                  width="960"
+                  height="540"
+                  aria-label="Match-up graphic preview"
+                />
               </div>
 
               {saveStatus ? (

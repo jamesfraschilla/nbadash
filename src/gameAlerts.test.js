@@ -582,3 +582,49 @@ test("buildGameAlerts credits linked defensive players on shot and turnover even
   assert.ok(alerts.some((alert) => alert.title === "Dain Dainja has totaled 3 Blk"));
   assert.ok(alerts.some((alert) => alert.title === "Aaron Scott has tallied 3 Stl"));
 });
+
+test("buildGameAlerts counts paired linked and explicit steals only once", () => {
+  const pairedStealActions = [
+    { period: 1, clock: "PT08M21.00S", turnoverActionNumber: 1, stealActionNumber: 2 },
+    { period: 2, clock: "PT09M52.00S", turnoverActionNumber: 3, stealActionNumber: 4 },
+  ].flatMap(({ period, clock, turnoverActionNumber, stealActionNumber }) => ([
+    {
+      actionNumber: turnoverActionNumber,
+      orderNumber: turnoverActionNumber,
+      actionType: "turnover",
+      period,
+      clock,
+      teamId: HOME.teamId,
+      personId: 201,
+      stealPersonId: 101,
+      stealPlayerNameI: "A. Defender",
+    },
+    {
+      actionNumber: stealActionNumber,
+      orderNumber: stealActionNumber,
+      actionType: "steal",
+      period,
+      clock,
+      teamId: AWAY.teamId,
+      personId: 101,
+      playerName: "Actual Defender",
+    },
+  ]));
+
+  const alerts = buildGameAlerts({
+    game: {
+      gameId: "0012600009",
+      gameStatus: 2,
+      period: 2,
+      gameClock: "PT09M00.00S",
+      playByPlayActions: pairedStealActions,
+    },
+    awayTeam: AWAY,
+    homeTeam: HOME,
+    basePlayers: [
+      { personId: 101, firstName: "Actual", familyName: "Defender", teamId: AWAY.teamId },
+    ],
+  });
+
+  assert.equal(alerts.filter((alert) => alert.title === "Actual Defender has tallied 3 Stl").length, 0);
+});

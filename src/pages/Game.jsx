@@ -26,6 +26,8 @@ import {
 import {
   analysisPeriodLabel,
   buildCompletedAnalysisSegments,
+  buildAnalysisEndMinuteOptions,
+  buildAnalysisEndSecondOptions,
   buildAnalysisMinuteOptions,
   buildAnalysisPeriodOptions,
   buildAnalysisSecondOptions,
@@ -56,6 +58,10 @@ import {
   isWashingtonTeam,
 } from "../gamePolling.js";
 import { gameStatusLabel, normalizeClock } from "../utils.js";
+import {
+  completedPeriodElapsedSeconds,
+  resolveLivePeriodBreak,
+} from "../liveGameClock.js";
 import BoxScoreTable from "../components/BoxScoreTable.jsx";
 import StatBars from "../components/StatBars.jsx";
 import Officials from "../components/Officials.jsx";
@@ -577,6 +583,7 @@ export default function Game({ variant = "full" }) {
   const [analysisForm, setAnalysisForm] = useState(() => buildInitialAnalysisForm(null, false));
   const [selectedPreparedAnalysisSegmentKey, setSelectedPreparedAnalysisSegmentKey] = useState("");
   const analysisRequestRef = useRef({ id: 0, controller: null });
+  const analysisMaxFollowsLiveRef = useRef(true);
   const [strategyVantageTeamId, setStrategyVantageTeamId] = useState("");
   const [strategyFeedback, setStrategyFeedback] = useState(() => buildDefaultStrategyFeedback());
   const [strategyOverrides, setStrategyOverrides] = useState(() => buildDefaultStrategyOverrides());
@@ -892,9 +899,12 @@ export default function Game({ variant = "full" }) {
   const defaultChallenges = { challengesTotal: 0, challengesWon: 0 };
   const awayChallenges = challenges?.away || defaultChallenges;
   const homeChallenges = challenges?.home || defaultChallenges;
-  const status = game ? gameStatusLabel(game) : "";
   const isLive = game?.gameStatus === 2;
-  const clock = isLive ? normalizeClock(game?.gameClock) : null;
+  const livePeriodBreak = resolveLivePeriodBreak(game);
+  const status = livePeriodBreak?.status || (game ? gameStatusLabel(game) : "");
+  const clock = isLive
+    ? (livePeriodBreak ? livePeriodBreak.clock : normalizeClock(game?.gameClock))
+    : null;
   const useSnapshots = isLive;
   const hasAnalysisData = (game?.playByPlayActions || []).length > 0;
   const analysisDisabledReason = isPregame
@@ -1106,7 +1116,7 @@ export default function Game({ variant = "full" }) {
 
   useEffect(() => {
     if (!analysisModalOpen) return;
-    if (isLive) {
+    if (isLive && analysisMaxFollowsLiveRef.current) {
       setAnalysisForm((prev) => {
         const nextDefaults = buildInitialAnalysisForm(game, isLive);
         if (prev.segmentShortcut && prev.segmentShortcut !== "custom") {
@@ -1158,6 +1168,7 @@ export default function Game({ variant = "full" }) {
         const payload = record.payload && typeof record.payload === "object" ? record.payload : {};
         if (String(payload.gameId || "") !== String(gameId || "")) return;
         if (payload.analysisForm && typeof payload.analysisForm === "object") {
+          analysisMaxFollowsLiveRef.current = false;
           setAnalysisForm(payload.analysisForm);
         }
         setAnalysisResult(payload.analysisResult || null);
@@ -1328,7 +1339,7 @@ export default function Game({ variant = "full" }) {
   };
 
   const updateAnalysisPoint = (prefix, field, value) => {
-    if (prefix === "max" && isLive) return;
+    if (prefix === "max") analysisMaxFollowsLiveRef.current = false;
     setAnalysisForm((prev) => {
       const next = {
         ...prev,
@@ -1336,11 +1347,17 @@ export default function Game({ variant = "full" }) {
         [`${prefix}${field}`]: value,
       };
       const period = Number(next[`${prefix}Period`]) || 1;
-      const minuteOptions = buildAnalysisMinuteOptions(period, game);
+      const minuteOptions = prefix === "max"
+        ? buildAnalysisEndMinuteOptions(period, game, isLive)
+        : buildAnalysisMinuteOptions(period, game);
       if (!minuteOptions.includes(String(next[`${prefix}Minutes`]))) {
-        next[`${prefix}Minutes`] = minuteOptions[0];
+        next[`${prefix}Minutes`] = prefix === "max"
+          ? minuteOptions[minuteOptions.length - 1]
+          : minuteOptions[0];
       }
-      const secondOptions = buildAnalysisSecondOptions(period, next[`${prefix}Minutes`], game);
+      const secondOptions = prefix === "max"
+        ? buildAnalysisEndSecondOptions(period, next[`${prefix}Minutes`], game, isLive)
+        : buildAnalysisSecondOptions(period, next[`${prefix}Minutes`], game);
       const normalizedSeconds = String(next[`${prefix}Seconds`] ?? "00").padStart(2, "0");
       if (!secondOptions.includes(normalizedSeconds)) {
         next[`${prefix}Seconds`] = secondOptions[0];
@@ -1356,6 +1373,7 @@ export default function Game({ variant = "full" }) {
   };
 
   const openAnalysisModal = () => {
+    analysisMaxFollowsLiveRef.current = true;
     setAnalysisForm(buildInitialAnalysisForm(game, isLive));
     setAnalysisError("");
     setAnalysisResult(null);
@@ -1371,6 +1389,7 @@ export default function Game({ variant = "full" }) {
     const result = cachedRecord?.analysisResult;
     if (!result) return;
     if (segmentRecord?.form) {
+      analysisMaxFollowsLiveRef.current = false;
       setAnalysisForm(segmentRecord.form);
     }
     setAnalysisError("");
@@ -1405,6 +1424,7 @@ export default function Game({ variant = "full" }) {
     setAnalysisUniformOpen(false);
     setAnalysisSaveStatus("");
     setSelectedPreparedAnalysisSegmentKey("");
+    analysisMaxFollowsLiveRef.current = true;
     setAnalysisForm(buildInitialAnalysisForm(game, isLive));
   };
 
@@ -1474,8 +1494,13 @@ export default function Game({ variant = "full" }) {
   const analysisPeriodOptions = buildAnalysisPeriodOptions(game?.period || 4);
   const minMinuteOptions = buildAnalysisMinuteOptions(analysisForm.minPeriod, game);
   const minSecondOptions = buildAnalysisSecondOptions(analysisForm.minPeriod, analysisForm.minMinutes, game);
-  const maxMinuteOptions = buildAnalysisMinuteOptions(analysisForm.maxPeriod, game);
-  const maxSecondOptions = buildAnalysisSecondOptions(analysisForm.maxPeriod, analysisForm.maxMinutes, game);
+  const maxMinuteOptions = buildAnalysisEndMinuteOptions(analysisForm.maxPeriod, game, isLive);
+  const maxSecondOptions = buildAnalysisEndSecondOptions(
+    analysisForm.maxPeriod,
+    analysisForm.maxMinutes,
+    game,
+    isLive
+  );
   const buildAnalysisRequestRange = (validation) => {
     const { minPoint, maxPoint } = validation;
     const toClock = (point) => `${point.minutes}:${String(point.seconds).padStart(2, "0")}`;
@@ -2145,10 +2170,10 @@ export default function Game({ variant = "full" }) {
   const normalizeStintClock = (clock, period) => Math.min(parseClock(clock), periodLength(period));
 
   const estimateElapsedSegmentSeconds = () => {
-    if (!isLive || !game?.period || !game?.gameClock) return null;
+    if (!isLive || (!livePeriodBreak && (!game?.period || !game?.gameClock))) return null;
     const predicate = segmentPeriods(segment);
-    const currentPeriod = Number(game.period) || 1;
-    const remaining = parseIsoClock(game.gameClock);
+    const currentPeriod = livePeriodBreak?.completedPeriod || Number(game.period) || 1;
+    const remaining = livePeriodBreak ? 0 : parseIsoClock(game.gameClock);
     const elapsedCurrent = Math.max(0, periodLength(currentPeriod) - remaining);
     let total = 0;
     for (let period = 1; period < currentPeriod; period += 1) {
@@ -2159,6 +2184,12 @@ export default function Game({ variant = "full" }) {
   };
 
   const estimateElapsedAllSeconds = () => {
+    if (livePeriodBreak) {
+      return completedPeriodElapsedSeconds(
+        livePeriodBreak.completedPeriod,
+        regulationPeriodSeconds
+      );
+    }
     if (!game?.period || !game?.gameClock) return null;
     const period = Number(game.period) || 1;
     const currentLength = periodLength(period);
@@ -3406,7 +3437,6 @@ export default function Game({ variant = "full" }) {
                             className={styles.noteSelect}
                             value={analysisForm.maxPeriod}
                             onChange={(event) => updateAnalysisPoint("max", "Period", event.target.value)}
-                            disabled={isLive}
                           >
                             {analysisPeriodOptions.map((option) => (
                               <option key={`max-${option.value}`} value={option.value}>
@@ -3419,7 +3449,6 @@ export default function Game({ variant = "full" }) {
                               className={styles.noteSelect}
                               value={analysisForm.maxMinutes}
                               onChange={(event) => updateAnalysisPoint("max", "Minutes", event.target.value)}
-                              disabled={isLive}
                             >
                               {maxMinuteOptions.map((option) => (
                                 <option key={`max-minute-${option}`} value={option}>
@@ -3432,7 +3461,6 @@ export default function Game({ variant = "full" }) {
                               className={styles.noteSelect}
                               value={analysisForm.maxSeconds}
                               onChange={(event) => updateAnalysisPoint("max", "Seconds", event.target.value)}
-                              disabled={isLive}
                             >
                               {maxSecondOptions.map((option) => (
                                 <option key={`max-second-${option}`} value={option}>

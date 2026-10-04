@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient.js";
+import { fetchSharedStateRow, saveSharedStateRow } from "./sharedState.js";
 
 // Manual player headshot overrides keyed by NBA personId or a manual roster key.
 // For source-controlled images, add files under public/player-headshots/
@@ -12,7 +13,6 @@ export const PLAYER_HEADSHOT_BUCKET = "player-headshots";
 export const PLAYER_HEADSHOT_REMOTE_RECORD_ID = "shared-player-headshots";
 export const PLAYER_HEADSHOT_REMOTE_RECORD_TYPE = "player_headshots";
 
-const PLAYER_HEADSHOT_SHARED_TABLE = "rotations_shared_state";
 const PLAYER_HEADSHOT_SHARED_SCOPE_TYPE = "shared_player_headshots";
 const PLAYER_HEADSHOT_SHARED_SCOPE_KEY = "global";
 const PLAYER_HEADSHOT_UPLOAD_FORMATS = {
@@ -22,6 +22,7 @@ const PLAYER_HEADSHOT_UPLOAD_FORMATS = {
 };
 let inMemoryUploadedPlayerHeadshots = {};
 let playerHeadshotCacheSyncBlocked = false;
+let playerHeadshotRemoteVersion;
 
 function normalizePlayerHeadshotOverrideUrl(value, basePath = "/nbadash/") {
   const url = String(value || "").trim();
@@ -159,15 +160,10 @@ export function resolvePlayerHeadshotOverrideUrls(personId, basePath = "/nbadash
 
 export async function loadRemotePlayerHeadshotState(userId) {
   if (supabase) {
-    const { data, error } = await supabase
-      .from(PLAYER_HEADSHOT_SHARED_TABLE)
-      .select("payload")
-      .eq("scope_type", PLAYER_HEADSHOT_SHARED_SCOPE_TYPE)
-      .eq("scope_key", PLAYER_HEADSHOT_SHARED_SCOPE_KEY)
-      .maybeSingle();
-    if (error) throw error;
-    if (!error && data?.payload && typeof data.payload === "object") {
-      return sanitizePlayerHeadshotState(data.payload);
+    const row = await fetchSharedStateRow(PLAYER_HEADSHOT_SHARED_SCOPE_TYPE, PLAYER_HEADSHOT_SHARED_SCOPE_KEY);
+    playerHeadshotRemoteVersion = row?.version || "";
+    if (row?.payload && typeof row.payload === "object") {
+      return sanitizePlayerHeadshotState(row.payload);
     }
   }
   if (!userId) return null;
@@ -178,15 +174,19 @@ export async function saveRemotePlayerHeadshotState(userId, records) {
   const sanitizedRecords = sanitizePlayerHeadshotState(records);
   const payload = { records: sanitizedRecords };
   if (supabase) {
-    const { error } = await supabase.from(PLAYER_HEADSHOT_SHARED_TABLE).upsert(
-      {
-        scope_type: PLAYER_HEADSHOT_SHARED_SCOPE_TYPE,
-        scope_key: PLAYER_HEADSHOT_SHARED_SCOPE_KEY,
-        payload,
-      },
-      { onConflict: "scope_type,scope_key" }
-    );
-    if (error) throw error;
+    if (playerHeadshotRemoteVersion === undefined) {
+      playerHeadshotRemoteVersion = (await fetchSharedStateRow(
+        PLAYER_HEADSHOT_SHARED_SCOPE_TYPE,
+        PLAYER_HEADSHOT_SHARED_SCOPE_KEY
+      ))?.version || "";
+    }
+    const saved = await saveSharedStateRow({
+      scopeType: PLAYER_HEADSHOT_SHARED_SCOPE_TYPE,
+      scopeKey: PLAYER_HEADSHOT_SHARED_SCOPE_KEY,
+      payload,
+      expectedVersion: playerHeadshotRemoteVersion,
+    });
+    playerHeadshotRemoteVersion = saved?.version || playerHeadshotRemoteVersion;
     return payload;
   }
   if (!userId) return null;

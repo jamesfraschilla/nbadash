@@ -2,18 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { teamLogoUrl } from "../api.js";
 import styles from "../pages/Game.module.css";
 
-const COMPACT_ALERT_CATEGORIES = new Set([
-  "Run",
-  "Foul Trouble",
-  "Player Impact",
-  "Team Trend",
-  "Quarter",
-  "Half",
-  "Halftime",
-  "Player Scoring",
-  "Milestone",
-]);
-
 function normalizeTeamId(value) {
   const normalized = String(value ?? "").trim();
   return normalized || null;
@@ -80,7 +68,7 @@ export default function GameAlerts({
       return rightSort - leftSort;
     })
     .map(({ alert }) => alert);
-  const compactAlert = displayedAlerts.find((alert) => COMPACT_ALERT_CATEGORIES.has(alert?.category));
+  const compactAlert = displayedAlerts[0] || null;
   const compactAlertId = compactAlert?.id ?? null;
 
   useEffect(() => {

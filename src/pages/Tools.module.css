@@ -153,6 +153,20 @@
   gap: 12px;
 }
 
+.matchupPreviewFrame {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: #000;
+  box-shadow: var(--shadow-panel);
+}
+
+.matchupPreviewCanvas {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
 .toolGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

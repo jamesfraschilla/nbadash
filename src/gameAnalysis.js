@@ -89,6 +89,27 @@ export function buildAnalysisSecondOptions(period, minute, game = null) {
   return Array.from({ length: 60 }, (_, index) => String(index).padStart(2, "0"));
 }
 
+export function buildAnalysisEndMinuteOptions(period, game = null, isLive = false) {
+  const options = buildAnalysisMinuteOptions(period, game);
+  if (!isLive) return options;
+  const currentPoint = buildCurrentAnalysisPoint(game, true);
+  const selectedPeriod = safeNumber(period, 1);
+  if (selectedPeriod < currentPoint.period) return options;
+  if (selectedPeriod > currentPoint.period) return [];
+  return options.filter((minute) => safeNumber(minute, 0) >= currentPoint.minutes);
+}
+
+export function buildAnalysisEndSecondOptions(period, minute, game = null, isLive = false) {
+  const options = buildAnalysisSecondOptions(period, minute, game);
+  if (!isLive) return options;
+  const currentPoint = buildCurrentAnalysisPoint(game, true);
+  const selectedPeriod = safeNumber(period, 1);
+  const selectedMinute = safeNumber(minute, 0);
+  if (selectedPeriod < currentPoint.period || selectedMinute > currentPoint.minutes) return options;
+  if (selectedPeriod > currentPoint.period || selectedMinute < currentPoint.minutes) return [];
+  return options.filter((second) => safeNumber(second, 0) >= currentPoint.seconds);
+}
+
 export function buildAnalysisPoint(period, minutes, seconds) {
   return {
     period: safeNumber(period, 1),

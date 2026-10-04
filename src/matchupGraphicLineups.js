@@ -1,5 +1,6 @@
 import { supabase } from "./supabaseClient.js";
 import { getGraphicHeadshotPublicUrl } from "./graphicHeadshotStorage.js";
+import { saveSharedStateRow } from "./sharedState.js";
 
 export const MATCHUP_GRAPHIC_LINEUP_SCOPE_TYPE = "matchup_graphic_team_lineup";
 export const MATCHUP_GRAPHIC_PLAYER_SLOTS = 5;
@@ -85,6 +86,7 @@ export function normalizeMatchupGraphicLineup(value) {
     customPlayers,
     players,
     updatedAt: String(value?.updated_at || value?.updatedAt || payload?.updatedAt || "").trim(),
+    version: String(value?.version || value?.updated_at || "").trim(),
   };
 }
 
@@ -152,22 +154,27 @@ export async function saveRemoteMatchupGraphicLineups(lineups) {
   const normalized = [...normalizedByKey.values()];
   if (!normalized.length) return [];
 
-  const rows = normalized.map((lineup) => ({
-    scope_type: MATCHUP_GRAPHIC_LINEUP_SCOPE_TYPE,
-    scope_key: getMatchupGraphicLineupKey(lineup.league, lineup.teamId),
-    payload: {
+  const savedRows = await Promise.all(normalized.map(async (lineup) => {
+    const scopeKey = getMatchupGraphicLineupKey(lineup.league, lineup.teamId);
+    const payload = {
       schemaVersion: 1,
       league: lineup.league,
       teamId: lineup.teamId,
       playerIds: lineup.playerIds,
       customPlayers: lineup.customPlayers.map(serializeCustomPlayer),
       players: lineup.players,
-    },
+    };
+    const saved = await saveSharedStateRow({
+      scopeType: MATCHUP_GRAPHIC_LINEUP_SCOPE_TYPE,
+      scopeKey,
+      payload,
+      expectedVersion: lineup.version || "",
+    });
+    return normalizeMatchupGraphicLineup({
+      scope_key: scopeKey,
+      payload: saved?.payload || payload,
+      updated_at: saved?.version || "",
+    });
   }));
-  const { data, error } = await supabase
-    .from("rotations_shared_state")
-    .upsert(rows, { onConflict: "scope_type,scope_key" })
-    .select("scope_key,payload,updated_at");
-  if (error) throw error;
-  return (data || []).map(normalizeMatchupGraphicLineup).filter(Boolean);
+  return savedRows.filter(Boolean);
 }

@@ -1,0 +1,24 @@
+{
+  "generatedAt": "2026-09-07T16:47:34.015Z",
+  "format": "jsonl.gz inside zip",
+  "exports": [
+    {
+      "label": "nba_official_call_events_2024-25_before_compaction",
+      "table": "nba_official_call_events",
+      "rows": 64181,
+      "file": "nba_official_call_events_2024-25_before_compaction.jsonl.gz"
+    },
+    {
+      "label": "nba_official_call_events_2025-26_before_compaction",
+      "table": "nba_official_call_events",
+      "rows": 69042,
+      "file": "nba_official_call_events_2025-26_before_compaction.jsonl.gz"
+    },
+    {
+      "label": "nba_coach_challenge_events_before_compaction",
+      "table": "nba_coach_challenge_events",
+      "rows": 5678,
+      "file": "nba_coach_challenge_events_before_compaction.jsonl.gz"
+    }
+  ]
+}

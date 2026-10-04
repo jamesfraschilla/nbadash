@@ -1,5 +1,6 @@
 import { STATIC_REFEREE_HEADSHOT_PATHS } from "./refereeHeadshotStaticPaths.js";
 import { supabase } from "./supabaseClient.js";
+import { fetchSharedStateRow, saveSharedStateRow } from "./sharedState.js";
 
 export const REFEREE_HEADSHOT_OVERRIDE_STORAGE_KEY = "referee_headshot_overrides_v1";
 export const REFEREE_HEADSHOT_PREFERENCES_STORAGE_KEY = "referee_headshot_preferences_v1";
@@ -10,7 +11,6 @@ export const REFEREE_HEADSHOT_REMOTE_RECORD_TYPE = "referee_headshots";
 export const REFEREE_HEADSHOT_PREVIEW_BUCKET = "referee-headshots-preview";
 export const REFEREE_HEADSHOT_FULL_BUCKET = "referee-headshots-full";
 export const STATIC_REFEREE_HEADSHOT_FULL_PREFIX = "static";
-const REFEREE_HEADSHOT_SHARED_TABLE = "rotations_shared_state";
 const REFEREE_HEADSHOT_SHARED_SCOPE_TYPE = "shared_referee_headshots";
 const REFEREE_HEADSHOT_SHARED_SCOPE_KEY = "global";
 
@@ -39,6 +39,7 @@ export const DEFAULT_REFEREE_HEADSHOT_PREFERENCES = {
 let inMemoryRefereeHeadshotOverrides = { ...DEFAULT_REFEREE_HEADSHOT_OVERRIDES };
 let inMemoryRefereeHeadshotPreferences = { ...DEFAULT_REFEREE_HEADSHOT_PREFERENCES };
 let refereeHeadshotCacheSyncBlocked = false;
+let refereeHeadshotRemoteVersion;
 
 export function buildUploadedRefereeImageId(nameKey) {
   const normalizedKey = normalizeNameKey(nameKey);
@@ -341,20 +342,15 @@ export function readStoredRefereeHeadshotState() {
 
 export async function loadRemoteRefereeHeadshotState(userId) {
   if (supabase) {
-    const { data, error } = await supabase
-      .from(REFEREE_HEADSHOT_SHARED_TABLE)
-      .select("payload")
-      .eq("scope_type", REFEREE_HEADSHOT_SHARED_SCOPE_TYPE)
-      .eq("scope_key", REFEREE_HEADSHOT_SHARED_SCOPE_KEY)
-      .maybeSingle();
-    if (error) throw error;
-    if (!error && data?.payload && typeof data.payload === "object") {
+    const row = await fetchSharedStateRow(REFEREE_HEADSHOT_SHARED_SCOPE_TYPE, REFEREE_HEADSHOT_SHARED_SCOPE_KEY);
+    refereeHeadshotRemoteVersion = row?.version || "";
+    if (row?.payload && typeof row.payload === "object") {
       return {
         overrides: {
           ...DEFAULT_REFEREE_HEADSHOT_OVERRIDES,
-          ...sanitizeRefereeHeadshotOverrides(data.payload.overrides),
+          ...sanitizeRefereeHeadshotOverrides(row.payload.overrides),
         },
-        preferences: sanitizeRefereeHeadshotPreferences(data.payload.preferences),
+        preferences: sanitizeRefereeHeadshotPreferences(row.payload.preferences),
       };
     }
   }
@@ -368,15 +364,19 @@ export async function saveRemoteRefereeHeadshotState(userId, { overrides, prefer
     preferences: sanitizeRefereeHeadshotPreferences(preferences),
   };
   if (supabase) {
-    const { error } = await supabase.from(REFEREE_HEADSHOT_SHARED_TABLE).upsert(
-      {
-        scope_type: REFEREE_HEADSHOT_SHARED_SCOPE_TYPE,
-        scope_key: REFEREE_HEADSHOT_SHARED_SCOPE_KEY,
-        payload: sanitizedPayload,
-      },
-      { onConflict: "scope_type,scope_key" }
-    );
-    if (error) throw error;
+    if (refereeHeadshotRemoteVersion === undefined) {
+      refereeHeadshotRemoteVersion = (await fetchSharedStateRow(
+        REFEREE_HEADSHOT_SHARED_SCOPE_TYPE,
+        REFEREE_HEADSHOT_SHARED_SCOPE_KEY
+      ))?.version || "";
+    }
+    const saved = await saveSharedStateRow({
+      scopeType: REFEREE_HEADSHOT_SHARED_SCOPE_TYPE,
+      scopeKey: REFEREE_HEADSHOT_SHARED_SCOPE_KEY,
+      payload: sanitizedPayload,
+      expectedVersion: refereeHeadshotRemoteVersion,
+    });
+    refereeHeadshotRemoteVersion = saved?.version || refereeHeadshotRemoteVersion;
     return sanitizedPayload;
   }
   if (!userId) return null;

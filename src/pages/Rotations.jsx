@@ -889,7 +889,7 @@ async function writeSharedPayloadWithRetry(
       : null;
     const currentPayloadUpdatedAt = Number(currentPayload?.updatedAt || 0);
     if (!options.mergeWithNewerPayload && currentPayloadUpdatedAt > Number(requestedUpdatedAt || 0)) {
-      return currentPayload;
+      throw new Error("This shared Rotations state changed in another browser. Reload before saving again.");
     }
 
     const nextPayload = {

@@ -95,6 +95,15 @@ function clockPeriodLabel(action) {
   return `${periodShortLabel(action?.period)} ${shortClockLabel(action?.clock)}`;
 }
 
+function defensiveEventKey(actionType, action) {
+  const personId = normalizePlayerId(action?.personId);
+  const period = safeNumber(action?.period, 0);
+  const clock = normalizeClock(String(action?.clock || ""));
+  return actionType && personId && period && clock
+    ? `${actionType}:${personId}:${period}:${clock}`
+    : "";
+}
+
 function formatDuration(seconds) {
   const total = Math.max(0, Math.round(seconds));
   const minutes = Math.floor(total / 60);
@@ -1141,6 +1150,12 @@ export function buildGameAlerts({
     [homeTeamId, homeTeam],
   ]);
   const orderedActions = [...actions].sort(compareActionsChronologically);
+  const explicitDefensiveEvents = new Set(
+    orderedActions
+      .filter((action) => action?.actionType === "block" || action?.actionType === "steal")
+      .map((action) => defensiveEventKey(action.actionType, action))
+      .filter(Boolean)
+  );
   const playerLookup = buildPlayerLookup(basePlayers);
   const starterLookup = buildStarterLookup({ basePlayers, minutesData, homeTeamId, awayTeamId });
   const alerts = [];
@@ -1330,7 +1345,11 @@ export function buildGameAlerts({
     }
 
     const linkedBlockPersonId = normalizePlayerId(action.blockPersonId);
-    if (linkedBlockPersonId && action.actionType !== "block") {
+    const linkedBlockHasExplicitAction = explicitDefensiveEvents.has(defensiveEventKey("block", {
+      ...action,
+      personId: linkedBlockPersonId,
+    }));
+    if (linkedBlockPersonId && action.actionType !== "block" && !linkedBlockHasExplicitAction) {
       const blockTeamId = opponentTeamId(teamId, homeTeamId, awayTeamId);
       const blockTeam = teamsById.get(blockTeamId);
       if (blockTeamId && blockTeam) {
@@ -1383,7 +1402,11 @@ export function buildGameAlerts({
     }
 
     const linkedStealPersonId = normalizePlayerId(action.stealPersonId);
-    if (linkedStealPersonId && action.actionType !== "steal") {
+    const linkedStealHasExplicitAction = explicitDefensiveEvents.has(defensiveEventKey("steal", {
+      ...action,
+      personId: linkedStealPersonId,
+    }));
+    if (linkedStealPersonId && action.actionType !== "steal" && !linkedStealHasExplicitAction) {
       const stealTeamId = opponentTeamId(teamId, homeTeamId, awayTeamId);
       const stealTeam = teamsById.get(stealTeamId);
       if (stealTeamId && stealTeam) {

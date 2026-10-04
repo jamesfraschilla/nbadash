@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   applyAnalysisSegmentShortcut,
+  buildAnalysisEndMinuteOptions,
+  buildAnalysisEndSecondOptions,
   buildCompletedAnalysisSegments,
   buildAnalysisMinuteOptions,
   buildInitialAnalysisForm,
@@ -91,6 +93,28 @@ test("live analysis rejects ranges after the current game clock", () => {
     maxSeconds: "00",
   }, game, true);
   assert.equal(validation.error, "Max time cannot be later than Q2 6:00.");
+});
+
+test("live analysis end options include elapsed clocks and exclude future clocks", () => {
+  const game = {
+    gameId: "0022600001",
+    gameStatus: 2,
+    period: 2,
+    gameClock: "PT06M24.00S",
+    playByPlayActions: [],
+  };
+
+  assert.deepEqual(buildAnalysisEndMinuteOptions(1, game, true), buildAnalysisMinuteOptions(1, game));
+  assert.deepEqual(buildAnalysisEndMinuteOptions(2, game, true), ["12", "11", "10", "9", "8", "7", "6"]);
+  assert.deepEqual(
+    buildAnalysisEndSecondOptions(2, "7", game, true),
+    Array.from({ length: 60 }, (_, index) => String(index).padStart(2, "0"))
+  );
+  assert.deepEqual(
+    buildAnalysisEndSecondOptions(2, "6", game, true),
+    Array.from({ length: 36 }, (_, index) => String(index + 24).padStart(2, "0"))
+  );
+  assert.deepEqual(buildAnalysisEndSecondOptions(2, "5", game, true), []);
 });
 
 test("completed fixed analysis segments include overlapping halftime ranges", () => {

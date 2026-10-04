@@ -111,12 +111,22 @@ export async function saveMatchupProfile(record) {
   if (!supabase) {
     throw new Error("Supabase is not configured.");
   }
+  const normalized = normalizeMatchupProfileRecord(record);
   const payload = normalizeMatchupProfilePayload(record);
-  const { data, error } = await supabase
-    .from("matchup_player_profiles")
-    .upsert(payload, { onConflict: "person_id" })
-    .select("*")
-    .single();
+  const expectedVersion = normalized?.updatedAt || "";
+  let query = expectedVersion
+    ? supabase
+      .from("matchup_player_profiles")
+      .update(payload)
+      .eq("person_id", payload.person_id)
+      .eq("updated_at", expectedVersion)
+    : supabase
+      .from("matchup_player_profiles")
+      .insert(payload);
+  const { data, error } = await query.select("*").maybeSingle();
+  if (error?.code === "23505" || (!error && !data)) {
+    throw new Error("This matchup profile changed in another browser. Reload before saving again.");
+  }
   if (error) throw error;
   return normalizeMatchupProfileRecord(data);
 }
@@ -156,4 +166,3 @@ export function buildResolvedMatchupProfileMap(rows) {
     ...buildMatchupProfileMap(rows),
   };
 }
-

@@ -12,6 +12,7 @@ import {
   isWashingtonTeam,
   linkPregamePlayersToApiPlayers,
   loadPregamePlayersPayload,
+  normalizePregamePlayers,
   normalizePregamePlayerName,
   persistPregamePlayers,
   resolveSharedPregamePlayersPayload,
@@ -283,37 +284,62 @@ async function fetchRemoteTemplate() {
 
 async function saveRemoteSchedule(gameId, slots, updatedAt = Date.now()) {
   if (!supabase || !gameId) return;
-  const { error } = await supabase.from("pbp_highlights").upsert(
-    {
-      game_id: String(gameId),
-      action_number: PREGAME_ACTION_PAYLOAD,
-      note: JSON.stringify({
-        updatedAt,
-        slots,
-      }),
-    },
-    { onConflict: "game_id,action_number" }
-  );
-  if (error) throw error;
+  await saveRemotePregamePayload(String(gameId), {
+    updatedAt,
+    slots,
+  });
 }
 
 async function saveRemoteTemplate(slots, updatedAt = Date.now()) {
   if (!supabase) return;
-  const { error } = await supabase.from("pbp_highlights").upsert(
-    {
-      game_id: PREGAME_GLOBAL_TEMPLATE_GAME_ID,
-      action_number: PREGAME_ACTION_PAYLOAD,
-      note: JSON.stringify({
-        updatedAt,
-        template: {
-          count: Math.max(1, slots.length),
-          playerGroups: slots.map((slot) => slot.playerIds.slice(0, 3)),
-        },
-      }),
+  await saveRemotePregamePayload(PREGAME_GLOBAL_TEMPLATE_GAME_ID, {
+    updatedAt,
+    template: {
+      count: Math.max(1, slots.length),
+      playerGroups: slots.map((slot) => slot.playerIds.slice(0, 3)),
     },
-    { onConflict: "game_id,action_number" }
-  );
-  if (error) throw error;
+  });
+}
+
+async function saveRemotePregamePayload(gameId, payload, maxAttempts = 4) {
+  const nextNote = JSON.stringify(payload);
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const { data: current, error: readError } = await supabase
+      .from("pbp_highlights")
+      .select("note")
+      .eq("game_id", gameId)
+      .eq("action_number", PREGAME_ACTION_PAYLOAD)
+      .maybeSingle();
+    if (readError) throw readError;
+
+    const currentUpdatedAt = Number(parseRemotePayload(current?.note, "value").updatedAt || 0);
+    if (currentUpdatedAt > Number(payload.updatedAt || 0)) {
+      throw new Error("This shared Court Time schedule changed in another browser. Reload before saving again.");
+    }
+
+    if (current) {
+      let updateQuery = supabase
+        .from("pbp_highlights")
+        .update({ note: nextNote })
+        .eq("game_id", gameId)
+        .eq("action_number", PREGAME_ACTION_PAYLOAD);
+      updateQuery = current.note == null ? updateQuery.is("note", null) : updateQuery.eq("note", current.note);
+      const { data: updated, error: updateError } = await updateQuery.select("note").maybeSingle();
+      if (updateError) throw updateError;
+      if (updated) return;
+      continue;
+    }
+
+    const { error: insertError } = await supabase.from("pbp_highlights").insert({
+      game_id: gameId,
+      action_number: PREGAME_ACTION_PAYLOAD,
+      note: nextNote,
+    });
+    if (!insertError) return;
+    if (insertError.code !== "23505") throw insertError;
+  }
+
+  throw new Error("Unable to save shared Court Time state after multiple retries.");
 }
 
 function getGameTimeZone(game) {
@@ -764,11 +790,9 @@ export default function PreGame({ standalone = false }) {
       }
       setStandaloneOpponentLine(String(savedRecord.payload.opponentLine || "vs OPPONENT").trim() || "vs OPPONENT");
       const loadedAt = Date.now();
-      if (Array.isArray(savedRecord.payload.players)) {
-        setPlayers(savedRecord.payload.players);
-        playersUpdatedAtRef.current = loadedAt;
-        setPlayersHydrated(true);
-      }
+      // A saved Court Time record owns its schedule, but the roster is shared
+      // team data. Always let the shared roster hydration path supply players so
+      // an older saved snapshot cannot hide players added in Admin.
       if (Array.isArray(savedRecord.payload.slots)) {
         setSlots(normalizeSlots(savedRecord.payload.slots));
         slotsUpdatedAtRef.current = loadedAt;
@@ -910,13 +934,23 @@ export default function PreGame({ standalone = false }) {
 
   useEffect(() => {
     if (!playersHydrated || !trackedTeamScope) return;
-    if (standalone) return;
+    if (standalone) {
+      if (supabase && !remotePlayersFetched) return;
+      const localPayload = loadPregamePlayersPayload(trackedTeamScope);
+      const sharedPlayers = resolveSharedPregamePlayersPayload(localPayload, remotePlayers).players;
+      setPlayers((current) => (
+        JSON.stringify(normalizePregamePlayers(current)) === JSON.stringify(sharedPlayers)
+          ? current
+          : sharedPlayers
+      ));
+      return;
+    }
     const remoteUpdatedAt = Number(remotePlayers?.updatedAt || 0);
     if (!remoteUpdatedAt || remoteUpdatedAt <= playersUpdatedAtRef.current) return;
     setPlayers(remotePlayers.players || []);
     playersUpdatedAtRef.current = remoteUpdatedAt;
     persistPregamePlayers(trackedTeamScope, remotePlayers.players || [], remoteUpdatedAt);
-  }, [playersHydrated, remotePlayers, standalone, trackedTeamScope]);
+  }, [playersHydrated, remotePlayers, remotePlayersFetched, standalone, trackedTeamScope]);
 
   useEffect(() => {
     if (!playersHydrated || !trackedTeamScope || !trackedApiPlayers.length) return;
