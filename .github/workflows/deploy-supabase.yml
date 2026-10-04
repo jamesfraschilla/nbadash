@@ -43,17 +43,13 @@ jobs:
           test -n "$SUPABASE_PROJECT_REF"
           test -n "$SUPABASE_URL"
           test -n "$SUPABASE_SERVICE_ROLE_KEY"
-      - name: Apply database scripts in manifest order
-        run: |
-          node -e 'for (const row of require("./supabase/deployment-manifest.json").databaseScripts) console.log(row.path)' |
-          while read -r sql; do
-            npx -y supabase db query --project-ref "$SUPABASE_PROJECT_REF" --file "$sql"
-          done
+      - name: Refuse deployment when database scripts are not attested in production
+        run: npm run supabase:production:check-database
       - name: Deploy every repository Edge Function
         run: |
           node -e 'for (const row of require("./supabase/deployment-manifest.json").edgeFunctions) console.log(row.name)' |
           while read -r fn; do
             npx -y supabase functions deploy "$fn" --project-ref "$SUPABASE_PROJECT_REF" --use-api
           done
-      - run: npm run supabase:production:record
+      - run: npm run supabase:production:record-edge
       - run: npm run supabase:production:check

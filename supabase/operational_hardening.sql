@@ -55,6 +55,12 @@ create table if not exists public.supabase_deployment_state (
   deployed_by text not null default 'unknown'
 );
 
+alter table public.supabase_deployment_state
+add column if not exists database_sha256 text;
+
+alter table public.supabase_deployment_state
+add column if not exists edge_sha256 text;
+
 alter table public.supabase_deployment_state enable row level security;
 revoke all on public.supabase_deployment_state from public, anon, authenticated;
 grant select, insert, update on public.supabase_deployment_state to service_role;

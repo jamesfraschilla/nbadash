@@ -6,7 +6,7 @@ The application changes in this repository depend on database and Edge Function 
 
 `supabase/deployment-manifest.json` is the authoritative, checksummed deployment inventory. Run `npm run supabase:manifest:check` before every deployment. Any added or changed SQL script or Edge Function makes verification fail until `npm run supabase:manifest:update` is run and the updated manifest is reviewed and committed.
 
-The manifest hashes complete deployable function bundles, including shared modules and JSON data—not only `index.ts`. Changes under `supabase/` on `main` are deployed by `.github/workflows/deploy-supabase.yml`. That workflow applies SQL in manifest order, deploys every function, records the manifest checksum in `supabase_deployment_state`, and verifies it. Run `npm run supabase:production:check` with service-role credentials to detect repository/production drift independently.
+The manifest hashes complete deployable function bundles, including shared modules and JSON data—not only `index.ts`. Changes under `supabase/` on `main` trigger `.github/workflows/deploy-supabase.yml`. The workflow refuses to deploy if database scripts do not match the separately attested production database checksum, then deploys every Edge Function and records its checksum. Apply intentional SQL changes in manifest order and run `node scripts/verify-supabase-production.mjs --record-database` before pushing. Run `npm run supabase:production:check` with service-role credentials to detect repository/production drift independently.
 
 Run the database scripts in the exact order recorded by the manifest. Do not deploy only the abbreviated list below; it is descriptive rather than exhaustive.
 

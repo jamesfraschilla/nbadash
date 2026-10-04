@@ -114,7 +114,7 @@
     {
       "order": 23,
       "path": "supabase/operational_hardening.sql",
-      "sha256": "81815f462c2b696ce67ffad9f9db18213f69e1da5076f50e7cfb25145bb2ecd1"
+      "sha256": "69d464f37763becbfbb24f57f61d6b7794c6138b147613239c17f8485333c15e"
     },
     {
       "order": 24,

@@ -35,6 +35,8 @@
     "supabase:manifest:check": "node scripts/supabase-deployment-manifest.mjs",
     "supabase:production:check": "node scripts/verify-supabase-production.mjs",
     "supabase:production:record": "node scripts/verify-supabase-production.mjs --record",
+    "supabase:production:check-database": "node scripts/verify-supabase-production.mjs --check-database",
+    "supabase:production:record-edge": "node scripts/verify-supabase-production.mjs --record-edge",
     "verify": "npm run supabase:manifest:check && npm run lint && npm test && npm run test:edge && npm run typecheck && npm run test:e2e && npm run build && npm run build:budget && npm audit --audit-level=high",
     "preview": "vite preview"
   },
