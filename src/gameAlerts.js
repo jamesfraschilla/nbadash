@@ -1,4 +1,6 @@
 import { isSummerLeagueGameId } from "./summerLeagueGameSource.js";
+import { resolveLivePeriodBreak } from "./liveGameClock.js";
+import { buildTeamFoulInfo, isTeamFoulAction, parsePeriodClockSeconds } from "./gameRules.js";
 import { normalizeClock } from "./utils.js";
 
 const RUN_NET_THRESHOLD = 8;
@@ -19,6 +21,7 @@ const TEAM_TREND_MAX_ALERTS = 8;
 const TEAM_TREND_MIN_POINTS = 12;
 const TEAM_TREND_MIN_FIELD_GOAL_ATTEMPTS = 10;
 const TEAM_TREND_MIN_THREE_ATTEMPTS = 6;
+const TIMEOUT_LOOKBACK_SECONDS = 3 * 60;
 const DEFAULT_MAX_ALERTS = 75;
 
 function safeNumber(value, fallback = 0) {
@@ -342,6 +345,7 @@ function addAlert(alerts, seen, alert) {
     title: alert.title,
     detail: alert.detail || "",
     teamId: alert.teamId || null,
+    isPrimary: Boolean(alert.isPrimary),
   });
   return true;
 }
@@ -583,6 +587,7 @@ function addRunAlerts({ alerts, seen, scoringEvents, teamsById }) {
     let best = null;
     for (let startIndex = endIndex; startIndex >= 0; startIndex -= 1) {
       const startEvent = scoringEvents[startIndex];
+      if (safeNumber(startEvent.period, 0) <= 2 && safeNumber(endEvent.period, 0) >= 3) continue;
       const duration = endEvent.elapsed - startEvent.elapsed;
       if (duration > RUN_MAX_SECONDS) break;
       if (startEvent.teamId !== endEvent.teamId) continue;
@@ -658,6 +663,298 @@ function addRunAlerts({ alerts, seen, scoringEvents, teamsById }) {
   }
 }
 
+function scoreContextText({ awayScore, homeScore, awayTeam, homeTeam }) {
+  if (awayScore === homeScore) return `The game is tied ${awayScore}-${homeScore}.`;
+  const leader = awayScore > homeScore ? awayTeam : homeTeam;
+  const trailer = awayScore > homeScore ? homeTeam : awayTeam;
+  return `${teamLabel(leader)} lead ${teamLabel(trailer)} ${Math.max(awayScore, homeScore)}-${Math.min(awayScore, homeScore)}.`;
+}
+
+function recentTeamShotMisses(actions, actionIndex, teamId, period) {
+  if (!teamId) return 0;
+  const teamShots = actions
+    .slice(0, actionIndex)
+    .filter((candidate) => (
+      normalizeTeamId(candidate?.teamId) === teamId
+      && safeNumber(candidate?.period, 0) === period
+      && (candidate?.actionType === "2pt" || candidate?.actionType === "3pt")
+    ))
+    .reverse();
+  let misses = 0;
+  for (const shot of teamShots) {
+    if (shot.shotResult === "Made") break;
+    if (shot.shotResult === "Missed") misses += 1;
+  }
+  return misses;
+}
+
+function buildTimeoutAlert({
+  action,
+  actionIndex,
+  orderedActions,
+  scoringEvents,
+  scoreState,
+  playerStats,
+  awayTeam,
+  homeTeam,
+  teamsById,
+  gameId,
+}) {
+  const period = safeNumber(action?.period, 0);
+  const elapsed = actionElapsedSeconds(action, gameId);
+  const timeoutTeamId = normalizeTeamId(action?.teamId);
+  const timeoutTeam = teamsById.get(timeoutTeamId);
+  const otherTeamId = opponentTeamId(
+    timeoutTeamId,
+    normalizeTeamId(homeTeam?.teamId),
+    normalizeTeamId(awayTeam?.teamId),
+  );
+  const recentStart = Math.max(0, elapsed - TIMEOUT_LOOKBACK_SECONDS);
+  const recentScoring = scoringEvents.filter((event) => (
+    event.period === period
+    && event.elapsed >= recentStart
+    && event.elapsed <= elapsed
+  ));
+  const pointsByTeam = new Map();
+  recentScoring.forEach((event) => {
+    pointsByTeam.set(event.teamId, safeNumber(pointsByTeam.get(event.teamId), 0) + event.points);
+  });
+  const awayScore = parseScoreValue(action?.scoreAway) ?? safeNumber(scoreState.previousAwayScore, safeNumber(awayTeam?.score, 0));
+  const homeScore = parseScoreValue(action?.scoreHome) ?? safeNumber(scoreState.previousHomeScore, safeNumber(homeTeam?.score, 0));
+  const scoreDetail = scoreContextText({ awayScore, homeScore, awayTeam, homeTeam });
+  const recentDuration = recentScoring.length
+    ? Math.max(0, elapsed - recentScoring[0].elapsed)
+    : 0;
+  const rankedScoring = [...pointsByTeam.entries()]
+    .map(([teamId, points]) => ({ teamId, points }))
+    .sort((left, right) => right.points - left.points);
+  const recentLeader = rankedScoring[0] || null;
+  const recentTrailer = rankedScoring[1] || { teamId: opponentTeamId(recentLeader?.teamId, normalizeTeamId(homeTeam?.teamId), normalizeTeamId(awayTeam?.teamId)), points: 0 };
+  const recentNet = safeNumber(recentLeader?.points, 0) - safeNumber(recentTrailer?.points, 0);
+  const timeoutLabel = timeoutTeam ? `${teamLabel(timeoutTeam)} timeout` : "Timeout";
+
+  if (recentLeader && recentLeader.points >= 6 && recentNet >= 4) {
+    const leaderTeam = teamsById.get(recentLeader.teamId);
+    return {
+      title: `${timeoutLabel} after ${teamLabel(leaderTeam)} won the recent stretch ${recentLeader.points}-${recentTrailer.points}`,
+      detail: `${recentDuration ? `Over the last ${formatDuration(recentDuration)}. ` : ""}${scoreDetail}`,
+    };
+  }
+
+  const recentActions = orderedActions.slice(0, actionIndex).filter((candidate) => (
+    safeNumber(candidate?.period, 0) === period
+    && actionElapsedSeconds(candidate, gameId) >= recentStart
+  ));
+  const timeoutTeamTurnovers = timeoutTeamId
+    ? recentActions.filter((candidate) => (
+      normalizeTeamId(candidate?.teamId) === timeoutTeamId
+      && candidate?.actionType === "turnover"
+    )).length
+    : 0;
+  if (timeoutTeamTurnovers >= 2) {
+    return {
+      title: `${timeoutLabel} after ${timeoutTeamTurnovers} recent turnovers`,
+      detail: scoreDetail,
+    };
+  }
+
+  const consecutiveMisses = recentTeamShotMisses(orderedActions, actionIndex, timeoutTeamId, period);
+  if (consecutiveMisses >= 3) {
+    return {
+      title: `${timeoutLabel} after missing ${consecutiveMisses} straight shots`,
+      detail: scoreDetail,
+    };
+  }
+
+  const teamLeader = timeoutTeamId ? findTeamLeader(playerStats, timeoutTeamId) : null;
+  const leaderDetail = teamLeader
+    ? ` ${teamLeader.name} leads ${teamLabel(timeoutTeam)} with ${formatStat(teamLeader.points, "Pt", "Pts")}.`
+    : "";
+  let recentScoreDetail = "";
+  if (recentScoring.length) {
+    const durationLabel = `over the last ${formatDuration(recentDuration)}`;
+    if (timeoutTeamId) {
+      const teamPoints = safeNumber(pointsByTeam.get(timeoutTeamId), 0);
+      const opponentPoints = safeNumber(pointsByTeam.get(otherTeamId), 0);
+      const opponent = teamsById.get(otherTeamId);
+      if (teamPoints > opponentPoints) {
+        recentScoreDetail = ` ${teamLabel(timeoutTeam)} outscored ${teamLabel(opponent)} ${teamPoints}-${opponentPoints} ${durationLabel}.`;
+      } else if (opponentPoints > teamPoints) {
+        recentScoreDetail = ` ${teamLabel(opponent)} outscored ${teamLabel(timeoutTeam)} ${opponentPoints}-${teamPoints} ${durationLabel}.`;
+      } else {
+        recentScoreDetail = ` The teams played even at ${teamPoints}-${opponentPoints} ${durationLabel}.`;
+      }
+    } else if (recentLeader) {
+      const leaderTeam = teamsById.get(recentLeader.teamId);
+      const trailerTeam = teamsById.get(recentTrailer.teamId);
+      recentScoreDetail = recentLeader.points === recentTrailer.points
+        ? ` The teams played even at ${recentLeader.points}-${recentTrailer.points} ${durationLabel}.`
+        : ` ${teamLabel(leaderTeam)} outscored ${teamLabel(trailerTeam)} ${recentLeader.points}-${recentTrailer.points} ${durationLabel}.`;
+    }
+  }
+  return {
+    title: `${timeoutLabel} at ${periodShortLabel(period)} ${shortClockLabel(action?.clock)}`,
+    detail: `${scoreDetail}${recentScoreDetail}${leaderDetail}`.trim(),
+  };
+}
+
+function addTimeoutAlert(options) {
+  const { alerts, seen, action, gameId } = options;
+  const insight = buildTimeoutAlert(options);
+  addAlert(alerts, seen, {
+    id: `timeout:${action?.actionNumber ?? action?.orderNumber ?? `${action?.period}:${action?.clock}`}`,
+    category: "Timeout",
+    period: safeNumber(action?.period, 0),
+    clock: action?.clock,
+    elapsed: actionElapsedSeconds(action, gameId),
+    teamId: normalizeTeamId(action?.teamId),
+    title: insight.title,
+    detail: insight.detail,
+  });
+}
+
+function ordinal(value) {
+  const number = Math.max(0, Math.floor(safeNumber(value, 0)));
+  const mod100 = number % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${number}th`;
+  if (number % 10 === 1) return `${number}st`;
+  if (number % 10 === 2) return `${number}nd`;
+  if (number % 10 === 3) return `${number}rd`;
+  return `${number}th`;
+}
+
+function addPossessionPressureAlerts({ alerts, seen, orderedActions, teamsById, homeTeamId, awayTeamId, gameId }) {
+  const emptyStreaks = new Map([[homeTeamId, 0], [awayTeamId, 0]]);
+  const emptyAlertByTeam = new Map();
+  const killTotals = new Map([[homeTeamId, 0], [awayTeamId, 0]]);
+  const secondChanceTotals = new Map();
+  const secondChanceAlertByKey = new Map();
+  let possession = null;
+
+  const finishPossession = () => {
+    if (!possession?.teamId || !possession.hasOutcome) return;
+    const offense = teamsById.get(possession.teamId);
+    const defenseId = opponentTeamId(possession.teamId, homeTeamId, awayTeamId);
+    const defense = teamsById.get(defenseId);
+
+    if (possession.points > 0) {
+      emptyStreaks.set(possession.teamId, 0);
+      emptyAlertByTeam.delete(possession.teamId);
+    } else {
+      const streak = safeNumber(emptyStreaks.get(possession.teamId), 0) + 1;
+      emptyStreaks.set(possession.teamId, streak);
+      if (streak >= 3) {
+        let alert = emptyAlertByTeam.get(possession.teamId);
+        if (!alert) {
+          alert = {
+            id: `empty-possession:${possession.teamId}:${possession.startKey}`,
+            category: "Empty Possessions",
+            period: possession.lastAction.period,
+            clock: possession.lastAction.clock,
+            elapsed: actionElapsedSeconds(possession.lastAction, gameId),
+            teamId: possession.teamId,
+            title: "",
+            detail: "",
+          };
+          addAlert(alerts, seen, alert);
+          alert = alerts[alerts.length - 1];
+          emptyAlertByTeam.set(possession.teamId, alert);
+        }
+        alert.period = safeNumber(possession.lastAction.period, 0);
+        alert.clock = possession.lastAction.clock || "";
+        alert.periodLabel = periodShortLabel(alert.period);
+        alert.timeLabel = `${periodShortLabel(alert.period)} ${clockLabel(alert.clock)}`;
+        alert.elapsed = actionElapsedSeconds(possession.lastAction, gameId);
+        alert.title = `${teamLabel(offense)} have come up empty on ${streak} consecutive possessions`;
+        alert.detail = `The streak includes missed shots and turnovers without a scoring recovery.`;
+      }
+      if (streak >= 3 && streak % 3 === 0) {
+        const total = safeNumber(killTotals.get(defenseId), 0) + 1;
+        killTotals.set(defenseId, total);
+        addAlert(alerts, seen, {
+          id: `kill:${defenseId}:${total}`,
+          category: "Kill",
+          period: possession.lastAction.period,
+          clock: possession.lastAction.clock,
+          elapsed: actionElapsedSeconds(possession.lastAction, gameId) + 0.01,
+          teamId: defenseId,
+          title: `${teamLabel(defense)} just completed its ${ordinal(total)} Kill of the game`,
+          detail: `Three consecutive scoreless possessions forced by ${teamLabel(defense)}.`,
+        });
+      }
+    }
+
+    if (possession.offensiveRebounds > 0) {
+      const key = `${possession.teamId}:${possession.lastAction.period}`;
+      const totals = secondChanceTotals.get(key) || { offensiveRebounds: 0, points: 0, conversions: 0 };
+      totals.offensiveRebounds += possession.offensiveRebounds;
+      totals.points += possession.secondChancePoints;
+      if (possession.secondChancePoints > 0) totals.conversions += 1;
+      secondChanceTotals.set(key, totals);
+      if (totals.offensiveRebounds >= 3 || totals.points >= 4 || totals.conversions >= 2) {
+        let alert = secondChanceAlertByKey.get(key);
+        if (!alert) {
+          addAlert(alerts, seen, {
+            id: `second-chance-pressure:${key}`,
+            category: "Second Chance",
+            period: possession.lastAction.period,
+            clock: possession.lastAction.clock,
+            elapsed: actionElapsedSeconds(possession.lastAction, gameId) + 0.02,
+            teamId: possession.teamId,
+            title: "",
+          });
+          alert = alerts[alerts.length - 1];
+          secondChanceAlertByKey.set(key, alert);
+        }
+        alert.clock = possession.lastAction.clock || "";
+        alert.timeLabel = `${periodShortLabel(alert.period)} ${clockLabel(alert.clock)}`;
+        alert.elapsed = actionElapsedSeconds(possession.lastAction, gameId) + 0.02;
+        alert.title = `${teamLabel(offense)} have ${totals.points} second-chance points in ${periodShortLabel(possession.lastAction.period)}`;
+        alert.detail = `${totals.offensiveRebounds} offensive ${totals.offensiveRebounds === 1 ? "rebound" : "rebounds"} created ${totals.conversions} scoring ${totals.conversions === 1 ? "possession" : "possessions"}.`;
+      }
+    }
+  };
+
+  orderedActions.forEach((action) => {
+    const actionPossession = normalizeTeamId(action?.possession);
+    if (actionPossession && actionPossession !== possession?.teamId) {
+      finishPossession();
+      possession = {
+        teamId: actionPossession,
+        startKey: action?.actionNumber ?? action?.orderNumber ?? `${action?.period}:${action?.clock}`,
+        lastAction: action,
+        hasOutcome: false,
+        points: 0,
+        secondChancePoints: 0,
+        offensiveRebounds: 0,
+      };
+    }
+    if (!possession) return;
+    possession.lastAction = action;
+    const actionTeamId = normalizeTeamId(action?.teamId);
+    if (actionTeamId === possession.teamId && (action?.actionType === "2pt" || action?.actionType === "3pt")) {
+      possession.hasOutcome = true;
+      if (action?.shotResult === "Made") {
+        const points = action.actionType === "3pt" ? 3 : 2;
+        possession.points += points;
+        if (possession.offensiveRebounds > 0) possession.secondChancePoints += points;
+      }
+    }
+    if (actionTeamId === possession.teamId && action?.actionType === "freethrow") {
+      possession.hasOutcome = true;
+      if (action?.shotResult === "Made") {
+        possession.points += 1;
+        if (possession.offensiveRebounds > 0) possession.secondChancePoints += 1;
+      }
+    }
+    if (actionTeamId === possession.teamId && action?.actionType === "turnover") possession.hasOutcome = true;
+    if (actionTeamId === possession.teamId && action?.actionType === "rebound" && String(action?.subType || "").toLowerCase() === "offensive") {
+      possession.offensiveRebounds += 1;
+    }
+  });
+  finishPossession();
+}
+
 function buildPeriodEndSummary({
   period,
   action,
@@ -721,15 +1018,22 @@ function describeLeader(player, team) {
   return `${player.name} leads the ${teamLabel(team)} with ${formatStat(player.points, "Pt", "Pts")}${suffix}.`;
 }
 
-function completedPeriodLimit(game, scoringEvents) {
-  if (!scoringEvents.length) return 0;
+function completedPeriodLimit(game, scoringEvents, actions = []) {
+  const explicitPeriodEnd = actions
+    .filter((action) => (
+      String(action?.actionType || "").toLowerCase() === "period"
+      && String(action?.subType || "").toLowerCase() === "end"
+      && /^0+:00$/.test(normalizeClock(String(action?.clock || "")))
+    ))
+    .reduce((latest, action) => Math.max(latest, safeNumber(action?.period, 0)), 0);
+  if (!scoringEvents.length && !explicitPeriodEnd) return 0;
   const currentPeriod = safeNumber(game?.period, 0);
   const status = safeNumber(game?.gameStatus, 0);
   if (status === 3) {
-    return Math.max(currentPeriod, Math.max(...scoringEvents.map((event) => event.period)));
+    return Math.max(currentPeriod, explicitPeriodEnd, ...scoringEvents.map((event) => event.period));
   }
   if (status === 2) {
-    return Math.max(0, currentPeriod - 1);
+    return Math.max(explicitPeriodEnd, Math.max(0, currentPeriod - 1));
   }
   return 0;
 }
@@ -751,21 +1055,29 @@ function addPeriodEndAlerts({
   teamCumulativeStatsByPeriod,
   teamPeriodStats,
   teamsById,
+  orderedActions,
+  primaryBreakPeriod,
 }) {
-  const finalCompletedPeriod = completedPeriodLimit(game, scoringEvents);
+  const finalCompletedPeriod = completedPeriodLimit(game, scoringEvents, orderedActions);
   if (!finalCompletedPeriod) return;
   const teamTrendCandidates = [];
 
   for (let period = 1; period <= finalCompletedPeriod; period += 1) {
     const periodEvents = scoringEvents.filter((event) => event.period === period);
     const lastPeriodEvent = periodEvents[periodEvents.length - 1];
-    if (!lastPeriodEvent) continue;
+    const periodEndAction = [...orderedActions].reverse().find((candidate) => (
+      safeNumber(candidate?.period, 0) === period
+      && String(candidate?.actionType || "").toLowerCase() === "period"
+      && String(candidate?.subType || "").toLowerCase() === "end"
+    ));
+    const summaryAction = periodEndAction || lastPeriodEvent?.action;
+    if (!summaryAction) continue;
     const periodEndElapsed = actionElapsedSeconds({ period, clock: "0:00" }, game?.gameId);
 
     if (shouldAddPeriodSummary(period, finalCompletedPeriod)) {
       const summary = buildPeriodEndSummary({
         period,
-        action: lastPeriodEvent.action,
+        action: summaryAction,
         awayTeam,
         homeTeam,
         cumulativePlayerStats: cumulativeSnapshotsByPeriod.get(period) || new Map(),
@@ -778,6 +1090,7 @@ function addPeriodEndAlerts({
         elapsed: periodEndElapsed + 0.1,
         title: summary.title,
         detail: summary.detail,
+        isPrimary: period === primaryBreakPeriod,
       });
     }
 
@@ -1101,9 +1414,14 @@ function alertPruneScore(alert) {
       return 35;
     case "Team Trend":
     case "Scoring Source":
+    case "Second Chance":
+    case "Bonus Pressure":
       return 10;
     case "Milestone":
+    case "Empty Possessions":
+    case "Kill":
       return 5;
+    case "Timeout":
     case "First Score":
     case "Quarter":
     case "Halftime":
@@ -1130,6 +1448,10 @@ function limitAlertsByPriority(sortedAlerts, maxAlerts) {
     });
   const removeIndexes = new Set(removalQueue.slice(0, removeCount).map((entry) => entry.index));
   return sortedAlerts.filter((_, index) => !removeIndexes.has(index));
+}
+
+export function selectPrimaryGameAlert(alerts = []) {
+  return alerts.find((alert) => alert?.isPrimary) || alerts[0] || null;
 }
 
 export function buildGameAlerts({
@@ -1171,6 +1493,8 @@ export function buildGameAlerts({
   const teamCumulativeStatsByPeriod = new Map();
   const playerAchievementState = new Map();
   const createdShareState = new Map();
+  const foulPressurePeriods = new Set();
+  const primaryBreakPeriod = resolveLivePeriodBreak(game)?.completedPeriod || 0;
   const scoreState = {
     gameId: game?.gameId,
     previousHomeScore: 0,
@@ -1178,7 +1502,7 @@ export function buildGameAlerts({
   };
   let lastProcessedPeriod = 0;
 
-  orderedActions.forEach((action) => {
+  orderedActions.forEach((action, actionIndex) => {
     const period = safeNumber(action?.period, 0);
     if (!period) return;
     while (lastProcessedPeriod > 0 && lastProcessedPeriod < period) {
@@ -1342,6 +1666,50 @@ export function buildGameAlerts({
         periodPoints: periodStats.points,
         gameId: game?.gameId,
       });
+    }
+
+    if (String(action?.actionType || "").toLowerCase() === "timeout") {
+      addTimeoutAlert({
+        alerts,
+        seen,
+        action,
+        actionIndex,
+        orderedActions,
+        scoringEvents,
+        scoreState,
+        playerStats,
+        awayTeam,
+        homeTeam,
+        teamsById,
+        gameId: game?.gameId,
+      });
+    }
+
+    if (teamId && isTeamFoulAction(action)) {
+      const pressureKey = `${teamId}:${period}`;
+      const foulInfo = buildTeamFoulInfo({
+        actions: orderedActions.slice(0, actionIndex + 1),
+        teamId,
+        period,
+        isSummerLeague: isSummerLeagueGameId(game?.gameId),
+      });
+      if (foulInfo.count === 4 && !foulPressurePeriods.has(pressureKey)) {
+        foulPressurePeriods.add(pressureKey);
+        const opponent = teamsById.get(opponentTeamId(teamId, homeTeamId, awayTeamId));
+        const inFinalTwo = safeNumber(parsePeriodClockSeconds(action.clock), Infinity) <= 2 * 60;
+        addAlert(alerts, seen, {
+          id: `bonus-pressure:${pressureKey}`,
+          category: "Bonus Pressure",
+          period,
+          clock: action.clock,
+          elapsed: actionElapsedSeconds(action, game?.gameId),
+          teamId,
+          title: `${teamLabel(team)} have one foul to give`,
+          detail: inFinalTwo && foulInfo.rawCount < 4
+            ? `Their first team foul inside the final 2:00 means the next puts ${teamLabel(opponent)} in the penalty.`
+            : `Their ${ordinal(foulInfo.rawCount)} team foul means the next puts ${teamLabel(opponent)} in the penalty.`,
+        });
+      }
     }
 
     const linkedBlockPersonId = normalizePlayerId(action.blockPersonId);
@@ -1567,6 +1935,19 @@ export function buildGameAlerts({
       const subType = String(action.subType || "").toLowerCase();
       if (!subType.includes("technical")) {
         player.fouls += 1;
+        const isMajorPlayer = starterLookup[teamId]?.has(player.personId) || player.points >= 10;
+        if (isMajorPlayer && player.fouls === 3 && period <= 2) {
+          addAlert(alerts, seen, {
+            id: `player-foul-pressure:${player.personId}:3`,
+            category: "Foul Trouble",
+            period,
+            clock: action.clock,
+            elapsed: actionElapsedSeconds(action, game?.gameId),
+            teamId,
+            title: `${player.name} is in early foul trouble with 3 PF`,
+            detail: `${teamLabel(team)} may need to manage the rotation before halftime.`,
+          });
+        }
         addPlayerStatAlert({
           alerts,
           seen,
@@ -1583,6 +1964,16 @@ export function buildGameAlerts({
         });
       }
     }
+  });
+
+  addPossessionPressureAlerts({
+    alerts,
+    seen,
+    orderedActions,
+    teamsById,
+    homeTeamId,
+    awayTeamId,
+    gameId: game?.gameId,
   });
 
   const finalPeriod = Math.max(...orderedActions.map((action) => safeNumber(action?.period, 0)), 0);
@@ -1605,6 +1996,8 @@ export function buildGameAlerts({
     teamCumulativeStatsByPeriod,
     teamPeriodStats,
     teamsById,
+    orderedActions,
+    primaryBreakPeriod,
   });
 
   const sortedAlerts = alerts.sort((a, b) => {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildGameAlerts } from "./gameAlerts.js";
+import { buildGameAlerts, selectPrimaryGameAlert } from "./gameAlerts.js";
 
 const AWAY = { teamId: "1", teamName: "Nets", teamTricode: "BKN" };
 const HOME = { teamId: "2", teamName: "Thunder", teamTricode: "OKC" };
@@ -331,6 +331,198 @@ test("buildGameAlerts formats run ranges with compact period labels", () => {
   const runAlert = alerts.find((alert) => alert.category === "Run" && alert.title === "Thunder are on a 8-0 run over the last 5:49");
   assert.ok(runAlert);
   assert.equal(runAlert.detail, "Q1 1:15 to Q2 7:26");
+});
+
+test("buildGameAlerts never carries a run across halftime", () => {
+  const firstHalfActions = [
+    scoringAction({ actionNumber: 1, orderNumber: 1, period: 1, clock: "PT02M00.00S", scoreAway: "2", scoreHome: "0" }),
+    scoringAction({ actionNumber: 2, orderNumber: 2, period: 2, clock: "PT10M00.00S", scoreAway: "4", scoreHome: "0" }),
+    scoringAction({ actionNumber: 3, orderNumber: 3, period: 2, clock: "PT09M30.00S", scoreAway: "6", scoreHome: "0" }),
+    scoringAction({ actionNumber: 4, orderNumber: 4, period: 2, clock: "PT09M00.00S", scoreAway: "8", scoreHome: "0" }),
+  ];
+  const halftimeCrossingActions = [
+    scoringAction({ actionNumber: 1, orderNumber: 1, period: 2, clock: "PT01M00.00S", scoreAway: "2", scoreHome: "0" }),
+    scoringAction({ actionNumber: 2, orderNumber: 2, period: 3, clock: "PT10M00.00S", scoreAway: "4", scoreHome: "0" }),
+    scoringAction({ actionNumber: 3, orderNumber: 3, period: 3, clock: "PT09M30.00S", scoreAway: "6", scoreHome: "0" }),
+    scoringAction({ actionNumber: 4, orderNumber: 4, period: 3, clock: "PT09M00.00S", scoreAway: "8", scoreHome: "0" }),
+  ];
+
+  const build = (playByPlayActions, period) => buildGameAlerts({
+    game: {
+      gameId: "0022600001",
+      gameStatus: 2,
+      period,
+      gameClock: "PT09M00.00S",
+      playByPlayActions,
+    },
+    awayTeam: AWAY,
+    homeTeam: HOME,
+    basePlayers: [{ personId: 101, firstName: "John", familyName: "Ukomadu", teamId: AWAY.teamId }],
+  });
+
+  assert.ok(build(firstHalfActions, 2).some((alert) => alert.category === "Run" && alert.title.includes("8-0 run")));
+  assert.ok(!build(halftimeCrossingActions, 3).some((alert) => alert.category === "Run"));
+});
+
+test("a completed Q2 summary is primary until Q3 starts", () => {
+  const halftimeActions = [
+    scoringAction({ actionNumber: 1, orderNumber: 1, period: 1, clock: "PT08M00.00S", scoreAway: "2", scoreHome: "0" }),
+    { actionNumber: 2, orderNumber: 2, actionType: "period", subType: "end", period: 1, clock: "PT00M00.00S", scoreAway: "2", scoreHome: "0" },
+    scoringAction({ actionNumber: 3, orderNumber: 3, period: 2, clock: "PT08M00.00S", scoreAway: "4", scoreHome: "0" }),
+    { actionNumber: 4, orderNumber: 4, actionType: "period", subType: "end", period: 2, clock: "PT00M00.00S", scoreAway: "4", scoreHome: "0" },
+  ];
+  const build = (playByPlayActions, period, gameClock) => buildGameAlerts({
+    game: {
+      gameId: "0012600009",
+      gameStatus: 2,
+      period,
+      gameClock,
+      playByPlayActions,
+    },
+    awayTeam: AWAY,
+    homeTeam: HOME,
+    basePlayers: [{ personId: 101, firstName: "John", familyName: "Ukomadu", teamId: AWAY.teamId }],
+  });
+
+  const halftimeAlerts = build(halftimeActions, 2, "PT08M51.00S");
+  const halftimeSummary = halftimeAlerts.find((alert) => alert.category === "Halftime");
+  assert.ok(halftimeSummary);
+  assert.equal(halftimeSummary.isPrimary, true);
+  assert.equal(selectPrimaryGameAlert([...halftimeAlerts].reverse())?.id, halftimeSummary.id);
+
+  const thirdQuarterAlerts = build([
+    ...halftimeActions,
+    { actionNumber: 5, orderNumber: 5, actionType: "period", subType: "start", period: 3, clock: "PT12M00.00S", scoreAway: "4", scoreHome: "0" },
+  ], 3, "PT12M00.00S");
+  assert.equal(thirdQuarterAlerts.find((alert) => alert.category === "Halftime")?.isPrimary, false);
+});
+
+test("every timeout creates an alert with recent game context", () => {
+  const alerts = buildGameAlerts({
+    game: {
+      gameId: "0022600001",
+      gameStatus: 2,
+      period: 1,
+      gameClock: "PT07M30.00S",
+      playByPlayActions: [
+        scoringAction({ actionNumber: 1, orderNumber: 1, period: 1, clock: "PT09M30.00S", scoreAway: "2", scoreHome: "0" }),
+        scoringAction({ actionNumber: 2, orderNumber: 2, actionType: "3pt", period: 1, clock: "PT08M45.00S", scoreAway: "5", scoreHome: "0" }),
+        scoringAction({ actionNumber: 3, orderNumber: 3, actionType: "3pt", period: 1, clock: "PT08M00.00S", scoreAway: "8", scoreHome: "0" }),
+        { actionNumber: 4, orderNumber: 4, actionType: "timeout", subType: "regular", period: 1, clock: "PT07M58.00S", teamId: HOME.teamId, scoreAway: "8", scoreHome: "0" },
+        { actionNumber: 5, orderNumber: 5, actionType: "timeout", subType: "official", period: 1, clock: "PT07M30.00S", scoreAway: "8", scoreHome: "0" },
+      ],
+    },
+    awayTeam: AWAY,
+    homeTeam: HOME,
+    basePlayers: [{ personId: 101, firstName: "John", familyName: "Ukomadu", teamId: AWAY.teamId }],
+  });
+
+  const timeoutAlerts = alerts.filter((alert) => alert.category === "Timeout");
+  assert.equal(timeoutAlerts.length, 2);
+  assert.equal(timeoutAlerts[0].title, "Thunder timeout after Nets won the recent stretch 8-0");
+  assert.match(timeoutAlerts[0].detail, /Nets lead Thunder 8-0/);
+  assert.ok(timeoutAlerts[1].title.startsWith("Timeout"));
+  assert.ok(timeoutAlerts.every((alert) => alert.detail));
+});
+
+test("empty-possession alerts update within a streak and reset for a new streak", () => {
+  let order = 0;
+  const action = (teamId, actionType, shotResult = undefined) => ({
+    actionNumber: ++order,
+    orderNumber: order,
+    period: 1,
+    clock: `PT${String(12 - Math.floor(order / 2)).padStart(2, "0")}M00.00S`,
+    possession: teamId,
+    teamId,
+    actionType,
+    shotResult,
+    personId: teamId === AWAY.teamId ? 101 : 201,
+  });
+  const actions = [];
+  const emptyAwayPossession = (type = "turnover") => {
+    actions.push(action(AWAY.teamId, type, type === "2pt" ? "Missed" : undefined));
+    actions.push(action(HOME.teamId, "2pt", "Made"));
+  };
+  emptyAwayPossession("2pt");
+  emptyAwayPossession();
+  emptyAwayPossession("2pt");
+  emptyAwayPossession();
+  actions.push(action(AWAY.teamId, "2pt", "Made"));
+  actions.push(action(HOME.teamId, "turnover"));
+  emptyAwayPossession();
+  emptyAwayPossession("2pt");
+  emptyAwayPossession();
+
+  const alerts = buildGameAlerts({
+    game: { gameId: "0022600001", gameStatus: 2, period: 1, gameClock: "PT03M00.00S", playByPlayActions: actions },
+    awayTeam: AWAY,
+    homeTeam: HOME,
+  });
+  const emptyAlerts = alerts.filter((alert) => alert.category === "Empty Possessions" && alert.teamId === AWAY.teamId);
+  assert.equal(emptyAlerts.length, 2);
+  assert.ok(emptyAlerts.some((alert) => alert.title.includes("4 consecutive possessions")));
+  assert.ok(emptyAlerts.some((alert) => alert.title.includes("3 consecutive possessions")));
+});
+
+test("Kill alerts fire for each completed group of three defensive stops", () => {
+  const actions = [];
+  let order = 0;
+  for (let stop = 0; stop < 6; stop += 1) {
+    actions.push({ actionNumber: ++order, orderNumber: order, period: 1, clock: `PT0${9 - stop}M30.00S`, possession: AWAY.teamId, teamId: AWAY.teamId, actionType: "turnover", personId: 101 });
+    actions.push({ actionNumber: ++order, orderNumber: order, period: 1, clock: `PT0${9 - stop}M00.00S`, possession: HOME.teamId, teamId: HOME.teamId, actionType: "2pt", shotResult: "Made", personId: 201 });
+  }
+  const alerts = buildGameAlerts({
+    game: { gameId: "0022600001", gameStatus: 2, period: 1, gameClock: "PT03M00.00S", playByPlayActions: actions },
+    awayTeam: AWAY,
+    homeTeam: HOME,
+  });
+  assert.deepEqual(
+    alerts.filter((alert) => alert.category === "Kill").map((alert) => alert.title),
+    ["Thunder just completed its 1st Kill of the game", "Thunder just completed its 2nd Kill of the game"],
+  );
+});
+
+test("second-chance pressure aggregates offensive rebounds and resulting points", () => {
+  const actions = [
+    { actionNumber: 1, orderNumber: 1, period: 1, clock: "PT09M00.00S", possession: AWAY.teamId, teamId: AWAY.teamId, actionType: "2pt", shotResult: "Missed", personId: 101 },
+    { actionNumber: 2, orderNumber: 2, period: 1, clock: "PT08M58.00S", possession: AWAY.teamId, teamId: AWAY.teamId, actionType: "rebound", subType: "offensive", personId: 101 },
+    { actionNumber: 3, orderNumber: 3, period: 1, clock: "PT08M50.00S", possession: AWAY.teamId, teamId: AWAY.teamId, actionType: "2pt", shotResult: "Made", personId: 101 },
+    { actionNumber: 4, orderNumber: 4, period: 1, clock: "PT08M30.00S", possession: HOME.teamId, teamId: HOME.teamId, actionType: "turnover", personId: 201 },
+    { actionNumber: 5, orderNumber: 5, period: 1, clock: "PT08M00.00S", possession: AWAY.teamId, teamId: AWAY.teamId, actionType: "3pt", shotResult: "Missed", personId: 101 },
+    { actionNumber: 6, orderNumber: 6, period: 1, clock: "PT07M58.00S", possession: AWAY.teamId, teamId: AWAY.teamId, actionType: "rebound", subType: "offensive", personId: 101 },
+    { actionNumber: 7, orderNumber: 7, period: 1, clock: "PT07M50.00S", possession: AWAY.teamId, teamId: AWAY.teamId, actionType: "3pt", shotResult: "Made", personId: 101 },
+    { actionNumber: 8, orderNumber: 8, period: 1, clock: "PT07M30.00S", possession: HOME.teamId, teamId: HOME.teamId, actionType: "turnover", personId: 201 },
+  ];
+  const alert = buildGameAlerts({
+    game: { gameId: "0022600001", gameStatus: 2, period: 1, gameClock: "PT07M30.00S", playByPlayActions: actions },
+    awayTeam: AWAY,
+    homeTeam: HOME,
+  }).find((candidate) => candidate.category === "Second Chance");
+  assert.equal(alert?.title, "Nets have 5 second-chance points in Q1");
+  assert.equal(alert?.detail, "2 offensive rebounds created 2 scoring possessions.");
+});
+
+test("bonus pressure matches the yellow foul indicator thresholds", () => {
+  const foul = (actionNumber, teamId, clock) => ({ actionNumber, orderNumber: actionNumber, period: 1, clock, teamId, actionType: "foul", subType: "personal", personId: teamId === AWAY.teamId ? 101 : 201 });
+  const alerts = buildGameAlerts({
+    game: {
+      gameId: "0022600001",
+      gameStatus: 2,
+      period: 1,
+      gameClock: "PT01M30.00S",
+      playByPlayActions: [
+        foul(1, AWAY.teamId, "PT08M00.00S"), foul(2, AWAY.teamId, "PT06M00.00S"),
+        foul(3, AWAY.teamId, "PT04M00.00S"), foul(4, AWAY.teamId, "PT03M00.00S"),
+        foul(5, HOME.teamId, "PT01M30.00S"),
+      ],
+    },
+    awayTeam: AWAY,
+    homeTeam: HOME,
+  });
+  const pressure = alerts.filter((alert) => alert.category === "Bonus Pressure");
+  assert.equal(pressure.length, 2);
+  assert.match(pressure.find((alert) => alert.teamId === AWAY.teamId)?.detail, /4th team foul/);
+  assert.match(pressure.find((alert) => alert.teamId === HOME.teamId)?.detail, /first team foul inside the final 2:00/);
 });
 
 test("buildGameAlerts keeps late-quarter rebound alerts before period-end alerts", () => {

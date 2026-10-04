@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { teamLogoUrl } from "../api.js";
+import { selectPrimaryGameAlert } from "../gameAlerts.js";
 import styles from "../pages/Game.module.css";
 
 function normalizeTeamId(value) {
@@ -68,7 +69,7 @@ export default function GameAlerts({
       return rightSort - leftSort;
     })
     .map(({ alert }) => alert);
-  const compactAlert = displayedAlerts[0] || null;
+  const compactAlert = selectPrimaryGameAlert(displayedAlerts);
   const compactAlertId = compactAlert?.id ?? null;
 
   useEffect(() => {
