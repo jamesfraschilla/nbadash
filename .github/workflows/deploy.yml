@@ -46,6 +46,10 @@ jobs:
       - name: Install browser
         run: npx playwright install --with-deps chromium
       - name: Browser tests
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_ASSIGNMENTS_PROXY_URL: ${{ secrets.VITE_ASSIGNMENTS_PROXY_URL }}
         run: npm run test:e2e
       - name: Dependency audit
         run: npm audit --audit-level=high
