@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { requestBodyTooLarge, requireActiveRateLimitedUser } from "../_shared/requestSecurity.ts";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
@@ -2341,7 +2342,11 @@ export async function handleRequest(req: Request) {
     return jsonResponse(405, { error: "Method not allowed." });
   }
 
+  if (requestBodyTooLarge(req)) return jsonResponse(413, { error: "Request body is too large." });
+
   try {
+    const access = await requireActiveRateLimitedUser(req, "game-analysis", { limit: 12, windowSeconds: 60 });
+    if (!access.ok) return jsonResponse(access.status, { error: access.error });
     const body = await req.json().catch(() => ({}));
     const operation = String(body?.operation || "").trim();
     const gameId = String(body?.gameId || "").trim();

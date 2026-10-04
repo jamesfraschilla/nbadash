@@ -1,0 +1,59 @@
+name: Deploy Supabase
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "supabase/**"
+      - "scripts/supabase-deployment-manifest.mjs"
+      - "scripts/verify-supabase-production.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: npm ci
+      - run: npm run supabase:manifest:check
+      - run: npm run test:edge
+      - run: npm run typecheck
+      - name: Require deployment credentials
+        run: |
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          test -n "$SUPABASE_PROJECT_REF"
+          test -n "$SUPABASE_URL"
+          test -n "$SUPABASE_SERVICE_ROLE_KEY"
+      - name: Apply database scripts in manifest order
+        run: |
+          node -e 'for (const row of require("./supabase/deployment-manifest.json").databaseScripts) console.log(row.path)' |
+          while read -r sql; do
+            npx -y supabase db query --project-ref "$SUPABASE_PROJECT_REF" --file "$sql"
+          done
+      - name: Deploy every repository Edge Function
+        run: |
+          node -e 'for (const row of require("./supabase/deployment-manifest.json").edgeFunctions) console.log(row.name)' |
+          while read -r fn; do
+            npx -y supabase functions deploy "$fn" --project-ref "$SUPABASE_PROJECT_REF" --use-api
+          done
+      - run: npm run supabase:production:record
+      - run: npm run supabase:production:check

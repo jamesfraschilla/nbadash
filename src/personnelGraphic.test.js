@@ -42,7 +42,7 @@ test("constants expose the requested slots, stats, tags, and 3P colors", () => {
   ]);
   assert.deepEqual(DEFAULT_PERSONNEL_STAT_KEYS, ["ppg", "threePointPercentage", "rpg", "apg"]);
   assert.deepEqual(PERSONNEL_TAG_OPTIONS.map(({ key }) => key), [
-    "fire", "cold", "drives_right", "drives_left",
+    "fire", "cold", "drives_right", "drives_left", "lefty",
   ]);
   assert.deepEqual(PERSONNEL_THREE_POINT_COLOR_OPTIONS.map(({ key }) => key), [
     "bright_green", "dark_green", "yellow", "orange", "red",
@@ -85,6 +85,10 @@ test("fire personnel tags force bright green 3P color without mutating tags", ()
   });
   assert.equal(brightGreenRow.threePointColor, "bright_green");
   assert.deepEqual(brightGreenRow.tags, []);
+});
+
+test("Lefty is preserved as a personnel export tag", () => {
+  assert.deepEqual(createPersonnelRow({ tags: ["Lefty", "unknown"] }).tags, ["lefty"]);
 });
 
 test("createPersonnelDraft produces 18 independent rows with the exact draft shape", () => {

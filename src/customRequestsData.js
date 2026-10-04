@@ -33,6 +33,7 @@ export async function requestCustomDashboardRequest({ prompt }) {
     body: JSON.stringify({
       prompt,
     }),
+    signal: AbortSignal.timeout(45_000),
   });
 
   let payload = null;

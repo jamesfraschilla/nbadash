@@ -43,12 +43,20 @@ jobs:
         run: npm test -- --test-reporter=spec
       - name: Lint
         run: npm run lint
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+      - name: Browser tests
+        run: npm run test:e2e
+      - name: Dependency audit
+        run: npm audit --audit-level=high
       - name: Build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           VITE_ASSIGNMENTS_PROXY_URL: ${{ secrets.VITE_ASSIGNMENTS_PROXY_URL }}
         run: npm run build
+      - name: Enforce build performance budget
+        run: npm run build:budget
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5
         with:

@@ -28,10 +28,21 @@ const sqlOrder = [
   "remove_pgr_insights.sql",
   "challenge_context_tag_save_rpc.sql",
   "database_storage_audit.sql",
+  "operational_hardening.sql",
   "wizards_analysis_prewarm_schedule.sql",
 ];
 
 const sha256 = (file) => crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+const digestEntries = (entries) => crypto.createHash("sha256")
+  .update(entries.map(({ name, hash }) => `${name}:${hash}`).join("\n"))
+  .digest("hex");
+const walk = (directory) => fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+  const fullPath = path.join(directory, entry.name);
+  if (entry.isDirectory()) return walk(fullPath);
+  return [fullPath];
+});
+const sharedFiles = walk(path.join(supabaseDir, "functions", "_shared"))
+  .filter((file) => !file.endsWith(".test.ts"));
 const functionNames = fs.readdirSync(path.join(supabaseDir, "functions"), { withFileTypes: true })
   .filter((entry) => entry.isDirectory() && fs.existsSync(path.join(supabaseDir, "functions", entry.name, "index.ts")))
   .map((entry) => entry.name)
@@ -49,11 +60,22 @@ const next = {
     path: `supabase/${name}`,
     sha256: sha256(path.join(supabaseDir, name)),
   })),
-  edgeFunctions: functionNames.map((name) => ({
-    name,
-    entrypoint: `supabase/functions/${name}/index.ts`,
-    sha256: sha256(path.join(supabaseDir, "functions", name, "index.ts")),
-  })),
+  edgeConfigSha256: sha256(path.join(supabaseDir, "config.toml")),
+  edgeFunctions: functionNames.map((name) => {
+    const files = [...walk(path.join(supabaseDir, "functions", name)), ...sharedFiles]
+      .filter((file) => !file.endsWith(".test.ts"))
+      .map((file) => ({
+        name: path.relative(root, file).split(path.sep).join("/"),
+        hash: sha256(file),
+      }))
+      .sort((left, right) => left.name.localeCompare(right.name));
+    return {
+      name,
+      entrypoint: `supabase/functions/${name}/index.ts`,
+      sha256: digestEntries(files),
+      sourceFiles: files.map((file) => file.name),
+    };
+  }),
 };
 
 if (process.argv.includes("--write")) {

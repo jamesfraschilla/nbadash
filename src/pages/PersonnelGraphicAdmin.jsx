@@ -5,6 +5,7 @@ import fireTagUrl from "../assets/personnel/fire.png";
 import coldTagUrl from "../assets/personnel/cold.png";
 import drivesRightTagUrl from "../assets/personnel/drives-right.png";
 import drivesLeftTagUrl from "../assets/personnel/drives-left.png";
+import leftyTagUrl from "../assets/personnel/lefty.png";
 import { fetchNbaPlayerStats } from "../api.js";
 import { useAuth } from "../auth/useAuth.js";
 import Dialog from "../components/ui/Dialog.jsx";
@@ -51,6 +52,7 @@ const TAG_IMAGE_URLS = {
   cold: coldTagUrl,
   drives_right: drivesRightTagUrl,
   drives_left: drivesLeftTagUrl,
+  lefty: leftyTagUrl,
 };
 
 const PERSONNEL_STAT_OPTIONS_BY_KEY = Object.freeze(Object.fromEntries(

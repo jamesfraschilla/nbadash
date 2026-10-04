@@ -1,5 +1,6 @@
 import rosterSnapshotByTeam from "./rosterSnapshotByTeam.json" with { type: "json" };
 import leagueTeamGameKillsBySeason from "./leagueTeamGameKillsBySeason.json" with { type: "json" };
+import { requestBodyTooLarge, requireActiveRateLimitedUser } from "../_shared/requestSecurity.ts";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const OPENAI_API_URL = "https://api.openai.com/v1/responses";
@@ -4575,10 +4576,15 @@ Deno.serve(async (request) => {
     return jsonResponse(405, { error: "Method not allowed." });
   }
 
+  if (requestBodyTooLarge(request, 64 * 1024)) return jsonResponse(413, { error: "Request body is too large." });
+
   try {
+    const access = await requireActiveRateLimitedUser(request, "custom-requests", { limit: 10, windowSeconds: 60 });
+    if (!access.ok) return jsonResponse(access.status, { error: access.error });
     const body = await request.json().catch(() => ({}));
     const prompt = String(body?.prompt || "").trim();
     if (!prompt) return jsonResponse(400, { error: "Prompt is required." });
+    if (prompt.length > 1000) return jsonResponse(400, { error: "Prompt must be 1,000 characters or fewer." });
     const season = await resolveSeasonStringForPrompt(prompt);
     const explicitTeam = findTeamFromPrompt(prompt);
     const earlyLeagueConditionalRecordRequest = !explicitTeam && !extractLikelyPlayerName(prompt, null)

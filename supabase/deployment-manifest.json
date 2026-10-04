@@ -113,90 +113,196 @@
     },
     {
       "order": 23,
+      "path": "supabase/operational_hardening.sql",
+      "sha256": "81815f462c2b696ce67ffad9f9db18213f69e1da5076f50e7cfb25145bb2ecd1"
+    },
+    {
+      "order": 24,
       "path": "supabase/wizards_analysis_prewarm_schedule.sql",
       "sha256": "1764a8ef8efd85d9462588d201be039dbcb56d2120bcee056b3bc171aabe8879"
     }
   ],
+  "edgeConfigSha256": "81b2706900fc69166f6e89330e3e3504ae4a933bed3a10db6295c70abf0043c5",
   "edgeFunctions": [
     {
       "name": "admin-users",
       "entrypoint": "supabase/functions/admin-users/index.ts",
-      "sha256": "02d72ecbd6409f0551b2c90890c7f297aff79a92ba3f9408bab6620d864e9654"
+      "sha256": "9e1c3a037f30ff21bd4166211a51685d4cdf6030ef09917aca0e5587a7445663",
+      "sourceFiles": [
+        "supabase/functions/_shared/officiatingInsights.ts",
+        "supabase/functions/_shared/requestSecurity.ts",
+        "supabase/functions/_shared/rosterSnapshot.ts",
+        "supabase/functions/admin-users/index.ts"
+      ]
     },
     {
       "name": "custom-requests",
       "entrypoint": "supabase/functions/custom-requests/index.ts",
-      "sha256": "92cfaf488cc6d876fabb5d2e493a796f1abf0c226d8fbddd8d83021eb7230b9a"
+      "sha256": "89b0bb11cb81e852524b24f495d14eac36f4247eb55c501d9f71860f28448dad",
+      "sourceFiles": [
+        "supabase/functions/_shared/officiatingInsights.ts",
+        "supabase/functions/_shared/requestSecurity.ts",
+        "supabase/functions/_shared/rosterSnapshot.ts",
+        "supabase/functions/custom-requests/index.ts",
+        "supabase/functions/custom-requests/leagueTeamGameKillsBySeason.json",
+        "supabase/functions/custom-requests/rosterSnapshotByTeam.json"
+      ]
     },
     {
       "name": "export-image",
       "entrypoint": "supabase/functions/export-image/index.ts",
-      "sha256": "b8503c465105625aae1bbe05a32e6e751bb27a13037080510dc86d7d6bd747d2"
+      "sha256": "d9065fd8781de0470c67a0d6f231016d202bde6ece6bf7b5c7c77b1f5a19b09b",
+      "sourceFiles": [
+        "supabase/functions/_shared/officiatingInsights.ts",
+        "supabase/functions/_shared/requestSecurity.ts",
+        "supabase/functions/_shared/rosterSnapshot.ts",
+        "supabase/functions/export-image/index.ts"
+      ]
     },
     {
       "name": "game-analysis",
       "entrypoint": "supabase/functions/game-analysis/index.ts",
-      "sha256": "9e37ad588deefc9f4386a93db57ea52e66ee3fdf1dc04bbc3a564ff51330ad54"
+      "sha256": "650dec5f39af6fadb7b50cde74525b0f9356c2435138fe3477b630d126e4b96d",
+      "sourceFiles": [
+        "supabase/functions/_shared/officiatingInsights.ts",
+        "supabase/functions/_shared/requestSecurity.ts",
+        "supabase/functions/_shared/rosterSnapshot.ts",
+        "supabase/functions/game-analysis/index.ts"
+      ]
     },
     {
       "name": "game-live-state",
       "entrypoint": "supabase/functions/game-live-state/index.ts",
-      "sha256": "2d20cfb436dd62affd81e0ba7d162fada273c1bff53e3c5af9bd1692163d387c"
+      "sha256": "8332b42117c79432e708a771802be86e1ede2ebe834e059a5cf4cc33d077c166",
+      "sourceFiles": [
+        "supabase/functions/_shared/officiatingInsights.ts",
+        "supabase/functions/_shared/requestSecurity.ts",
+        "supabase/functions/_shared/rosterSnapshot.ts",
+        "supabase/functions/game-live-state/index.ts"
+      ]
     },
     {
       "name": "game-metadata",
       "entrypoint": "supabase/functions/game-metadata/index.ts",
-      "sha256": "35142c16437d5b6d9a63d2781ddb4c6e836fa96772c3946b25061e2a3cfc980f"
+      "sha256": "27f30cf1d74f59628bb01be3468d7c5f6cfd37290819f122b943d701b1d89cea",
+      "sourceFiles": [
+        "supabase/functions/_shared/officiatingInsights.ts",
+        "supabase/functions/_shared/requestSecurity.ts",
+        "supabase/functions/_shared/rosterSnapshot.ts",
+        "supabase/functions/game-metadata/index.ts"
+      ]
     },
     {
       "name": "gleague-rosters",
       "entrypoint": "supabase/functions/gleague-rosters/index.ts",
-      "sha256": "54d22d74328cc7fab72ed1ef72f02abe3ed9095575451ab6933c871a3aab3611"
+      "sha256": "9692594d2be45034a52d2f822d9a74172bb823291cfc01b29dcb8daac5cba8b9",
+      "sourceFiles": [
+        "supabase/functions/_shared/officiatingInsights.ts",
+        "supabase/functions/_shared/requestSecurity.ts",
+        "supabase/functions/_shared/rosterSnapshot.ts",
+        "supabase/functions/gleague-rosters/index.ts"
+      ]
     },
     {
       "name": "nba-analytics-report",
       "entrypoint": "supabase/functions/nba-analytics-report/index.ts",
-      "sha256": "2c1c8c0e07c8afccff622debf603dbc1bf841305686c2e7e715977a037a4f8a4"
+      "sha256": "9ea26651d2b5f1fbd72bc9bec59043a28fa3aa40522ad7b517d57acee8aa6b93",
+      "sourceFiles": [
+        "supabase/functions/_shared/officiatingInsights.ts",
+        "supabase/functions/_shared/requestSecurity.ts",
+        "supabase/functions/_shared/rosterSnapshot.ts",
+        "supabase/functions/nba-analytics-report/index.ts"
+      ]
     },
     {
       "name": "nba-matchup-defaults",
       "entrypoint": "supabase/functions/nba-matchup-defaults/index.ts",
-      "sha256": "411b65cdfe38457d655f6858400a06c1ecd8d4e2d65fa4ed3b3c595e5f4103e5"
+      "sha256": "e0864e8ac0f82ea6b65faa8598c1d4ae1cffdd2e8ccce4b51fd5f5393c69aac3",
+      "sourceFiles": [
+        "supabase/functions/_shared/officiatingInsights.ts",
+        "supabase/functions/_shared/requestSecurity.ts",
+        "supabase/functions/_shared/rosterSnapshot.ts",
+        "supabase/functions/nba-matchup-defaults/index.ts"
+      ]
     },
     {
       "name": "nba-player-stats",
       "entrypoint": "supabase/functions/nba-player-stats/index.ts",
-      "sha256": "f2daf25eb5204d831ffbc46f900d72cbce069de7633d4a828b3fcbd9a3ff6960"
+      "sha256": "6b108655211dd7bcd7933094a50af9013b5e71c5b5338ffcbfdc458300085edf",
+      "sourceFiles": [
+        "supabase/functions/_shared/officiatingInsights.ts",
+        "supabase/functions/_shared/requestSecurity.ts",
+        "supabase/functions/_shared/rosterSnapshot.ts",
+        "supabase/functions/nba-player-stats/index.ts",
+        "supabase/functions/nba-player-stats/normalizers.ts"
+      ]
     },
     {
       "name": "nba-rosters",
       "entrypoint": "supabase/functions/nba-rosters/index.ts",
-      "sha256": "f1751b7e12d3bf516346ebbe9ff945bb7bc710a6f15d6cbcbf30faa2dbce0a46"
+      "sha256": "ccf05138c0d82f11cdb728643e8fcbcbc6dd119e173dbe18078d4e9ffac0a6a6",
+      "sourceFiles": [
+        "supabase/functions/_shared/officiatingInsights.ts",
+        "supabase/functions/_shared/requestSecurity.ts",
+        "supabase/functions/_shared/rosterSnapshot.ts",
+        "supabase/functions/nba-rosters/index.ts"
+      ]
     },
     {
       "name": "officiating-insights",
       "entrypoint": "supabase/functions/officiating-insights/index.ts",
-      "sha256": "4d6a5f7b968c670b23e8281d0c8db86c910cfbe83bfd70fc1992b343f95617d9"
+      "sha256": "f185d05946e272c872bc0ba439f0e5b7ed3cfe785c9df906afb7e861a78eb26e",
+      "sourceFiles": [
+        "supabase/functions/_shared/officiatingInsights.ts",
+        "supabase/functions/_shared/requestSecurity.ts",
+        "supabase/functions/_shared/rosterSnapshot.ts",
+        "supabase/functions/officiating-insights/index.ts"
+      ]
     },
     {
       "name": "player-headshot",
       "entrypoint": "supabase/functions/player-headshot/index.ts",
-      "sha256": "c0adde64cc05f4bcaca643b6e3f7a483d957714ea110ca69f9d4f3e91b4da13f"
+      "sha256": "e768fcd5a699f7fcb39b7ccb2d65bf18498837eba2a094dfd999ea67c7ad7805",
+      "sourceFiles": [
+        "supabase/functions/_shared/officiatingInsights.ts",
+        "supabase/functions/_shared/requestSecurity.ts",
+        "supabase/functions/_shared/rosterSnapshot.ts",
+        "supabase/functions/player-headshot/index.ts"
+      ]
     },
     {
       "name": "pregame-scouting",
       "entrypoint": "supabase/functions/pregame-scouting/index.ts",
-      "sha256": "9ab4d5bcbf52ef55de30de7fbd888dd23114964ac255e04062ef164737cbdd2e"
+      "sha256": "9d78dbf315ba19021f3854cbbcc96403bba6efbb3aa8d906a4ab960bb30ad3de",
+      "sourceFiles": [
+        "supabase/functions/_shared/officiatingInsights.ts",
+        "supabase/functions/_shared/requestSecurity.ts",
+        "supabase/functions/_shared/rosterSnapshot.ts",
+        "supabase/functions/pregame-scouting/index.ts"
+      ]
     },
     {
       "name": "team-games",
       "entrypoint": "supabase/functions/team-games/index.ts",
-      "sha256": "0cbad56a1799cf20a2d8d9f8191e47e67d841154335e6cfefb45ca987d8a43a8"
+      "sha256": "4578b4280103f5adade3405b5411f80a88a01c1b6a2d952835909a1e5ad9f738",
+      "sourceFiles": [
+        "supabase/functions/_shared/officiatingInsights.ts",
+        "supabase/functions/_shared/requestSecurity.ts",
+        "supabase/functions/_shared/rosterSnapshot.ts",
+        "supabase/functions/team-games/index.ts",
+        "supabase/functions/team-games/nbaSchedule2026_27.json"
+      ]
     },
     {
       "name": "wizards-analysis-prewarm",
       "entrypoint": "supabase/functions/wizards-analysis-prewarm/index.ts",
-      "sha256": "56aef9b460086f85f7c27336384c2f76cd79ecbfbffdb475a9f4af4bf306d487"
+      "sha256": "ae8bffe71b9517a97ac7b8d4dc3e3835725732e12e8929bf17a2e59acbb723eb",
+      "sourceFiles": [
+        "supabase/functions/_shared/officiatingInsights.ts",
+        "supabase/functions/_shared/requestSecurity.ts",
+        "supabase/functions/_shared/rosterSnapshot.ts",
+        "supabase/functions/wizards-analysis-prewarm/index.ts"
+      ]
     }
   ]
 }

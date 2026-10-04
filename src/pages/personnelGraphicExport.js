@@ -2,6 +2,7 @@ import fireTagUrl from "../assets/personnel/fire.png";
 import coldTagUrl from "../assets/personnel/cold.png";
 import drivesRightTagUrl from "../assets/personnel/drives-right.png";
 import drivesLeftTagUrl from "../assets/personnel/drives-left.png";
+import leftyTagUrl from "../assets/personnel/lefty.png";
 import { teamLogoUrl } from "../api.js";
 import {
   PERSONNEL_CUSTOM_STAT_KEY,
@@ -53,6 +54,7 @@ const TAG_ASSET_URLS = {
   cold: coldTagUrl,
   drives_right: drivesRightTagUrl,
   drives_left: drivesLeftTagUrl,
+  lefty: leftyTagUrl,
 };
 
 function getThreePointRatio(stats) {

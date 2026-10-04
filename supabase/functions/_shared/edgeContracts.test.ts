@@ -29,3 +29,13 @@ Deno.test("every Edge Function has an explicit JWT policy and request contract",
 Deno.test("Edge Function contract inventory matches the deployment surface", () => {
   assertEquals(functionNames.length, 16);
 });
+
+Deno.test("AI-backed endpoints enforce active-user rate limits and bounded input", async () => {
+  for (const name of ["game-analysis", "custom-requests"]) {
+    const source = await Deno.readTextFile(new URL(`./${name}/index.ts`, functionsRoot));
+    assert(source.includes("requireActiveRateLimitedUser"), `${name} has no active-user rate limit`);
+    assert(source.includes("requestBodyTooLarge"), `${name} has no request-size guard`);
+    const configBlock = configText.split(`[functions.${name}]`)[1]?.split("[functions.")[0] || "";
+    assert(/verify_jwt\s*=\s*true/.test(configBlock), `${name} must verify JWTs`);
+  }
+});

@@ -26,6 +26,7 @@ export const PERSONNEL_TAG_OPTIONS = Object.freeze([
   Object.freeze({ key: "cold", label: "Cold" }),
   Object.freeze({ key: "drives_right", label: "Drives Right" }),
   Object.freeze({ key: "drives_left", label: "Drives Left" }),
+  Object.freeze({ key: "lefty", label: "Lefty" }),
 ]);
 
 export const PERSONNEL_THREE_POINT_COLOR_OPTIONS = Object.freeze([
@@ -123,6 +124,7 @@ const TAG_KEY_ALIASES = new Map([
   ["hot", "fire"],
   ["cold", "cold"],
   ["ice", "cold"],
+  ["lefty", "lefty"],
   ["drivesright", "drives_right"],
   ["driveright", "drives_right"],
   ["drivesleft", "drives_left"],

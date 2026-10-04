@@ -7,6 +7,7 @@ const storageSql = readFileSync(new URL("../supabase/graphic_headshots_storage.s
 const rosterSnapshotsSql = readFileSync(new URL("../supabase/roster_feed_snapshots.sql", import.meta.url), "utf8");
 const gameLiveStateSql = readFileSync(new URL("../supabase/game_live_state.sql", import.meta.url), "utf8");
 const gameLiveStateAtomicSql = readFileSync(new URL("../supabase/game_live_state_atomic.sql", import.meta.url), "utf8");
+const operationalSql = readFileSync(new URL("../supabase/operational_hardening.sql", import.meta.url), "utf8");
 
 test("account-data migration defines atomic version, share, and revision contracts", () => {
   [
@@ -54,4 +55,12 @@ test("game live state writes are atomically deduplicated across viewers", () => 
   assert.match(gameLiveStateAtomicSql, /existing\.source_signature = incoming_signature/i);
   assert.match(gameLiveStateAtomicSql, /grant execute .* to service_role/is);
   assert.match(gameLiveStateAtomicSql, /revoke all .* from authenticated/is);
+});
+
+test("operational hardening atomically rate-limits Edge requests and records deployments", () => {
+  assert.match(operationalSql, /consume_edge_request_limit/i);
+  assert.match(operationalSql, /on conflict \(user_id, function_name, window_start\)/i);
+  assert.match(operationalSql, /grant execute .* to service_role/is);
+  assert.match(operationalSql, /supabase_deployment_state/i);
+  assert.match(operationalSql, /revoke all .* from public, anon, authenticated/is);
 });

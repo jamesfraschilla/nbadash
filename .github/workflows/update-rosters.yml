@@ -19,6 +19,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
       - name: Skip outside season
         run: |
           month=$(date -u +%m)
@@ -30,6 +36,10 @@ jobs:
         run: |
           set -euo pipefail
           timeout 120s python3 scripts/build_rosters.py
+      - name: Validate generated rosters
+        run: |
+          npm run rosters:validate
+          npm test -- --test-name-pattern="roster"
       - name: Commit and push if changed
         run: |
           if git diff --quiet; then

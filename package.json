@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:budget": "node scripts/check-build-budget.mjs",
+    "rosters:validate": "node scripts/validate-rosters.mjs",
     "check:edge-functions": "npx -y deno cache --no-check supabase/functions/*/index.ts",
     "typecheck:edge-functions": "npx -y deno check --config supabase/deno.json supabase/functions/*/index.ts",
     "typecheck": "npm run typecheck:edge-functions",
@@ -31,7 +33,9 @@
     "test:e2e": "playwright test",
     "supabase:manifest:update": "node scripts/supabase-deployment-manifest.mjs --write",
     "supabase:manifest:check": "node scripts/supabase-deployment-manifest.mjs",
-    "verify": "npm run supabase:manifest:check && npm run lint && npm test && npm run test:edge && npm run typecheck && npm run test:e2e && npm run build && npm audit --audit-level=high",
+    "supabase:production:check": "node scripts/verify-supabase-production.mjs",
+    "supabase:production:record": "node scripts/verify-supabase-production.mjs --record",
+    "verify": "npm run supabase:manifest:check && npm run lint && npm test && npm run test:edge && npm run typecheck && npm run test:e2e && npm run build && npm run build:budget && npm audit --audit-level=high",
     "preview": "vite preview"
   },
   "dependencies": {
