@@ -439,7 +439,9 @@ export default function CoverageGraphicAdmin() {
                         type="button"
                         className={styles.coverageRemoveColumnButton}
                         onClick={handleRemoveLastColumn}
-                        aria-label={`Remove coverage column ${columnIndex + 1}`}
+                        aria-label={columnIndex === 2
+                          ? "Remove third coverage column"
+                          : "Remove second coverage column"}
                       >
                         X
                       </button>

@@ -17,7 +17,7 @@ test("coverage export collapses empty third column and restores it when populate
   expect(isWhitePixel(result.threeColumnSecondSeparator)).toBe(true);
 });
 
-test("coverage editor removes and re-adds the third column", async ({ page }) => {
+test("coverage editor removes and re-adds columns down to a one-column layout", async ({ page }) => {
   await page.goto("http://127.0.0.1:4174/nbadash/#/graphics?graphic=coverage");
 
   await expect(page.getByRole("button", { name: "Coverage", exact: true })).toBeVisible();
@@ -32,6 +32,10 @@ test("coverage editor removes and re-adds the third column", async ({ page }) =>
   await expect(page.getByText("Column 3", { exact: true })).toBeVisible();
   await page.getByLabel("Remove third coverage column").click();
   await expect(page.getByText("Column 3", { exact: true })).toHaveCount(0);
+  await page.getByLabel("Remove second coverage column").click();
+  await expect(page.getByText("Column 2", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "+ Column" }).click();
+  await expect(page.getByText("Column 2", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "+ Column" }).click();
   await expect(page.getByText("Column 3", { exact: true })).toBeVisible();
 });
