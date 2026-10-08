@@ -19,6 +19,9 @@ import {
   saveRemotePregamePlayers,
 } from "../pregamePlayers.js";
 import { supabase } from "../supabaseClient.js";
+import { createSerialTaskQueue } from "../serialTaskQueue.js";
+import { fetchSharedStateRow, saveSharedStateRow } from "../sharedState.js";
+import { chooseSavedPregameSchedule } from "../pregameScheduleState.js";
 import { readLocalStorage, writeLocalStorage } from "../storage.js";
 import wizardsLogoUrl from "../assets/WWizards_Primary_Icon.png";
 import dinFontUrl from "../assets/fonts/DIN.ttf";
@@ -35,6 +38,9 @@ const SLOT_STORAGE_PREFIX = "pregame:slots:v1:";
 const SLOT_TEMPLATE_KEY = "pregame:slot-template:v1";
 const PREGAME_GLOBAL_TEMPLATE_GAME_ID = "9999999902";
 const PREGAME_ACTION_PAYLOAD = 900000001;
+const PREGAME_SCHEDULE_SCOPE_TYPE = "pregame_schedule";
+const PREGAME_TEMPLATE_SCOPE_TYPE = "pregame_template";
+const PREGAME_TEMPLATE_SCOPE_KEY = "global";
 const PREGAME_REMOTE_SCHEDULE_POLL_INTERVAL_MS = 60_000;
 const PREGAME_REMOTE_REFERENCE_STALE_TIME_MS = 5 * 60 * 1000;
 const STANDALONE_PREGAME_GAME_ID = "standalone-pregame-court-time";
@@ -152,12 +158,6 @@ function normalizeTemplate(rawTemplate) {
   return { count, playerGroups };
 }
 
-function slotsHaveAssignments(slots) {
-  return (Array.isArray(slots) ? slots : []).some((slot) =>
-    (Array.isArray(slot?.playerIds) ? slot.playerIds : []).some((id) => String(id || "").trim())
-  );
-}
-
 function parseRemotePayload(note, key) {
   const parsed = safeParseJson(note || "{}", null);
   if (!parsed) return { updatedAt: 0, value: null };
@@ -252,6 +252,16 @@ function loadTemplatePayload() {
 
 async function fetchRemoteSchedule(gameId) {
   if (!supabase || !gameId) return null;
+  const sharedRow = await fetchSharedStateRow(PREGAME_SCHEDULE_SCOPE_TYPE, String(gameId));
+  if (sharedRow) {
+    return {
+      updatedAt: Number(sharedRow.payload?.updatedAt || new Date(sharedRow.version).getTime() || 0),
+      slots: normalizeSlots(sharedRow.payload?.slots),
+      version: sharedRow.version,
+    };
+  }
+
+  // Preserve schedules saved before Court Time moved to the shared-state table.
   const { data, error } = await supabase
     .from("pbp_highlights")
     .select("note")
@@ -268,6 +278,16 @@ async function fetchRemoteSchedule(gameId) {
 
 async function fetchRemoteTemplate() {
   if (!supabase) return null;
+  const sharedRow = await fetchSharedStateRow(PREGAME_TEMPLATE_SCOPE_TYPE, PREGAME_TEMPLATE_SCOPE_KEY);
+  if (sharedRow) {
+    return {
+      updatedAt: Number(sharedRow.payload?.updatedAt || new Date(sharedRow.version).getTime() || 0),
+      template: normalizeTemplate(sharedRow.payload?.template),
+      version: sharedRow.version,
+    };
+  }
+
+  // Preserve the global template saved in the legacy highlights row.
   const { data, error } = await supabase
     .from("pbp_highlights")
     .select("note")
@@ -284,7 +304,7 @@ async function fetchRemoteTemplate() {
 
 async function saveRemoteSchedule(gameId, slots, updatedAt = Date.now()) {
   if (!supabase || !gameId) return;
-  await saveRemotePregamePayload(String(gameId), {
+  await saveRemotePregameSharedState(PREGAME_SCHEDULE_SCOPE_TYPE, String(gameId), {
     updatedAt,
     slots,
   });
@@ -292,7 +312,7 @@ async function saveRemoteSchedule(gameId, slots, updatedAt = Date.now()) {
 
 async function saveRemoteTemplate(slots, updatedAt = Date.now()) {
   if (!supabase) return;
-  await saveRemotePregamePayload(PREGAME_GLOBAL_TEMPLATE_GAME_ID, {
+  await saveRemotePregameSharedState(PREGAME_TEMPLATE_SCOPE_TYPE, PREGAME_TEMPLATE_SCOPE_KEY, {
     updatedAt,
     template: {
       count: Math.max(1, slots.length),
@@ -301,45 +321,18 @@ async function saveRemoteTemplate(slots, updatedAt = Date.now()) {
   });
 }
 
-async function saveRemotePregamePayload(gameId, payload, maxAttempts = 4) {
-  const nextNote = JSON.stringify(payload);
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const { data: current, error: readError } = await supabase
-      .from("pbp_highlights")
-      .select("note")
-      .eq("game_id", gameId)
-      .eq("action_number", PREGAME_ACTION_PAYLOAD)
-      .maybeSingle();
-    if (readError) throw readError;
-
-    const currentUpdatedAt = Number(parseRemotePayload(current?.note, "value").updatedAt || 0);
-    if (currentUpdatedAt > Number(payload.updatedAt || 0)) {
-      throw new Error("This shared Court Time schedule changed in another browser. Reload before saving again.");
-    }
-
-    if (current) {
-      let updateQuery = supabase
-        .from("pbp_highlights")
-        .update({ note: nextNote })
-        .eq("game_id", gameId)
-        .eq("action_number", PREGAME_ACTION_PAYLOAD);
-      updateQuery = current.note == null ? updateQuery.is("note", null) : updateQuery.eq("note", current.note);
-      const { data: updated, error: updateError } = await updateQuery.select("note").maybeSingle();
-      if (updateError) throw updateError;
-      if (updated) return;
-      continue;
-    }
-
-    const { error: insertError } = await supabase.from("pbp_highlights").insert({
-      game_id: gameId,
-      action_number: PREGAME_ACTION_PAYLOAD,
-      note: nextNote,
-    });
-    if (!insertError) return;
-    if (insertError.code !== "23505") throw insertError;
+async function saveRemotePregameSharedState(scopeType, scopeKey, payload) {
+  const current = await fetchSharedStateRow(scopeType, scopeKey);
+  const currentUpdatedAt = Number(current?.payload?.updatedAt || 0);
+  if (currentUpdatedAt > Number(payload.updatedAt || 0)) {
+    throw new Error("This shared Court Time schedule changed in another browser. Reload before saving again.");
   }
-
-  throw new Error("Unable to save shared Court Time state after multiple retries.");
+  return saveSharedStateRow({
+    scopeType,
+    scopeKey,
+    payload,
+    expectedVersion: current?.version || "",
+  });
 }
 
 function getGameTimeZone(game) {
@@ -417,17 +410,6 @@ function buildSlotsFromTemplate(game, template, options = {}) {
     ...slot,
     playerIds: Array.isArray(template?.playerGroups?.[index])
       ? template.playerGroups[index].slice(0, 3).map((value) => String(value || ""))
-      : ["", ""],
-  }));
-}
-
-function buildSlotsWithLocalTimes(game, slots, options = {}) {
-  const normalizedSlots = normalizeSlots(slots);
-  const seeded = buildDefaultSlots(game, Math.max(1, normalizedSlots.length || 8), options);
-  return seeded.map((slot, index) => ({
-    ...slot,
-    playerIds: Array.isArray(normalizedSlots[index]?.playerIds)
-      ? normalizedSlots[index].playerIds.slice(0, 3).map((value) => String(value || ""))
       : ["", ""],
   }));
 }
@@ -706,6 +688,7 @@ export default function PreGame({ standalone = false }) {
   const playersUpdatedAtRef = useRef(0);
   const slotsUpdatedAtRef = useRef(0);
   const templateUpdatedAtRef = useRef(0);
+  const remoteScheduleSaveQueueRef = useRef(createSerialTaskQueue());
 
   const trackedTeamScope = useMemo(
     () => (standalone ? standaloneTeamScope : getPregameTeamScope(game)),
@@ -830,51 +813,16 @@ export default function PreGame({ standalone = false }) {
     if (!standalone && supabase && (!remoteScheduleFetched || !remoteTemplateFetched)) return;
 
     const localSchedulePayload = loadSlotsPayload(effectiveGameId);
-    const localScheduleUpdatedAt = Number(localSchedulePayload?.updatedAt || 0);
-    const remoteScheduleUpdatedAt = Number(remoteSchedule?.updatedAt || 0);
+    const savedSchedule = chooseSavedPregameSchedule(remoteSchedule, localSchedulePayload);
     const localTemplatePayload = loadTemplatePayload();
     const localTemplateUpdatedAt = Number(localTemplatePayload?.updatedAt || 0);
     const remoteTemplateUpdatedAt = Number(remoteTemplate?.updatedAt || 0);
     const selectedTemplate = remoteTemplateUpdatedAt >= localTemplateUpdatedAt
       ? remoteTemplate?.template
       : localTemplatePayload?.template;
-    const templateHasAssignments = slotsHaveAssignments(
-      selectedTemplate?.playerGroups?.map((playerIds) => ({ playerIds })) || []
-    );
-
-    const remoteHasAssignments = slotsHaveAssignments(remoteSchedule?.slots);
-    const localHasAssignments = slotsHaveAssignments(localSchedulePayload?.slots);
-
-    if (
-      remoteSchedule?.slots?.length &&
-      remoteScheduleUpdatedAt >= localScheduleUpdatedAt &&
-      remoteHasAssignments
-    ) {
-      setSlots(remoteSchedule.slots);
-      slotsUpdatedAtRef.current = remoteScheduleUpdatedAt;
-      setSlotsHydrated(true);
-      return;
-    }
-
-    if (localSchedulePayload?.slots?.length && localHasAssignments) {
-      setSlots(localSchedulePayload.slots);
-      slotsUpdatedAtRef.current = localScheduleUpdatedAt;
-      setSlotsHydrated(true);
-      return;
-    }
-
-    if (remoteSchedule?.slots?.length && remoteScheduleUpdatedAt >= localScheduleUpdatedAt && !remoteHasAssignments) {
-      const migratedRemoteSlots = buildSlotsWithLocalTimes(game, remoteSchedule.slots, { standalone });
-      setSlots(migratedRemoteSlots);
-      slotsUpdatedAtRef.current = remoteScheduleUpdatedAt;
-      setSlotsHydrated(true);
-      return;
-    }
-
-    if (localSchedulePayload?.slots?.length && !localHasAssignments) {
-      const migratedLocalSlots = buildSlotsWithLocalTimes(game, localSchedulePayload.slots, { standalone });
-      setSlots(migratedLocalSlots);
-      slotsUpdatedAtRef.current = localScheduleUpdatedAt;
+    if (savedSchedule) {
+      setSlots(savedSchedule.slots);
+      slotsUpdatedAtRef.current = savedSchedule.updatedAt;
       setSlotsHydrated(true);
       return;
     }
@@ -921,10 +869,10 @@ export default function PreGame({ standalone = false }) {
     persistSlots(effectiveGameId, slots, updatedAt);
     if (!standalone) persistSlotTemplate(slots, updatedAt);
     if (standalone) return;
-    Promise.all([
+    remoteScheduleSaveQueueRef.current.run(() => Promise.all([
       saveRemoteSchedule(effectiveGameId, slots, updatedAt),
       saveRemoteTemplate(slots, updatedAt),
-    ])
+    ]))
       .then(() => setSyncError(""))
       .catch((saveError) => {
         console.error("Failed to save pregame schedule/template", saveError);
