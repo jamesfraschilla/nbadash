@@ -6,6 +6,7 @@ export const TOOL_TABS = {
   PERSONNEL: "personnel",
   DEPTH_CHART: "depth-chart",
   TABLE: "table",
+  REFEREES: "referees",
   ROTATIONS: "rotations",
   ANALYTICS_REPORT: "analytics-report",
   SCOUTING: "scouting",
@@ -22,6 +23,7 @@ export const GRAPHIC_TOOL_TABS = [
   { key: TOOL_TABS.PERSONNEL, label: "Personnel", title: "Personnel Graphics" },
   { key: TOOL_TABS.DEPTH_CHART, label: "Depth Chart", title: "Depth Chart Graphics" },
   { key: TOOL_TABS.TABLE, label: "Table", title: "Table Graphics" },
+  { key: TOOL_TABS.REFEREES, label: "Referees", title: "Referee Graphics" },
 ];
 
 const GRAPHIC_TOOL_TAB_KEYS = new Set(GRAPHIC_TOOL_TABS.map((tab) => tab.key));

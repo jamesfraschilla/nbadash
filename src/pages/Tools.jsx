@@ -65,6 +65,7 @@ import styles from "./Tools.module.css";
 
 const DepthChartGraphicAdmin = lazy(() => import("./DepthChartGraphicAdmin.jsx"));
 const CoverageGraphicAdmin = lazy(() => import("./CoverageGraphicAdmin.jsx"));
+const RefereeGraphicAdmin = lazy(() => import("./RefereeGraphicAdmin.jsx"));
 const TableGraphicAdmin = lazy(() => import("./TableGraphicAdmin.jsx"));
 const AnalyticsReport = lazy(() => import("./AnalyticsReport.jsx"));
 const LateGameMatrixPanel = lazy(() => import("../components/LateGameMatrixPanel.jsx"));
@@ -1818,6 +1819,10 @@ export default function Tools({ section = "tools" }) {
       ) : activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.COVERAGE ? (
         <section className={styles.workspace}>
           <CoverageGraphicAdmin />
+        </section>
+      ) : activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.REFEREES ? (
+        <section className={styles.workspace}>
+          <RefereeGraphicAdmin />
         </section>
       ) : activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.TABLE ? (
         <section className={styles.workspace}>

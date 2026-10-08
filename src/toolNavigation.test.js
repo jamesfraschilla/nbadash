@@ -16,6 +16,7 @@ test("all configured graphic tabs are accepted by shared navigation helpers", ()
     TOOL_TABS.PERSONNEL,
     TOOL_TABS.DEPTH_CHART,
     TOOL_TABS.TABLE,
+    TOOL_TABS.REFEREES,
   ];
 
   assert.deepEqual(GRAPHIC_TOOL_TABS.map((tab) => tab.key), expected);

@@ -12,7 +12,7 @@ import {
 } from "../refereeHeadshots.js";
 import styles from "./OfficialsExportPanel.module.css";
 
-const EXPORT_SPECS = {
+export const OFFICIALS_EXPORT_SPECS = {
   portrait: {
     label: "Portrait",
     logicalWidth: 384,
@@ -385,8 +385,8 @@ function drawAvatar(context, image, official, x, y, size, radius, variant) {
 }
 
 function drawPortraitTemplate(primaryOfficials, alternates, imageMap, themeMode, gameTimeLocal, scale = 1) {
-  const width = EXPORT_SPECS.portrait.logicalWidth;
-  const height = EXPORT_SPECS.portrait.logicalHeight;
+  const width = OFFICIALS_EXPORT_SPECS.portrait.logicalWidth;
+  const height = OFFICIALS_EXPORT_SPECS.portrait.logicalHeight;
   const colors = getColors(themeMode);
   const { canvas, context } = makeScaledLogicalCanvas(width, height, scale, colors.background);
 
@@ -484,8 +484,8 @@ function drawPortraitTemplate(primaryOfficials, alternates, imageMap, themeMode,
 }
 
 function drawLandscapeTemplate(primaryOfficials, alternates, imageMap, themeMode, gameTimeLocal, scale = 1) {
-  const width = EXPORT_SPECS.landscape.logicalWidth;
-  const height = EXPORT_SPECS.landscape.logicalHeight;
+  const width = OFFICIALS_EXPORT_SPECS.landscape.logicalWidth;
+  const height = OFFICIALS_EXPORT_SPECS.landscape.logicalHeight;
   const colors = getColors(themeMode);
   const { canvas, context } = makeScaledLogicalCanvas(width, height, scale, colors.background);
 
@@ -595,8 +595,8 @@ function drawLandscapeTemplate(primaryOfficials, alternates, imageMap, themeMode
 
 async function buildExportCanvas(format, primaryOfficials, alternates, themeMode, gameTimeLocal) {
   const imageMap = await buildLoadedImageMap(primaryOfficials);
-  const portraitSpec = EXPORT_SPECS.portrait;
-  const landscapeSpec = EXPORT_SPECS.landscape;
+  const portraitSpec = OFFICIALS_EXPORT_SPECS.portrait;
+  const landscapeSpec = OFFICIALS_EXPORT_SPECS.landscape;
   const portraitScale = portraitSpec.outputWidth / portraitSpec.logicalWidth;
   const landscapeScale = landscapeSpec.outputWidth / landscapeSpec.logicalWidth;
 
@@ -616,7 +616,7 @@ async function buildExportCanvas(format, primaryOfficials, alternates, themeMode
     gameTimeLocal,
     portraitScale
   );
-  const spec = EXPORT_SPECS.was;
+  const spec = OFFICIALS_EXPORT_SPECS.was;
   const colors = getColors(themeMode);
   const { canvas, context } = makeCanvas(spec.outputWidth, spec.outputHeight, "#ffffff");
   context.fillStyle = colors.background;
@@ -648,6 +648,33 @@ function VisibleOfficialTile({ official }) {
 
 function Spinner() {
   return <span className={styles.spinner} aria-hidden="true" />;
+}
+
+export async function exportOfficialsGraphic({
+  officials,
+  publishedOrder,
+  format,
+  gameTimeLocal = "",
+  fileName = "officials-custom",
+}) {
+  if (!OFFICIALS_EXPORT_SPECS[format]) {
+    throw new Error("Choose a valid referee graphic format.");
+  }
+
+  await ensureExportFonts();
+  if (document.fonts?.ready) {
+    await document.fonts.ready;
+  }
+
+  const exportData = await hydrateOfficialsData(buildOfficialsData(officials, publishedOrder));
+  const canvas = await buildExportCanvas(
+    format,
+    exportData.primary,
+    exportData.alternates,
+    getThemeMode(),
+    gameTimeLocal
+  );
+  downloadCanvas(canvas, `${fileName}-${format}.png`);
 }
 
 export default function OfficialsExportPanel({ officials, gameId, publishedOrder, gameTimeLocal = "" }) {
@@ -696,14 +723,13 @@ export default function OfficialsExportPanel({ officials, gameId, publishedOrder
     setBusyFormat(format);
 
     try {
-      await ensureExportFonts();
-      if (document.fonts?.ready) {
-        await document.fonts.ready;
-      }
-
-      const exportData = await hydrateOfficialsData(baseOfficialsData);
-      const canvas = await buildExportCanvas(format, exportData.primary, exportData.alternates, getThemeMode(), gameTimeLocal);
-      downloadCanvas(canvas, `officials-${gameId || "game"}-${format}.png`);
+      await exportOfficialsGraphic({
+        officials,
+        publishedOrder,
+        format,
+        gameTimeLocal,
+        fileName: `officials-${gameId || "game"}`,
+      });
       setExportOpen(false);
     } catch (error) {
       console.error("Failed to export officials graphic.", error);
@@ -752,7 +778,7 @@ export default function OfficialsExportPanel({ officials, gameId, publishedOrder
                         onClick={() => handleExport(format)}
                         disabled={Boolean(busyFormat)}
                       >
-                        {busy ? <Spinner /> : EXPORT_SPECS[format].label}
+                        {busy ? <Spinner /> : OFFICIALS_EXPORT_SPECS[format].label}
                       </button>
                     );
                   })}
