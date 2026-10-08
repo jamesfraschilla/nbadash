@@ -56,6 +56,12 @@ const COVERAGE_ICON_URLS = Object.freeze(Object.fromEntries(
 ));
 
 const COLUMN_LAYOUTS = Object.freeze({
+  1: Object.freeze({
+    left: 345,
+    right: 1575,
+    separatorTop: 165,
+    separatorBottom: 920,
+  }),
   2: Object.freeze({
     left: 345,
     right: 1575,
@@ -106,7 +112,7 @@ function buildFileName(team) {
 }
 
 function getColumnGeometry(columnCount) {
-  const layout = COLUMN_LAYOUTS[columnCount] || COLUMN_LAYOUTS[2];
+  const layout = COLUMN_LAYOUTS[columnCount] || COLUMN_LAYOUTS[1];
   const width = layout.right - layout.left;
   const columnWidth = width / columnCount;
   return {

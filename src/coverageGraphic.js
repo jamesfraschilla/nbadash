@@ -1,5 +1,5 @@
 export const COVERAGE_ROW_COUNT = 2;
-export const COVERAGE_MIN_COLUMNS = 2;
+export const COVERAGE_MIN_COLUMNS = 1;
 export const COVERAGE_MAX_COLUMNS = 3;
 export const DEFAULT_COVERAGE_COLUMN_COUNT = 3;
 export const DEFAULT_COVERAGE_COLUMN_HEADERS = Object.freeze(["P/R", "DHO + C&S", "MISC"]);
@@ -38,7 +38,7 @@ export function buildDefaultCoverageColumnHeaders() {
 
 export function normalizeCoverageColumnCount(value) {
   const parsed = Number.parseInt(String(value || ""), 10);
-  if (parsed === COVERAGE_MIN_COLUMNS) return COVERAGE_MIN_COLUMNS;
+  if (parsed >= COVERAGE_MIN_COLUMNS && parsed <= COVERAGE_MAX_COLUMNS) return parsed;
   return DEFAULT_COVERAGE_COLUMN_COUNT;
 }
 
@@ -121,7 +121,8 @@ export function coverageColumnHasContent(slots, columnIndex, columnHeaders = [])
 export function getCoverageExportColumnCount(slots, columnCount, columnHeaders = []) {
   const normalizedCount = normalizeCoverageColumnCount(columnCount);
   if (normalizedCount <= COVERAGE_MIN_COLUMNS) return COVERAGE_MIN_COLUMNS;
-  return coverageColumnHasContent(slots, 2, columnHeaders) ? COVERAGE_MAX_COLUMNS : COVERAGE_MIN_COLUMNS;
+  if (normalizedCount === 2) return 2;
+  return coverageColumnHasContent(slots, 2, columnHeaders) ? COVERAGE_MAX_COLUMNS : 2;
 }
 
 export function hydrateCoveragePayload(payload) {

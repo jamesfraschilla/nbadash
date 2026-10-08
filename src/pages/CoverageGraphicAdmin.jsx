@@ -235,19 +235,27 @@ export default function CoverageGraphicAdmin() {
     setStatus("");
   };
 
-  const handleRemoveThirdColumn = () => {
-    setColumnCount(COVERAGE_MIN_COLUMNS);
-    setColumnHeaders((current) => current.map((header, index) => (index === 2 ? "" : header)));
+  const handleRemoveLastColumn = () => {
+    if (columnCount <= COVERAGE_MIN_COLUMNS) return;
+    const removedColumnIndex = columnCount - 1;
+    setColumnCount(removedColumnIndex);
+    setColumnHeaders((current) => current.map((header, index) => (
+      index === removedColumnIndex ? "" : header
+    )));
     setSlots((current) => current.map((slot) => (
-      Number(slot.column) === 2 ? { ...slot, subtitle: "", iconKey: "" } : slot
+      Number(slot.column) === removedColumnIndex ? { ...slot, subtitle: "", iconKey: "" } : slot
     )));
     setStatus("");
   };
 
-  const handleAddThirdColumn = () => {
-    setColumnCount(COVERAGE_MAX_COLUMNS);
+  const handleAddColumn = () => {
+    if (columnCount >= COVERAGE_MAX_COLUMNS) return;
+    const addedColumnIndex = columnCount;
+    setColumnCount(columnCount + 1);
     setColumnHeaders((current) => current.map((header, index) => (
-      index === 2 && !String(header || "").trim() ? DEFAULT_COVERAGE_COLUMN_HEADERS[2] : header
+      index === addedColumnIndex && !String(header || "").trim()
+        ? DEFAULT_COVERAGE_COLUMN_HEADERS[addedColumnIndex]
+        : header
     )));
     setStatus("");
   };
@@ -409,11 +417,11 @@ export default function CoverageGraphicAdmin() {
             <div>
               <div className={styles.coverageSectionTitle}>Coverage spaces</div>
               <div className={styles.statusNote}>
-                The export uses 2 columns when column 3 has no header, row text, or icon.
+                Use the X on the last column to create a one-, two-, or three-column graphic.
               </div>
             </div>
-            {columnCount === COVERAGE_MIN_COLUMNS ? (
-              <button type="button" className={styles.secondaryButton} onClick={handleAddThirdColumn}>
+            {columnCount < COVERAGE_MAX_COLUMNS ? (
+              <button type="button" className={styles.secondaryButton} onClick={handleAddColumn}>
                 + Column
               </button>
             ) : null}
@@ -426,12 +434,12 @@ export default function CoverageGraphicAdmin() {
                 <section key={columnIndex} className={styles.coverageColumnCard}>
                   <div className={styles.coverageColumnHeader}>
                     <span>Column {columnIndex + 1}</span>
-                    {columnIndex === 2 ? (
+                    {columnIndex === columnCount - 1 && columnCount > COVERAGE_MIN_COLUMNS ? (
                       <button
                         type="button"
                         className={styles.coverageRemoveColumnButton}
-                        onClick={handleRemoveThirdColumn}
-                        aria-label="Remove third coverage column"
+                        onClick={handleRemoveLastColumn}
+                        aria-label={`Remove coverage column ${columnIndex + 1}`}
                       >
                         X
                       </button>

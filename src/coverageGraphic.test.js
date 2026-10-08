@@ -35,11 +35,27 @@ test("coverage export collapses to two columns when the third column is empty", 
   const twoColumnHeaders = ["P/R", "DHO + C&S", ""];
 
   assert.equal(coverageColumnHasContent(slots, 2, twoColumnHeaders), false);
-  assert.equal(getCoverageExportColumnCount(slots, COVERAGE_MAX_COLUMNS, twoColumnHeaders), COVERAGE_MIN_COLUMNS);
+  assert.equal(getCoverageExportColumnCount(slots, COVERAGE_MAX_COLUMNS, twoColumnHeaders), 2);
 
   const threeColumnHeaders = ["P/R", "DHO + C&S", "Misc"];
   assert.equal(coverageColumnHasContent(slots, 2, threeColumnHeaders), true);
   assert.equal(getCoverageExportColumnCount(slots, COVERAGE_MAX_COLUMNS, threeColumnHeaders), COVERAGE_MAX_COLUMNS);
+});
+
+test("coverage supports removing the second column for a one-column export", () => {
+  const slots = buildEmptyCoverageSlots();
+  slots[0] = { ...slots[0], subtitle: "5", iconKey: "vol-1" };
+  const headers = ["P/R", "", ""];
+
+  const hydrated = hydrateCoveragePayload({
+    columnCount: 1,
+    columnHeaders: headers,
+    slots,
+  });
+
+  assert.equal(COVERAGE_MIN_COLUMNS, 1);
+  assert.equal(hydrated.columnCount, 1);
+  assert.equal(getCoverageExportColumnCount(hydrated.slots, hydrated.columnCount, hydrated.columnHeaders), 1);
 });
 
 test("coverage payload hydration preserves saved text and icon fields", () => {
@@ -56,7 +72,7 @@ test("coverage payload hydration preserves saved text and icon fields", () => {
 
   assert.equal(hydrated.league, "gleague");
   assert.equal(hydrated.logoTeamId, "1612709928");
-  assert.equal(hydrated.columnCount, COVERAGE_MIN_COLUMNS);
+  assert.equal(hydrated.columnCount, 2);
   assert.deepEqual(serializeCoverageColumnHeaders(hydrated.columnHeaders), ["P/R", "DHO + C&S", ""]);
   assert.deepEqual(serializeCoverageSlots(hydrated.slots).filter((slot) => slot.subtitle || slot.iconKey), [
     { id: "coverage-1-1", column: 0, row: 0, subtitle: "5", iconKey: "vol-1" },
