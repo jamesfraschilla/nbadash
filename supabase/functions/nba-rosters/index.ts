@@ -7,8 +7,19 @@ const corsHeaders = {
 };
 
 const COMMON_TEAM_ROSTER_URL = "https://stats.nba.com/stats/commonteamroster";
+const ESPN_TEAM_ROSTER_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams";
 const TEAM_REQUEST_TIMEOUT_MS = 8_000;
+const ESPN_REQUEST_TIMEOUT_MS = 4_000;
 const GLOBAL_REQUEST_DEADLINE_MS = 12_000;
+
+const ESPN_TEAM_SLUGS: Record<string, string> = {
+  GSW: "gs",
+  NOP: "no",
+  NYK: "ny",
+  SAS: "sa",
+  UTA: "utah",
+  WAS: "wsh",
+};
 
 const NBA_TEAMS = [
   { teamId: "1610612737", teamCity: "Atlanta", teamName: "Hawks", teamAbbreviation: "ATL" },
@@ -106,6 +117,56 @@ function splitName(fullName: string) {
   };
 }
 
+function normalizePlayerName(value: unknown) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\b(jr|sr|ii|iii|iv)\b/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function rosterNeedsJerseyCorrection(players: Array<{ jerseyNum: string }>) {
+  const jerseyCounts = new Map<string, number>();
+  for (const player of players) {
+    const jerseyNum = String(player?.jerseyNum || "").trim();
+    if (!jerseyNum) return true;
+    jerseyCounts.set(jerseyNum, (jerseyCounts.get(jerseyNum) || 0) + 1);
+  }
+  return [...jerseyCounts.values()].some((count) => count > 1);
+}
+
+async function fetchEspnJerseyCorrections(team: TeamRecord, parentSignal: AbortSignal) {
+  const slug = ESPN_TEAM_SLUGS[team.teamAbbreviation] || team.teamAbbreviation.toLowerCase();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort("espn-timeout"), ESPN_REQUEST_TIMEOUT_MS);
+  const abortFromParent = () => controller.abort(parentSignal.reason || "global-deadline");
+  if (parentSignal.aborted) abortFromParent();
+  else parentSignal.addEventListener("abort", abortFromParent, { once: true });
+
+  try {
+    const response = await fetch(`${ESPN_TEAM_ROSTER_URL}/${slug}/roster`, {
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
+    if (!response.ok) return new Map<string, string>();
+    const payload = await response.json();
+    const athletes = Array.isArray(payload?.athletes) ? payload.athletes : [];
+    return new Map<string, string>(athletes
+      .map((athlete: Record<string, unknown>) => [
+        normalizePlayerName(athlete?.fullName || athlete?.displayName),
+        String(athlete?.jersey || "").trim(),
+      ] as [string, string])
+      .filter(([name, jerseyNum]) => name && jerseyNum));
+  } catch {
+    return new Map<string, string>();
+  } finally {
+    clearTimeout(timeoutId);
+    parentSignal.removeEventListener("abort", abortFromParent);
+  }
+}
+
 function findResultSet(payload: Record<string, unknown>, targetName: string) {
   const resultSets = Array.isArray(payload?.resultSets)
     ? payload.resultSets
@@ -169,34 +230,45 @@ async function fetchTeamRoster(team: TeamRecord, season: string, parentSignal: A
     throw new Error(`Roster feed returned no players for ${team.teamAbbreviation}`);
   }
 
+  const players = rosterRows
+    .map((row) => {
+      const fullName = String(row.PLAYER || "").trim();
+      const personId = String(row.PLAYER_ID || "").trim();
+      if (!fullName || !personId) return null;
+      const { firstName, familyName } = splitName(fullName);
+      return {
+        personId,
+        firstName,
+        familyName,
+        fullName,
+        jerseyNum: String(row.NUM || "").trim(),
+        position: String(row.POSITION || "").trim(),
+        height: String(row.HEIGHT || "").trim(),
+        teamId: team.teamId,
+      };
+    })
+    .filter((player): player is NonNullable<typeof player> => Boolean(player));
+
+  if (rosterNeedsJerseyCorrection(players)) {
+    const espnJerseysByName = await fetchEspnJerseyCorrections(team, parentSignal);
+    players.forEach((player) => {
+      const correctedJersey = espnJerseysByName.get(normalizePlayerName(player.fullName));
+      if (correctedJersey) player.jerseyNum = correctedJersey;
+    });
+  }
+
+  players.sort((a, b) => {
+    const jerseyCompare = toSortableJersey(a.jerseyNum) - toSortableJersey(b.jerseyNum);
+    if (jerseyCompare !== 0) return jerseyCompare;
+    return a.fullName.localeCompare(b.fullName);
+  });
+
   return {
     teamId: team.teamId,
     teamCity: team.teamCity,
     teamName: team.teamName,
     teamAbbreviation: team.teamAbbreviation,
-    players: rosterRows
-      .map((row) => {
-        const fullName = String(row.PLAYER || "").trim();
-        const personId = String(row.PLAYER_ID || "").trim();
-        if (!fullName || !personId) return null;
-        const { firstName, familyName } = splitName(fullName);
-        return {
-          personId,
-          firstName,
-          familyName,
-          fullName,
-          jerseyNum: String(row.NUM || "").trim(),
-          position: String(row.POSITION || "").trim(),
-          height: String(row.HEIGHT || "").trim(),
-          teamId: team.teamId,
-        };
-      })
-      .filter(Boolean)
-      .sort((a, b) => {
-        const jerseyCompare = toSortableJersey(a!.jerseyNum) - toSortableJersey(b!.jerseyNum);
-        if (jerseyCompare !== 0) return jerseyCompare;
-        return a!.fullName.localeCompare(b!.fullName);
-      }),
+    players,
   };
 }
 
