@@ -240,7 +240,7 @@
     {
       "name": "nba-rosters",
       "entrypoint": "supabase/functions/nba-rosters/index.ts",
-      "sha256": "ccf05138c0d82f11cdb728643e8fcbcbc6dd119e173dbe18078d4e9ffac0a6a6",
+      "sha256": "1471bf60933b82c33f099c8dcea9453dc634dd7f1a5e43b61ebeb62e2a540aec",
       "sourceFiles": [
         "supabase/functions/_shared/officiatingInsights.ts",
         "supabase/functions/_shared/requestSecurity.ts",
