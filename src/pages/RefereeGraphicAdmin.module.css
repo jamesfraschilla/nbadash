@@ -1,7 +1,7 @@
 .builder {
   display: grid;
   gap: 24px;
-  max-width: 760px;
+  width: 100%;
 }
 
 .intro h2,
@@ -15,9 +15,9 @@
   color: var(--muted);
 }
 
-.fields {
+.refereeFields {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
 }
 
@@ -36,6 +36,41 @@
   background: var(--surface);
   color: var(--text);
   font: inherit;
+}
+
+.formatFieldset {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.formatFieldset legend {
+  margin-bottom: 10px;
+  padding: 0;
+  font-weight: 700;
+}
+
+.formatOptions {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.formatOption {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.formatOption input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
 }
 
 .actions {
@@ -67,7 +102,7 @@
 }
 
 @media (max-width: 640px) {
-  .fields {
+  .refereeFields {
     grid-template-columns: 1fr;
   }
 }
