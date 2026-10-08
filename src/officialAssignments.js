@@ -43,8 +43,10 @@ const ORDER_PATHS = [
 ];
 
 let publishedAssignmentsPromise = null;
+let publishedAssignmentsFetchedAt = 0;
+const PUBLISHED_ASSIGNMENTS_CACHE_TTL_MS = 5 * 60 * 1000;
 const OFFICIALS_ASSIGNMENTS_URL = "https://official.nba.com/referee-assignments/";
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL;
 
 function deriveSupabaseFunctionUrl() {
   const raw = String(SUPABASE_URL || "").trim();
@@ -61,7 +63,7 @@ function deriveSupabaseFunctionUrl() {
 }
 
 const ASSIGNMENTS_PROXY_URLS = [
-  import.meta.env.VITE_ASSIGNMENTS_PROXY_URL,
+  import.meta.env?.VITE_ASSIGNMENTS_PROXY_URL,
   deriveSupabaseFunctionUrl(),
   "/api/referee-assignments",
 ].filter(Boolean);
@@ -318,7 +320,8 @@ async function fetchFirstWorkingAssignments() {
 }
 
 async function fetchPublishedAssignments() {
-  if (!publishedAssignmentsPromise) {
+  if (!publishedAssignmentsPromise || Date.now() - publishedAssignmentsFetchedAt >= PUBLISHED_ASSIGNMENTS_CACHE_TTL_MS) {
+    publishedAssignmentsFetchedAt = Date.now();
     publishedAssignmentsPromise = fetchAssignmentsViaProxy()
       .then((proxyAssignments) => {
         if (proxyAssignments.length) return proxyAssignments;
@@ -342,6 +345,44 @@ async function fetchPublishedAssignments() {
   }
 
   return publishedAssignmentsPromise;
+}
+
+function assignmentTeamTokens(team) {
+  return [
+    team?.teamCity,
+    team?.teamName,
+    `${team?.teamCity || ""} ${team?.teamName || ""}`,
+    team?.teamTricode,
+  ]
+    .map((value) => normalizeNameKey(value))
+    .filter((value) => value.length >= 3);
+}
+
+function assignmentIncludesTeam(assignmentLabel, team) {
+  const normalizedLabel = normalizeNameKey(assignmentLabel);
+  return assignmentTeamTokens(team).some((token) => normalizedLabel.includes(token));
+}
+
+export function matchPublishedAssignmentForGame(assignments, game) {
+  if (!game?.homeTeam || !game?.awayTeam) return null;
+  const match = (Array.isArray(assignments) ? assignments : []).find((assignment) => (
+    assignmentIncludesTeam(assignment.game, game.awayTeam)
+    && assignmentIncludesTeam(assignment.game, game.homeTeam)
+  ));
+  if (!match) return null;
+  return {
+    game: match.game,
+    crew: [
+      { name: match.crewChief, role: "Crew Chief" },
+      { name: match.referee, role: "Referee" },
+      { name: match.umpire, role: "Umpire" },
+    ],
+    alternate: match.alternate || "",
+  };
+}
+
+export async function fetchPublishedAssignmentForGame(game) {
+  return matchPublishedAssignmentForGame(await fetchPublishedAssignments(), game);
 }
 
 export async function fetchPublishedOrderForOfficials(officials) {

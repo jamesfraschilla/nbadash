@@ -27,7 +27,7 @@ Deno.test("every Edge Function has an explicit JWT policy and request contract",
 });
 
 Deno.test("Edge Function contract inventory matches the deployment surface", () => {
-  assertEquals(functionNames.length, 16);
+  assertEquals(functionNames.length, 17);
 });
 
 Deno.test("AI-backed endpoints enforce active-user rate limits and bounded input", async () => {

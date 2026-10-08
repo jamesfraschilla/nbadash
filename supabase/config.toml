@@ -45,3 +45,6 @@ verify_jwt = true
 
 [functions.officiating-insights]
 verify_jwt = true
+
+[functions.referee-assignments]
+verify_jwt = false

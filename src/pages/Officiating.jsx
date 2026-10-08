@@ -17,6 +17,7 @@ import { useGamesByDate } from "../queries.js";
 import { formatDateInputInTimeZone } from "../utils.js";
 import { CALL_CATEGORY_GROUPS } from "../officiatingCategoryNormalization.js";
 import { loadRefereeHeadshotUrl } from "../refereeHeadshots.js";
+import { fetchPublishedAssignmentForGame } from "../officialAssignments.js";
 import {
   fetchOfficiatingInsightSimulatorOptions,
   requestOfficiatingInsightSimulation,
@@ -37,12 +38,6 @@ const TABS = [
   { key: "officials", label: "All Officials" },
   { key: "teams", label: "Teams" },
   { key: "challenge-log", label: "Challenge Log" },
-];
-
-const TONIGHT_REPORT_CREW = [
-  { name: "James Williams", role: "Crew Chief" },
-  { name: "JB DeRosa", role: "Referee" },
-  { name: "Natalie Sago", role: "Umpire" },
 ];
 
 function defaultSeasonForTab(tab) {
@@ -1121,13 +1116,13 @@ function OfficialsReportCard({ profile, role, populationSize, teamOne = "WAS", t
   );
 }
 
-function TonightOfficialsReport({ rows, crew, isLoading, onExportPdf, populationSize, gameMetadata, reportDate, simulator }) {
+function TonightOfficialsReport({ rows, crew, isLoading, assignmentError, onExportPdf, populationSize, gameMetadata, reportDate, simulator }) {
   return (
     <section className={styles.tonightReportPanel}>
       <div className={styles.reportToolbar}>
         <div>
           <h2>Tonight's Officials Report</h2>
-          <p>Sample report layout using 2024-Present regular season and playoff stats.</p>
+          <p>Official NBA assignment report using 2024-Present regular season and playoff stats.</p>
         </div>
         <button type="button" className={styles.primaryButton} onClick={onExportPdf} disabled={isLoading}>
           Export PDF
@@ -1146,6 +1141,10 @@ function TonightOfficialsReport({ rows, crew, isLoading, onExportPdf, population
         </header>
         {isLoading ? (
           <div className={styles.reportLoading}>Loading report data...</div>
+        ) : !crew.length ? (
+          <div className={styles.reportLoading}>
+            {assignmentError || "Tonight's officials have not been posted by the NBA yet."}
+          </div>
         ) : (
           <div className={styles.reportCards}>
             <div className={styles.reportOfficialColumns}>
@@ -1867,7 +1866,7 @@ export default function Officiating() {
     teamOneLocation: "home",
     useAi: true,
   });
-  const [reportCrew, setReportCrew] = useState(TONIGHT_REPORT_CREW);
+  const [reportCrew, setReportCrew] = useState([]);
   const [reportMatchup, setReportMatchup] = useState(null);
   const [insightResult, setInsightResult] = useState(null);
   const [simulatorError, setSimulatorError] = useState("");
@@ -1888,6 +1887,29 @@ export default function Officiating() {
     || String(game?.homeTeam?.teamTricode || "").trim() === "WAS"
   ));
   const {
+    data: publishedAssignment,
+    isLoading: isPublishedAssignmentLoading,
+    error: publishedAssignmentError,
+  } = useQuery({
+    queryKey: ["published-referee-assignment", reportDate, reportGame?.gameId || ""],
+    queryFn: () => fetchPublishedAssignmentForGame(reportGame),
+    enabled: activeTab === "tonight" && Boolean(reportGame),
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    retry: 2,
+  });
+  useEffect(() => {
+    setReportCrew([]);
+    setReportMatchup(null);
+    setInsightResult(null);
+  }, [reportDate, reportGame?.gameId]);
+  useEffect(() => {
+    if (reportMatchup || !publishedAssignment?.crew?.length) return;
+    setReportCrew(publishedAssignment.crew);
+  }, [publishedAssignment, reportMatchup]);
+  const {
     data: simulatorOptions,
     isLoading: isSimulatorOptionsLoading,
   } = useQuery({
@@ -1902,12 +1924,13 @@ export default function Officiating() {
     if (!simulatorOptions?.officials?.length) return;
     setSimulatorDraft((current) => {
       if (current.officialIds.every(Boolean)) return current;
-      const defaults = TONIGHT_REPORT_CREW.map((slot) => (
+      const defaults = reportCrew.map((slot) => (
         simulatorOptions.officials.find((official) => official.name.toLowerCase() === slot.name.toLowerCase())?.id || ""
       ));
+      while (defaults.length < 3) defaults.push("");
       return { ...current, officialIds: defaults };
     });
-  }, [simulatorOptions]);
+  }, [reportCrew, simulatorOptions]);
   const tonightGameMetadata = reportMatchup
     ? simulatorGameMetadata(reportMatchup, simulatorOptions, reportDate)
     : reportGameMetadata(reportGame, reportDate);
@@ -1936,7 +1959,7 @@ export default function Officiating() {
       officialNames: reportCrew.map((slot) => slot.name),
       teamCodes: tonightReportTeamCodes,
     }),
-    enabled: activeTab === "tonight",
+    enabled: activeTab === "tonight" && reportCrew.length === 3,
     staleTime: 5 * 60_000,
     gcTime: 30 * 60_000,
     retry: 1,
@@ -2351,7 +2374,8 @@ export default function Officiating() {
         <TonightOfficialsReport
           rows={tonightReportRows}
           crew={reportCrew}
-          isLoading={isTonightReportLoading}
+          isLoading={isPublishedAssignmentLoading || isTonightReportLoading}
+          assignmentError={publishedAssignmentError ? "Unable to load today's official NBA assignments." : ""}
           onExportPdf={exportTonightReportPdf}
           populationSize={tonightReportData?.populationSize || 0}
           gameMetadata={tonightGameMetadata}

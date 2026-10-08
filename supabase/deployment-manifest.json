@@ -122,7 +122,7 @@
       "sha256": "1764a8ef8efd85d9462588d201be039dbcb56d2120bcee056b3bc171aabe8879"
     }
   ],
-  "edgeConfigSha256": "81b2706900fc69166f6e89330e3e3504ae4a933bed3a10db6295c70abf0043c5",
+  "edgeConfigSha256": "888239741ba053884c15a87017c6aa58f5bf4ff7bd1ab61901d8f02ec13d96cc",
   "edgeFunctions": [
     {
       "name": "admin-users",
@@ -279,6 +279,18 @@
         "supabase/functions/_shared/requestSecurity.ts",
         "supabase/functions/_shared/rosterSnapshot.ts",
         "supabase/functions/pregame-scouting/index.ts"
+      ]
+    },
+    {
+      "name": "referee-assignments",
+      "entrypoint": "supabase/functions/referee-assignments/index.ts",
+      "sha256": "4e26003bcfe33d8b355769afb94665af01b936856e00426a78ef7e2a56f468bf",
+      "sourceFiles": [
+        "supabase/functions/_shared/officiatingInsights.ts",
+        "supabase/functions/_shared/requestSecurity.ts",
+        "supabase/functions/_shared/rosterSnapshot.ts",
+        "supabase/functions/referee-assignments/index.ts",
+        "supabase/functions/referee-assignments/parser.ts"
       ]
     },
     {
