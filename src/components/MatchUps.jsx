@@ -6,6 +6,7 @@ import { buildMatchupProfileMap, buildResolvedMatchupProfileMap, listMatchupProf
 import rostersByTeamId from "../data/rosters.json";
 import PlayerHeadshot from "./PlayerHeadshot.jsx";
 import { readLocalStorage, writeLocalStorage } from "../storage.js";
+import { resolveDashboardMatchupLineup } from "../matchupDashboardLineups.js";
 import styles from "./MatchUps.module.css";
 
 const MATCH_UP_STORAGE_PREFIX = "nba-dashboard:match-ups:";
@@ -694,32 +695,13 @@ function buildCurrentStintSlotIds(stintPlayers) {
   return slotIds.slice(0, ROW_SLOT_COUNT);
 }
 
-function buildPreferredSlotIds(teamBoxPlayers, stintPlayers, roster) {
-  const slotIds = [];
-  const used = new Set();
-
-  normalizeStintPlayers(stintPlayers).forEach((player) => {
-    const personId = String(player?.personId || "");
-    if (!personId || used.has(personId)) return;
-    used.add(personId);
-    slotIds.push(personId);
+function buildPreferredSlotIds(teamBoxPlayers, stintPlayers, projectedStarterIds, roster) {
+  return resolveDashboardMatchupLineup({
+    currentLineupIds: normalizeStintPlayers(stintPlayers).map((player) => String(player?.personId || "")),
+    confirmedStarterIds: buildStarterSlotIds(teamBoxPlayers),
+    projectedStarterIds,
+    rosterIds: roster.map((player) => player.personId),
   });
-
-  if (!slotIds.length) {
-    buildStarterSlotIds(teamBoxPlayers).forEach((personId) => {
-      if (used.has(personId)) return;
-      used.add(personId);
-      slotIds.push(personId);
-    });
-  }
-
-  roster.forEach((player) => {
-    if (slotIds.length >= ROW_SLOT_COUNT || used.has(player.personId)) return;
-    used.add(player.personId);
-    slotIds.push(player.personId);
-  });
-
-  return slotIds.slice(0, ROW_SLOT_COUNT);
 }
 
 function resolveSlotIds(savedSlotIds, defaultSlotIds, roster) {
@@ -753,11 +735,11 @@ function resolveSlotIds(savedSlotIds, defaultSlotIds, roster) {
   return resolved.filter(Boolean).slice(0, ROW_SLOT_COUNT);
 }
 
-function buildTeamRow(teamBoxPlayers, stintPlayers, extraRosterPlayers, savedSlotIds, teamId, profileMap) {
+function buildTeamRow(teamBoxPlayers, stintPlayers, extraRosterPlayers, projectedStarterIds, savedSlotIds, teamId, profileMap) {
   const roster = buildRosterPlayers(teamBoxPlayers, stintPlayers, extraRosterPlayers, teamId, profileMap);
   const rosterMap = new Map(roster.map((player) => [player.personId, player]));
   const currentStintSlotIds = buildCurrentStintSlotIds(stintPlayers).filter((personId) => rosterMap.has(personId));
-  const preferredSlotIds = buildPreferredSlotIds(teamBoxPlayers, stintPlayers, roster);
+  const preferredSlotIds = buildPreferredSlotIds(teamBoxPlayers, stintPlayers, projectedStarterIds, roster);
   const slotIds = resolveSlotIds(savedSlotIds, preferredSlotIds, roster);
   return {
     roster,
@@ -1060,6 +1042,8 @@ export default function MatchUps({
   minutesData,
   awayRosterPlayers = [],
   homeRosterPlayers = [],
+  awayProjectedStarterIds = [],
+  homeProjectedStarterIds = [],
 }) {
   const [persistedState, setPersistedState] = useState(() => loadMatchUpState(gameId));
   const [dragState, setDragState] = useState(null);
@@ -1161,11 +1145,12 @@ export default function MatchUps({
       boxScore?.away?.players,
       currentStint?.playersAway,
       awayRosterPlayers,
+      awayProjectedStarterIds,
       persistedState.slots.away,
       awayTeam?.teamId,
       matchupProfileMap
     ),
-    [awayRosterPlayers, awayTeam?.teamId, boxScore?.away?.players, currentStint?.playersAway, matchupProfileMap, persistedState.slots.away]
+    [awayProjectedStarterIds, awayRosterPlayers, awayTeam?.teamId, boxScore?.away?.players, currentStint?.playersAway, matchupProfileMap, persistedState.slots.away]
   );
 
   const homeRow = useMemo(
@@ -1173,11 +1158,12 @@ export default function MatchUps({
       boxScore?.home?.players,
       currentStint?.playersHome,
       homeRosterPlayers,
+      homeProjectedStarterIds,
       persistedState.slots.home,
       homeTeam?.teamId,
       matchupProfileMap
     ),
-    [boxScore?.home?.players, currentStint?.playersHome, homeRosterPlayers, homeTeam?.teamId, matchupProfileMap, persistedState.slots.home]
+    [boxScore?.home?.players, currentStint?.playersHome, homeProjectedStarterIds, homeRosterPlayers, homeTeam?.teamId, matchupProfileMap, persistedState.slots.home]
   );
 
   const clearPressSession = () => {

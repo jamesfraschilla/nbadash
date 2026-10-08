@@ -6,6 +6,7 @@ import { listCachedGameAnalyses, requestGameAnalysis } from "../analysisData.js"
 import {
   fetchCurrentGLeagueRosters,
   fetchCurrentNbaRosters,
+  fetchNbaMatchupDefaults,
   inferLeagueFromTeamId,
   isSummerLeagueGame,
   teamLogoUrl,
@@ -94,6 +95,7 @@ import {
   buildMatchupRosterPool,
   normalizeLiveRosterPlayers,
 } from "../rosterPools.js";
+import { buildMatchupDefaultLineup } from "../matchupDefaultLineups.js";
 import {
   aggregateSegmentStats,
   computeKills,
@@ -1046,6 +1048,32 @@ export default function Game({ variant = "full" }) {
       isSummerLeagueMatch,
     ]
   );
+
+  const matchupDefaultTeamIds = useMemo(() => [
+    String(game?.awayTeam?.teamId || "").trim(),
+    String(game?.homeTeam?.teamId || "").trim(),
+  ].filter(Boolean), [game?.awayTeam?.teamId, game?.homeTeam?.teamId]);
+
+  const { data: matchupDefaultsPayload } = useQuery({
+    queryKey: ["nba-matchup-defaults", matchupDefaultTeamIds],
+    queryFn: ({ signal }) => fetchNbaMatchupDefaults({ teamIds: matchupDefaultTeamIds, signal }),
+    enabled: canUseMatchUps && !isSummerLeagueMatch && matchupDefaultTeamIds.length === 2,
+    staleTime: 2 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+
+  const awayProjectedStarterIds = useMemo(() => buildMatchupDefaultLineup({
+    teamId: game?.awayTeam?.teamId,
+    defaultTeam: matchupDefaultsPayload?.teams?.[String(game?.awayTeam?.teamId || "")],
+    roster: awayRosterPlayers,
+  })?.playerIds.filter(Boolean) || [], [awayRosterPlayers, game?.awayTeam?.teamId, matchupDefaultsPayload]);
+
+  const homeProjectedStarterIds = useMemo(() => buildMatchupDefaultLineup({
+    teamId: game?.homeTeam?.teamId,
+    defaultTeam: matchupDefaultsPayload?.teams?.[String(game?.homeTeam?.teamId || "")],
+    roster: homeRosterPlayers,
+  })?.playerIds.filter(Boolean) || [], [game?.homeTeam?.teamId, homeRosterPlayers, matchupDefaultsPayload]);
 
   const awayMinuteCapsByPersonId = useMemo(() => new Map(
     awayRosterPlayers
@@ -3245,6 +3273,8 @@ export default function Game({ variant = "full" }) {
               minutesData={minutesData}
               awayRosterPlayers={awayRosterPlayers}
               homeRosterPlayers={homeRosterPlayers}
+              awayProjectedStarterIds={awayProjectedStarterIds}
+              homeProjectedStarterIds={homeProjectedStarterIds}
             />
           ) : null}
 
