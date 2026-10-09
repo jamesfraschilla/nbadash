@@ -378,8 +378,7 @@ Deno.test("range aggregation excludes team rebounds and team turnovers", () => {
   assertEquals(totals[homeTeam.teamId].reboundsTotal, 1);
   assertEquals(totals[homeTeam.teamId].reboundsOffensive, 0);
   assertEquals(totals[homeTeam.teamId].turnovers, 2);
-  assertEquals(totals[homeTeam.teamId].transitionTurnovers, 1);
-  assertEquals(totals[awayTeam.teamId].transitionTurnovers, 0);
+  assertEquals("transitionTurnovers" in totals[homeTeam.teamId], false);
 });
 
 Deno.test("quarter ranges exclude actions from the preceding period at the shared boundary", () => {

@@ -536,7 +536,6 @@ function buildTeamActionTotals(teamId: string) {
     foulsPersonal: 0,
     transitionPoints: 0,
     transitionPossessions: 0,
-    transitionTurnovers: 0,
     secondChancePoints: 0,
     pointsOffTurnovers: 0,
     paintPoints: 0,
@@ -783,7 +782,6 @@ function aggregateRangeStats(
 
     if (actionType === "turnover" && teamTotals && getActionPlayerIdentity(action)) {
       teamTotals.turnovers += 1;
-      if (qualifiers.includes("fastbreak")) teamTotals.transitionTurnovers += 1;
     }
 
     if (actionType === "steal" && teamTotals) {
@@ -2012,7 +2010,7 @@ function buildTemplateAnalysis(features: ReturnType<typeof buildFeaturePayload>)
 
 function buildAnalysisDataSignatureInput(features: ReturnType<typeof buildFeaturePayload>) {
   return {
-    analysisVersion: 2,
+    analysisVersion: 3,
     range: features.range,
     score: features.score,
     teams: features.teams,
