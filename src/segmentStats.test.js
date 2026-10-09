@@ -12,6 +12,28 @@ const HOME = {
   teamTricode: "HME",
 };
 
+test("segment rebound totals exclude NBA team and dead-ball rebound rows", () => {
+  const aggregated = aggregateSegmentStats({
+    gameId: "0012600035",
+    actions: [
+      { actionNumber: 1, orderNumber: 1, period: 3, teamId: AWAY.teamId, actionType: "rebound", subType: "offensive", personId: 101 },
+      { actionNumber: 2, orderNumber: 2, period: 3, teamId: AWAY.teamId, actionType: "rebound", subType: "offensive", personId: null, description: "Wizards Rebound" },
+      { actionNumber: 3, orderNumber: 3, period: 3, teamId: AWAY.teamId, actionType: "rebound", subType: "defensive", personId: 102 },
+    ],
+    segment: "q3",
+    minutesData: null,
+    homeTeam: HOME,
+    awayTeam: AWAY,
+    basePlayers: [],
+    currentPeriod: 4,
+    currentClock: "PT00M00.00S",
+    isLive: false,
+  });
+
+  assert.equal(aggregated.teamTotals[AWAY.teamId].reboundsTotal, 2);
+  assert.equal(aggregated.teamTotals[AWAY.teamId].reboundsOffensive, 1);
+});
+
 test("transition stats count fastbreak possessions once and include free throws", () => {
   const aggregated = aggregateSegmentStats({
     gameId: "0022500001",

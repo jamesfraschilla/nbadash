@@ -887,8 +887,11 @@ function addPossessionPressureAlerts({ alerts, seen, orderedActions, teamsById, 
         alert.clock = possession.lastAction.clock || "";
         alert.timeLabel = `${periodShortLabel(alert.period)} ${clockLabel(alert.clock)}`;
         alert.elapsed = actionElapsedSeconds(possession.lastAction, gameId) + 0.02;
-        alert.title = `${teamLabel(offense)} have ${totals.points} second-chance points in ${periodShortLabel(possession.lastAction.period)}`;
-        alert.detail = `${totals.offensiveRebounds} offensive ${totals.offensiveRebounds === 1 ? "rebound" : "rebounds"} created ${totals.conversions} scoring ${totals.conversions === 1 ? "possession" : "possessions"}.`;
+        const periodLabel = periodShortLabel(possession.lastAction.period);
+        alert.title = totals.points >= 4
+          ? `${teamLabel(offense)} have ${totals.points} second-chance points in ${periodLabel}`
+          : `${teamLabel(offense)} grabbed ${totals.offensiveRebounds} offensive ${totals.offensiveRebounds === 1 ? "rebound" : "rebounds"} in ${periodLabel}`;
+        alert.detail = `${totals.offensiveRebounds} offensive ${totals.offensiveRebounds === 1 ? "rebound" : "rebounds"} created ${totals.points} second-chance ${totals.points === 1 ? "point" : "points"} on ${totals.conversions} scoring ${totals.conversions === 1 ? "possession" : "possessions"}.`;
       }
     }
   };
@@ -925,7 +928,7 @@ function addPossessionPressureAlerts({ alerts, seen, orderedActions, teamsById, 
       }
     }
     if (actionTeamId === possession.teamId && action?.actionType === "turnover") possession.hasOutcome = true;
-    if (actionTeamId === possession.teamId && action?.actionType === "rebound" && String(action?.subType || "").toLowerCase() === "offensive") {
+    if (actionTeamId === possession.teamId && action?.personId && action?.actionType === "rebound" && String(action?.subType || "").toLowerCase() === "offensive") {
       possession.offensiveRebounds += 1;
     }
   });

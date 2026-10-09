@@ -2,7 +2,7 @@ import { Link, useSearchParams, useParams } from "react-router-dom";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createNote } from "../accountData.js";
-import { listCachedGameAnalyses, requestGameAnalysis } from "../analysisData.js";
+import { listCachedGameAnalyses, requestGameAnalysis, requestGameAnalysisPrewarm } from "../analysisData.js";
 import {
   fetchCurrentGLeagueRosters,
   fetchCurrentNbaRosters,
@@ -960,6 +960,40 @@ export default function Game({ variant = "full" }) {
     });
   }, [preparedAnalysisSegments]);
   const hasPreparedAnalysisSegments = preparedAnalysisSegments.length > 0;
+  const analysisPrewarmAttemptRef = useRef(new Map());
+
+  useEffect(() => {
+    if (!gameId || !user?.id || !isWashingtonGame || !hasAnalysisData || !shouldUseSharedAnalysisRecaps) return;
+    const cachedKeys = new Set(cachedAnalysisSegments.map((record) => String(record?.segmentKey || "").trim()));
+    const missingKeys = completedAnalysisSegments
+      .map((record) => record.key)
+      .filter((key) => !cachedKeys.has(key));
+    if (!missingKeys.length) return;
+
+    const signature = `${gameId}:${missingKeys.join(",")}`;
+    const now = Date.now();
+    if (now - Number(analysisPrewarmAttemptRef.current.get(signature) || 0) < 60_000) return;
+    analysisPrewarmAttemptRef.current.set(signature, now);
+
+    const controller = new AbortController();
+    requestGameAnalysisPrewarm(gameId, { signal: controller.signal })
+      .then(() => refetchCachedAnalysisSegments())
+      .catch((prewarmError) => {
+        if (prewarmError?.name !== "AbortError" && prewarmError?.name !== "TimeoutError") {
+          console.warn("Unable to prepare completed game-analysis segments.", prewarmError);
+        }
+      });
+    return () => controller.abort();
+  }, [
+    cachedAnalysisSegments,
+    completedAnalysisSegments,
+    gameId,
+    hasAnalysisData,
+    isWashingtonGame,
+    refetchCachedAnalysisSegments,
+    shouldUseSharedAnalysisRecaps,
+    user?.id,
+  ]);
 
   useEffect(() => {
     let cancelled = false;

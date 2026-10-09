@@ -505,7 +505,9 @@ export function aggregateSegmentStats({
 
     if (action.actionType === "rebound") {
       const isOffensive = action.subType === "offensive";
-      if (teamStats) {
+      // Team/dead-ball rebound bookkeeping rows do not count toward standard
+      // box-score REB/OREB totals.
+      if (teamStats && action.personId) {
         teamStats.reboundsTotal += 1;
         if (isOffensive) teamStats.reboundsOffensive += 1;
       }

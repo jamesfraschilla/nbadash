@@ -69,21 +69,20 @@ function parseStoredAuthValue(rawValue) {
   }
 }
 
+export function selectStoredAuthValue(localValue, sessionValue) {
+  // localStorage is shared across tabs. A sessionStorage fallback belongs to
+  // one tab and can hold an older refresh token even if it expires later.
+  return parseStoredAuthValue(localValue)?.rawValue
+    ?? parseStoredAuthValue(sessionValue)?.rawValue
+    ?? null;
+}
+
 const browserStorage = typeof window !== "undefined"
   ? {
     getItem(key) {
       const localValue = safeReadStorage(window.localStorage, key);
       const sessionValue = safeReadStorage(window.sessionStorage, key);
-      const localEntry = parseStoredAuthValue(localValue);
-      const sessionEntry = parseStoredAuthValue(sessionValue);
-
-      if (localEntry && sessionEntry) {
-        return sessionEntry.expiresAt > localEntry.expiresAt
-          ? sessionEntry.rawValue
-          : localEntry.rawValue;
-      }
-
-      return localEntry?.rawValue ?? sessionEntry?.rawValue ?? null;
+      return selectStoredAuthValue(localValue, sessionValue);
     },
     setItem(key, value) {
       try {

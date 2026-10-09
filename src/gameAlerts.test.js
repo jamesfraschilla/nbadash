@@ -558,7 +558,29 @@ test("second-chance pressure aggregates offensive rebounds and resulting points"
     homeTeam: HOME,
   }).find((candidate) => candidate.category === "Second Chance");
   assert.equal(alert?.title, "Nets have 5 second-chance points in Q1");
-  assert.equal(alert?.detail, "2 offensive rebounds created 2 scoring possessions.");
+  assert.equal(alert?.detail, "2 offensive rebounds created 5 second-chance points on 2 scoring possessions.");
+});
+
+test("offensive-rebound pressure leads with rebounds when second-chance scoring is marginal", () => {
+  const actions = [];
+  for (let index = 0; index < 5; index += 1) {
+    const order = index * 3;
+    actions.push(
+      { actionNumber: order + 1, orderNumber: order + 1, period: 3, clock: `PT0${9 - index}M00.00S`, possession: AWAY.teamId, teamId: AWAY.teamId, actionType: "2pt", shotResult: "Missed", personId: 101 },
+      { actionNumber: order + 2, orderNumber: order + 2, period: 3, clock: `PT0${8 - index}M58.00S`, possession: AWAY.teamId, teamId: AWAY.teamId, actionType: "rebound", subType: "offensive", personId: 101 },
+      { actionNumber: order + 3, orderNumber: order + 3, period: 3, clock: `PT0${8 - index}M40.00S`, possession: HOME.teamId, teamId: HOME.teamId, actionType: "turnover", personId: 201 },
+    );
+  }
+  actions.push({ actionNumber: 99, orderNumber: 99, period: 3, clock: "PT03M00.00S", possession: AWAY.teamId, teamId: AWAY.teamId, actionType: "rebound", subType: "offensive", personId: null });
+
+  const alert = buildGameAlerts({
+    game: { gameId: "0012600035", gameStatus: 2, period: 3, gameClock: "PT03M00.00S", playByPlayActions: actions },
+    awayTeam: AWAY,
+    homeTeam: HOME,
+  }).find((candidate) => candidate.category === "Second Chance");
+
+  assert.equal(alert?.title, "Nets grabbed 5 offensive rebounds in Q3");
+  assert.equal(alert?.detail, "5 offensive rebounds created 0 second-chance points on 0 scoring possessions.");
 });
 
 test("bonus pressure matches the yellow foul indicator thresholds", () => {

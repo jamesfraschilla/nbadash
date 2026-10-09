@@ -2345,7 +2345,11 @@ export async function handleRequest(req: Request) {
   if (requestBodyTooLarge(req)) return jsonResponse(413, { error: "Request body is too large." });
 
   try {
-    const access = await requireActiveRateLimitedUser(req, "game-analysis", { limit: 12, windowSeconds: 60 });
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const isInternalServiceRequest = Boolean(serviceRoleKey) && bearerTokenFromRequest(req) === serviceRoleKey;
+    const access = isInternalServiceRequest
+      ? { ok: true as const, userId: "service-role" }
+      : await requireActiveRateLimitedUser(req, "game-analysis", { limit: 12, windowSeconds: 60 });
     if (!access.ok) return jsonResponse(access.status, { error: access.error });
     const body = await req.json().catch(() => ({}));
     const operation = String(body?.operation || "").trim();

@@ -84,3 +84,30 @@ export async function listCachedGameAnalyses(gameId, options = {}) {
   }, options);
   return Array.isArray(data?.segments) ? data.segments : [];
 }
+
+export async function requestGameAnalysisPrewarm(gameId, options = {}) {
+  if (!gameId) return null;
+  requireSupabase();
+  const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : 70_000;
+  const { signal, cleanup } = createTimeoutSignal(options.signal, timeoutMs);
+  try {
+    const sessionResult = await supabase.auth.getSession().catch(() => ({ data: null }));
+    const accessToken = sessionResult?.data?.session?.access_token;
+    if (!accessToken) throw new Error("Sign in to prepare shared game analysis.");
+    const response = await fetch(`${supabaseFunctionConfig.url}/functions/v1/wizards-analysis-prewarm`, {
+      method: "POST",
+      headers: {
+        apikey: supabaseFunctionConfig.anonKey,
+        authorization: `Bearer ${accessToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ source: "game-dashboard", gameIds: [String(gameId)] }),
+      signal,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data?.error || `Unable to prepare shared analysis (${response.status}).`);
+    return data;
+  } finally {
+    cleanup();
+  }
+}

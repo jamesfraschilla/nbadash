@@ -162,7 +162,7 @@
     {
       "name": "game-analysis",
       "entrypoint": "supabase/functions/game-analysis/index.ts",
-      "sha256": "650dec5f39af6fadb7b50cde74525b0f9356c2435138fe3477b630d126e4b96d",
+      "sha256": "5ce941a78a320c514aa88b8257d542490abee2ceaabe3e42a506b13193119492",
       "sourceFiles": [
         "supabase/functions/_shared/officiatingInsights.ts",
         "supabase/functions/_shared/requestSecurity.ts",
