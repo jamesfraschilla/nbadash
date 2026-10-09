@@ -157,6 +157,32 @@ function normalizeString(value) {
   return String(value ?? "").trim();
 }
 
+const PERSONNEL_NAME_SUFFIXES = new Set(["jr", "sr", "ii", "iii", "iv", "v"]);
+
+function normalizeNamePart(value) {
+  return normalizeString(value).toLowerCase().replace(/[.,]/g, "");
+}
+
+export function resolvePersonnelFamilyName(familyName, fullName) {
+  const explicit = normalizeString(familyName);
+  const parts = normalizeString(fullName).split(/\s+/).filter(Boolean);
+  const suffixes = [];
+  while (parts.length > 1 && PERSONNEL_NAME_SUFFIXES.has(normalizeNamePart(parts[parts.length - 1]))) {
+    suffixes.unshift(parts.pop());
+  }
+  const parsedFamilyName = parts[parts.length - 1] || "";
+  const parsedLabel = [parsedFamilyName, ...suffixes].filter(Boolean).join(" ");
+  const explicitParts = explicit.split(/\s+/).filter(Boolean);
+  const explicitIsOnlySuffix = explicitParts.length > 0
+    && explicitParts.every((part) => PERSONNEL_NAME_SUFFIXES.has(normalizeNamePart(part)));
+
+  if (!explicit || explicitIsOnlySuffix) return parsedLabel || explicit;
+  if (suffixes.length && normalizeNamePart(explicit) === normalizeNamePart(parsedFamilyName)) {
+    return parsedLabel;
+  }
+  return explicit;
+}
+
 export function normalizePersonnelCustomStatLabel(value) {
   return normalizeString(value)
     .toUpperCase()
@@ -285,15 +311,20 @@ export function createPersonnelRow(index = 0, overrides = {}) {
     "threePointColorManual",
     "colorEdited",
   ]);
+  const fullName = normalizeString(firstPresentValue(source, ["fullName", "playerName", "PLAYER_NAME"]));
+  const familyName = resolvePersonnelFamilyName(
+    firstPresentValue(source, ["familyName", "lastName", "LAST_NAME"]),
+    fullName
+  );
 
   return {
     id: `personnel-slot-${safeIndex + 1}`,
     enabled: normalizeBoolean(enabled, Boolean(personId)),
     personId,
     teamId: normalizePlayerId(firstPresentValue(source, ["teamId", "TEAM_ID"])),
-    fullName: normalizeString(firstPresentValue(source, ["fullName", "playerName", "PLAYER_NAME"])),
+    fullName,
     firstName: normalizeString(firstPresentValue(source, ["firstName", "FIRST_NAME"])),
-    familyName: normalizeString(firstPresentValue(source, ["familyName", "lastName", "LAST_NAME"])),
+    familyName,
     jerseyNum: normalizeString(firstPresentValue(source, ["jerseyNum", "jerseyNumber", "number", "NUM"])),
     selectedStats: normalizeSelectedStats(selectedStats, selectedStats === undefined),
     statOverrides: normalizeStatOverrides(statOverrides),
@@ -345,12 +376,16 @@ function normalizeRosterPlayer(player) {
   if (!player || typeof player !== "object") return null;
   const personId = getRosterPlayerId(player);
   if (!personId) return null;
+  const fullName = normalizeString(firstPresentValue(player, ["fullName", "playerName", "PLAYER_NAME"]));
   return {
     personId,
     teamId: normalizePlayerId(firstPresentValue(player, ["teamId", "TEAM_ID"])),
-    fullName: normalizeString(firstPresentValue(player, ["fullName", "playerName", "PLAYER_NAME"])),
+    fullName,
     firstName: normalizeString(firstPresentValue(player, ["firstName", "FIRST_NAME"])),
-    familyName: normalizeString(firstPresentValue(player, ["familyName", "lastName", "LAST_NAME"])),
+    familyName: resolvePersonnelFamilyName(
+      firstPresentValue(player, ["familyName", "lastName", "LAST_NAME"]),
+      fullName
+    ),
     jerseyNum: normalizeString(firstPresentValue(player, ["jerseyNum", "jerseyNumber", "number", "NUM"])),
   };
 }

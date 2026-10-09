@@ -26,11 +26,29 @@ import {
   orderPersonnelSelectedStats,
   populatePersonnelDraftFromRoster,
   reorderPersonnelStatColumns,
+  resolvePersonnelFamilyName,
   resolvePersonnelThreePointColorForTags,
   togglePersonnelRowStat,
   togglePersonnelStat,
   validatePersonnelDraftForExport,
 } from "./personnelGraphic.js";
+
+test("personnel family names preserve suffixes without treating the suffix as the surname", () => {
+  assert.equal(resolvePersonnelFamilyName("II", "Ron Holland II"), "Holland II");
+  assert.equal(resolvePersonnelFamilyName("Holland", "Ron Holland II"), "Holland II");
+  assert.equal(resolvePersonnelFamilyName("Holland II", "Ron Holland II"), "Holland II");
+  assert.equal(resolvePersonnelFamilyName("O'Neale", "Royce O'Neale"), "O'Neale");
+
+  const populated = populatePersonnelDraftFromRoster(createPersonnelDraft(), [{
+    personId: "1641842",
+    teamId: "1610612765",
+    fullName: "Ron Holland II",
+    firstName: "Ron Holland",
+    familyName: "II",
+    jerseyNum: "00",
+  }]);
+  assert.equal(populated.rows[0].familyName, "Holland II");
+});
 
 test("constants expose the requested slots, stats, tags, and 3P colors", () => {
   assert.equal(PERSONNEL_SLOT_COUNT, 18);

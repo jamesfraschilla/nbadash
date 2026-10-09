@@ -10,6 +10,7 @@ import {
   normalizePersonnelCustomStatLabel,
   calculateThreePointAttemptRatio,
   formatPersonnelStatValue,
+  resolvePersonnelFamilyName,
   resolvePersonnelThreePointColorForTags,
 } from "../personnelGraphic.js";
 import { PERSONNEL_LAYOUT } from "../personnelGraphicLayout.js";
@@ -62,7 +63,7 @@ function getThreePointRatio(stats) {
 }
 
 function normalizeLastName(player) {
-  const familyName = String(player?.familyName || "").trim();
+  const familyName = resolvePersonnelFamilyName(player?.familyName, player?.fullName);
   if (familyName) return familyName.toUpperCase();
   const parts = String(player?.fullName || "PLAYER").trim().split(/\s+/).filter(Boolean);
   return String(parts[parts.length - 1] || "PLAYER").toUpperCase();
