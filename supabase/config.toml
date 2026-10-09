@@ -26,7 +26,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.game-analysis]
-verify_jwt = true
+verify_jwt = false
 
 [functions.wizards-analysis-prewarm]
 verify_jwt = true

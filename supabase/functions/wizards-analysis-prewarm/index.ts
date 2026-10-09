@@ -277,6 +277,7 @@ async function invokeGameAnalysis(gameId: string, segment: { key: string; label:
     headers: {
       apikey: serviceRoleKey,
       authorization: `Bearer ${serviceRoleKey}`,
+      "x-internal-service-key": serviceRoleKey,
       "content-type": "application/json",
     },
     body: JSON.stringify({

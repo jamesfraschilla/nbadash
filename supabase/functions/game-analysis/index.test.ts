@@ -365,3 +365,109 @@ Deno.test("analysis language guard rejects incorrect score transition claims", (
     false,
   );
 });
+
+Deno.test("range aggregation excludes team rebounds and team turnovers", () => {
+  const totals = __test__.aggregateRangeStats([
+    { actionNumber: 1, actionType: "rebound", subType: "defensive", teamId: homeTeam.teamId, personId: "101", playerName: "Player One" },
+    { actionNumber: 2, actionType: "rebound", subType: "offensive", teamId: homeTeam.teamId, personId: null, description: "Wizards Rebound" },
+    { actionNumber: 3, actionType: "turnover", teamId: homeTeam.teamId, personId: "101", playerName: "Player One" },
+    { actionNumber: 4, actionType: "turnover", teamId: homeTeam.teamId, personId: null, description: "Wizards Turnover: Shot Clock" },
+    { actionNumber: 5, actionType: "turnover", teamId: homeTeam.teamId, personId: "101", playerName: "Player One", qualifiers: ["fastbreak"] },
+  ], [], homeTeam.teamId, awayTeam.teamId);
+
+  assertEquals(totals[homeTeam.teamId].reboundsTotal, 1);
+  assertEquals(totals[homeTeam.teamId].reboundsOffensive, 0);
+  assertEquals(totals[homeTeam.teamId].turnovers, 2);
+  assertEquals(totals[homeTeam.teamId].transitionTurnovers, 1);
+  assertEquals(totals[awayTeam.teamId].transitionTurnovers, 0);
+});
+
+Deno.test("quarter ranges exclude actions from the preceding period at the shared boundary", () => {
+  const features = __test__.buildFeaturePayload({
+    gameId: "0022600001",
+    gameStatus: 3,
+    period: 4,
+    homeTeam,
+    awayTeam,
+    playByPlayActions: [
+      { actionNumber: 1, orderNumber: 1, period: 2, clock: "PT00M00.00S", actionType: "rebound", subType: "offensive", teamId: homeTeam.teamId, personId: "101", playerName: "Player One", scoreHome: 50, scoreAway: 50 },
+      { actionNumber: 2, orderNumber: 2, period: 3, clock: "PT11M50.00S", actionType: "2pt", shotResult: "Made", teamId: homeTeam.teamId, personId: "101", playerName: "Player One", scoreHome: 52, scoreAway: 50 },
+      { actionNumber: 3, orderNumber: 3, period: 3, clock: "PT11M40.00S", actionType: "rebound", subType: "defensive", teamId: homeTeam.teamId, personId: "101", playerName: "Player One", scoreHome: 52, scoreAway: 50 },
+      { actionNumber: 4, orderNumber: 4, period: 3, clock: "PT00M00.00S", actionType: "period", subType: "end", scoreHome: 52, scoreAway: 50 },
+    ],
+  }, null, {
+    minPeriod: 3,
+    minClock: "12:00",
+    maxPeriod: 3,
+    maxClock: "0:00",
+  });
+
+  assertEquals(features.teams.home.totals.reboundsTotal, 1);
+  assertEquals(features.teams.home.totals.fieldGoalsMade, 1);
+  assertEquals(features.teams.home.totals.fieldGoalsAttempted, 1);
+});
+
+Deno.test("final status rows cannot reset the score or create a fictitious run", () => {
+  const features = __test__.buildFeaturePayload({
+    gameId: "0022600001",
+    gameStatus: 3,
+    period: 4,
+    homeTeam,
+    awayTeam,
+    playByPlayActions: [
+      { actionNumber: 1, orderNumber: 1, period: 4, clock: "PT00M10.00S", actionType: "2pt", shotResult: "Made", teamId: homeTeam.teamId, personId: "101", playerName: "Player One", scoreHome: 2, scoreAway: 0 },
+      { actionNumber: 99, orderNumber: 0, period: 4, clock: "PT00M00.00S", actionType: "status", subType: "finalbox", scoreHome: 0, scoreAway: 0 },
+      { actionNumber: 2, orderNumber: 2, period: 4, clock: "PT00M00.00S", actionType: "period", subType: "end", scoreHome: 2, scoreAway: 0 },
+    ],
+  }, null, {
+    minPeriod: 4,
+    minClock: "12:00",
+    maxPeriod: 4,
+    maxClock: "0:00",
+  });
+
+  assertEquals(features.teams.home.totals.points, 2);
+  assertEquals(features.teams.home.totals.fieldGoalsMade, 1);
+  assertEquals(features.teams.home.largestRun?.points, 2);
+});
+
+Deno.test("analysis language guard rejects reversed team scoring attribution", () => {
+  const features = buildScoreGuardFeatures();
+  assertEquals(
+    __test__.shouldRejectAiAnalysis({
+      headline: "Bulls win Q3",
+      summary: "The Bulls outscored the Wizards 23-35 in Q3.",
+      sections: [],
+    }, features as any),
+    true,
+  );
+});
+
+Deno.test("analysis language guard rejects invented runs and overtime clocks", () => {
+  const features = buildScoreGuardFeatures() as any;
+  features.range.endLabel = "Q4 0:00";
+  features.teams.home.largestRun = { points: 8 };
+  features.teams.away.largestRun = { points: 10 };
+  features.momentumBursts = [{ points: 12, opponentPoints: 5 }];
+
+  const reasons = __test__.findAiAnalysisRejectReasons({
+    headline: "Late push",
+    summary: "WAS closed on a 111-0 run from OT 5:00 to Q4 0:00.",
+    sections: [],
+  }, features);
+
+  assert(reasons.some((reason: string) => reason.includes("run claim 111-0")));
+  assert(reasons.some((reason: string) => reason.includes("overtime clock")));
+});
+
+Deno.test("analysis language guard rejects naming the losing team as the winner", () => {
+  const features = buildScoreGuardFeatures();
+  assertEquals(
+    __test__.shouldRejectAiAnalysis({
+      headline: "Wizards edge Bulls in a close third quarter",
+      summary: "The teams traded runs throughout the period.",
+      sections: [],
+    }, features as any),
+    true,
+  );
+});

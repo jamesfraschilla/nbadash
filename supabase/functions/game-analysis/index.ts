@@ -48,7 +48,7 @@ const ANALYSIS_RESPONSE_SCHEMA = {
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, x-internal-service-key, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -433,8 +433,11 @@ function buildScoringEvents(actions: Array<Record<string, unknown>>, homeTeamId:
   let previousAway = 0;
 
   return actions.flatMap((action) => {
-    const nextHome = numericScore(action, "home");
-    const nextAway = numericScore(action, "away");
+    // Ignore late status/snapshot rows that report 0-0 after scoring has begun.
+    // Team scores are monotonic during a game; accepting those rows resets the
+    // accumulator and turns the final score into a fictitious scoring run.
+    const nextHome = Math.max(previousHome, numericScore(action, "home"));
+    const nextAway = Math.max(previousAway, numericScore(action, "away"));
     const homeDiff = nextHome - previousHome;
     const awayDiff = nextAway - previousAway;
     previousHome = nextHome;
@@ -612,7 +615,7 @@ function buildPlayerRangeStats(
     const player = upsertPlayer(action);
     if (!player) continue;
     const points = scoringByActionNumber.get(safeNumber(action.actionNumber, 0)) || 0;
-    const made = points > 0 || String(action.shotResult || "").toLowerCase() === "made";
+    const made = String(action.shotResult || "").toLowerCase() === "made";
 
     if (actionType === "2pt" || actionType === "3pt") {
       player.fieldGoalsAttempted += 1;
@@ -739,11 +742,9 @@ function aggregateRangeStats(
     const teamId = String(action.teamId || "");
     const actionType = String(action.actionType || "").toLowerCase();
     const teamTotals = totals[teamId];
-    const opponentId = teamId === homeTeamId ? awayTeamId : homeTeamId;
-    const opponentTotals = totals[opponentId];
     const qualifiers = normalizeQualifiers(action.qualifiers);
     const points = scoringByActionNumber.get(safeNumber(action.actionNumber, 0)) || 0;
-    const made = points > 0 || String(action.shotResult || "").toLowerCase() === "made";
+    const made = String(action.shotResult || "").toLowerCase() === "made";
 
     if (actionType === "2pt" || actionType === "3pt") {
       if (teamTotals) {
@@ -772,7 +773,7 @@ function aggregateRangeStats(
       if (made) teamTotals.freeThrowsMade += 1;
     }
 
-    if (actionType === "rebound" && teamTotals) {
+    if (actionType === "rebound" && teamTotals && getActionPlayerIdentity(action)) {
       const subType = String(action.subType || "").toLowerCase();
       teamTotals.reboundsTotal += 1;
       if (subType.includes("offensive")) {
@@ -780,9 +781,9 @@ function aggregateRangeStats(
       }
     }
 
-    if (actionType === "turnover" && teamTotals) {
+    if (actionType === "turnover" && teamTotals && getActionPlayerIdentity(action)) {
       teamTotals.turnovers += 1;
-      if (opponentTotals) opponentTotals.transitionTurnovers += 1;
+      if (qualifiers.includes("fastbreak")) teamTotals.transitionTurnovers += 1;
     }
 
     if (actionType === "steal" && teamTotals) {
@@ -1573,7 +1574,12 @@ function buildFeaturePayload(
   }
 
   const rangeActions = actions.filter((action) => {
+    const actionPeriod = safeNumber(action.period, 0);
     const elapsed = pointToElapsedSeconds(safeNumber(action.period, 0), action.clock, regulationMinutes);
+    // Adjacent period endpoints share the same elapsed value (for example,
+    // Q2 0:00 and Q3 12:00). Keep only the requested period at each boundary.
+    if (elapsed === rangeStartElapsed && actionPeriod !== minPeriod) return false;
+    if (elapsed === rangeEndElapsed && actionPeriod !== maxPeriod) return false;
     return elapsed >= rangeStartElapsed && elapsed <= rangeEndElapsed;
   });
 
@@ -2006,6 +2012,7 @@ function buildTemplateAnalysis(features: ReturnType<typeof buildFeaturePayload>)
 
 function buildAnalysisDataSignatureInput(features: ReturnType<typeof buildFeaturePayload>) {
   return {
+    analysisVersion: 2,
     range: features.range,
     score: features.score,
     teams: features.teams,
@@ -2236,6 +2243,136 @@ function findInvalidSpanScoreClaims(analysis: Record<string, unknown>, features:
   return reasons;
 }
 
+function escapeRegExp(value: unknown) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function teamTextAliases(team: Record<string, unknown>) {
+  return [...new Set([
+    String(team.tricode || "").trim(),
+    String(team.name || "").trim(),
+  ].filter(Boolean))];
+}
+
+function findInvalidTeamScoreAttributionClaims(
+  analysis: Record<string, unknown>,
+  features: ReturnType<typeof buildFeaturePayload>,
+) {
+  const reasons: string[] = [];
+  if (!features?.score?.rangePoints) return reasons;
+  const texts = collectAnalysisStrings({
+    headline: analysis.headline,
+    summary: analysis.summary,
+    sections: analysis.sections,
+  });
+  const teams = [features.teams.home, features.teams.away];
+
+  teams.forEach((team, index) => {
+    const opponent = teams[index === 0 ? 1 : 0];
+    const teamAliases = teamTextAliases(team).map(escapeRegExp).join("|");
+    const opponentAliases = teamTextAliases(opponent).map(escapeRegExp).join("|");
+    if (!teamAliases || !opponentAliases) return;
+    const expectedTeamPoints = safeNumber(
+      team === features.teams.home ? features.score.rangePoints.home : features.score.rangePoints.away,
+      0,
+    );
+    const expectedOpponentPoints = safeNumber(
+      opponent === features.teams.home ? features.score.rangePoints.home : features.score.rangePoints.away,
+      0,
+    );
+    const pattern = new RegExp(
+      String.raw`\b(?:${teamAliases})\b[^.?!]{0,50}?\boutscor(?:ed|e|ing)\b[^.?!]{0,50}?\b(?:${opponentAliases})\b[^.?!]{0,30}?(\d{1,3})\s*[-–]\s*(\d{1,3})`,
+      "gi",
+    );
+    texts.forEach((text) => {
+      let match: RegExpExecArray | null;
+      while ((match = pattern.exec(text))) {
+        const first = safeNumber(match[1], -1);
+        const second = safeNumber(match[2], -1);
+        if (first !== expectedTeamPoints || second !== expectedOpponentPoints) {
+          reasons.push(`${team.tricode} scoring attribution ${first}-${second} should be ${expectedTeamPoints}-${expectedOpponentPoints}`);
+        }
+      }
+    });
+  });
+
+  return reasons;
+}
+
+function findInvalidRunClaims(
+  analysis: Record<string, unknown>,
+  features: ReturnType<typeof buildFeaturePayload>,
+) {
+  const reasons: string[] = [];
+  const texts = collectAnalysisStrings({
+    headline: analysis.headline,
+    summary: analysis.summary,
+    sections: analysis.sections,
+  });
+  const allowedPairs = new Set<string>();
+  [features.teams.home, features.teams.away].forEach((team) => {
+    if (safeNumber(team.largestRun?.points, 0) > 0) {
+      allowedPairs.add(`${safeNumber(team.largestRun?.points, 0)}-0`);
+    }
+  });
+  (features.momentumBursts || []).forEach((burst) => {
+    allowedPairs.add(`${safeNumber(burst.points, 0)}-${safeNumber(burst.opponentPoints, 0)}`);
+  });
+
+  texts.forEach((text) => {
+    const patterns = [
+      /\b(\d{1,3})\s*[-–]\s*(\d{1,3})\s+(?:run|push|burst)\b/gi,
+      /\b(?:run|push|burst)\b[^.?!]{0,24}?\b(\d{1,3})\s*[-–]\s*(\d{1,3})\b/gi,
+    ];
+    patterns.forEach((pattern) => {
+      let match: RegExpExecArray | null;
+      while ((match = pattern.exec(text))) {
+        const pair = `${safeNumber(match[1], -1)}-${safeNumber(match[2], -1)}`;
+        if (!allowedPairs.has(pair)) reasons.push(`run claim ${pair} is not supported by the scoring timeline`);
+      }
+    });
+    if (features?.range?.endLabel === "Q4 0:00" && /\bOT\s+\d{1,2}:\d{2}\b/i.test(text)) {
+      reasons.push("uses an overtime clock in a regulation game range");
+    }
+  });
+
+  return reasons;
+}
+
+function findInvalidWinnerAttributionClaims(
+  analysis: Record<string, unknown>,
+  features: ReturnType<typeof buildFeaturePayload>,
+) {
+  if (!features?.score?.rangePoints) return [];
+  const reasons: string[] = [];
+  const texts = collectAnalysisStrings({
+    headline: analysis.headline,
+    summary: analysis.summary,
+    sections: analysis.sections,
+  });
+  const teams = [features.teams.home, features.teams.away];
+  teams.forEach((team, index) => {
+    const opponent = teams[index === 0 ? 1 : 0];
+    const teamPoints = team === features.teams.home
+      ? safeNumber(features.score.rangePoints.home, 0)
+      : safeNumber(features.score.rangePoints.away, 0);
+    const opponentPoints = opponent === features.teams.home
+      ? safeNumber(features.score.rangePoints.home, 0)
+      : safeNumber(features.score.rangePoints.away, 0);
+    if (teamPoints > opponentPoints) return;
+    const teamAliases = teamTextAliases(team).map(escapeRegExp).join("|");
+    const opponentAliases = teamTextAliases(opponent).map(escapeRegExp).join("|");
+    const pattern = new RegExp(
+      String.raw`\b(?:${teamAliases})\b[^.?!]{0,35}?\b(?:edge(?:d|s)?|defeat(?:ed|s)?|beat(?:s)?|top(?:ped|s)?|outlast(?:ed|s)?|won\s+over)\b[^.?!]{0,35}?\b(?:${opponentAliases})\b`,
+      "i",
+    );
+    if (texts.some((text) => pattern.test(text))) {
+      reasons.push(`${team.tricode} is described as the winner despite being outscored ${teamPoints}-${opponentPoints}`);
+    }
+  });
+  return reasons;
+}
+
 function findAiAnalysisRejectReasons(analysis: Record<string, unknown>, features: ReturnType<typeof buildFeaturePayload>) {
   const reasons = [];
   const texts = collectAnalysisStrings({
@@ -2254,6 +2391,9 @@ function findAiAnalysisRejectReasons(analysis: Record<string, unknown>, features
   });
 
   reasons.push(...findInvalidSpanScoreClaims(analysis, features));
+  reasons.push(...findInvalidTeamScoreAttributionClaims(analysis, features));
+  reasons.push(...findInvalidRunClaims(analysis, features));
+  reasons.push(...findInvalidWinnerAttributionClaims(analysis, features));
 
   return [...new Set(reasons)];
 }
@@ -2416,7 +2556,8 @@ export async function handleRequest(req: Request) {
 
   try {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-    const isInternalServiceRequest = Boolean(serviceRoleKey) && bearerTokenFromRequest(req) === serviceRoleKey;
+    const internalServiceCredential = req.headers.get("x-internal-service-key") || bearerTokenFromRequest(req);
+    const isInternalServiceRequest = Boolean(serviceRoleKey) && internalServiceCredential === serviceRoleKey;
     const access = isInternalServiceRequest
       ? { ok: true as const, userId: "service-role" }
       : await requireActiveRateLimitedUser(req, "game-analysis", { limit: 12, windowSeconds: 60 });
