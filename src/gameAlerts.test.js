@@ -146,6 +146,68 @@ test("buildGameAlerts adds bounded team trend alerts at period checkpoints", () 
   )));
 });
 
+test("explicit starters override a minutes feed that begins after the opening substitution", () => {
+  const actions = [];
+  let scoreAway = 0;
+  let actionNumber = 0;
+  const addBasket = (personId) => {
+    scoreAway += 2;
+    actionNumber += 1;
+    actions.push(scoringAction({
+      actionNumber,
+      orderNumber: actionNumber,
+      personId,
+      playerName: personId === 106 ? "Bench Player" : "Starter Player",
+      clock: `PT${String(Math.max(1, 12 - actionNumber)).padStart(2, "0")}M00.00S`,
+      scoreAway: String(scoreAway),
+      scoreHome: "0",
+    }));
+  };
+  Array.from({ length: 10 }).forEach(() => addBasket(101));
+  Array.from({ length: 5 }).forEach(() => addBasket(106));
+  actions.push({
+    actionNumber: 99,
+    orderNumber: 99,
+    actionType: "period",
+    subType: "end",
+    period: 1,
+    clock: "PT00M00.00S",
+    scoreAway: "30",
+    scoreHome: "0",
+  });
+
+  const alerts = buildGameAlerts({
+    game: {
+      gameId: "0022600001",
+      gameStatus: 2,
+      period: 2,
+      gameClock: "PT12M00.00S",
+      playByPlayActions: actions,
+    },
+    awayTeam: AWAY,
+    homeTeam: HOME,
+    basePlayers: [
+      ...[101, 102, 103, 104, 105].map((personId) => ({ personId, teamId: AWAY.teamId, starter: true })),
+      { personId: 106, teamId: AWAY.teamId, starter: false },
+    ],
+    minutesData: {
+      periods: [{
+        period: 1,
+        stints: [{
+          startClock: "5:00",
+          playersAway: [102, 103, 104, 105, 106].map((personId) => ({ personId })),
+          playersHome: [201, 202, 203, 204, 205].map((personId) => ({ personId })),
+        }],
+      }],
+    },
+  });
+
+  assert.equal(
+    alerts.some((alert) => alert.id === `trend-bench-high:${AWAY.teamId}:1`),
+    false,
+  );
+});
+
 test("buildGameAlerts adds assisted, unassisted, and free-throw detail to assisted-shot trends", () => {
   const actions = [
     scoringAction({ actionNumber: 1, orderNumber: 1, clock: "PT11M30.00S", assistPersonId: 101, scoreAway: "2", scoreHome: "0" }),
@@ -581,6 +643,29 @@ test("offensive-rebound pressure leads with rebounds when second-chance scoring 
 
   assert.equal(alert?.title, "Nets grabbed 5 offensive rebounds in Q3");
   assert.equal(alert?.detail, "5 offensive rebounds created 0 second-chance points on 0 scoring possessions.");
+});
+
+test("second-chance possessions do not carry offensive rebounds across quarter boundaries", () => {
+  const alerts = buildGameAlerts({
+    game: {
+      gameId: "0022600001",
+      gameStatus: 2,
+      period: 2,
+      gameClock: "PT11M00.00S",
+      playByPlayActions: [
+        { actionNumber: 1, orderNumber: 1, actionType: "rebound", subType: "offensive", period: 1, clock: "PT00M01.00S", personId: 101, teamId: AWAY.teamId, possession: AWAY.teamId },
+        { actionNumber: 2, orderNumber: 2, actionType: "period", subType: "end", period: 1, clock: "PT00M00.00S", possession: AWAY.teamId, scoreAway: "0", scoreHome: "0" },
+        { actionNumber: 3, orderNumber: 3, actionType: "rebound", subType: "offensive", period: 2, clock: "PT11M40.00S", personId: 101, teamId: AWAY.teamId, possession: AWAY.teamId },
+        { actionNumber: 4, orderNumber: 4, actionType: "rebound", subType: "offensive", period: 2, clock: "PT11M30.00S", personId: 101, teamId: AWAY.teamId, possession: AWAY.teamId },
+        scoringAction({ actionNumber: 5, orderNumber: 5, period: 2, clock: "PT11M20.00S", teamId: AWAY.teamId, possession: AWAY.teamId, scoreAway: "2", scoreHome: "0" }),
+        { actionNumber: 6, orderNumber: 6, actionType: "turnover", period: 2, clock: "PT11M00.00S", teamId: HOME.teamId, possession: HOME.teamId },
+      ],
+    },
+    awayTeam: AWAY,
+    homeTeam: HOME,
+  });
+
+  assert.equal(alerts.some((alert) => alert.category === "Second Chance"), false);
 });
 
 test("bonus pressure matches the yellow foul indicator thresholds", () => {

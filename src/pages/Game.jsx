@@ -1016,10 +1016,19 @@ export default function Game({ variant = "full" }) {
     };
   }, [officials]);
 
-  const basePlayers = useMemo(() => [
-    ...(boxScore?.away?.players || []),
-    ...(boxScore?.home?.players || []),
-  ], [boxScore?.away?.players, boxScore?.home?.players]);
+  const basePlayers = useMemo(() => {
+    const identifyBoxScorePlayers = (players, teamId) => (players || []).map((player, index) => ({
+      ...player,
+      teamId: player?.teamId ?? teamId,
+      // NBA box scores list the five starters first. Preserve an explicit starter
+      // value when one is supplied, otherwise retain that ordering as the fallback.
+      starter: player?.starter ?? player?.isStarter ?? index < 5,
+    }));
+    return [
+      ...identifyBoxScorePlayers(boxScore?.away?.players, awayTeam?.teamId),
+      ...identifyBoxScorePlayers(boxScore?.home?.players, homeTeam?.teamId),
+    ];
+  }, [awayTeam?.teamId, boxScore?.away?.players, boxScore?.home?.players, homeTeam?.teamId]);
 
   const gameAlerts = useMemo(() => buildGameAlerts({
     game,

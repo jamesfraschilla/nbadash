@@ -252,12 +252,21 @@ function starterIdsFromMinutes(minutesData, homeTeamId, awayTeamId) {
 
 function buildStarterLookup({ basePlayers, minutesData, homeTeamId, awayTeamId }) {
   const starters = starterIdsFromMinutes(minutesData, homeTeamId, awayTeamId);
+  const explicitStarters = {
+    [homeTeamId]: new Set(),
+    [awayTeamId]: new Set(),
+  };
   (basePlayers || []).forEach((player) => {
     const personId = normalizePlayerId(player?.personId);
     const teamId = normalizeTeamId(player?.teamId);
     if (!personId || !teamId || !isStarterPlayer(player)) return;
-    if (!starters[teamId]) starters[teamId] = new Set();
-    starters[teamId].add(personId);
+    if (!explicitStarters[teamId]) explicitStarters[teamId] = new Set();
+    explicitStarters[teamId].add(personId);
+  });
+  Object.entries(explicitStarters).forEach(([teamId, playerIds]) => {
+    // An explicit five-man box-score lineup is authoritative. This matters when
+    // the minutes feed begins at the first substitution and omits the opening stint.
+    if (playerIds.size >= 5) starters[teamId] = playerIds;
   });
   return starters;
 }
@@ -897,6 +906,12 @@ function addPossessionPressureAlerts({ alerts, seen, orderedActions, teamsById, 
   };
 
   orderedActions.forEach((action) => {
+    const actionPeriod = safeNumber(action?.period, 0);
+    const possessionPeriod = safeNumber(possession?.lastAction?.period, 0);
+    if (possession && actionPeriod && possessionPeriod && actionPeriod !== possessionPeriod) {
+      finishPossession();
+      possession = null;
+    }
     const actionPossession = normalizeTeamId(action?.possession);
     if (actionPossession && actionPossession !== possession?.teamId) {
       finishPossession();
