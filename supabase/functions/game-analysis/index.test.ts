@@ -222,6 +222,43 @@ Deno.test("analysis language guard rejects bare shooting percentages", () => {
   );
 });
 
+Deno.test("analysis repair adds made-attempt context without discarding an otherwise useful AI report", () => {
+  const features = {
+    teams: {
+      home: {
+        tricode: "WAS",
+        shooting: { fgPct: 50, threePct: 45.5, rimPct: 57.1, midPct: 50, ftPct: 50 },
+        totals: {
+          fieldGoalsMade: 11, fieldGoalsAttempted: 22,
+          threePointersMade: 5, threePointersAttempted: 11,
+          rimFieldGoalsMade: 4, rimFieldGoalsAttempted: 7,
+          midFieldGoalsMade: 2, midFieldGoalsAttempted: 4,
+          freeThrowsMade: 3, freeThrowsAttempted: 6,
+        },
+      },
+      away: {
+        tricode: "NYK",
+        shooting: { fgPct: 42.9, threePct: 27.3, rimPct: 66.7, midPct: 50, ftPct: 88.9 },
+        totals: {
+          fieldGoalsMade: 9, fieldGoalsAttempted: 21,
+          threePointersMade: 3, threePointersAttempted: 11,
+          rimFieldGoalsMade: 4, rimFieldGoalsAttempted: 6,
+          midFieldGoalsMade: 2, midFieldGoalsAttempted: 4,
+          freeThrowsMade: 8, freeThrowsAttempted: 9,
+        },
+      },
+    },
+  };
+  const repaired = __test__.repairBareShootingPercentages({
+    headline: "Shot-making separated the teams",
+    summary: "WAS shot 50% overall, while NYK stayed close by converting 88.9% at the line.",
+    sections: [],
+  }, features as any) as Record<string, unknown>;
+
+  assertEquals(repaired.summary, "WAS shot 50% (11/22) overall, while NYK stayed close by converting 88.9% (8/9) at the line.");
+  assertEquals(__test__.shouldRejectAiAnalysis(repaired, features as any), false);
+});
+
 Deno.test("analysis language guard rejects zero lead or zero advantage wording", () => {
   assertEquals(__test__.hasZeroMarginLanguage("WAS never led, with its largest advantage being 0."), true);
   assertEquals(__test__.hasZeroMarginLanguage("WAS never led during the span."), false);

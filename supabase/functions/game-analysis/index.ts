@@ -2044,24 +2044,94 @@ function collectAnalysisStrings(value: unknown): string[] {
 }
 
 function collectKnownShootingPercentages(features: ReturnType<typeof buildFeaturePayload>) {
-  const refs: Array<{ percentageText: string; made: number; attempted: number }> = [];
+  const refs: Array<{ percentageText: string; made: number; attempted: number; stat: string; team: string }> = [];
   [features.teams.home, features.teams.away].forEach((team) => {
     [
-      [team.shooting.fgPct, team.totals.fieldGoalsMade, team.totals.fieldGoalsAttempted],
-      [team.shooting.threePct, team.totals.threePointersMade, team.totals.threePointersAttempted],
-      [team.shooting.rimPct, team.totals.rimFieldGoalsMade, team.totals.rimFieldGoalsAttempted],
-      [team.shooting.midPct, team.totals.midFieldGoalsMade, team.totals.midFieldGoalsAttempted],
-      [team.shooting.ftPct, team.totals.freeThrowsMade, team.totals.freeThrowsAttempted],
-    ].forEach(([percentageValue, made, attempted]) => {
+      ["fg", team.shooting.fgPct, team.totals.fieldGoalsMade, team.totals.fieldGoalsAttempted],
+      ["three", team.shooting.threePct, team.totals.threePointersMade, team.totals.threePointersAttempted],
+      ["rim", team.shooting.rimPct, team.totals.rimFieldGoalsMade, team.totals.rimFieldGoalsAttempted],
+      ["mid", team.shooting.midPct, team.totals.midFieldGoalsMade, team.totals.midFieldGoalsAttempted],
+      ["ft", team.shooting.ftPct, team.totals.freeThrowsMade, team.totals.freeThrowsAttempted],
+    ].forEach(([stat, percentageValue, made, attempted]) => {
       if (percentageValue == null || !safeNumber(attempted, 0)) return;
       refs.push({
         percentageText: formatPercentage(percentageValue),
         made: safeNumber(made, 0),
         attempted: safeNumber(attempted, 0),
+        stat: String(stat),
+        team: String(team.tricode || "").toLowerCase(),
       });
     });
   });
   return refs;
+}
+
+function shootingStatFromContext(value: string) {
+  const text = value.toLowerCase();
+  if (/\b(?:free[ -]?throw|ft|at the line|from the line)\b/.test(text)) return "ft";
+  if (/\b(?:three|3pt|3-point|3p)\b/.test(text)) return "three";
+  if (/\brim\b/.test(text)) return "rim";
+  if (/\bmid(?:range|-range)?\b/.test(text)) return "mid";
+  if (/\b(?:field goal|overall|shooting|shot)\b/.test(text)) return "fg";
+  return "";
+}
+
+function repairBarePercentageInText(text: string, features: ReturnType<typeof buildFeaturePayload>) {
+  let repaired = text;
+  const references = collectKnownShootingPercentages(features);
+  [...new Set(references.map((reference) => reference.percentageText))].forEach((percentageText) => {
+    let searchFrom = 0;
+    while (searchFrom < repaired.length) {
+      const index = repaired.indexOf(percentageText, searchFrom);
+      if (index === -1) break;
+      const tail = repaired.slice(index + percentageText.length);
+      if (/^\s*\(/.test(tail)) {
+        searchFrom = index + percentageText.length;
+        continue;
+      }
+      const sentenceStart = Math.max(
+        repaired.lastIndexOf(".", index),
+        repaired.lastIndexOf("!", index),
+        repaired.lastIndexOf("?", index),
+        repaired.lastIndexOf(",", index),
+        repaired.lastIndexOf(";", index),
+      ) + 1;
+      const endingCandidates = [
+        repaired.indexOf(".", index),
+        repaired.indexOf("!", index),
+        repaired.indexOf("?", index),
+        repaired.indexOf(",", index),
+        repaired.indexOf(";", index),
+      ].filter((value) => value >= 0);
+      const sentenceEnd = endingCandidates.length ? Math.min(...endingCandidates) : repaired.length;
+      const context = repaired.slice(sentenceStart, sentenceEnd);
+      let candidates = references.filter((reference) => reference.percentageText === percentageText);
+      const contextLower = context.toLowerCase();
+      const matchingTeams = [...new Set(candidates.map((reference) => reference.team).filter((team) => team && contextLower.includes(team)))];
+      if (matchingTeams.length === 1) candidates = candidates.filter((reference) => reference.team === matchingTeams[0]);
+      const stat = shootingStatFromContext(context);
+      if (stat) candidates = candidates.filter((reference) => reference.stat === stat);
+      const ratios = [...new Set(candidates.map((reference) => `${reference.made}/${reference.attempted}`))];
+      if (ratios.length !== 1) {
+        searchFrom = index + percentageText.length;
+        continue;
+      }
+      const replacement = `${percentageText} (${ratios[0]})`;
+      repaired = `${repaired.slice(0, index)}${replacement}${repaired.slice(index + percentageText.length)}`;
+      searchFrom = index + replacement.length;
+    }
+  });
+  return repaired;
+}
+
+function repairBareShootingPercentages(value: unknown, features: ReturnType<typeof buildFeaturePayload>): unknown {
+  if (typeof value === "string") return repairBarePercentageInText(value, features);
+  if (Array.isArray(value)) return value.map((entry) => repairBareShootingPercentages(entry, features));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+      .map(([key, entry]) => [key, repairBareShootingPercentages(entry, features)]));
+  }
+  return value;
 }
 
 function hasBarePercentageReference(text: string, percentageText: string) {
@@ -2396,7 +2466,10 @@ export async function handleRequest(req: Request) {
     try {
       for (let attempt = 0; attempt < 2; attempt += 1) {
         aiAttemptCount = attempt + 1;
-        const aiAnalysis = await generateAiAnalysis(features, aiRejectReasons);
+        const generatedAnalysis = await generateAiAnalysis(features, aiRejectReasons);
+        const aiAnalysis = generatedAnalysis
+          ? repairBareShootingPercentages(generatedAnalysis, features) as Awaited<ReturnType<typeof generateAiAnalysis>>
+          : null;
         if (!aiAnalysis) {
           aiRejectReasons = ["AI generation is unavailable or not configured"];
           break;
@@ -2486,6 +2559,7 @@ export const __test__ = {
   hasZeroMarginLanguage,
   normalizeStatAbbreviations,
   percentage,
+  repairBareShootingPercentages,
   sanitizeAnalysisText,
   sanitizeTurnoverLanguage,
   shouldRejectAiAnalysis,
