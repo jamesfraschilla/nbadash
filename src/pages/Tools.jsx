@@ -57,6 +57,7 @@ import {
   getMatchupGraphicLineupKey,
   listRemoteMatchupGraphicLineups,
   saveRemoteMatchupGraphicLineups,
+  swapMatchupGraphicPlayerSelection,
 } from "../matchupGraphicLineups.js";
 import { buildMatchupDefaultLineupMap } from "../matchupDefaultLineups.js";
 import { findWashingtonOpponentTeamId } from "../matchupGameDefaults.js";
@@ -480,11 +481,9 @@ function ToolColumn({
 
       <div className={styles.playerFields}>
         {Array.from({ length: 5 }, (_, index) => {
-          const selectedIds = new Set(playerIds.filter((value) => value && value !== CUSTOM_PLAYER_VALUE));
           const currentId = playerIds[index] || "";
           const isCustom = currentId === CUSTOM_PLAYER_VALUE;
           const customPlayer = customPlayers?.[index] || buildEmptyCustomPlayer();
-          selectedIds.delete(currentId);
           return (
             <div key={`${columnId}-player-${index}`} className={styles.matchupPlayerSlot}>
               <label className={styles.field}>
@@ -499,7 +498,6 @@ function ToolColumn({
                     <option
                       key={player.personId}
                       value={player.personId}
-                      disabled={selectedIds.has(player.personId)}
                     >
                       {formatPlayerOption(player)}
                     </option>
@@ -1069,8 +1067,7 @@ export default function Tools({ section = "tools" }) {
   const handlePlayerChange = (side, index, nextPlayerId) => {
     setDraft((current) => {
       const key = `${side}PlayerIds`;
-      const nextIds = [...current[key]];
-      nextIds[index] = String(nextPlayerId || "").trim();
+      const nextIds = swapMatchupGraphicPlayerSelection(current[key], index, nextPlayerId);
       return {
         ...current,
         [key]: nextIds,

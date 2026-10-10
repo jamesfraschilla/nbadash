@@ -1023,18 +1023,31 @@ function buildFinalGameRecap({
     const winner = awayScore > homeScore ? awayTeam : homeTeam;
     const loser = awayScore > homeScore ? homeTeam : awayTeam;
     title = `${teamLabel(winner)} defeated ${teamLabel(loser)}, ${Math.max(awayScore, homeScore)}-${Math.min(awayScore, homeScore)}`;
-  }
+    const winnerId = normalizeTeamId(winner?.teamId);
+    const loserId = normalizeTeamId(loser?.teamId);
+    const halftimeSnapshot = [...scoringEvents].reverse().find((event) => (
+      event.period <= 2 && event.scoreAway != null && event.scoreHome != null
+    ));
+    const awayHalftime = safeNumber(halftimeSnapshot?.scoreAway, 0);
+    const homeHalftime = safeNumber(halftimeSnapshot?.scoreHome, 0);
+    const winnerHalftime = winnerId === normalizeTeamId(awayTeam?.teamId) ? awayHalftime : homeHalftime;
+    const loserHalftime = loserId === normalizeTeamId(awayTeam?.teamId) ? awayHalftime : homeHalftime;
+    const halftimeMargin = winnerHalftime - loserHalftime;
+    const winnerAfterHalftime = awayScore > homeScore
+      ? awayScore - winnerHalftime
+      : homeScore - winnerHalftime;
+    const loserAfterHalftime = awayScore > homeScore
+      ? homeScore - loserHalftime
+      : awayScore - loserHalftime;
+    const afterHalftimeMargin = winnerAfterHalftime - loserAfterHalftime;
 
-  const secondHalfPoints = new Map();
-  scoringEvents.filter((event) => event.period >= 3).forEach((event) => {
-    secondHalfPoints.set(event.teamId, safeNumber(secondHalfPoints.get(event.teamId), 0) + event.points);
-  });
-  const awaySecondHalf = safeNumber(secondHalfPoints.get(normalizeTeamId(awayTeam?.teamId)), 0);
-  const homeSecondHalf = safeNumber(secondHalfPoints.get(normalizeTeamId(homeTeam?.teamId)), 0);
-  if (awaySecondHalf !== homeSecondHalf && awaySecondHalf + homeSecondHalf > 0) {
-    const strongerTeam = awaySecondHalf > homeSecondHalf ? awayTeam : homeTeam;
-    const weakerTeam = awaySecondHalf > homeSecondHalf ? homeTeam : awayTeam;
-    details.push(`${teamLabel(strongerTeam)} won the second half ${Math.max(awaySecondHalf, homeSecondHalf)}-${Math.min(awaySecondHalf, homeSecondHalf)} over ${teamLabel(weakerTeam)}.`);
+    if (winnerHalftime + loserHalftime > 0 && halftimeMargin <= -5) {
+      details.push(`${teamLabel(winner)} trailed by ${Math.abs(halftimeMargin)} points at halftime, then outscored ${teamLabel(loser)} ${winnerAfterHalftime}-${loserAfterHalftime} after the break.`);
+    } else if (winnerHalftime + loserHalftime > 0 && halftimeMargin >= 8 && Math.abs(afterHalftimeMargin) <= 5) {
+      details.push(`${teamLabel(winner)} led by ${halftimeMargin} points at halftime and carried that cushion to the finish.`);
+    } else if (winnerAfterHalftime + loserAfterHalftime > 0 && afterHalftimeMargin >= 10) {
+      details.push(`${teamLabel(winner)} pulled away by outscoring ${teamLabel(loser)} ${winnerAfterHalftime}-${loserAfterHalftime} after halftime.`);
+    }
   }
 
   const awayStats = cumulativeTeamStats.get(normalizeTeamId(awayTeam?.teamId));
@@ -1048,12 +1061,32 @@ function buildFinalGameRecap({
     }
   }
 
-  const leaders = buildLeaderSummary(cumulativePlayerStats, awayTeam, homeTeam);
+  const leaders = buildFinalLeaderSummary(cumulativePlayerStats, awayTeam, homeTeam);
   if (leaders) details.push(leaders);
   return {
     title,
     detail: details.join(" "),
   };
+}
+
+function buildFinalLeaderSummary(cumulativePlayerStats, awayTeam, homeTeam) {
+  const awayLeader = findTeamLeader(cumulativePlayerStats, normalizeTeamId(awayTeam?.teamId));
+  const homeLeader = findTeamLeader(cumulativePlayerStats, normalizeTeamId(homeTeam?.teamId));
+  const awayDescription = describeFinalLeader(awayLeader, awayTeam);
+  const homeDescription = describeFinalLeader(homeLeader, homeTeam);
+  if (awayDescription && homeDescription) return `${awayDescription}, while ${homeDescription}.`;
+  const onlyDescription = awayDescription || homeDescription;
+  return onlyDescription ? `${onlyDescription}.` : "";
+}
+
+function describeFinalLeader(player, team) {
+  if (!player) return "";
+  const extras = [];
+  if (player.rebounds >= 3) extras.push(formatStat(player.rebounds, "Reb"));
+  if (player.assists >= 3) extras.push(formatStat(player.assists, "Ast"));
+  if (player.threes >= 2) extras.push(`${player.threes} 3PM`);
+  const suffix = extras.length ? ` and ${extras.join(" and ")}` : "";
+  return `${player.name} led the ${teamLabel(team)} with ${formatStat(player.points, "Pt", "Pts")}${suffix}`;
 }
 
 function findTeamLeader(cumulativePlayerStats, teamId) {

@@ -7,7 +7,15 @@ import {
   getDefaultMatchupGraphicTeamId,
   getMatchupGraphicLineupKey,
   normalizeMatchupGraphicLineup,
+  swapMatchupGraphicPlayerSelection,
 } from "./matchupGraphicLineups.js";
+
+test("selecting an already-used player swaps the displaced player into the old slot", () => {
+  assert.deepEqual(
+    swapMatchupGraphicPlayerSelection(["trae", "bub", "bilal", "khris", "sarr"], 4, "trae"),
+    ["sarr", "bub", "bilal", "khris", "trae"]
+  );
+});
 
 test("match-up lineup keys are scoped by league and team", () => {
   assert.equal(getMatchupGraphicLineupKey("nba", "1610612764"), "nba:1610612764");

@@ -118,6 +118,16 @@
   padding: 0 4px;
 }
 
+.clockCell {
+  background: #000000;
+  font-size: calc(var(--pregame-time-font-size, 38px) * 0.82);
+  border-top: 1px solid #dfe3e8;
+}
+
+.clockCell .cellButton {
+  min-height: 58px;
+}
+
 .playerCell {
   min-height: 82px;
   background: #d3d3d3;
@@ -176,6 +186,12 @@
   text-align: center;
   font-size: clamp(28px, 2.2vw, 42px);
   height: 52px;
+}
+
+.inlineClockInput {
+  background: #000000;
+  height: 44px;
+  font-size: clamp(24px, 1.8vw, 36px);
 }
 
 .bottomRow {
@@ -362,6 +378,18 @@
 
 .addSlotTop {
   margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.clockToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  cursor: pointer;
 }
 
 .slotRows {
@@ -372,7 +400,7 @@
 
 .slotRow {
   display: grid;
-  grid-template-columns: 18px 86px 1fr 30px;
+  grid-template-columns: 18px 86px 86px 1fr 30px;
   gap: 8px;
   align-items: center;
   padding: 8px 0;
@@ -381,7 +409,7 @@
 
 .slotHeaderRow {
   display: grid;
-  grid-template-columns: 18px 86px 1fr 30px;
+  grid-template-columns: 18px 86px 86px 1fr 30px;
   gap: 8px;
   align-items: center;
   font-size: 13px;

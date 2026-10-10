@@ -480,9 +480,54 @@ test("a completed game ends with a primary full-game recap", () => {
   const recap = alerts.find((alert) => alert.category === "Final");
   assert.ok(recap);
   assert.equal(recap.title, "Nets defeated Thunder, 7-4");
-  assert.match(recap.detail, /John Ukomadu leads the Nets/);
+  assert.match(recap.detail, /John Ukomadu led the Nets/);
+  assert.doesNotMatch(recap.detail, /leads the/);
   assert.equal(selectPrimaryGameAlert(alerts)?.id, "final-game-recap");
   assert.equal(alerts.at(-1)?.id, "final-game-recap");
+});
+
+test("a final recap only mentions the second half when it materially shaped the result", () => {
+  const actions = [
+    scoringAction({ actionNumber: 1, orderNumber: 1, period: 1, scoreAway: "20", scoreHome: "15" }),
+    scoringAction({ actionNumber: 2, orderNumber: 2, period: 2, scoreAway: "63", scoreHome: "52" }),
+    scoringAction({ actionNumber: 3, orderNumber: 3, period: 3, scoreAway: "85", scoreHome: "75" }),
+    scoringAction({ actionNumber: 4, orderNumber: 4, period: 4, scoreAway: "109", scoreHome: "97" }),
+    { actionNumber: 5, orderNumber: 5, actionType: "period", subType: "end", period: 4, clock: "PT00M00.00S", scoreAway: "109", scoreHome: "97" },
+  ];
+  const alerts = buildGameAlerts({
+    game: { gameId: "0012600067", gameStatus: 3, period: 4, gameClock: "PT00M00.00S", playByPlayActions: actions },
+    awayTeam: { ...AWAY, teamName: "Jazz", teamTricode: "UTA", score: 109 },
+    homeTeam: { ...HOME, teamName: "Nuggets", teamTricode: "DEN", score: 97 },
+    basePlayers: [
+      { personId: 101, firstName: "Lauri", familyName: "Markkanen", teamId: AWAY.teamId },
+      { personId: 201, firstName: "Julian", familyName: "Strawther", teamId: HOME.teamId },
+    ],
+  });
+  const recap = alerts.find((alert) => alert.category === "Final");
+  assert.match(recap.detail, /led by 11 points at halftime and carried that cushion to the finish/);
+  assert.doesNotMatch(recap.detail, /won the second half/);
+  assert.doesNotMatch(recap.detail, /leads the/);
+});
+
+test("a final recap calls out a meaningful halftime comeback", () => {
+  const actions = [
+    scoringAction({ actionNumber: 1, orderNumber: 1, period: 2, scoreAway: "42", scoreHome: "50" }),
+    scoringAction({ actionNumber: 2, orderNumber: 2, period: 3, scoreAway: "70", scoreHome: "68" }),
+    scoringAction({ actionNumber: 3, orderNumber: 3, period: 4, scoreAway: "102", scoreHome: "94" }),
+    { actionNumber: 4, orderNumber: 4, actionType: "period", subType: "end", period: 4, clock: "PT00M00.00S", scoreAway: "102", scoreHome: "94" },
+  ];
+  const alerts = buildGameAlerts({
+    game: { gameId: "0022600001", gameStatus: 3, period: 4, gameClock: "PT00M00.00S", playByPlayActions: actions },
+    awayTeam: { ...AWAY, score: 102 },
+    homeTeam: { ...HOME, score: 94 },
+    basePlayers: [
+      { personId: 101, firstName: "John", familyName: "Ukomadu", teamId: AWAY.teamId },
+      { personId: 201, firstName: "Home", familyName: "Leader", teamId: HOME.teamId },
+    ],
+  });
+  const recap = alerts.find((alert) => alert.category === "Final");
+  assert.match(recap.detail, /trailed by 8 points at halftime/);
+  assert.match(recap.detail, /after the break/);
 });
 
 test("every timeout creates an alert with recent game context", () => {

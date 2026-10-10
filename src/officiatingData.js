@@ -137,6 +137,43 @@ export function specificCallCategory(event) {
   return normalizeOfficialCallCategory(event);
 }
 
+export function buildPreseasonValidationProfiles(callEvents = [], assignments = []) {
+  const profiles = new Map();
+  const ensureProfile = (row) => {
+    const officialId = String(row?.official_id || "").trim();
+    const name = String(row?.official_name || "").trim();
+    const key = officialId || name.toLowerCase();
+    if (!key || !name) return null;
+    if (!profiles.has(key)) {
+      profiles.set(key, {
+        id: officialId || name,
+        officialId,
+        name,
+        jerseyNumber: String(row?.jersey_number || "").trim(),
+        gameIds: new Set(),
+        calls: 0,
+      });
+    }
+    const profile = profiles.get(key);
+    const gameId = String(row?.game_id || "").trim();
+    if (gameId) profile.gameIds.add(gameId);
+    if (!profile.jerseyNumber && row?.jersey_number) {
+      profile.jerseyNumber = String(row.jersey_number).trim();
+    }
+    return profile;
+  };
+
+  asArray(assignments).forEach(ensureProfile);
+  asArray(callEvents).forEach((row) => {
+    const profile = ensureProfile(row);
+    if (profile) profile.calls += 1;
+  });
+
+  return [...profiles.values()]
+    .map(({ gameIds, ...profile }) => ({ ...profile, games: gameIds.size }))
+    .sort((left, right) => right.calls - left.calls || left.name.localeCompare(right.name));
+}
+
 function teamIdForTricode(team) {
   return NBA_TEAM_ID_BY_TRICODE[String(team || "").trim().toUpperCase()] || "";
 }
@@ -1611,6 +1648,25 @@ export async function fetchOfficiatingDashboardData({ season = DEFAULT_SEASON, i
       teams: Number(overviewRow.teams) || 0,
     };
 
+  let preseasonValidationProfiles = [];
+  if (!cumulative && !rollupOfficialProfiles.length && !detailOfficialProfiles.length) {
+    const [preseasonCallsResult, preseasonAssignmentsResult] = await Promise.all([
+      selectTable("nba_official_call_events", (query) => applySeasonFilter(query
+        .select(CALL_EVENT_COLUMNS), season)
+        .ilike("season_type", "Preseason")
+        .order("game_date", { ascending: false }), { maxRows: CALL_EVENT_LIMIT, requireComplete: true }),
+      selectTable("nba_official_game_assignments", (query) => applySeasonFilter(query
+        .select(ASSIGNMENT_COLUMNS), season)
+        .ilike("season_type", "Preseason")
+        .eq("is_alternate", false)
+        .order("game_date", { ascending: false }), { maxRows: ASSIGNMENT_LIMIT, requireComplete: true }),
+    ]);
+    preseasonValidationProfiles = buildPreseasonValidationProfiles(
+      preseasonCallsResult.data,
+      preseasonAssignmentsResult.data,
+    );
+  }
+
   return {
     season,
     unavailable: challengeEventsResult.unavailable || (!hasProfileRollups && !detailOfficialProfiles.length),
@@ -1623,6 +1679,7 @@ export async function fetchOfficiatingDashboardData({ season = DEFAULT_SEASON, i
       : detailTeamProfiles,
     challengeLog: challengeEvents,
     recentCallEvents: callEvents.slice(0, 50),
+    preseasonValidationProfiles,
   };
 }
 

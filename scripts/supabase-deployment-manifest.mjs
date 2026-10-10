@@ -25,6 +25,7 @@ const sqlOrder = [
   "officiating_insight_feedback.sql",
   "officiating_cache_rls.sql",
   "fix_officiating_stat_accuracy.sql",
+  "fix_challenge_foul_subtypes.sql",
   "remove_pgr_insights.sql",
   "challenge_context_tag_save_rpc.sql",
   "database_storage_audit.sql",

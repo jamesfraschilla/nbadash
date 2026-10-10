@@ -59,7 +59,7 @@
     {
       "order": 12,
       "path": "supabase/officiating_intelligence.sql",
-      "sha256": "a6abd52a0f7ac8d55cff800edb8b7b84360e36285070401f18db1ae2652bcad2"
+      "sha256": "1cc0d7a17370d366eb18a014df51c387a4282d9a308eb029e91182c076e9e866"
     },
     {
       "order": 13,
@@ -98,26 +98,31 @@
     },
     {
       "order": 20,
+      "path": "supabase/fix_challenge_foul_subtypes.sql",
+      "sha256": "3575dc3487a0762a9442f4a3bf9d4f88bcb9d2cf398787c20b69adea35ff9b87"
+    },
+    {
+      "order": 21,
       "path": "supabase/remove_pgr_insights.sql",
       "sha256": "3ace6b2e11e2e917917b4a8aef0a91326671fa9f71266f19e62cfad17e6721a3"
     },
     {
-      "order": 21,
+      "order": 22,
       "path": "supabase/challenge_context_tag_save_rpc.sql",
       "sha256": "0333462ca4e496aa67243176088732d5ea62869e9af95f5e0ac6bc65f8eed63e"
     },
     {
-      "order": 22,
+      "order": 23,
       "path": "supabase/database_storage_audit.sql",
       "sha256": "71b69f0988cbc0fc82bd4c227706ab5d2c105d63a5597776b3ac90f3686da995"
     },
     {
-      "order": 23,
+      "order": 24,
       "path": "supabase/operational_hardening.sql",
       "sha256": "69d464f37763becbfbb24f57f61d6b7794c6138b147613239c17f8485333c15e"
     },
     {
-      "order": 24,
+      "order": 25,
       "path": "supabase/wizards_analysis_prewarm_schedule.sql",
       "sha256": "1764a8ef8efd85d9462588d201be039dbcb56d2120bcee056b3bc171aabe8879"
     }

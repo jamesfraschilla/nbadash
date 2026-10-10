@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   attachDisplayCategoryMetrics,
   buildOfficialProfiles,
+  buildPreseasonValidationProfiles,
   buildTeamProfiles,
   eligibleRateMetric,
   OFFICIAL_CATEGORY_ROLLUP_COLUMNS,
@@ -19,6 +20,22 @@ import {
   isRaChargeEvent,
   isViolationCallCategory,
 } from "./officiatingCategoryNormalization.js";
+
+test("preseason validation profiles report ingestion without feeding career profiles", () => {
+  const rows = buildPreseasonValidationProfiles([
+    { game_id: "0012600009", official_id: "1148", official_name: "James Capers" },
+    { game_id: "0012600009", official_id: "1148", official_name: "James Capers" },
+    { game_id: "0012600009", official_id: "200608", official_name: "Brent Barnaky" },
+  ], [
+    { game_id: "0012600009", official_id: "1148", official_name: "James Capers", jersey_number: "19" },
+    { game_id: "0012600009", official_id: "200608", official_name: "Brent Barnaky", jersey_number: "36" },
+  ]);
+
+  assert.deepEqual(rows.map(({ name, games, calls }) => ({ name, games, calls })), [
+    { name: "James Capers", games: 1, calls: 2 },
+    { name: "Brent Barnaky", games: 1, calls: 1 },
+  ]);
+});
 
 test("preferAuthoritativeChallengeEvents keeps daily PBP rows until weekly official rows arrive", () => {
   const events = preferAuthoritativeChallengeEvents([
@@ -241,7 +258,16 @@ test("specificCallCategory displays detailed foul and violation types", () => {
     primary_category: "foul",
     descriptor: "offensive",
     area: "Left Corner 3",
-  }), "3-Pt");
+  }), "Offensive Foul");
+
+  assert.equal(challengeFoulSubtype({
+    challenge_type: "Foul",
+    initial_call: "Defensive Foul",
+  }, {
+    primary_category: "foul",
+    secondary_category: "personal",
+    area: "Above the Break 3",
+  }), "Foul on Floor");
 
   assert.equal(challengeFoulSubtype({
     challenge_type: "Foul",

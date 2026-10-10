@@ -153,6 +153,8 @@ export function shootingFoulLocationSubtype(event = {}, category = "") {
 export function challengeFoulSubtype(event = {}, matchedCall = null) {
   const call = matchedCall || event;
   const category = normalizeOfficialCallCategory(call);
+  const actionType = cleanCallCategoryPart(call.action_type || call.actionType);
+  const isShotContext = actionType === "2pt" || actionType === "3pt";
 
   const challengeSignal = [
     event.challenge_type,
@@ -168,7 +170,8 @@ export function challengeFoulSubtype(event = {}, matchedCall = null) {
     call.description,
   ].map(cleanCallCategoryPart).join(" ");
   const isFoulChallenge = challengeSignal.includes("foul");
-  if (isFoulChallenge) {
+  const isShootingFoul = category === "Shooting Foul" || category === "Restricted Area Shooting Foul" || category === "3-Pt Shooting Foul";
+  if (isFoulChallenge && (isShootingFoul || isShotContext)) {
     if (isRestrictedArea(call)) return "Restricted Area";
     if (isThreePointArea(call)) return "3-Pt";
   }

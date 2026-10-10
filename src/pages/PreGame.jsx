@@ -143,6 +143,8 @@ function normalizeSlots(rawSlots) {
     .map((slot) => ({
       id: String(slot?.id || crypto.randomUUID()),
       time: String(slot?.time || ""),
+      clock: normalizeArenaClock(slot?.clock),
+      showClock: Boolean(slot?.showClock),
       playerIds: Array.isArray(slot?.playerIds)
         ? slot.playerIds.slice(0, 3).map((value) => String(value || ""))
         : ["", ""],
@@ -367,6 +369,20 @@ function formatClockMinutes(totalMinutes) {
   return `${hour12}:${String(minute).padStart(2, "0")}`;
 }
 
+function formatArenaClock(totalMinutes) {
+  const safeMinutes = Math.max(0, Math.round(Number(totalMinutes) || 0));
+  return safeMinutes <= 90 ? `${safeMinutes}:00` : "";
+}
+
+function normalizeArenaClock(value) {
+  const match = String(value || "").trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return "";
+  const minutes = Number(match[1]);
+  const seconds = Number(match[2]);
+  if (minutes > 90 || seconds > 59) return "";
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
 function parseGameStart(game) {
   const utcValue = game?.gameTimeUTC;
   const etValue = game?.gameEt;
@@ -378,26 +394,31 @@ function parseGameStart(game) {
   return new Date();
 }
 
-function buildDefaultSlots(game, count = 8, options = {}) {
+export function buildDefaultSlots(game, count = 8, options = {}) {
+  const slotCount = Math.max(1, Number(count) || 1);
   if (options.standalone) {
-    const finalSlotMinutes = 19 * 60;
-    const firstSlotMinutes = finalSlotMinutes - ((count - 1) * 15);
-    return Array.from({ length: count }, (_, index) => ({
+    const finalSlotMinutes = (19 * 60) - 50;
+    const firstSlotMinutes = finalSlotMinutes - ((slotCount - 1) * 15);
+    return Array.from({ length: slotCount }, (_, index) => ({
       id: crypto.randomUUID(),
       time: formatClockMinutes(firstSlotMinutes + (index * 15)),
+      clock: formatArenaClock(53 + ((slotCount - 1 - index) * 15)),
+      showClock: false,
       playerIds: ["", ""],
     }));
   }
 
   const start = parseGameStart(game);
   const timeZone = getGameTimeZone(game);
-  const finalSlot = new Date(start.getTime() - (45 * 60 * 1000));
-  const firstSlot = new Date(finalSlot.getTime() - ((count - 1) * 15 * 60 * 1000));
-  return Array.from({ length: count }, (_, index) => {
+  const finalSlot = new Date(start.getTime() - (50 * 60 * 1000));
+  const firstSlot = new Date(finalSlot.getTime() - ((slotCount - 1) * 15 * 60 * 1000));
+  return Array.from({ length: slotCount }, (_, index) => {
     const slotTime = new Date(firstSlot.getTime() + (index * 15 * 60 * 1000));
     return {
       id: crypto.randomUUID(),
       time: formatTime(slotTime, timeZone),
+      clock: formatArenaClock(53 + ((slotCount - 1 - index) * 15)),
+      showClock: false,
       playerIds: ["", ""],
     };
   });
@@ -483,7 +504,7 @@ function drawStackedNames(context, names, x, y, width, height, size, color, weig
   });
 }
 
-function drawLandscapeExport(slots, playerById, headerLineTwo, logoImage, themeMode, scale = 1) {
+function drawLandscapeExport(slots, playerById, headerLineTwo, logoImage, themeMode, showClock = false, scale = 1) {
   const spec = EXPORT_SPECS.landscape;
   const colors = getExportColors(themeMode);
   const { canvas, context } = makeCanvas(spec.logicalWidth * scale, spec.logicalHeight * scale, colors.background);
@@ -493,12 +514,13 @@ function drawLandscapeExport(slots, playerById, headerLineTwo, logoImage, themeM
   drawCenteredText(context, headerLineTwo, 0, 108, spec.logicalWidth, 30, colors.chromeText, 700);
 
   const tableX = 12;
-  const tableY = 172;
+  const tableY = showClock ? 160 : 172;
   const tableWidth = spec.logicalWidth - 24;
   const colCount = Math.max(1, slots.length);
   const colWidth = tableWidth / colCount;
-  const timeHeight = 60;
-  const rowHeight = 76;
+  const timeHeight = showClock ? 48 : 60;
+  const clockHeight = showClock ? 42 : 0;
+  const rowHeight = showClock ? 64 : 76;
 
   slots.forEach((slot, index) => {
     const x = tableX + (index * colWidth);
@@ -506,9 +528,18 @@ function drawLandscapeExport(slots, playerById, headerLineTwo, logoImage, themeM
     context.fillRect(x, tableY, colWidth, timeHeight);
     context.strokeStyle = colors.border;
     context.strokeRect(x, tableY, colWidth, timeHeight);
-    drawCenteredTextMiddle(context, slot.time, x, tableY, colWidth, timeHeight, 26, colors.timeText, 700);
+    drawCenteredTextMiddle(context, slot.time, x, tableY, colWidth, timeHeight, showClock ? 22 : 26, colors.timeText, 700);
 
-    const row1Y = tableY + timeHeight;
+    const clockY = tableY + timeHeight;
+    if (showClock) {
+      context.fillStyle = colors.timeBg;
+      context.fillRect(x, clockY, colWidth, clockHeight);
+      context.strokeStyle = colors.border;
+      context.strokeRect(x, clockY, colWidth, clockHeight);
+      drawCenteredTextMiddle(context, slot.clock || "", x, clockY, colWidth, clockHeight, 21, colors.timeText, 700);
+    }
+
+    const row1Y = clockY + clockHeight;
     const row2Y = row1Y + rowHeight;
     const displays = slot.playerIds.slice(0, 3).map((id) => playerById.get(id)?.display || "");
     const visibleDisplays = displays.filter(Boolean);
@@ -536,7 +567,7 @@ function drawLandscapeExport(slots, playerById, headerLineTwo, logoImage, themeM
 
   if (logoImage) {
     const size = 40;
-    const y = tableY + timeHeight + (rowHeight * 2) + 26;
+    const y = tableY + timeHeight + clockHeight + (rowHeight * 2) + 24;
     const x = (spec.logicalWidth - size) / 2;
     context.drawImage(logoImage, x, y, size, size);
   }
@@ -544,7 +575,7 @@ function drawLandscapeExport(slots, playerById, headerLineTwo, logoImage, themeM
   return canvas;
 }
 
-function drawPortraitExport(slots, playerById, headerLineTwo, logoImage, themeMode, scale = 1) {
+function drawPortraitExport(slots, playerById, headerLineTwo, logoImage, themeMode, showClock = false, scale = 1) {
   const spec = EXPORT_SPECS.portrait;
   const colors = getExportColors(themeMode);
   const { canvas, context } = makeCanvas(spec.logicalWidth * scale, spec.logicalHeight * scale, colors.background);
@@ -553,11 +584,12 @@ function drawPortraitExport(slots, playerById, headerLineTwo, logoImage, themeMo
   drawCenteredText(context, "PRE-GAME COURT TIME", 0, 36, spec.logicalWidth, 44, colors.chromeText, 700);
   drawCenteredText(context, headerLineTwo.replace("@", "vs"), 0, 86, spec.logicalWidth, 27, colors.chromeText, 700);
 
-  const tableX = 30;
+  const tableX = showClock ? 18 : 30;
   const tableY = 132;
-  const tableWidth = spec.logicalWidth - 60;
-  const timeColWidth = 72;
-  const playerColWidth = (tableWidth - timeColWidth) / 2;
+  const tableWidth = showClock ? spec.logicalWidth - 36 : spec.logicalWidth - 60;
+  const timeColWidth = showClock ? 58 : 72;
+  const clockColWidth = showClock ? 58 : 0;
+  const playerColWidth = (tableWidth - timeColWidth - clockColWidth) / 2;
   const rowCount = Math.max(1, slots.length);
   const rowHeight = Math.floor((spec.logicalHeight - tableY - 104) / rowCount);
 
@@ -568,9 +600,18 @@ function drawPortraitExport(slots, playerById, headerLineTwo, logoImage, themeMo
     context.fillRect(tableX, y, timeColWidth, rowHeight);
     context.strokeStyle = colors.border;
     context.strokeRect(tableX, y, timeColWidth, rowHeight);
-    drawCenteredTextMiddle(context, slot.time, tableX, y, timeColWidth, rowHeight, 24, colors.timeText, 700);
+    drawCenteredTextMiddle(context, slot.time, tableX, y, timeColWidth, rowHeight, showClock ? 18 : 24, colors.timeText, 700);
 
-    const x1 = tableX + timeColWidth;
+    const clockX = tableX + timeColWidth;
+    if (showClock) {
+      context.fillStyle = colors.timeBg;
+      context.fillRect(clockX, y, clockColWidth, rowHeight);
+      context.strokeStyle = colors.border;
+      context.strokeRect(clockX, y, clockColWidth, rowHeight);
+      drawCenteredTextMiddle(context, slot.clock || "", clockX, y, clockColWidth, rowHeight, 18, colors.timeText, 700);
+    }
+
+    const x1 = clockX + clockColWidth;
     const x2 = x1 + playerColWidth;
     const displays = slot.playerIds.slice(0, 3).map((id) => playerById.get(id)?.display || "");
     const visibleDisplays = displays.filter(Boolean);
@@ -677,6 +718,8 @@ export default function PreGame({ standalone = false }) {
   const [slotDrafts, setSlotDrafts] = useState([]);
   const [inlineTimeSlotId, setInlineTimeSlotId] = useState(null);
   const [inlineTimeDraft, setInlineTimeDraft] = useState("");
+  const [inlineClockSlotId, setInlineClockSlotId] = useState(null);
+  const [inlineClockDraft, setInlineClockDraft] = useState("");
   const [activePlayerCell, setActivePlayerCell] = useState(null);
   const [playersHydrated, setPlayersHydrated] = useState(false);
   const [slotsHydrated, setSlotsHydrated] = useState(false);
@@ -920,6 +963,7 @@ export default function PreGame({ standalone = false }) {
     () => (standalone ? standaloneOpponentLine : buildHeaderLine(game)),
     [game, standalone, standaloneOpponentLine]
   );
+  const showClock = slots.some((slot) => Boolean(slot.showClock));
   const tableTypeScale = useMemo(() => {
     const slotCount = Math.max(1, slots.length || 1);
     if (slotCount >= 12) return { time: "26px", player: "21px", lineGap: "3px" };
@@ -1001,7 +1045,7 @@ export default function PreGame({ standalone = false }) {
     const portraitScale = EXPORT_SPECS.portrait.outputWidth / EXPORT_SPECS.portrait.logicalWidth;
     const landscapeScale = EXPORT_SPECS.landscape.outputWidth / EXPORT_SPECS.landscape.logicalWidth;
 
-    const portraitCanvas = drawPortraitExport(slots, playerById, headerLineTwo, logoImage, themeMode, portraitScale);
+    const portraitCanvas = drawPortraitExport(slots, playerById, headerLineTwo, logoImage, themeMode, showClock, portraitScale);
 
     if (formatKey === "portrait") {
       downloadCanvas(portraitCanvas, `pregame-${effectiveGameId || "court-time"}-portrait.png`);
@@ -1016,6 +1060,7 @@ export default function PreGame({ standalone = false }) {
         headerLineTwo,
         logoImage,
         "light",
+        showClock,
         landscapeScale
       );
       downloadCanvas(landscapeCanvas, `pregame-${effectiveGameId || "court-time"}-landscape.png`);
@@ -1191,6 +1236,44 @@ export default function PreGame({ standalone = false }) {
                 </th>
               ))}
             </tr>
+            {showClock ? <tr>
+              {slots.map((slot) => (
+                <th key={`clock-${slot.id}`} className={`${styles.timeCell} ${styles.clockCell}`}>
+                  {inlineClockSlotId === slot.id ? (
+                    <input
+                      autoFocus
+                      className={`${styles.inlineTimeInput} ${styles.inlineClockInput}`}
+                      value={inlineClockDraft}
+                      onChange={(event) => setInlineClockDraft(event.target.value)}
+                      onBlur={() => {
+                        updateSlotById(slot.id, (current) => ({ ...current, clock: normalizeArenaClock(inlineClockDraft) }));
+                        setInlineClockSlotId(null);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          updateSlotById(slot.id, (current) => ({ ...current, clock: normalizeArenaClock(inlineClockDraft) }));
+                          setInlineClockSlotId(null);
+                        }
+                        if (event.key === "Escape") setInlineClockSlotId(null);
+                      }}
+                      aria-label={`Arena clock for ${slot.time}`}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className={styles.cellButton}
+                      onClick={() => {
+                        setInlineClockSlotId(slot.id);
+                        setInlineClockDraft(slot.clock || "");
+                      }}
+                      aria-label={`Edit arena clock for ${slot.time}`}
+                    >
+                      {slot.clock || "--"}
+                    </button>
+                  )}
+                </th>
+              ))}
+            </tr> : null}
           </thead>
           <tbody>
             <tr>
@@ -1451,8 +1534,15 @@ export default function PreGame({ standalone = false }) {
                   const timeDate = new Date();
                   timeDate.setHours(Number.isFinite(hours) ? hours : 4, Number.isFinite(minutes) ? minutes : 30, 0, 0);
                   const added = new Date(timeDate.getTime() - (15 * 60 * 1000));
+                  const firstClockMinutes = Number.parseInt(String(first?.clock || "53:00").split(":")[0], 10);
                   setSlotDrafts((current) => [
-                    { id: crypto.randomUUID(), time: formatTime(added), playerIds: ["", ""] },
+                    {
+                      id: crypto.randomUUID(),
+                      time: formatTime(added),
+                      clock: formatArenaClock((Number.isFinite(firstClockMinutes) ? firstClockMinutes : 53) + 15),
+                      showClock: Boolean(first?.showClock),
+                      playerIds: ["", ""],
+                    },
                     ...current,
                   ]);
                 }}
@@ -1460,11 +1550,23 @@ export default function PreGame({ standalone = false }) {
               >
                 +
               </button>
+              <label className={styles.clockToggle}>
+                <input
+                  type="checkbox"
+                  checked={slotDrafts.some((slot) => Boolean(slot.showClock))}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setSlotDrafts((current) => current.map((slot) => ({ ...slot, showClock: checked })));
+                  }}
+                />
+                <span>Show Clock column/row</span>
+              </label>
             </div>
 
             <div className={styles.slotHeaderRow}>
               <span />
               <span className={styles.slotHeaderTime}>Time</span>
+              <span className={styles.slotHeaderTime}>Clock</span>
               <button
                 type="button"
                 className={styles.resetButton}
@@ -1495,6 +1597,17 @@ export default function PreGame({ standalone = false }) {
                       value={slot.time}
                       onChange={(event) => setSlotDrafts((current) => current.map((candidate, candidateIndex) => (
                         candidateIndex === index ? { ...candidate, time: event.target.value } : candidate
+                      )))}
+                    />
+                  </div>
+                  <div className={styles.slotTimeColumn}>
+                    <input
+                      className={styles.timeInput}
+                      value={slot.clock || ""}
+                      placeholder="53:00"
+                      aria-label={`Arena clock for slot ${index + 1}`}
+                      onChange={(event) => setSlotDrafts((current) => current.map((candidate, candidateIndex) => (
+                        candidateIndex === index ? { ...candidate, clock: event.target.value } : candidate
                       )))}
                     />
                   </div>
@@ -1558,6 +1671,8 @@ export default function PreGame({ standalone = false }) {
                 onClick={() => {
                   setSlots(slotDrafts.map((slot) => ({
                     ...slot,
+                    time: slot.time.trim(),
+                    clock: normalizeArenaClock(slot.clock),
                     playerIds: slot.playerIds.slice(0, 3),
                   })));
                   setSlotsOpen(false);

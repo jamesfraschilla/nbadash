@@ -1243,7 +1243,45 @@ function EmptyPanel({ title, children }) {
   );
 }
 
-function OfficialsTable({ rows, sort, onSort, onSelect }) {
+function PreseasonValidationTable({ rows, season }) {
+  return (
+    <section>
+      <div className={styles.notice}>
+        {season} currently contains preseason validation data only. These games are ingested for feed validation and are excluded from career statistics, percentiles, trends, and regular-season rollups.
+      </div>
+      <div className={`${styles.tableWrap} ${styles.summaryTableWrap}`}>
+        <table className={`${styles.table} ${styles.officialsTable}`}>
+          <thead>
+            <tr>
+              <th>Official</th>
+              <th>Games ingested</th>
+              <th>Calls ingested</th>
+              <th>Statistical status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.id}>
+                <td className={styles.identityCell}>
+                  <div className={styles.officialIdentity}>
+                    <RefereeHeadshot name={row.name} />
+                    {row.jerseyNumber ? <span className={styles.jerseyNumber}>#{row.jerseyNumber}</span> : null}
+                    <strong>{row.name}</strong>
+                  </div>
+                </td>
+                <td>{row.games}</td>
+                <td>{row.calls}</td>
+                <td>Validation only — excluded</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function OfficialsTable({ rows, sort, onSort, onSelect, season, preseasonValidationRows = [] }) {
   const metricRanks = useMemo(() => ({
     callsPerGame: buildMetricRankMap(rows, "callsPerGame"),
     foulsPerGame: buildMetricRankMap(rows, "foulsPerGame"),
@@ -1254,9 +1292,12 @@ function OfficialsTable({ rows, sort, onSort, onSelect }) {
   }), [rows]);
 
   if (!rows.length) {
+    if (preseasonValidationRows.length) {
+      return <PreseasonValidationTable rows={preseasonValidationRows} season={season} />;
+    }
     return (
       <EmptyPanel title="No official profiles yet">
-        Deploy the Supabase schema and run the 2025-26 officiating backfill to populate official call profiles.
+        No regular-season or playoff officiating data has been ingested for {season}.
       </EmptyPanel>
     );
   }
@@ -2404,6 +2445,8 @@ export default function Officiating() {
             onSelect={(profile) => {
               openOfficialProfile(profile);
             }}
+            season={season}
+            preseasonValidationRows={data?.preseasonValidationProfiles || []}
           />
         </div>
       ) : activeTab === "teams" ? (

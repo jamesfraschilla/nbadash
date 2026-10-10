@@ -8,6 +8,23 @@ export const MATCHUP_GRAPHIC_CUSTOM_PLAYER_ID = "__custom__";
 export const DEFAULT_NBA_MATCHUP_TEAM_ID = "1610612764";
 export const DEFAULT_GLEAGUE_MATCHUP_TEAM_ID = "1612709928";
 
+export function swapMatchupGraphicPlayerSelection(playerIds, targetIndex, nextPlayerId) {
+  const next = Array.from({ length: MATCHUP_GRAPHIC_PLAYER_SLOTS }, (_, index) => (
+    String(playerIds?.[index] || "").trim()
+  ));
+  if (!Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= next.length) return next;
+
+  const normalizedPlayerId = String(nextPlayerId || "").trim();
+  const displacedPlayerId = next[targetIndex];
+  const existingIndex = normalizedPlayerId && normalizedPlayerId !== MATCHUP_GRAPHIC_CUSTOM_PLAYER_ID
+    ? next.findIndex((personId, index) => index !== targetIndex && personId === normalizedPlayerId)
+    : -1;
+
+  next[targetIndex] = normalizedPlayerId;
+  if (existingIndex >= 0) next[existingIndex] = displacedPlayerId;
+  return next;
+}
+
 function normalizeLeague(value) {
   return String(value || "").trim() === "gleague" ? "gleague" : "nba";
 }

@@ -910,22 +910,6 @@ set challenge_sub_type = case
     calls.area,
     calls.area_detail
   ) = '3-Pt Shooting Foul' then '3-Pt'
-  when public.nba_normalized_official_call_category(
-    calls.primary_category,
-    calls.secondary_category,
-    calls.descriptor,
-    calls.sub_type,
-    calls.area,
-    calls.area_detail
-  ) = 'Offensive Foul'
-    and regexp_replace(lower(coalesce(calls.area, '') || ' ' || coalesce(calls.area_detail, '')), '[^a-z0-9]', '', 'g') like any (array[
-      '%3pt%',
-      '%3point%',
-      '%threepoint%',
-      '%corner3%',
-      '%abovethebreak3%'
-    ])
-    then '3-Pt'
   else null
 end
 from public.nba_official_call_events calls
