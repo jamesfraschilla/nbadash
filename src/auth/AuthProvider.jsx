@@ -231,7 +231,7 @@ export function AuthProvider({ children }) {
       } catch {
         // Local auth state is already cleared; a remote sign-out failure should not trap the user.
       } finally {
-        clearSupabaseAuthStorage();
+        await clearSupabaseAuthStorage();
       }
     },
     async completePasswordReset(nextPassword) {
