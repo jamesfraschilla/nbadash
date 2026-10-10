@@ -1,9 +1,13 @@
 export type RefereeAssignment = {
   game: string;
   crewChief: string;
+  crewChiefNumber: string;
   referee: string;
+  refereeNumber: string;
   umpire: string;
+  umpireNumber: string;
   alternate: string;
+  alternateNumber: string;
 };
 
 function decodeHtml(value: string) {
@@ -26,6 +30,10 @@ function officialName(value: string) {
   return value.replace(/\s*\(#\d+\)\s*/gi, "").trim();
 }
 
+function officialNumber(value: string) {
+  return value.match(/\(#(\d+)\)/)?.[1] || "";
+}
+
 export function parseRefereeAssignments(html: string): RefereeAssignment[] {
   const assignments: RefereeAssignment[] = [];
   const rows = String(html || "").match(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi) || [];
@@ -35,9 +43,13 @@ export function parseRefereeAssignments(html: string): RefereeAssignment[] {
     const assignment = {
       game: cells[0],
       crewChief: officialName(cells[1]),
+      crewChiefNumber: officialNumber(cells[1]),
       referee: officialName(cells[2]),
+      refereeNumber: officialNumber(cells[2]),
       umpire: officialName(cells[3]),
+      umpireNumber: officialNumber(cells[3]),
       alternate: officialName(cells[4] || ""),
+      alternateNumber: officialNumber(cells[4] || ""),
     };
     if (assignment.game && assignment.crewChief && assignment.referee && assignment.umpire) {
       assignments.push(assignment);

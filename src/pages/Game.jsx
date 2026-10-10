@@ -83,7 +83,11 @@ import {
   resolvePossessionDisplay,
 } from "../components/lateGamePanelHelpers.js";
 import { buildGameAlerts } from "../gameAlerts.js";
-import { fetchPublishedOrderForOfficials } from "../officialAssignments.js";
+import {
+  fetchPublishedAssignmentForGame,
+  fetchPublishedOrderForOfficials,
+  mergeOfficialsWithPublishedAssignment,
+} from "../officialAssignments.js";
 import {
   fetchRemotePregamePlayers,
   getPregameTeamScopeForTeam,
@@ -895,6 +899,11 @@ export default function Game({ variant = "full" }) {
   const isRotationsGame = isRotationsTeam(homeTeam) || isRotationsTeam(awayTeam);
   const shouldUseSharedAnalysisRecaps = isRotationsGame;
   const [publishedOfficialOrder, setPublishedOfficialOrder] = useState(null);
+  const [publishedOfficialAssignment, setPublishedOfficialAssignment] = useState(null);
+  const displayedOfficials = useMemo(
+    () => mergeOfficialsWithPublishedAssignment(officials, publishedOfficialAssignment),
+    [officials, publishedOfficialAssignment]
+  );
   const timeouts = game?.timeouts;
   const isPregame = game?.gameStatus === 1;
   const challenges = game?.challenges;
@@ -998,23 +1007,20 @@ export default function Game({ variant = "full" }) {
   useEffect(() => {
     let cancelled = false;
 
-    if (!officials?.length) {
-      setPublishedOfficialOrder(null);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    fetchPublishedOrderForOfficials(officials).then((publishedOrder) => {
-      if (!cancelled) {
-        setPublishedOfficialOrder(publishedOrder);
+    fetchPublishedAssignmentForGame(game).then(async (assignment) => {
+      if (cancelled) return;
+      setPublishedOfficialAssignment(assignment);
+      if (assignment?.crew?.length) {
+        setPublishedOfficialOrder(assignment.crew.map((official) => official.name));
+        return;
       }
+      setPublishedOfficialOrder(officials?.length ? await fetchPublishedOrderForOfficials(officials) : null);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [officials]);
+  }, [awayTeamId, gameId, homeTeamId, officials]);
 
   const basePlayers = useMemo(() => {
     const identifyBoxScorePlayers = (players, teamId) => (players || []).map((player, index) => ({
@@ -3832,13 +3838,13 @@ export default function Game({ variant = "full" }) {
         </section>
       )}
       <OfficialsExportPanel
-        officials={officials}
+        officials={displayedOfficials}
         gameId={gameId}
         publishedOrder={publishedOfficialOrder}
         gameTimeLocal={game?.gameEt}
       />
       <Officials
-        officials={officials}
+        officials={displayedOfficials}
         callsAgainst={callsAgainst}
         homeAbr={homeTeam.teamTricode}
         awayAbr={awayTeam.teamTricode}

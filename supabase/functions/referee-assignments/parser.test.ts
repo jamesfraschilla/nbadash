@@ -14,8 +14,12 @@ Deno.test("parses the official NBA referee assignment table", () => {
   assertEquals(parseRefereeAssignments(html), [{
     game: "Washington @ New York",
     crewChief: "Marc Davis",
+    crewChiefNumber: "8",
     referee: "Ray Acosta",
+    refereeNumber: "54",
     umpire: "Suyash Mehta",
+    umpireNumber: "47",
     alternate: "",
+    alternateNumber: "",
   }]);
 });

@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { matchPublishedAssignmentForGame } from "./officialAssignments.js";
+import { matchPublishedAssignmentForGame, mergeOfficialsWithPublishedAssignment } from "./officialAssignments.js";
 
 test("matches the official NBA assignment to a scheduled game", () => {
   const result = matchPublishedAssignmentForGame([{
     game: "Washington @ New York",
     crewChief: "Marc Davis",
+    crewChiefNumber: "8",
     referee: "Ray Acosta",
+    refereeNumber: "54",
     umpire: "Suyash Mehta",
+    umpireNumber: "47",
     alternate: "",
   }], {
     awayTeam: { teamCity: "Washington", teamName: "Wizards", teamTricode: "WAS" },
@@ -15,9 +18,25 @@ test("matches the official NBA assignment to a scheduled game", () => {
   });
 
   assert.deepEqual(result?.crew, [
-    { name: "Marc Davis", role: "Crew Chief" },
-    { name: "Ray Acosta", role: "Referee" },
-    { name: "Suyash Mehta", role: "Umpire" },
+    { name: "Marc Davis", jerseyNumber: "8", role: "Crew Chief", roleKey: "crewChief" },
+    { name: "Ray Acosta", jerseyNumber: "54", role: "Referee", roleKey: "referee" },
+    { name: "Suyash Mehta", jerseyNumber: "47", role: "Umpire", roleKey: "umpire" },
+  ]);
+});
+
+test("published assignments populate missing preseason officials and current numbers", () => {
+  const assignment = {
+    crew: [
+      { name: "Ben Taylor", jerseyNumber: "46", role: "Crew Chief", roleKey: "crewChief" },
+      { name: "Matt Kallio", jerseyNumber: "53", role: "Referee", roleKey: "referee" },
+      { name: "JP Primm", jerseyNumber: "82", role: "Umpire", roleKey: "umpire" },
+    ],
+  };
+  const merged = mergeOfficialsWithPublishedAssignment([], assignment);
+  assert.deepEqual(merged.map(({ name, jerseyNumber, roleKey }) => ({ name, jerseyNumber, roleKey })), [
+    { name: "Ben Taylor", jerseyNumber: "46", roleKey: "crewChief" },
+    { name: "Matt Kallio", jerseyNumber: "53", roleKey: "referee" },
+    { name: "JP Primm", jerseyNumber: "82", roleKey: "umpire" },
   ]);
 });
 

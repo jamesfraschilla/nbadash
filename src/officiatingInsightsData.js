@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient.js";
+import { fetchPublishedOfficials, normalizeNameKey } from "./officialAssignments.js";
 
 export const NBA_TEAM_OPTIONS = [
   ["ATL", "Atlanta Hawks"], ["BOS", "Boston Celtics"], ["BKN", "Brooklyn Nets"],
@@ -20,12 +21,15 @@ function requireSupabase() {
 
 export async function fetchOfficiatingInsightSimulatorOptions() {
   const client = requireSupabase();
-  const { data, error } = await client
-    .from("nba_official_profiles_cache")
-    .select("season,official_id,name,jersey_number,games")
-    .in("season", ["2024-25", "2025-26", "2026-27"])
-    .order("name", { ascending: true })
-    .limit(1000);
+  const [{ data, error }, publishedOfficials] = await Promise.all([
+    client
+      .from("nba_official_profiles_cache")
+      .select("season,official_id,name,jersey_number,games")
+      .in("season", ["2024-25", "2025-26", "2026-27"])
+      .order("name", { ascending: true })
+      .limit(1000),
+    fetchPublishedOfficials().catch(() => []),
+  ]);
   if (error) throw new Error(error.message);
   const byId = new Map();
   (data || []).forEach((row) => {
@@ -36,6 +40,18 @@ export async function fetchOfficiatingInsightSimulatorOptions() {
     current.games += Number(row.games) || 0;
     if (!current.jerseyNumber && row.jersey_number) current.jerseyNumber = row.jersey_number;
     byId.set(id, current);
+  });
+  const byName = new Map([...byId.values()].map((official) => [normalizeNameKey(official.name), official]));
+  publishedOfficials.forEach((published) => {
+    const nameKey = normalizeNameKey(published.name);
+    const existing = byName.get(nameKey);
+    if (existing) {
+      if (published.jerseyNumber) existing.jerseyNumber = published.jerseyNumber;
+      return;
+    }
+    const official = { ...published, games: 0 };
+    byId.set(official.id, official);
+    byName.set(nameKey, official);
   });
   return {
     officials: [...byId.values()].sort((left, right) => left.name.localeCompare(right.name)),

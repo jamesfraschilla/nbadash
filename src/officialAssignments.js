@@ -246,6 +246,10 @@ function stripNumberSuffix(value) {
     .trim();
 }
 
+function readNumberSuffix(value) {
+  return String(value || "").match(/\(#(\d+)\)/)?.[1] || "";
+}
+
 function parseAssignmentTables(html) {
   if (!html || typeof DOMParser === "undefined") return [];
 
@@ -261,9 +265,13 @@ function parseAssignmentTables(html) {
       .map((cells) => ({
         game: cells[0],
         crewChief: stripNumberSuffix(cells[1]),
+        crewChiefNumber: readNumberSuffix(cells[1]),
         referee: stripNumberSuffix(cells[2]),
+        refereeNumber: readNumberSuffix(cells[2]),
         umpire: stripNumberSuffix(cells[3]),
+        umpireNumber: readNumberSuffix(cells[3]),
         alternate: stripNumberSuffix(cells[4] || ""),
+        alternateNumber: readNumberSuffix(cells[4] || ""),
       }))
       .filter((row) => row.crewChief && row.referee && row.umpire);
 
@@ -281,9 +289,13 @@ function normalizeAssignmentsPayload(payload) {
     .map((row) => ({
       game: String(row?.game || "").trim(),
       crewChief: stripNumberSuffix(row?.crewChief || ""),
+      crewChiefNumber: String(row?.crewChiefNumber || "").trim(),
       referee: stripNumberSuffix(row?.referee || ""),
+      refereeNumber: String(row?.refereeNumber || "").trim(),
       umpire: stripNumberSuffix(row?.umpire || ""),
+      umpireNumber: String(row?.umpireNumber || "").trim(),
       alternate: stripNumberSuffix(row?.alternate || ""),
+      alternateNumber: String(row?.alternateNumber || "").trim(),
     }))
     .filter((row) => row.crewChief && row.referee && row.umpire);
 }
@@ -347,6 +359,28 @@ async function fetchPublishedAssignments() {
   return publishedAssignmentsPromise;
 }
 
+export async function fetchPublishedOfficials() {
+  const assignments = await fetchPublishedAssignments();
+  const officials = new Map();
+  assignments.forEach((assignment) => {
+    [
+      [assignment.crewChief, assignment.crewChiefNumber],
+      [assignment.referee, assignment.refereeNumber],
+      [assignment.umpire, assignment.umpireNumber],
+      [assignment.alternate, assignment.alternateNumber],
+    ].forEach(([name, jerseyNumber]) => {
+      const normalizedName = normalizeNameKey(name);
+      if (!normalizedName) return;
+      officials.set(normalizedName, {
+        id: `published:${normalizedName}`,
+        name: String(name || "").trim(),
+        jerseyNumber: String(jerseyNumber || "").trim(),
+      });
+    });
+  });
+  return [...officials.values()];
+}
+
 function assignmentTeamTokens(team) {
   return [
     team?.teamCity,
@@ -373,12 +407,49 @@ export function matchPublishedAssignmentForGame(assignments, game) {
   return {
     game: match.game,
     crew: [
-      { name: match.crewChief, role: "Crew Chief" },
-      { name: match.referee, role: "Referee" },
-      { name: match.umpire, role: "Umpire" },
+      { name: match.crewChief, jerseyNumber: match.crewChiefNumber || "", role: "Crew Chief", roleKey: "crewChief" },
+      { name: match.referee, jerseyNumber: match.refereeNumber || "", role: "Referee", roleKey: "referee" },
+      { name: match.umpire, jerseyNumber: match.umpireNumber || "", role: "Umpire", roleKey: "umpire" },
     ],
     alternate: match.alternate || "",
   };
+}
+
+export function mergeOfficialsWithPublishedAssignment(officials, publishedAssignment) {
+  const current = Array.isArray(officials) ? officials : [];
+  const publishedCrew = Array.isArray(publishedAssignment?.crew) ? publishedAssignment.crew : [];
+  if (!publishedCrew.length) return current;
+
+  const publishedByName = new Map(
+    publishedCrew.map((official, index) => [normalizeNameKey(official.name), { ...official, index }])
+  );
+  const merged = current.map((official) => {
+    const published = publishedByName.get(normalizeNameKey(getOfficialDisplayName(official)));
+    if (!published) return official;
+    publishedByName.delete(normalizeNameKey(published.name));
+    return {
+      ...official,
+      jerseyNum: published.jerseyNumber || official?.jerseyNum || official?.jerseyNumber || "",
+      jerseyNumber: published.jerseyNumber || official?.jerseyNumber || official?.jerseyNum || "",
+      roleKey: published.roleKey,
+      assignmentOrder: published.index + 1,
+    };
+  });
+
+  publishedCrew.forEach((official, index) => {
+    if (!publishedByName.has(normalizeNameKey(official.name))) return;
+    merged.push({
+      personId: `published:${normalizeNameKey(official.name)}`,
+      name: official.name,
+      fullName: official.name,
+      jerseyNum: official.jerseyNumber || "",
+      jerseyNumber: official.jerseyNumber || "",
+      role: official.role,
+      roleKey: official.roleKey,
+      assignmentOrder: index + 1,
+    });
+  });
+  return merged;
 }
 
 export async function fetchPublishedAssignmentForGame(game) {
