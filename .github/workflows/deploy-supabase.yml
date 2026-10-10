@@ -43,6 +43,19 @@ jobs:
           test -n "$SUPABASE_PROJECT_REF"
           test -n "$SUPABASE_URL"
           test -n "$SUPABASE_SERVICE_ROLE_KEY"
+      - name: Apply challenge foul subtype correction
+        env:
+          SQL_FILE: supabase/fix_challenge_foul_subtypes.sql
+        run: |
+          jq -n --rawfile query "$SQL_FILE" '{query: $query}' |
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            --header "Content-Type: application/json" \
+            --data-binary @- \
+            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query"
+      - name: Attest database scripts after successful SQL deployment
+        run: npm run supabase:production:record-database
       - name: Refuse deployment when database scripts are not attested in production
         run: npm run supabase:production:check-database
       - name: Deploy every repository Edge Function
