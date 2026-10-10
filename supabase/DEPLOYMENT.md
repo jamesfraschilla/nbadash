@@ -8,7 +8,7 @@ The application changes in this repository depend on database and Edge Function 
 
 The manifest hashes complete deployable function bundles, including shared modules and JSON data—not only `index.ts`. Changes under `supabase/` on `main` trigger `.github/workflows/deploy-supabase.yml`. The workflow refuses to deploy if database scripts do not match the separately attested production database checksum, then deploys every Edge Function and records its checksum. Apply intentional SQL changes in manifest order and run `node scripts/verify-supabase-production.mjs --record-database` before pushing. Run `npm run supabase:production:check` with service-role credentials to detect repository/production drift independently.
 
-The challenge foul subtype correction is idempotent and is applied by the deployment workflow before the database checksum is attested. The workflow records that checksum only after the Management API confirms the SQL request succeeded.
+The challenge foul subtype correction is idempotent and is applied by the deployment workflow before the database checksum is attested with `node scripts/verify-supabase-production.mjs --record-database`. The workflow records that checksum only after the Management API confirms the SQL request succeeded.
 
 Run the database scripts in the exact order recorded by the manifest. Do not deploy only the abbreviated list below; it is descriptive rather than exhaustive.
 

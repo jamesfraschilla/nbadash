@@ -55,7 +55,7 @@ jobs:
             --data-binary @- \
             "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query"
       - name: Attest database scripts after successful SQL deployment
-        run: npm run supabase:production:record-database
+        run: node scripts/verify-supabase-production.mjs --record-database
       - name: Refuse deployment when database scripts are not attested in production
         run: npm run supabase:production:check-database
       - name: Deploy every repository Edge Function
