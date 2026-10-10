@@ -127,7 +127,7 @@
       "sha256": "1764a8ef8efd85d9462588d201be039dbcb56d2120bcee056b3bc171aabe8879"
     }
   ],
-  "edgeConfigSha256": "888239741ba053884c15a87017c6aa58f5bf4ff7bd1ab61901d8f02ec13d96cc",
+  "edgeConfigSha256": "35c0e8985ac6eba567bb91fdd8b0ebffa74989d6f146b3c6fdba9aaf49c234f8",
   "edgeFunctions": [
     {
       "name": "admin-users",
@@ -167,7 +167,7 @@
     {
       "name": "game-analysis",
       "entrypoint": "supabase/functions/game-analysis/index.ts",
-      "sha256": "fd10fda1f23111290b277d2dbe5194531244f34b523d4f52b25ab78e760c992a",
+      "sha256": "45e39401ecfbeed4443325ffb4f22123dc91bc7664685ac2ebe92a0b6cd99a56",
       "sourceFiles": [
         "supabase/functions/_shared/officiatingInsights.ts",
         "supabase/functions/_shared/requestSecurity.ts",
@@ -313,7 +313,7 @@
     {
       "name": "wizards-analysis-prewarm",
       "entrypoint": "supabase/functions/wizards-analysis-prewarm/index.ts",
-      "sha256": "ae8bffe71b9517a97ac7b8d4dc3e3835725732e12e8929bf17a2e59acbb723eb",
+      "sha256": "56f19021adcb0c6a179f409e208b4a43b3b6e7ac5b3c1e3f23858da80be43428",
       "sourceFiles": [
         "supabase/functions/_shared/officiatingInsights.ts",
         "supabase/functions/_shared/requestSecurity.ts",

@@ -36,6 +36,12 @@ Deno.test("AI-backed endpoints enforce active-user rate limits and bounded input
     assert(source.includes("requireActiveRateLimitedUser"), `${name} has no active-user rate limit`);
     assert(source.includes("requestBodyTooLarge"), `${name} has no request-size guard`);
     const configBlock = configText.split(`[functions.${name}]`)[1]?.split("[functions.")[0] || "";
-    assert(/verify_jwt\s*=\s*true/.test(configBlock), `${name} must verify JWTs`);
+    if (name === "game-analysis") {
+      assert(/verify_jwt\s*=\s*false/.test(configBlock), "game-analysis must allow scheduled internal-service requests through the gateway");
+      assert(source.includes("x-internal-service-key"), "game-analysis has no internal-service credential guard");
+      assert(source.includes("internalServiceCredential === serviceRoleKey"), "game-analysis does not validate its internal-service credential");
+    } else {
+      assert(/verify_jwt\s*=\s*true/.test(configBlock), `${name} must verify JWTs`);
+    }
   }
 });
