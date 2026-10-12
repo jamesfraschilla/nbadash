@@ -1,0 +1,28 @@
+name: Scan Referee Assignments
+
+on:
+  schedule:
+    - cron: "3 9 * * *"
+      timezone: "America/New_York"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: referee-assignment-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Fetch and report today's published referee crews
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+        run: node scripts/check-referee-assignments.mjs

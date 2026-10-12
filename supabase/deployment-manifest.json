@@ -289,7 +289,7 @@
     {
       "name": "referee-assignments",
       "entrypoint": "supabase/functions/referee-assignments/index.ts",
-      "sha256": "35fb3d41b897fbe073ebb1a299af8a27c0f7dc19fc7508f541a11f74d65ee9fa",
+      "sha256": "d5a4e9d919424777c739e0c3f5cfc25468be77aeeb065ce1f17688b973b5924b",
       "sourceFiles": [
         "supabase/functions/_shared/officiatingInsights.ts",
         "supabase/functions/_shared/requestSecurity.ts",

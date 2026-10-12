@@ -20,9 +20,10 @@ Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (request.method !== "GET") return jsonResponse(405, { error: "Method not allowed." });
 
+  const forceRefresh = new URL(request.url).searchParams.get("refresh") === "1";
   try {
     const now = Date.now();
-    if (cache && now - cache.fetchedAt < CACHE_TTL_MS) {
+    if (!forceRefresh && cache && now - cache.fetchedAt < CACHE_TTL_MS) {
       return jsonResponse(200, { assignments: cache.assignments, fetchedAt: new Date(cache.fetchedAt).toISOString() });
     }
     const response = await fetch(ASSIGNMENTS_URL, {
@@ -35,7 +36,7 @@ Deno.serve(async (request) => {
     cache = { fetchedAt: now, assignments };
     return jsonResponse(200, { assignments, fetchedAt: new Date(now).toISOString() });
   } catch (error) {
-    if (cache?.assignments.length) {
+    if (!forceRefresh && cache?.assignments.length) {
       return jsonResponse(200, {
         assignments: cache.assignments,
         fetchedAt: new Date(cache.fetchedAt).toISOString(),
