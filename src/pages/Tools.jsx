@@ -61,6 +61,7 @@ import {
 } from "../matchupGraphicLineups.js";
 import { buildMatchupDefaultLineupMap } from "../matchupDefaultLineups.js";
 import { findWashingtonOpponentTeamId } from "../matchupGameDefaults.js";
+import { mergeRosterPools } from "../rosterPools.js";
 import { formatDateInputInTimeZone } from "../utils.js";
 import styles from "./Tools.module.css";
 
@@ -699,7 +700,8 @@ export default function Tools({ section = "tools" }) {
           teamId: String(player?.teamId || team.teamId).trim() || team.teamId,
         })).filter((player) => player.personId && player.fullName)
         : [];
-      next[team.teamId] = remoteRoster.length ? remoteRoster : getNbaTeamRoster(team.teamId);
+      const bundledRoster = getNbaTeamRoster(team.teamId);
+      next[team.teamId] = mergeRosterPools(bundledRoster, remoteRoster, team.teamId);
     });
     return next;
   }, [remoteNbaRostersPayload]);

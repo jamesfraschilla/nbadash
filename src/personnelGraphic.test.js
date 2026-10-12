@@ -51,7 +51,7 @@ test("personnel family names preserve suffixes without treating the suffix as th
 });
 
 test("constants expose the requested slots, stats, tags, and 3P colors", () => {
-  assert.equal(PERSONNEL_SLOT_COUNT, 18);
+  assert.equal(PERSONNEL_SLOT_COUNT, 25);
   assert.deepEqual(PERSONNEL_STAT_OPTIONS.map(({ label }) => label), [
     "PPG", "3P%", "RPG", "APG", "BPG", "SPG", "FTA", "Custom",
   ]);
@@ -109,14 +109,14 @@ test("Lefty is preserved as a personnel export tag", () => {
   assert.deepEqual(createPersonnelRow({ tags: ["Lefty", "unknown"] }).tags, ["lefty"]);
 });
 
-test("createPersonnelDraft produces 18 independent rows with the exact draft shape", () => {
+test("createPersonnelDraft produces 25 independent rows with the exact draft shape", () => {
   const draft = createPersonnelDraft({ teamId: 1610612764, season: "2025-26" });
 
   assert.deepEqual(Object.keys(draft), ["league", "teamId", "season", "statOrder", "rows"]);
   assert.equal(draft.teamId, "1610612764");
   assert.equal(draft.season, "2025-26");
   assert.deepEqual(draft.statOrder, DEFAULT_PERSONNEL_STAT_ORDER);
-  assert.equal(draft.rows.length, 18);
+  assert.equal(draft.rows.length, 25);
   assert.deepEqual(Object.keys(draft.rows[0]), [
     "id", "enabled", "personId", "teamId", "fullName", "firstName", "familyName", "jerseyNum",
     "selectedStats", "statOverrides", "customStatLabel", "tags", "threePointColor", "threePointColorEdited",
@@ -213,7 +213,7 @@ test("createPersonnelRow and hydration sanitize aliases while preserving 0 throu
     },
   });
 
-  assert.equal(hydrated.rows.length, 18);
+  assert.equal(hydrated.rows.length, 25);
   assert.deepEqual(hydrated.rows[0].selectedStats, []);
   assert.deepEqual(hydrated.rows[1].selectedStats, ["ppg", "rpg", "apg"]);
   assert.deepEqual(hydrated.rows[2].selectedStats, ["ppg", "rpg", "threePointPercentage", "apg", "bpg"]);
@@ -221,16 +221,16 @@ test("createPersonnelRow and hydration sanitize aliases while preserving 0 throu
   assert.equal(hydrated.rows[0].enabled, true);
 });
 
-test("hydration truncates to 18 rows and pads short payloads", () => {
-  const rows = Array.from({ length: 25 }, (_, index) => ({ playerId: String(index + 1) }));
+test("hydration truncates to 25 rows and pads short payloads", () => {
+  const rows = Array.from({ length: 30 }, (_, index) => ({ playerId: String(index + 1) }));
   const hydrated = hydratePersonnelDraft({ teamId: "team", rows });
 
-  assert.equal(hydrated.rows.length, 18);
-  assert.equal(hydrated.rows[17].personId, "18");
+  assert.equal(hydrated.rows.length, 25);
+  assert.equal(hydrated.rows[24].personId, "25");
   assert.equal(hydratePersonnelDraft({ rows: [{ playerId: "1" }] }).rows[1].personId, "");
 });
 
-test("populatePersonnelDraftFromRoster takes 18 unique players and pads blanks", () => {
+test("populatePersonnelDraftFromRoster takes up to 25 unique players and pads blanks", () => {
   const roster = [
     ...Array.from({ length: 20 }, (_, index) => ({
       personId: String(index + 1),
@@ -242,10 +242,11 @@ test("populatePersonnelDraftFromRoster takes 18 unique players and pads blanks",
   const populated = populatePersonnelDraftFromRoster(createPersonnelDraft(), roster, { teamId: "1610612764" });
 
   assert.equal(populated.teamId, "1610612764");
-  assert.equal(populated.rows.length, 18);
+  assert.equal(populated.rows.length, 25);
   assert.equal(populated.rows[0].personId, "1");
-  assert.equal(populated.rows[17].personId, "18");
-  assert.ok(populated.rows.every((row) => row.enabled));
+  assert.equal(populated.rows[19].personId, "20");
+  assert.ok(populated.rows.slice(0, 20).every((row) => row.enabled));
+  assert.ok(populated.rows.slice(20).every((row) => !row.enabled));
 
   const short = populatePersonnelDraftFromRoster(createPersonnelDraft(), roster.slice(0, 2), { teamId: "team" });
   assert.equal(short.rows[1].personId, "2");

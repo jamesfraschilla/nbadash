@@ -6,6 +6,7 @@ import { buildMatchupProfileMap, buildResolvedMatchupProfileMap, listMatchupProf
 import rostersByTeamId from "../data/rosters.json";
 import PlayerHeadshot from "./PlayerHeadshot.jsx";
 import { readLocalStorage, writeLocalStorage } from "../storage.js";
+import { resolvePersonnelFamilyName } from "../personnelGraphic.js";
 import { resolveDashboardMatchupLineup } from "../matchupDashboardLineups.js";
 import styles from "./MatchUps.module.css";
 
@@ -84,6 +85,13 @@ function extractFirstName(playerName = "") {
   const parts = String(playerName || "").trim().split(/\s+/).filter(Boolean);
   if (parts.length <= 1) return parts[0] || "";
   return parts.slice(0, -1).join(" ");
+}
+
+function extractFirstNameBeforeSuffix(playerName = "") {
+  const parts = String(playerName || "").trim().split(/\s+/).filter(Boolean);
+  while (parts.length > 1 && /^(jr\.?|sr\.?|ii|iii|iv|v)$/i.test(parts.at(-1))) parts.pop();
+  if (parts.length > 1) parts.pop();
+  return parts.join(" ");
 }
 
 function formatPlayerNameCase(value = "") {
@@ -548,8 +556,17 @@ function normalizeRosterPlayer(player, fallback = null, teamId = null, staticPos
     fallback?.name ||
     ""
   ).trim();
-  const firstName = String(player?.firstName || player?.givenName || "").trim() || extractFirstName(fullNameSource);
-  const familyName = String(player?.familyName || player?.lastName || "").trim() || extractLastName(fullNameSource);
+  const suppliedFirstName = String(player?.firstName || player?.givenName || "").trim();
+  const suppliedFamilyName = String(player?.familyName || player?.lastName || "").trim();
+  const parsedFamilyName = resolvePersonnelFamilyName(
+    suppliedFamilyName,
+    fullNameSource || [suppliedFirstName, suppliedFamilyName].filter(Boolean).join(" ")
+  );
+  const familyNameIsSuffix = /^(jr\.?|sr\.?|ii|iii|iv|v)$/i.test(suppliedFamilyName);
+  const firstName = familyNameIsSuffix
+    ? extractFirstNameBeforeSuffix(fullNameSource || [suppliedFirstName, suppliedFamilyName].filter(Boolean).join(" "))
+    : suppliedFirstName || extractFirstName(fullNameSource);
+  const familyName = parsedFamilyName || extractLastName(fullNameSource);
   return {
     personId,
     headshotPersonId,

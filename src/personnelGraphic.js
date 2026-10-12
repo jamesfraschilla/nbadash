@@ -1,4 +1,4 @@
-export const PERSONNEL_SLOT_COUNT = 18;
+export const PERSONNEL_SLOT_COUNT = 25;
 
 export const PERSONNEL_CUSTOM_STAT_KEY = "custom";
 
