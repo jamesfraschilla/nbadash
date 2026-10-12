@@ -1,6 +1,7 @@
 import { supabase } from "./supabaseClient.js";
 import { getGraphicHeadshotPublicUrl } from "./graphicHeadshotStorage.js";
 import { saveSharedStateRow } from "./sharedState.js";
+import { resolvePersonnelFamilyName } from "./personnelGraphic.js";
 
 export const MATCHUP_GRAPHIC_LINEUP_SCOPE_TYPE = "matchup_graphic_team_lineup";
 export const MATCHUP_GRAPHIC_PLAYER_SLOTS = 5;
@@ -63,10 +64,11 @@ function normalizePlayerSnapshot(value, teamId) {
   const personId = String(value?.personId || value?.playerId || "").trim();
   const fullName = String(value?.fullName || "").trim();
   if (!personId || !fullName) return null;
+  const suppliedFamilyName = String(value?.familyName || value?.lastName || "").trim();
   return {
     personId,
     firstName: String(value?.firstName || "").trim(),
-    familyName: String(value?.familyName || value?.lastName || "").trim(),
+    familyName: resolvePersonnelFamilyName(suppliedFamilyName, fullName),
     fullName,
     jerseyNum: String(value?.jerseyNum || value?.number || "").trim(),
     teamId: String(value?.teamId || teamId || "").trim(),

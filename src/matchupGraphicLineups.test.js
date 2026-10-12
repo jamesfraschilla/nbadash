@@ -22,6 +22,22 @@ test("match-up lineup keys are scoped by league and team", () => {
   assert.equal(getMatchupGraphicLineupKey("gleague", "1612709928"), "gleague:1612709928");
 });
 
+test("match-up lineup snapshots keep the surname together with a suffix-only feed field", () => {
+  const lineup = normalizeMatchupGraphicLineup({
+    teamId: "1610612751",
+    playerIds: ["person-1"],
+    players: [{
+      personId: "person-1",
+      fullName: "Michael Porter Jr.",
+      firstName: "Michael Porter",
+      familyName: "Jr.",
+      jerseyNum: "17",
+    }],
+  });
+
+  assert.equal(lineup.players[0].familyName, "Porter Jr.");
+});
+
 test("Washington is the default first NBA team for every user profile", () => {
   assert.equal(getDefaultMatchupGraphicTeamId("nba", []), "1610612764");
   assert.equal(getDefaultMatchupGraphicTeamId("nba", ["capital_city"]), "1610612764");

@@ -1010,7 +1010,7 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
       </div>
 
       {!teamId ? (
-        <p className={styles.notice}>Select a team to populate all {PERSONNEL_SLOT_COUNT} player slots.</p>
+        <p className={styles.notice}>Select a team to populate its current roster.</p>
       ) : statsError ? (
         <p className={styles.errorNotice}>{season} player stats could not be loaded. Try again before exporting.</p>
       ) : statsLoading || statsFetching ? (

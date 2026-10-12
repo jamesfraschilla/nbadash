@@ -230,7 +230,7 @@ test("hydration truncates to 25 rows and pads short payloads", () => {
   assert.equal(hydratePersonnelDraft({ rows: [{ playerId: "1" }] }).rows[1].personId, "");
 });
 
-test("populatePersonnelDraftFromRoster takes up to 25 unique players and pads blanks", () => {
+test("populatePersonnelDraftFromRoster creates rows only for unique roster players", () => {
   const roster = [
     ...Array.from({ length: 20 }, (_, index) => ({
       personId: String(index + 1),
@@ -242,16 +242,14 @@ test("populatePersonnelDraftFromRoster takes up to 25 unique players and pads bl
   const populated = populatePersonnelDraftFromRoster(createPersonnelDraft(), roster, { teamId: "1610612764" });
 
   assert.equal(populated.teamId, "1610612764");
-  assert.equal(populated.rows.length, 25);
+  assert.equal(populated.rows.length, 20);
   assert.equal(populated.rows[0].personId, "1");
   assert.equal(populated.rows[19].personId, "20");
   assert.ok(populated.rows.slice(0, 20).every((row) => row.enabled));
-  assert.ok(populated.rows.slice(20).every((row) => !row.enabled));
 
   const short = populatePersonnelDraftFromRoster(createPersonnelDraft(), roster.slice(0, 2), { teamId: "team" });
   assert.equal(short.rows[1].personId, "2");
-  assert.equal(short.rows[2].personId, "");
-  assert.equal(short.rows[2].enabled, false);
+  assert.equal(short.rows.length, 2);
 });
 
 test("populatePersonnelDraftFromRoster preserves configuration by player across reorder", () => {

@@ -61,7 +61,7 @@ import {
 } from "../matchupGraphicLineups.js";
 import { buildMatchupDefaultLineupMap } from "../matchupDefaultLineups.js";
 import { findWashingtonOpponentTeamId } from "../matchupGameDefaults.js";
-import { mergeRosterPools } from "../rosterPools.js";
+import { resolvePersonnelFamilyName } from "../personnelGraphic.js";
 import { formatDateInputInTimeZone } from "../utils.js";
 import styles from "./Tools.module.css";
 
@@ -691,19 +691,18 @@ export default function Tools({ section = "tools" }) {
     const next = {};
     NBA_TEAMS.forEach((team) => {
       const remoteRoster = Array.isArray(remoteTeams?.[team.teamId]?.players)
-        ? remoteTeams[team.teamId].players.map((player) => ({
+        ? remoteTeams[team.teamId].players.map((player) => {
+          const fullName = String(player?.fullName || "").trim();
+          return {
           personId: String(player?.personId || "").trim(),
           firstName: String(player?.firstName || "").trim(),
-          familyName: String(player?.familyName || "").trim(),
-          fullName: String(player?.fullName || "").trim(),
+          familyName: resolvePersonnelFamilyName(player?.familyName, fullName),
+          fullName,
           jerseyNum: String(player?.jerseyNum || "").trim(),
           teamId: String(player?.teamId || team.teamId).trim() || team.teamId,
-        })).filter((player) => player.personId && player.fullName)
+        }; }).filter((player) => player.personId && player.fullName)
         : [];
-      const bundledRoster = getNbaTeamRoster(team.teamId);
-      next[team.teamId] = remoteRoster.length >= 10
-        ? mergeRosterPools(bundledRoster, remoteRoster, team.teamId)
-        : remoteRoster.length ? remoteRoster : bundledRoster;
+      next[team.teamId] = remoteRoster.length ? remoteRoster : getNbaTeamRoster(team.teamId);
     });
     return next;
   }, [remoteNbaRostersPayload]);

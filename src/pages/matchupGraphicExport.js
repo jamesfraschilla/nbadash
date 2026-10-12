@@ -6,6 +6,7 @@ import {
   buildNbaFallbackHeadshotUrl,
   pixelBuffersMatch,
 } from "../nbaHeadshotFallback.js";
+import { resolvePersonnelFamilyName } from "../personnelGraphic.js";
 
 export const EXPORT_WIDTH = 1920;
 export const EXPORT_HEIGHT = 1080;
@@ -114,7 +115,7 @@ function drawCover(context, source, targetX, targetY, targetWidth, targetHeight)
 }
 
 function normalizeLastName(player) {
-  const explicitLast = String(player?.familyName || "").trim();
+  const explicitLast = resolvePersonnelFamilyName(player?.familyName, player?.fullName);
   if (explicitLast) return explicitLast.toUpperCase();
   const fullName = String(player?.fullName || "").trim();
   const parts = fullName.split(/\s+/).filter(Boolean);

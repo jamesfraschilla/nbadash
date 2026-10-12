@@ -427,7 +427,7 @@ export function populatePersonnelDraftFromRoster(draft, roster, options = {}) {
     teamId,
     season: normalizePersonnelSeason(optionSeason, currentDraft.season),
     statOrder: normalizePersonnelStatOrder(currentDraft.statOrder),
-    rows: Array.from({ length: PERSONNEL_SLOT_COUNT }, (_, index) => {
+    rows: Array.from({ length: rosterPlayers.length }, (_, index) => {
       const player = rosterPlayers[index];
       if (!player) return createPersonnelRow(index);
       const existing = configByPersonId.get(player.personId);
