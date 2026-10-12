@@ -893,6 +893,11 @@ export default function Game({ variant = "full" }) {
   });
 
   const { homeTeam, awayTeam, teamStats, boxScore, officials, callsAgainst } = game || {};
+  const publishedOfficialsInputKey = useMemo(() => (officials || []).map((official) => [
+    official?.personId || official?.officialId || official?.name || official?.fullName || "",
+    official?.jerseyNum || official?.jerseyNumber || "",
+    official?.roleKey || official?.role || "",
+  ].join(":")).join("|"), [officials]);
   const homeTeamId = homeTeam?.teamId ?? null;
   const awayTeamId = awayTeam?.teamId ?? null;
   const isWashingtonGame = isWashingtonTeam(homeTeam) || isWashingtonTeam(awayTeam);
@@ -1006,21 +1011,43 @@ export default function Game({ variant = "full" }) {
 
   useEffect(() => {
     let cancelled = false;
+    let assignmentFound = false;
+    let refreshInFlight = false;
+    let refreshTimer;
 
-    fetchPublishedAssignmentForGame(game).then(async (assignment) => {
-      if (cancelled) return;
-      setPublishedOfficialAssignment(assignment);
-      if (assignment?.crew?.length) {
-        setPublishedOfficialOrder(assignment.crew.map((official) => official.name));
-        return;
+    const refreshAssignment = async (forceRefresh = false) => {
+      if (refreshInFlight) return;
+      refreshInFlight = true;
+      try {
+        const assignment = await fetchPublishedAssignmentForGame(game, { forceRefresh });
+        if (cancelled) return;
+        setPublishedOfficialAssignment(assignment);
+        if (assignment?.crew?.length) {
+          assignmentFound = true;
+          if (refreshTimer) window.clearInterval(refreshTimer);
+          setPublishedOfficialOrder(assignment.crew.map((official) => official.name));
+          return;
+        }
+        setPublishedOfficialOrder(officials?.length ? await fetchPublishedOrderForOfficials(officials) : null);
+      } finally {
+        refreshInFlight = false;
       }
-      setPublishedOfficialOrder(officials?.length ? await fetchPublishedOrderForOfficials(officials) : null);
-    });
+    };
+
+    refreshAssignment();
+    if (game?.gameStatus === 1) {
+      // Officials may be published after a dashboard was opened. Check at a
+      // low cadence and force the upstream cache to refresh until crews appear.
+      refreshTimer = window.setInterval(() => {
+        if (!assignmentFound) refreshAssignment(true);
+      }, 2 * 60 * 1000);
+    }
 
     return () => {
       cancelled = true;
+      if (refreshTimer) window.clearInterval(refreshTimer);
     };
-  }, [awayTeamId, gameId, homeTeamId, officials]);
+  }, [awayTeamId, game?.gameStatus, gameId, homeTeamId, publishedOfficialsInputKey]);
 
   const basePlayers = useMemo(() => {
     const identifyBoxScorePlayers = (players, teamId) => (players || []).map((player, index) => ({

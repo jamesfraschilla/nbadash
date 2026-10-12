@@ -1,5 +1,6 @@
 import { playerHeadshotUrls } from "../api.js";
 import { loadFirstImage } from "./matchupGraphicExport.js";
+import { resolvePersonnelFamilyName } from "../personnelGraphic.js";
 
 const DEPTH_CHART_LAYOUT_SIZE = 400;
 export const DEPTH_CHART_EXPORT_SIZE = 1600;
@@ -13,18 +14,6 @@ const RED = "#e31837";
 const WHITE = "#f8fafc";
 const PLATE_FILL = "rgba(42, 48, 58, 0.74)";
 const PLATE_OUTLINE = "rgba(248, 250, 252, 0.4)";
-const NAME_SUFFIXES = new Set([
-  "JR",
-  "JUNIOR",
-  "SR",
-  "SENIOR",
-  "II",
-  "III",
-  "IV",
-  "V",
-  "VI",
-]);
-
 function setFont(context, size, weight = 700) {
   context.font = `${weight} ${size}px Arial, Helvetica, sans-serif`;
 }
@@ -89,34 +78,9 @@ function drawRoundedFill(context, x, y, width, height, radius, fill, outline = n
   }
 }
 
-function getLastName(slot) {
-  const explicit = String(slot?.lastName || "").trim();
-  if (hasNameBeforeSuffix(explicit)) return explicit.toUpperCase();
-  const fullName = String(slot?.fullName || "").trim();
-  const parsed = parseLastNameLabel(fullName);
-  return String(parsed || "").toUpperCase();
-}
-
-function normalizeNameToken(value) {
-  return String(value || "").trim().replace(/[.,]/g, "").toUpperCase();
-}
-
-function isNameSuffix(value) {
-  return NAME_SUFFIXES.has(normalizeNameToken(value));
-}
-
-function hasNameBeforeSuffix(value) {
-  return String(value || "").trim().split(/\s+/).some((part) => !isNameSuffix(part));
-}
-
-function parseLastNameLabel(fullName) {
-  const parts = String(fullName || "").trim().split(/\s+/).filter(Boolean);
-  const suffixes = [];
-  while (parts.length > 1 && isNameSuffix(parts[parts.length - 1])) {
-    suffixes.unshift(parts.pop());
-  }
-  const lastName = parts[parts.length - 1] || "";
-  return lastName && !isNameSuffix(lastName) ? [lastName, ...suffixes].join(" ") : "";
+export function resolveDepthChartLastName(slot) {
+  const familyName = resolvePersonnelFamilyName(slot?.lastName || slot?.familyName, slot?.fullName);
+  return String(familyName || "").toUpperCase();
 }
 
 function getNumberLabel(slot) {
@@ -235,7 +199,7 @@ function drawNbaHalfCourt(context) {
 
 function drawStarterNamePlate(context, x, y, slot, courtBounds) {
   const number = getNumberLabel(slot);
-  const lastName = getLastName(slot);
+  const lastName = resolveDepthChartLastName(slot);
   if (!number && !lastName) return;
 
   const maxWidth = 89;
@@ -307,7 +271,7 @@ function drawStarter(context, slot, image, courtPoint, courtBounds) {
 
 function drawBenchCellName(context, slot, x, y, width, height) {
   const number = getNumberLabel(slot);
-  const lastName = getLastName(slot);
+  const lastName = resolveDepthChartLastName(slot);
   drawCenteredText(context, number, x + 3, y + 9.5, width - 6, {
     size: 7.5,
     minSize: 5,

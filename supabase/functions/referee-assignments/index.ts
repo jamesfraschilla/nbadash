@@ -9,10 +9,14 @@ const corsHeaders = {
 };
 let cache: { fetchedAt: number; assignments: ReturnType<typeof parseRefereeAssignments> } | null = null;
 
-function jsonResponse(status: number, payload: Record<string, unknown>) {
+function jsonResponse(status: number, payload: Record<string, unknown>, maxAge = 300) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "public, max-age=300" },
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json",
+      "Cache-Control": status >= 400 || maxAge === 0 ? "no-store" : `public, max-age=${maxAge}`,
+    },
   });
 }
 
@@ -31,10 +35,23 @@ Deno.serve(async (request) => {
       signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) throw new Error(`NBA assignments request failed (${response.status}).`);
-    const assignments = parseRefereeAssignments(await response.text());
-    if (!assignments.length) throw new Error("The NBA assignments page returned no crews.");
+    const html = await response.text();
+    const assignments = parseRefereeAssignments(html);
+    if (!assignments.length) {
+      const rows = html.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi) || [];
+      const diagnostic = {
+        htmlLength: html.length,
+        tableCount: (html.match(/<table\b/gi) || []).length,
+        tableRowCount: rows.length,
+        assignmentShapedRowCount: rows.filter((row) => (row.match(/<td\b/gi) || []).length >= 4).length,
+      };
+      return jsonResponse(502, {
+        error: "The NBA assignments page returned no crews.",
+        diagnostic,
+      }, 0);
+    }
     cache = { fetchedAt: now, assignments };
-    return jsonResponse(200, { assignments, fetchedAt: new Date(now).toISOString() });
+    return jsonResponse(200, { assignments, fetchedAt: new Date(now).toISOString() }, forceRefresh ? 0 : 300);
   } catch (error) {
     if (!forceRefresh && cache?.assignments.length) {
       return jsonResponse(200, {

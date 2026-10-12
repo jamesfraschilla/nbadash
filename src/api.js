@@ -89,17 +89,34 @@ function readRosterFeedCache(league) {
   }
 }
 
-function mergeAndCacheRosterFeed(league, payload) {
+function mergeAndCacheRosterFeed(league, payload, requestedTeamIds = []) {
   const cached = readRosterFeedCache(league);
+  const responseTeams = payload?.teams && typeof payload.teams === "object" ? payload.teams : {};
+  const expectedTeamIds = requestedTeamIds.length
+    ? requestedTeamIds
+    : league === "nba"
+      ? NBA_TEAMS.map((team) => String(team.teamId))
+      : payload?.partial || !Object.keys(responseTeams).length
+        ? Object.keys(cached?.teams || {})
+        : Object.keys(responseTeams);
+  const fallbackTeamIds = expectedTeamIds.filter((teamId) => (
+    !Array.isArray(responseTeams?.[teamId]?.players)
+    && Array.isArray(cached?.teams?.[teamId]?.players)
+    && cached.teams[teamId].players.length > 0
+  ));
   const nextTeams = {
     ...(cached?.teams || {}),
-    ...(payload?.teams && typeof payload.teams === "object" ? payload.teams : {}),
+    ...responseTeams,
   };
   const nextPayload = {
     ...(cached || {}),
     ...(payload || {}),
     teams: nextTeams,
-    cacheFallback: Boolean(payload?.cacheFallback),
+    fallbackTeamIds: [...new Set([
+      ...(Array.isArray(payload?.fallbackTeamIds) ? payload.fallbackTeamIds : []),
+      ...fallbackTeamIds,
+    ])],
+    cacheFallback: Boolean(payload?.cacheFallback) || fallbackTeamIds.length > 0,
     cachedAt: payload?.cacheFallback ? rosterPayloadTimestampMs(payload) : Date.now(),
   };
   writeLocalStorage(`${ROSTER_CACHE_PREFIX}${league}`, JSON.stringify(nextPayload));
@@ -1894,7 +1911,7 @@ export async function fetchCurrentNbaRosters(options = {}) {
       timeoutMs: 15000,
       signal: options?.signal,
     });
-    return mergeAndCacheRosterFeed("nba", payload);
+    return mergeAndCacheRosterFeed("nba", payload, safeTeamIds);
   } catch (error) {
     if (options?.signal?.aborted) throw options.signal.reason || error;
     return cachedRosterFeedOrThrow("nba", error);

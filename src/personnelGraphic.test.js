@@ -38,6 +38,8 @@ test("personnel family names preserve suffixes without treating the suffix as th
   assert.equal(resolvePersonnelFamilyName("Holland", "Ron Holland II"), "Holland II");
   assert.equal(resolvePersonnelFamilyName("Holland II", "Ron Holland II"), "Holland II");
   assert.equal(resolvePersonnelFamilyName("O'Neale", "Royce O'Neale"), "O'Neale");
+  assert.equal(resolvePersonnelFamilyName("Junior", "Michael Porter Junior"), "Porter Junior");
+  assert.equal(resolvePersonnelFamilyName("VI", "Name Family VI"), "Family VI");
 
   const populated = populatePersonnelDraftFromRoster(createPersonnelDraft(), [{
     personId: "1641842",

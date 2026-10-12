@@ -643,14 +643,14 @@ export default function Tools({ section = "tools" }) {
     () => findWashingtonOpponentTeamId(selectedDateGames, nbaTeamIds),
     [nbaTeamIds, selectedDateGames]
   );
-  const { data: remoteNbaRostersPayload } = useQuery({
+  const { data: remoteNbaRostersPayload, isError: remoteNbaRostersError, isLoading: remoteNbaRostersLoading } = useQuery({
     queryKey: ["tools-current-nba-rosters", nbaRosterTeamIds],
     queryFn: ({ signal }) => fetchCurrentNbaRosters({ teamIds: nbaRosterTeamIds, signal }),
     enabled: needsNbaRosters,
     staleTime: CURRENT_ROSTER_STALE_TIME_MS,
     retry: 1,
   });
-  const { data: remoteGLeagueRostersPayload } = useQuery({
+  const { data: remoteGLeagueRostersPayload, isError: remoteGLeagueRostersError, isLoading: remoteGLeagueRostersLoading } = useQuery({
     queryKey: ["tools-current-gleague-rosters"],
     queryFn: ({ signal }) => fetchCurrentGLeagueRosters({ signal }),
     enabled: needsGLeagueRosters,
@@ -707,6 +707,11 @@ export default function Tools({ section = "tools" }) {
     return next;
   }, [remoteNbaRostersPayload]);
 
+  const nbaRosterFallbackTeamIds = useMemo(() => new Set(NBA_TEAMS
+    .filter((team) => !Array.isArray(remoteNbaRostersPayload?.teams?.[team.teamId]?.players)
+      || remoteNbaRostersPayload.teams[team.teamId].players.length === 0)
+    .map((team) => team.teamId)), [remoteNbaRostersPayload]);
+
   const gLeagueRosterMap = useMemo(() => {
     const remoteTeams = remoteGLeagueRostersPayload?.teams && typeof remoteGLeagueRostersPayload.teams === "object"
       ? remoteGLeagueRostersPayload.teams
@@ -727,6 +732,11 @@ export default function Tools({ section = "tools" }) {
     return next;
   }, [remoteGLeagueRostersPayload]);
 
+  const gLeagueRosterFallbackTeamIds = useMemo(() => new Set(GLEAGUE_TEAMS
+    .filter((team) => !Array.isArray(remoteGLeagueRostersPayload?.teams?.[team.teamId]?.players)
+      || remoteGLeagueRostersPayload.teams[team.teamId].players.length === 0)
+    .map((team) => team.teamId)), [remoteGLeagueRostersPayload]);
+
   const league = draftLeague;
   const availableTeams = league === "gleague" ? GLEAGUE_TEAMS : NBA_TEAMS;
   const scoutingLeague = scoutingDraft.league === "gleague" ? "gleague" : "nba";
@@ -744,7 +754,6 @@ export default function Tools({ section = "tools" }) {
     () => buildMatchupDefaultLineupMap(nbaMatchupDefaultsPayload, rosterMap, "nba"),
     [nbaMatchupDefaultsPayload, rosterMap]
   );
-  const remoteRostersPayload = league === "gleague" ? remoteGLeagueRostersPayload : remoteNbaRostersPayload;
   const leftRoster = useMemo(() => rosterMap[String(draft.leftTeamId || "")] || [], [draft.leftTeamId, rosterMap]);
   const rightRoster = useMemo(() => rosterMap[String(draft.rightTeamId || "")] || [], [draft.rightTeamId, rosterMap]);
   const leftTeam = useMemo(() => getLeagueTeam(draft.leftTeamId, league), [draft.leftTeamId, league]);
@@ -1680,9 +1689,24 @@ export default function Tools({ section = "tools" }) {
         </section>
       ) : activeTab === TOOL_TABS.GRAPHICS && activeGraphic === TOOL_TABS.MATCHUP ? (
         <section className={styles.workspace}>
-          {!remoteRostersPayload?.teams && league === "gleague" ? (
+          {(league === "nba"
+            ? Boolean(remoteNbaRostersPayload?.cacheFallback)
+              || [draft.leftTeamId, draft.rightTeamId].some((teamId) => nbaRosterFallbackTeamIds.has(String(teamId || "")))
+            : Boolean(remoteGLeagueRostersPayload?.cacheFallback)
+              || [draft.leftTeamId, draft.rightTeamId].some((teamId) => gLeagueRosterFallbackTeamIds.has(String(teamId || ""))))
+            && !(league === "nba" ? remoteNbaRostersLoading : remoteGLeagueRostersLoading) ? (
             <p className={styles.statusNote}>
-              Live G League rosters will appear here once the `gleague-rosters` Supabase function is deployed.
+              {league === "nba" && remoteNbaRostersPayload?.cacheFallback
+                ? "Live NBA roster refresh failed — showing a cached roster that may be outdated."
+                : league === "nba" && remoteNbaRostersError
+                  ? "Live NBA roster unavailable — showing the local roster snapshot, which may be outdated."
+                  : league === "gleague" && remoteGLeagueRostersPayload?.cacheFallback
+                    ? "Live G League roster refresh failed — showing cached roster data that may be outdated."
+                    : league === "gleague" && remoteGLeagueRostersError
+                      ? "Live G League roster unavailable. Check the connection and try again."
+                      : league === "gleague"
+                        ? "Live G League roster data is unavailable for one or both selected teams."
+                        : "Live NBA roster data is missing for one or both selected teams — showing the local roster snapshot, which may be outdated."}
             </p>
           ) : null}
           {sharedMatchupLineupsError ? (

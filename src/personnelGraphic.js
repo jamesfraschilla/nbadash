@@ -157,7 +157,7 @@ function normalizeString(value) {
   return String(value ?? "").trim();
 }
 
-const PERSONNEL_NAME_SUFFIXES = new Set(["jr", "sr", "ii", "iii", "iv", "v"]);
+const PERSONNEL_NAME_SUFFIXES = new Set(["jr", "junior", "sr", "senior", "ii", "iii", "iv", "v", "vi"]);
 
 function normalizeNamePart(value) {
   return normalizeString(value).toLowerCase().replace(/[.,]/g, "");

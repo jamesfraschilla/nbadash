@@ -14,8 +14,14 @@ for (let attempt = 1; attempt <= attempts; attempt += 1) {
     const payload = await response.json().catch(() => ({}));
 
     if (response.status === 502 && payload?.error === "The NBA assignments page returned no crews.") {
-      console.log(`Referee assignment scan completed at ${new Date().toISOString()}: the page had no listed crews.`);
-      process.exit(0);
+      const diagnostic = payload?.diagnostic || {};
+      if (Number(diagnostic.htmlLength) >= 1000
+        && Number(diagnostic.tableCount) > 0
+        && Number(diagnostic.assignmentShapedRowCount) === 0) {
+        console.log(`Referee assignment scan completed at ${new Date().toISOString()}: the NBA page is intact but has no listed crews today.`);
+        process.exit(0);
+      }
+      throw new Error(`Assignment parser found no crews in a page with assignment-shaped rows (HTML ${diagnostic.htmlLength || 0} chars, ${diagnostic.tableCount || 0} tables, ${diagnostic.tableRowCount || 0} rows, ${diagnostic.assignmentShapedRowCount || 0} assignment-shaped rows).`);
     }
     if (!response.ok) throw new Error(payload?.error || `Assignment endpoint returned HTTP ${response.status}.`);
 

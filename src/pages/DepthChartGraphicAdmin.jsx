@@ -19,22 +19,11 @@ import {
   TOOL_RECORD_TYPES,
 } from "../toolVault.js";
 import { DEPTH_CHART_EXPORT_SIZE, exportDepthChartGraphic, renderDepthChartGraphic } from "./depthChartGraphicExport.js";
+import { resolvePersonnelFamilyName } from "../personnelGraphic.js";
 import styles from "./Tools.module.css";
 
 const CUSTOM_VALUE = "__custom__";
 const POSITION_VALUES = ["1", "2", "3", "4", "5"];
-const NAME_SUFFIXES = new Set([
-  "JR",
-  "JUNIOR",
-  "SR",
-  "SENIOR",
-  "II",
-  "III",
-  "IV",
-  "V",
-  "VI",
-]);
-
 function buildSlot(id, position, group) {
   return {
     id,
@@ -129,32 +118,7 @@ function formatPlayerOption(player) {
 }
 
 function getPlayerLastName(player) {
-  const familyName = String(player?.familyName || "").trim();
-  if (hasNameBeforeSuffix(familyName)) return familyName;
-  const fullName = String(player?.fullName || "").trim();
-  return parseLastNameLabel(fullName) || fullName;
-}
-
-function normalizeNameToken(value) {
-  return String(value || "").trim().replace(/[.,]/g, "").toUpperCase();
-}
-
-function isNameSuffix(value) {
-  return NAME_SUFFIXES.has(normalizeNameToken(value));
-}
-
-function hasNameBeforeSuffix(value) {
-  return String(value || "").trim().split(/\s+/).some((part) => !isNameSuffix(part));
-}
-
-function parseLastNameLabel(fullName) {
-  const parts = String(fullName || "").trim().split(/\s+/).filter(Boolean);
-  const suffixes = [];
-  while (parts.length > 1 && isNameSuffix(parts[parts.length - 1])) {
-    suffixes.unshift(parts.pop());
-  }
-  const lastName = parts[parts.length - 1] || "";
-  return lastName && !isNameSuffix(lastName) ? [lastName, ...suffixes].join(" ") : "";
+  return resolvePersonnelFamilyName(player?.familyName, player?.fullName) || String(player?.fullName || "").trim();
 }
 
 function getTeamFileLabel(team) {

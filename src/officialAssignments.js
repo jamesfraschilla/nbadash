@@ -44,7 +44,7 @@ const ORDER_PATHS = [
 
 let publishedAssignmentsPromise = null;
 let publishedAssignmentsFetchedAt = 0;
-const PUBLISHED_ASSIGNMENTS_CACHE_TTL_MS = 5 * 60 * 1000;
+const PUBLISHED_ASSIGNMENTS_CACHE_TTL_MS = 60 * 1000;
 const OFFICIALS_ASSIGNMENTS_URL = "https://official.nba.com/referee-assignments/";
 const SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL;
 
@@ -300,10 +300,14 @@ function normalizeAssignmentsPayload(payload) {
     .filter((row) => row.crewChief && row.referee && row.umpire);
 }
 
-async function fetchAssignmentsViaProxy() {
+async function fetchAssignmentsViaProxy({ forceRefresh = false } = {}) {
   for (const proxyUrl of ASSIGNMENTS_PROXY_URLS) {
     try {
-      const response = await fetch(proxyUrl, { cache: "no-store" });
+      const requestUrl = new URL(proxyUrl, typeof window === "undefined" ? "https://localhost/" : window.location.href);
+      if (forceRefresh && requestUrl.pathname.includes("referee-assignments")) {
+        requestUrl.searchParams.set("refresh", "1");
+      }
+      const response = await fetch(requestUrl.toString(), { cache: "no-store" });
       if (!response.ok) continue;
       const payload = await response.json();
       const assignments = normalizeAssignmentsPayload(payload);
@@ -331,10 +335,10 @@ async function fetchFirstWorkingAssignments() {
   return [];
 }
 
-async function fetchPublishedAssignments() {
-  if (!publishedAssignmentsPromise || Date.now() - publishedAssignmentsFetchedAt >= PUBLISHED_ASSIGNMENTS_CACHE_TTL_MS) {
+async function fetchPublishedAssignments({ forceRefresh = false } = {}) {
+  if (forceRefresh || !publishedAssignmentsPromise || Date.now() - publishedAssignmentsFetchedAt >= PUBLISHED_ASSIGNMENTS_CACHE_TTL_MS) {
     publishedAssignmentsFetchedAt = Date.now();
-    publishedAssignmentsPromise = fetchAssignmentsViaProxy()
+    publishedAssignmentsPromise = fetchAssignmentsViaProxy({ forceRefresh })
       .then((proxyAssignments) => {
         if (proxyAssignments.length) return proxyAssignments;
         return fetchFirstWorkingAssignments();
@@ -452,8 +456,8 @@ export function mergeOfficialsWithPublishedAssignment(officials, publishedAssign
   return merged;
 }
 
-export async function fetchPublishedAssignmentForGame(game) {
-  return matchPublishedAssignmentForGame(await fetchPublishedAssignments(), game);
+export async function fetchPublishedAssignmentForGame(game, options = {}) {
+  return matchPublishedAssignmentForGame(await fetchPublishedAssignments(options), game);
 }
 
 export async function fetchPublishedOrderForOfficials(officials) {
