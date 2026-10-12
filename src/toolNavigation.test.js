@@ -2,10 +2,20 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   GRAPHIC_TOOL_TABS,
+  COACHING_TOOL_TABS,
+  normalizeCoachingToolTab,
   TOOL_TABS,
   isGraphicToolTab,
   normalizeGraphicToolTab,
 } from "./toolNavigation.js";
+
+test("coaching tools are ordered and default to no selection", () => {
+  assert.deepEqual(COACHING_TOOL_TABS.map((tab) => tab.label), ["Playcalls", "Custom Requests", "Visual Drill"]);
+  for (const value of [undefined, "", "analytics-report", "scouting", "late-game", "unknown"]) {
+    assert.equal(normalizeCoachingToolTab(value), "");
+  }
+  assert.equal(normalizeCoachingToolTab("playcalls"), "playcalls");
+});
 
 test("all configured graphic tabs are accepted by shared navigation helpers", () => {
   const expected = [

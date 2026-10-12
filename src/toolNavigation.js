@@ -1,4 +1,5 @@
 export const TOOL_TABS = {
+  PLAYCALLS: "playcalls",
   GRAPHICS: "graphics",
   MATCHUP: "matchup",
   COVERAGE: "coverage",
@@ -14,6 +15,16 @@ export const TOOL_TABS = {
   CUSTOM_REQUESTS: "custom-requests",
   VISUAL_DRILL: "visual-drill",
 };
+
+export const COACHING_TOOL_TABS = [
+  { key: TOOL_TABS.PLAYCALLS, label: "Playcalls" },
+  { key: TOOL_TABS.CUSTOM_REQUESTS, label: "Custom Requests" },
+  { key: TOOL_TABS.VISUAL_DRILL, label: "Visual Drill" },
+];
+
+export function normalizeCoachingToolTab(value) {
+  return COACHING_TOOL_TABS.some((tab) => tab.key === value) ? value : "";
+}
 
 export const GRAPHIC_TOOL_TABS = [
   { key: TOOL_TABS.ROTATIONS, label: "Rotations", title: "Rotations Graphics" },

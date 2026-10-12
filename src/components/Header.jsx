@@ -125,7 +125,7 @@ export default function Header({ theme, onToggleTheme, onSignOut, profile, isAdm
                   Officiating Intelligence
                 </Link>
                 {canUseTools ? (
-                  <Link to="/tools?tab=visual-drill" className={styles.dropdownItem} role="menuitem" onClick={() => setIsMenuOpen(false)}>
+                  <Link to="/tools" className={styles.dropdownItem} role="menuitem" onClick={() => setIsMenuOpen(false)}>
                     Tools
                   </Link>
                 ) : null}

@@ -46,6 +46,8 @@ import { exportMatchupGraphic, renderMatchupGraphicCanvas } from "./matchupGraph
 import { requestCustomDashboardRequest } from "../customRequestsData.js";
 import {
   GRAPHIC_TOOL_TABS,
+  COACHING_TOOL_TABS,
+  normalizeCoachingToolTab,
   TOOL_TABS,
   isGraphicToolTab,
   normalizeGraphicToolTab,
@@ -64,6 +66,8 @@ import { findWashingtonOpponentTeamId } from "../matchupGameDefaults.js";
 import { resolvePersonnelFamilyName } from "../personnelGraphic.js";
 import { formatDateInputInTimeZone } from "../utils.js";
 import styles from "./Tools.module.css";
+
+const PlaycallTracking = lazy(() => import("./PlaycallTracking.jsx"));
 
 const DepthChartGraphicAdmin = lazy(() => import("./DepthChartGraphicAdmin.jsx"));
 const CoverageGraphicAdmin = lazy(() => import("./CoverageGraphicAdmin.jsx"));
@@ -545,6 +549,7 @@ function ToolColumn({
 }
 
 export default function Tools({ section = "tools" }) {
+  const [playcallsEditing, setPlaycallsEditing] = useState(false);
   const matchupPreviewRef = useRef(null);
   const { accountsEnabled, user, profile, hasFeature, isAdmin } = useAuth();
   const queryClient = useQueryClient();
@@ -588,17 +593,7 @@ export default function Tools({ section = "tools" }) {
     ? TOOL_TABS.GRAPHICS
     : rawTab === TOOL_TABS.GRAPHICS
       ? TOOL_TABS.GRAPHICS
-    : rawTab === TOOL_TABS.LATE_GAME && canUseAdminTools
-    ? TOOL_TABS.LATE_GAME
-    : rawTab === TOOL_TABS.SCOUTING && canUseAdminTools
-      ? TOOL_TABS.SCOUTING
-    : rawTab === TOOL_TABS.CUSTOM_REQUESTS
-      ? TOOL_TABS.CUSTOM_REQUESTS
-    : rawTab === TOOL_TABS.ANALYTICS_REPORT
-      ? TOOL_TABS.ANALYTICS_REPORT
-    : rawTab === TOOL_TABS.VISUAL_DRILL
-      ? TOOL_TABS.VISUAL_DRILL
-      : TOOL_TABS.VISUAL_DRILL;
+    : normalizeCoachingToolTab(rawTab);
   const legacyGraphicTab = isGraphicToolTab(rawTab)
     ? rawTab
     : "";
@@ -1164,19 +1159,11 @@ export default function Tools({ section = "tools" }) {
   };
 
   const handleToolTabChange = (nextTab) => {
+    if (playcallsEditing && nextTab !== TOOL_TABS.PLAYCALLS
+      && !window.confirm("Discard unpublished playcall edits and switch tools?")) return;
     const normalized = nextTab === TOOL_TABS.GRAPHICS
       ? TOOL_TABS.GRAPHICS
-    : nextTab === TOOL_TABS.LATE_GAME && canUseAdminTools
-      ? TOOL_TABS.LATE_GAME
-      : nextTab === TOOL_TABS.SCOUTING && canUseAdminTools
-        ? TOOL_TABS.SCOUTING
-      : nextTab === TOOL_TABS.CUSTOM_REQUESTS
-        ? TOOL_TABS.CUSTOM_REQUESTS
-      : nextTab === TOOL_TABS.ANALYTICS_REPORT
-        ? TOOL_TABS.ANALYTICS_REPORT
-      : nextTab === TOOL_TABS.VISUAL_DRILL
-        ? TOOL_TABS.VISUAL_DRILL
-        : TOOL_TABS.VISUAL_DRILL;
+    : normalizeCoachingToolTab(nextTab);
     const nextParams = new URLSearchParams(params);
     nextParams.set("tab", normalized);
     if (normalized === TOOL_TABS.GRAPHICS && !nextParams.get("graphic")) {
@@ -1625,45 +1612,16 @@ export default function Tools({ section = "tools" }) {
 
       {activeTab === TOOL_TABS.GRAPHICS ? null : (
       <div className={styles.tabBar}>
+        {COACHING_TOOL_TABS.map((tab) => (
         <button
+          key={tab.key}
           type="button"
-          className={`${styles.tabButton} ${activeTab === TOOL_TABS.VISUAL_DRILL ? styles.tabButtonActive : ""}`}
-          onClick={() => handleToolTabChange(TOOL_TABS.VISUAL_DRILL)}
+          className={`${styles.tabButton} ${activeTab === tab.key ? styles.tabButtonActive : ""}`}
+          onClick={() => handleToolTabChange(tab.key)}
         >
-          Visual Drill
+          {tab.label}
         </button>
-        <button
-          type="button"
-          className={`${styles.tabButton} ${activeTab === TOOL_TABS.ANALYTICS_REPORT ? styles.tabButtonActive : ""}`}
-          onClick={() => handleToolTabChange(TOOL_TABS.ANALYTICS_REPORT)}
-        >
-          Analytics Report
-        </button>
-        {canUseAdminTools ? (
-        <button
-          type="button"
-          className={`${styles.tabButton} ${activeTab === TOOL_TABS.SCOUTING ? styles.tabButtonActive : ""}`}
-          onClick={() => handleToolTabChange(TOOL_TABS.SCOUTING)}
-        >
-          Pre-Game Scouting Packet
-        </button>
-        ) : null}
-        {canUseAdminTools ? (
-        <button
-          type="button"
-          className={`${styles.tabButton} ${activeTab === TOOL_TABS.LATE_GAME ? styles.tabButtonActive : ""}`}
-          onClick={() => handleToolTabChange(TOOL_TABS.LATE_GAME)}
-        >
-          Late Game Matrix
-        </button>
-        ) : null}
-        <button
-          type="button"
-          className={`${styles.tabButton} ${activeTab === TOOL_TABS.CUSTOM_REQUESTS ? styles.tabButtonActive : ""}`}
-          onClick={() => handleToolTabChange(TOOL_TABS.CUSTOM_REQUESTS)}
-        >
-          Custom Requests
-        </button>
+        ))}
       </div>
       )}
 
@@ -1683,7 +1641,11 @@ export default function Tools({ section = "tools" }) {
       ) : null}
 
       <Suspense fallback={<section className={styles.workspace}><div className={styles.statusNote}>Loading...</div></section>}>
-      {activeTab === TOOL_TABS.GRAPHICS && !activeGraphic ? (
+      {!activeTab ? (
+        <section className={styles.graphicsLanding}>Select a Tool from above</section>
+      ) : activeTab === TOOL_TABS.PLAYCALLS ? (
+        <PlaycallTracking onEditingChange={setPlaycallsEditing} />
+      ) : activeTab === TOOL_TABS.GRAPHICS && !activeGraphic ? (
         <section className={styles.graphicsLanding}>
           Select a graphics tool from above.
         </section>

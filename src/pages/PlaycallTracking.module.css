@@ -1,0 +1,11 @@
+.workspace { padding: 24px; border: 1px solid var(--border); border-radius: 16px; background: var(--panel); color: var(--text); }
+.teamPicker { display: flex; flex-direction: column; gap: 8px; max-width: 420px; }
+.teamPicker select, .buttons button, .workspace > section > button { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px; }
+.heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 24px; }
+.buttons { display: flex; gap: 10px; }
+.tableWrap { overflow-x: auto; margin: 16px 0; }
+.table { width: 100%; min-width: 650px; table-layout: fixed; border-collapse: collapse; }
+.shortColumn { width: 25%; }
+.table th, .table td { border: 1px solid var(--border); padding: 12px; text-align: left; vertical-align: top; }
+.table td span { display: block; min-height: 56px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.table textarea { display: block; box-sizing: border-box; width: 100%; resize: vertical; font: inherit; line-height: 1.5; color: inherit; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px; }
