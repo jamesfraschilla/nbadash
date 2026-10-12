@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   fetchGame,
   fetchGamesByDate,
@@ -78,18 +78,23 @@ export function gameQueryOptions(gameId, options = {}) {
 }
 
 export function useMinutes(gameId, options = {}) {
-  return useQuery(minutesQueryOptions(gameId, options));
+  const client = useQueryClient();
+  return useQuery(minutesQueryOptions(gameId, {
+    ...options,
+    getGame: () => client.getQueryData(queryKeys.game(gameId)),
+  }));
 }
 
 export function minutesQueryOptions(gameId, options = {}) {
   const {
     optional = false,
+    getGame,
     ...queryOptions
   } = options;
 
   return {
     queryKey: queryKeys.minutes(gameId),
-    queryFn: () => fetchMinutes(gameId, { optional }),
+    queryFn: () => fetchMinutes(gameId, { optional, game: getGame?.() }),
     enabled: Boolean(gameId) && (queryOptions.enabled ?? true),
     ...queryOptions,
   };

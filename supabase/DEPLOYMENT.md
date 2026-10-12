@@ -10,6 +10,8 @@ The manifest hashes complete deployable function bundles, including shared modul
 
 The challenge foul subtype correction is a historical data repair, not an Edge Function deployment step. Do not rerun it automatically on unrelated deployments; apply it only when explicitly needed, then attest the database checksum after verifying the repair succeeded.
 
+`playcall_note_sharing.sql` adds Playcall to the existing public-note access rules while retaining owner/admin management, atomic saves, conflict checks, and version history. It changes no existing note records and verifies content fingerprints in the same transaction. To apply it, manually run **Deploy Supabase** with `apply_note_sharing` enabled (the deployment token needs Database read-write permission). Automatic pushes never apply this SQL. Existing Reminder tags are displayed as Officiating without a bulk database rewrite.
+
 Run the database scripts in the exact order recorded by the manifest. Do not deploy only the abbreviated list below; it is descriptive rather than exhaustive.
 
 1. `account_data_atomic.sql` — atomic note/drawing saves and sharing, note/drawing conflict revisions, drawing version snapshots, and tool-vault revision checks.

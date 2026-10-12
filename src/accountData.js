@@ -1,5 +1,6 @@
 import { supabase } from "./supabaseClient.js";
 import { loadLegacyLocalNotes } from "./notesStorage.js";
+import { normalizeNoteTags, hasPublicNoteTag } from "./noteTags.js";
 
 const DEFAULT_ACCOUNT_RECORD_LIMIT = 200;
 const MAX_ACCOUNT_RECORD_LIMIT = 500;
@@ -26,28 +27,12 @@ function normalizeTextArray(values) {
   );
 }
 
-const PUBLIC_NOTE_TAG = "Halftime";
-const LEGACY_PUBLIC_NOTE_TAG = "Concept";
-
-function normalizeNoteTags(values) {
-  return Array.from(
-    new Set(
-      normalizeTextArray(values).map((tag) => (
-        tag === LEGACY_PUBLIC_NOTE_TAG ? PUBLIC_NOTE_TAG : tag
-      ))
-    )
-  );
-}
-
-function hasPublicNoteTag(tags) {
-  return normalizeNoteTags(tags).includes(PUBLIC_NOTE_TAG);
-}
-
 function normalizeNoteRow(note) {
   if (!note) return note;
   return {
     ...note,
     tags: normalizeNoteTags(note.tags),
+    sharing_scope: hasPublicNoteTag(note.tags) ? "shared" : note.sharing_scope,
   };
 }
 

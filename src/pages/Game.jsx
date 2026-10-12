@@ -1,6 +1,7 @@
 import { Link, useSearchParams, useParams } from "react-router-dom";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toggleNewNoteTag } from "../noteTags.js";
 import { createNote } from "../accountData.js";
 import { listCachedGameAnalyses, requestGameAnalysis, requestGameAnalysisPrewarm } from "../analysisData.js";
 import {
@@ -1587,6 +1588,10 @@ export default function Game({ variant = "full" }) {
     try {
       setSavingNewNote(true);
       await createNote(payload, user?.id);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["notes", gameId] }),
+        queryClient.invalidateQueries({ queryKey: ["owned-notes", user?.id] }),
+      ]);
       closeAddNote();
     } catch (error) {
       setSavingNewNote(false);
@@ -3792,8 +3797,8 @@ export default function Game({ variant = "full" }) {
                 </div>
               </div>
             </div>
-            <details className={styles.noteTags}>
-              <summary>Tags</summary>
+            <div className={styles.noteTags}>
+              <div>Tags</div>
               <div className={styles.noteTagsGrid}>
                 {NOTE_TAG_OPTIONS.map((tag) => {
                   const checked = noteForm.tags.includes(tag);
@@ -3803,10 +3808,11 @@ export default function Game({ variant = "full" }) {
                         type="checkbox"
                         checked={checked}
                         onChange={(event) => {
-                          const next = event.target.checked
-                            ? [...noteForm.tags, tag]
-                            : noteForm.tags.filter((value) => value !== tag);
-                          setNoteForm((prev) => ({ ...prev, tags: next }));
+                          const checked = event.target.checked;
+                          setNoteForm((prev) => toggleNewNoteTag(
+                            prev, tag, checked,
+                            noteSourceAction ? buildNoteFormFromAction(noteSourceAction).text : null
+                          ));
                         }}
                       />
                       <span>{tag}</span>
@@ -3814,7 +3820,7 @@ export default function Game({ variant = "full" }) {
                   );
                 })}
               </div>
-            </details>
+            </div>
             <textarea
               rows={4}
               placeholder={noteSourceAction ? "Add context for this play..." : "Type your note..."}

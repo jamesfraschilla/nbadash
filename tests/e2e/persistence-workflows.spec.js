@@ -2,6 +2,17 @@ import { expect, test } from "@playwright/test";
 
 const appUrl = (hash) => `http://127.0.0.1:4174/nbadash/#${hash}`;
 
+test("Vault Notes remains selected when Graphics access is enabled", async ({ page }) => {
+  await page.route("**/functions/v1/**", (route) => route.fulfill({ status: 503, contentType: "application/json", body: "{}" }));
+  await page.route("**/rest/v1/**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
+  await page.goto(appUrl("/me?tab=graphics"));
+  await page.getByRole("button", { name: "Notes", exact: true }).click();
+  await expect(page).toHaveURL(/tab=notes/);
+  await expect(page.getByText("You have not saved any notes yet.", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("You have not saved any notes yet.", { exact: true })).toBeVisible();
+});
+
 test("Graphics opens on a neutral landing page with Rotations first", async ({ page }) => {
   await page.goto(appUrl("/graphics"));
   const tabs = page.locator('[aria-label="Graphic tools"] button');

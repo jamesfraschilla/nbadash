@@ -158,6 +158,11 @@ export default function Minutes() {
       </section>
 
       <section className={styles.periods}>
+        {data.openingStintRepair?.status === "unresolved" ? (
+          <div className={styles.stateMessage}>
+            The minutes feed is missing the opening Q1 lineup interval. {data.openingStintRepair.reason}
+          </div>
+        ) : null}
         {periods.map((period) => (
           <div key={period.period} className={styles.period}>
             <div className={styles.periodTitle}>{period.periodLabel}</div>

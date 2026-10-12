@@ -4,17 +4,7 @@ import { normalizeClock } from "./utils.js";
 export const NOTE_PERIOD_OPTIONS = ["--", "Q1", "Q2", "Q3", "Q4", "OT"];
 export const NOTE_MINUTE_OPTIONS = ["--", ...Array.from({ length: 12 }, (_, idx) => String(idx))];
 export const NOTE_SECOND_OPTIONS = ["--", ...Array.from({ length: 60 }, (_, idx) => String(idx).padStart(2, "0"))];
-export const NOTE_TAG_OPTIONS = [
-  "Reminder",
-  "Playcall",
-  "Injury",
-  "Good",
-  "Bad",
-  "Offense",
-  "Defense",
-  "Halftime",
-  "Misc",
-];
+export { NOTE_TAG_OPTIONS } from "./noteTags.js";
 
 export function describePlayByPlayAction(action) {
   if (action?.description) return action.description;

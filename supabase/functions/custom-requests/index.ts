@@ -1,6 +1,7 @@
 import rosterSnapshotByTeam from "./rosterSnapshotByTeam.json" with { type: "json" };
 import leagueTeamGameKillsBySeason from "./leagueTeamGameKillsBySeason.json" with { type: "json" };
 import { requestBodyTooLarge, requireActiveRateLimitedUser } from "../_shared/requestSecurity.ts";
+import { needsOpeningStintRepair, normalizeOpeningMinutesData } from "../_shared/minutesNormalization.ts";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const OPENAI_API_URL = "https://api.openai.com/v1/responses";
@@ -1011,7 +1012,11 @@ async function fetchMinutesWithRetry(gameId: string, maxAttempts = 3) {
 
 async function fetchGameMinutes(gameId: string) {
   if (!GAME_MINUTES_CACHE.has(gameId)) {
-    const request = fetchMinutesWithRetry(gameId).catch((error) => {
+    const request = fetchMinutesWithRetry(gameId).then(async (minutes) => (
+      needsOpeningStintRepair(minutes)
+        ? normalizeOpeningMinutesData(minutes, await fetchGameDetails(gameId))!
+        : normalizeOpeningMinutesData(minutes, null)!
+    )).catch((error) => {
       GAME_MINUTES_CACHE.delete(gameId);
       throw error;
     });

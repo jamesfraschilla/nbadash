@@ -8,6 +8,11 @@ on:
       - "scripts/supabase-deployment-manifest.mjs"
       - "scripts/verify-supabase-production.mjs"
   workflow_dispatch:
+    inputs:
+      apply_note_sharing:
+        description: Apply the Playcall note-sharing function migration (preserves existing note data)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -43,6 +48,19 @@ jobs:
           test -n "$SUPABASE_PROJECT_REF"
           test -n "$SUPABASE_URL"
           test -n "$SUPABASE_SERVICE_ROLE_KEY"
+      - name: Apply Playcall note sharing and verify saved content is unchanged
+        if: github.event_name == 'workflow_dispatch' && inputs.apply_note_sharing
+        run: |
+          jq -n --rawfile query supabase/playcall_note_sharing.sql '{query: $query}' |
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            --header "Content-Type: application/json" \
+            --data-binary @- \
+            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query"
+      - name: Attest database after successful note-sharing migration
+        if: github.event_name == 'workflow_dispatch' && inputs.apply_note_sharing
+        run: node scripts/verify-supabase-production.mjs --record-database
       - name: Refuse deployment when database scripts are not attested in production
         run: npm run supabase:production:check-database
       - name: Deploy every repository Edge Function

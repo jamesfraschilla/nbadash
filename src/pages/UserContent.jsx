@@ -19,18 +19,8 @@ import {
   TOOL_RECORD_TYPES,
 } from "../toolVault.js";
 import styles from "./UserContent.module.css";
+import { NOTE_TAG_OPTIONS as DEFAULT_NOTE_TAG_OPTIONS } from "../noteTags.js";
 
-const DEFAULT_NOTE_TAG_OPTIONS = [
-  "Reminder",
-  "Playcall",
-  "Injury",
-  "Good",
-  "Bad",
-  "Offense",
-  "Defense",
-  "Halftime",
-  "Misc",
-];
 
 const VAULT_RECORD_LIMIT = 200;
 const GRAPHIC_TOOL_RECORD_TYPES = [
@@ -269,7 +259,9 @@ export default function UserContent() {
   const canUseAdminTools = !accountsEnabled || isAdmin;
   const vaultUserId = user?.id || (!accountsEnabled ? "guest" : "");
   const rawTab = params.get("tab");
-  const tab = rawTab === "drawings"
+  const tab = rawTab === "notes"
+    ? "notes"
+    : rawTab === "drawings"
     ? "drawings"
     : (rawTab === "graphics" || rawTab === "rotations") && canUseGraphics
       ? "graphics"
@@ -295,7 +287,7 @@ export default function UserContent() {
     [canUseAdminTools, tab]
   );
 
-  const { data: notes = [], isLoading: loadingNotes } = useQuery({
+  const { data: notes = [], isLoading: loadingNotes, error: notesError } = useQuery({
     queryKey: ["owned-notes", user?.id],
     queryFn: () => listOwnedNotes(user.id, { limit: VAULT_RECORD_LIMIT }),
     enabled: Boolean(user?.id && tab === "notes"),
@@ -722,6 +714,8 @@ export default function UserContent() {
         <section className={styles.section}>
           {loadingNotes ? (
             <div className={styles.emptyState}>Loading notes...</div>
+          ) : notesError ? (
+            <div className={styles.emptyState}>Unable to load your notes. Your saved notes have not been changed. Please try again.</div>
           ) : filteredNotes.length === 0 ? (
             <div className={styles.emptyState}>You have not saved any notes yet.</div>
           ) : (

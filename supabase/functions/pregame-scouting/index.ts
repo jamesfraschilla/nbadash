@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { normalizeOpeningMinutesData } from "../_shared/minutesNormalization.ts";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
@@ -342,7 +343,7 @@ async function fetchGameBundle(gameCard: Record<string, unknown>) {
   return {
     gameId,
     game,
-    minutesData,
+    minutesData: normalizeOpeningMinutesData(minutesData, game),
     gameDate: extractGameDateKey(gameCard, ""),
   };
 }

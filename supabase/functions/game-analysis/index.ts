@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { requestBodyTooLarge, requireActiveRateLimitedUser } from "../_shared/requestSecurity.ts";
+import { normalizeOpeningMinutesData } from "../_shared/minutesNormalization.ts";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
@@ -1316,7 +1317,7 @@ function buildLineupInsights(
   const upsertPlayer = (teamId: string, player: Record<string, unknown>, margin: number, seconds: number) => {
     const personId = String(player?.personId || "");
     const name = playerDisplayName(player);
-    if (!personId || !name || seconds <= 0) return;
+    if (!personId || !name || seconds < 0 || (seconds === 0 && margin === 0)) return;
     const key = `${teamId}:${personId}`;
     if (!playerSplits.has(key)) {
       playerSplits.set(key, {
@@ -1345,7 +1346,7 @@ function buildLineupInsights(
     margin: number,
     seconds: number,
   ) => {
-    if (!teamId || seconds <= 0) return;
+    if (!teamId || seconds < 0 || (seconds === 0 && margin === 0)) return;
     const key = lineupKey(players);
     const label = describeLineup(players);
     if (!key || !label) return;
@@ -1375,10 +1376,13 @@ function buildLineupInsights(
       const overlapStart = Math.max(rangeStartElapsed, stintStart);
       const overlapEnd = Math.min(rangeEndElapsed, stintEnd);
       const overlapSeconds = overlapEnd - overlapStart;
-      if (overlapSeconds <= 0) continue;
+      const boundaryScoring = stintStart === stintEnd
+        && stintStart >= rangeStartElapsed && stintStart <= rangeEndElapsed
+        && (safeNumber(stint.homeScore, 0) > 0 || safeNumber(stint.awayScore, 0) > 0);
+      if (overlapSeconds <= 0 && !boundaryScoring) continue;
 
       const fullSeconds = Math.max(1, stintEnd - stintStart);
-      const weight = overlapSeconds / fullSeconds;
+      const weight = boundaryScoring ? 1 : overlapSeconds / fullSeconds;
       const weightedHomeMargin = safeNumber(stint.plusMinus, 0) * weight;
       const weightedAwayMargin = -weightedHomeMargin;
 
@@ -2587,6 +2591,7 @@ export async function handleRequest(req: Request) {
       minutesData = await requestJson(`${API_BASE}/games/${gameId}/minutes`).catch(() => null);
     }
 
+    minutesData = normalizeOpeningMinutesData(minutesData, game);
     const features = buildFeaturePayload(game, minutesData, range);
     const templateAnalysis = buildTemplateAnalysis(features);
     const dataSignature = await stableDigest(buildAnalysisDataSignatureInput(features));
@@ -2686,6 +2691,7 @@ export async function handleRequest(req: Request) {
 export const __test__ = {
   aggregateRangeStats,
   buildFeaturePayload,
+  buildLineupInsights,
   buildInsightSignals,
   buildLateSwingInsight,
   buildTemplateAnalysis,

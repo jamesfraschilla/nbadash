@@ -8,6 +8,17 @@ const rosterSnapshotsSql = readFileSync(new URL("../supabase/roster_feed_snapsho
 const gameLiveStateSql = readFileSync(new URL("../supabase/game_live_state.sql", import.meta.url), "utf8");
 const gameLiveStateAtomicSql = readFileSync(new URL("../supabase/game_live_state_atomic.sql", import.meta.url), "utf8");
 const operationalSql = readFileSync(new URL("../supabase/operational_hardening.sql", import.meta.url), "utf8");
+const playcallSql = readFileSync(new URL("../supabase/playcall_note_sharing.sql", import.meta.url), "utf8");
+
+test("Playcall sharing preserves note ownership, revision checks and versions and verifies existing content", () => {
+  assert.match(playcallSql, /or 'Playcall' = any\(n\.tags\)/);
+  assert.match(playcallSql, /existing\.owner_id <> actor and not public\.is_admin_user\(actor\)/);
+  assert.match(playcallSql, /NOTE_CONFLICT/);
+  assert.match(playcallSql, /insert into public\.user_note_versions/);
+  assert.match(playcallSql, /current_hash <> saved\.content_hash/);
+  assert.match(playcallSql, /'user_notes', 'user_note_versions', 'user_note_shares'/);
+  assert.match(playcallSql, /on commit drop/);
+});
 
 test("account-data migration defines atomic version, share, and revision contracts", () => {
   [

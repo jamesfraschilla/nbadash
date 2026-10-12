@@ -509,8 +509,7 @@ html[data-theme="dark"] .pbpWheel {
   padding: 6px 10px;
 }
 
-.noteTags summary {
-  cursor: pointer;
+.noteTags > div:first-child {
   color: var(--text);
   font-size: 14px;
 }

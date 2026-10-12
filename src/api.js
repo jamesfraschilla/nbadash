@@ -24,6 +24,7 @@ import { supabase } from "./supabaseClient.js";
 import { readLocalStorage, writeLocalStorage, writeLocalStorageWithEviction } from "./storage.js";
 import { isRosterFallbackUsable, rosterPayloadTimestampMs } from "./rosterFallback.js";
 import { currentSeasonString, formatDateInput } from "./utils.js";
+import { needsOpeningStintRepair, normalizeOpeningMinutesData } from "../supabase/functions/_shared/minutesNormalization.ts";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const ALL_ORIGINS_RAW_URL = "https://api.allorigins.win/raw?url=";
@@ -1814,8 +1815,10 @@ export async function fetchGame(gameId, segment = null, options = {}) {
 export async function fetchMinutes(gameId, options = {}) {
   const url = `${API_BASE}/games/${gameId}/minutes`;
   try {
-    const minutesData = await requestJson(url);
-    return normalizeSummerLeagueMinutesData(gameId, minutesData);
+    const minutesData = normalizeOpeningMinutesData(normalizeSummerLeagueMinutesData(gameId, await requestJson(url)), null);
+    if (!needsOpeningStintRepair(minutesData)) return minutesData;
+    const game = options.game || await requestJson(`${API_BASE}/games/${gameId}`).catch(() => null);
+    return normalizeOpeningMinutesData(minutesData, game);
   } catch (error) {
     if (options.optional && error?.status === 404) {
       return null;

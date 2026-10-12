@@ -13,6 +13,15 @@ const awayTeam = {
   teamName: "Knicks",
 };
 
+Deno.test("lineup analysis retains a point scored between same-clock substitutions", () => {
+  const players = [{ personId: "1", nameI: "A. Player" }];
+  const notes = __test__.buildLineupInsights({ periods: [{ period: 1, stints: [
+    { startClock: "12:00", endClock: "10:00", plusMinus: 0, playersHome: players, playersAway: [] },
+    { startClock: "10:00", endClock: "10:00", plusMinus: 1, homeScore: 1, awayScore: 0, playersHome: players, playersAway: [] },
+  ] }] }, 0, 720, homeTeam, awayTeam, 1, -1);
+  assert(notes.lineupNotes.some((note) => note.includes("+1") && note.includes("2:00")));
+});
+
 Deno.test("late comeback insight credits the comeback team", () => {
   const actions = [
     { period: 4, clock: "2:00", scoreHome: 90, scoreAway: 95 },

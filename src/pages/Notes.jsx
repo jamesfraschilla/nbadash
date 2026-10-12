@@ -8,6 +8,7 @@ import {
 } from "../accountData.js";
 import { useAuth } from "../auth/useAuth.js";
 import styles from "./Notes.module.css";
+import { NOTE_TAG_OPTIONS } from "../noteTags.js";
 
 const periodOrder = {
   Q1: 1,
@@ -18,18 +19,7 @@ const periodOrder = {
 };
 
 const filterPeriods = ["All", "--", "Q1", "Q2", "Q3", "Q4", "OT"];
-const filterTags = [
-  "All",
-  "Reminder",
-  "Playcall",
-  "Injury",
-  "Good",
-  "Bad",
-  "Offense",
-  "Defense",
-  "Halftime",
-  "Misc",
-];
+const filterTags = ["All", ...NOTE_TAG_OPTIONS];
 const noteTags = filterTags.filter((tag) => tag !== "All");
 
 const getPeriodOrder = (note) => periodOrder[note.period_label] || 99;
@@ -67,7 +57,7 @@ export default function Notes() {
   const [statusMessage, setStatusMessage] = useState("");
 
   const { data: notes = [], isLoading, error } = useQuery({
-    queryKey: ["notes", gameId],
+    queryKey: ["notes", gameId, user?.id],
     queryFn: () => listNotesForGame(gameId, user?.id),
     enabled: Boolean(gameId && user?.id),
   });
@@ -95,6 +85,7 @@ export default function Notes() {
   const invalidateNotes = () => {
     return Promise.all([
       queryClient.invalidateQueries({ queryKey: ["notes", gameId] }),
+      queryClient.invalidateQueries({ queryKey: ["owned-notes", user?.id] }),
     ]);
   };
 
@@ -263,8 +254,8 @@ export default function Notes() {
             aria-modal="true"
           >
             <h3>Edit Note</h3>
-            <details className={styles.noteTags} open>
-              <summary>Tags</summary>
+            <div className={styles.noteTags}>
+              <div>Tags</div>
               <div className={styles.noteTagsGrid}>
                 {noteTags.map((tag) => {
                   const checked = editDraft.tags.includes(tag);
@@ -285,7 +276,7 @@ export default function Notes() {
                   );
                 })}
               </div>
-            </details>
+            </div>
             <textarea
               rows={4}
               placeholder="Type your note..."
