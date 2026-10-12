@@ -701,7 +701,9 @@ export default function Tools({ section = "tools" }) {
         })).filter((player) => player.personId && player.fullName)
         : [];
       const bundledRoster = getNbaTeamRoster(team.teamId);
-      next[team.teamId] = mergeRosterPools(bundledRoster, remoteRoster, team.teamId);
+      next[team.teamId] = remoteRoster.length >= 10
+        ? mergeRosterPools(bundledRoster, remoteRoster, team.teamId)
+        : remoteRoster.length ? remoteRoster : bundledRoster;
     });
     return next;
   }, [remoteNbaRostersPayload]);
