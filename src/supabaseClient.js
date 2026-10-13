@@ -79,6 +79,15 @@ export function selectStoredAuthValue(localValue, sessionValue) {
     ?? null;
 }
 
+export function selectDurableStoredAuthValue(localValue, indexedValue) {
+  const local = parseStoredAuthValue(localValue);
+  const indexed = parseStoredAuthValue(indexedValue);
+  if (!local) return indexed?.rawValue ?? null;
+  if (!indexed) return local.rawValue;
+  if (indexed.expiresAt > local.expiresAt) return indexed.rawValue;
+  return local.rawValue;
+}
+
 function openAuthDatabase() {
   if (typeof window === "undefined" || !window.indexedDB) return Promise.resolve(null);
   return new Promise((resolve) => {
@@ -175,16 +184,16 @@ const browserStorage = typeof window !== "undefined"
       const localValue = safeReadStorage(window.localStorage, key);
       const indexedValue = await readIndexedAuthValue(key);
       const sessionValue = safeReadStorage(window.sessionStorage, key);
-      const sharedValue = selectStoredAuthValue(localValue, indexedValue);
+      const sharedValue = selectDurableStoredAuthValue(localValue, indexedValue);
       if (sharedValue) {
-        if (!localValue) {
+        if (localValue !== sharedValue) {
           try {
             window.localStorage.setItem(key, sharedValue);
           } catch {
             // IndexedDB remains the durable shared-tab copy.
           }
         }
-        if (!indexedValue) void writeIndexedAuthValue(key, sharedValue);
+        if (indexedValue !== sharedValue) void writeIndexedAuthValue(key, sharedValue);
         return sharedValue;
       }
       return selectStoredAuthValue(null, sessionValue);

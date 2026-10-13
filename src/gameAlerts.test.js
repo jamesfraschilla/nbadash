@@ -668,6 +668,30 @@ test("second-chance pressure aggregates offensive rebounds and resulting points"
   assert.equal(alert?.detail, "2 offensive rebounds created 5 second-chance points on 2 scoring possessions.");
 });
 
+test("a team offensive rebound retains the possession, creates second-chance points, and does not create a false Kill", () => {
+  const actions = [
+    { actionNumber: 1, orderNumber: 1, period: 3, clock: "PT09M00.00S", possession: AWAY.teamId, teamId: AWAY.teamId, actionType: "turnover", personId: 101 },
+    { actionNumber: 2, orderNumber: 2, period: 3, clock: "PT08M30.00S", possession: HOME.teamId, teamId: HOME.teamId, actionType: "2pt", shotResult: "Made", personId: 201 },
+    { actionNumber: 3, orderNumber: 3, period: 3, clock: "PT08M00.00S", possession: AWAY.teamId, teamId: AWAY.teamId, actionType: "turnover", personId: 101 },
+    { actionNumber: 4, orderNumber: 4, period: 3, clock: "PT07M30.00S", possession: HOME.teamId, teamId: HOME.teamId, actionType: "2pt", shotResult: "Made", personId: 201 },
+    { actionNumber: 5, orderNumber: 5, period: 3, clock: "PT07M00.00S", possession: AWAY.teamId, teamId: AWAY.teamId, actionType: "2pt", shotResult: "Missed", personId: 101 },
+    { actionNumber: 6, orderNumber: 6, period: 3, clock: "PT06M58.00S", possession: AWAY.teamId, teamId: AWAY.teamId, actionType: "rebound", subType: "offensive", personId: null, description: "NETS Rebound" },
+    { actionNumber: 7, orderNumber: 7, period: 3, clock: "PT06M40.00S", possession: AWAY.teamId, teamId: AWAY.teamId, actionType: "3pt", shotResult: "Made", personId: 101 },
+    { actionNumber: 8, orderNumber: 8, period: 3, clock: "PT06M40.00S", possession: AWAY.teamId, teamId: AWAY.teamId, actionType: "freethrow", shotResult: "Made", personId: 101 },
+    { actionNumber: 9, orderNumber: 9, period: 3, clock: "PT06M20.00S", possession: HOME.teamId, teamId: HOME.teamId, actionType: "turnover", personId: 201 },
+  ];
+  const alerts = buildGameAlerts({
+    game: { gameId: "0012600035", gameStatus: 2, period: 3, gameClock: "PT06M20.00S", playByPlayActions: actions },
+    awayTeam: AWAY,
+    homeTeam: HOME,
+  });
+
+  assert.equal(alerts.some((alert) => alert.category === "Kill" && alert.teamCode === HOME.teamTricode), false);
+  const secondChance = alerts.find((alert) => alert.category === "Second Chance");
+  assert.equal(secondChance?.title, "Nets have 4 second-chance points in Q3");
+  assert.equal(secondChance?.detail, "1 offensive rebound created 4 second-chance points on 1 scoring possession.");
+});
+
 test("offensive-rebound pressure leads with rebounds when second-chance scoring is marginal", () => {
   const actions = [];
   for (let index = 0; index < 5; index += 1) {

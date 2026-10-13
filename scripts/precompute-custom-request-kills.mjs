@@ -148,9 +148,11 @@ function computeDisplayedKillsByTeam(actions, homeTeamId, awayTeamId) {
   let currentPossession = null;
   let possessionScored = false;
   let possessionTeam = null;
+  let possessionHasOutcome = false;
+  let possessionPeriod = 0;
 
   const finishPossession = () => {
-    if (!possessionTeam) return;
+    if (!possessionTeam || !possessionHasOutcome) return;
     const possessionKey = String(possessionTeam);
     if (!possessionScored) {
       streaks[possessionKey] += 1;
@@ -164,19 +166,34 @@ function computeDisplayedKillsByTeam(actions, homeTeamId, awayTeamId) {
   };
 
   orderedActions.forEach((action) => {
-    if (action.possession && action.possession !== currentPossession) {
+    const actionPeriod = safeNumber(action?.period, 0);
+    if (possessionTeam && actionPeriod && possessionPeriod && actionPeriod !== possessionPeriod) {
       finishPossession();
-      currentPossession = action.possession;
-      possessionTeam = action.possession;
+      currentPossession = null;
+      possessionTeam = null;
       possessionScored = false;
+      possessionHasOutcome = false;
+    }
+    const nextPossession = String(action?.possession ?? "").trim();
+    if (nextPossession && nextPossession !== "0" && nextPossession !== currentPossession) {
+      finishPossession();
+      currentPossession = nextPossession;
+      possessionTeam = nextPossession;
+      possessionScored = false;
+      possessionHasOutcome = false;
     }
     if (!possessionTeam) return;
-    if ((action.actionType === "2pt" || action.actionType === "3pt") && String(action.shotResult || "") === "Made") {
-      possessionScored = true;
+    possessionPeriod = actionPeriod || possessionPeriod;
+    const actionTeam = String(action?.teamId ?? "").trim();
+    if (actionTeam === possessionTeam && (action.actionType === "2pt" || action.actionType === "3pt")) {
+      possessionHasOutcome = true;
+      if (String(action.shotResult || "") === "Made") possessionScored = true;
     }
-    if (action.actionType === "freethrow" && String(action.teamId || "") === String(possessionTeam)) {
-      possessionScored = true;
+    if (actionTeam === possessionTeam && action.actionType === "freethrow") {
+      possessionHasOutcome = true;
+      if (String(action.shotResult || "") === "Made") possessionScored = true;
     }
+    if (actionTeam === possessionTeam && action.actionType === "turnover") possessionHasOutcome = true;
   });
 
   finishPossession();

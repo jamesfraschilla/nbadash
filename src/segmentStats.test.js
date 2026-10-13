@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { aggregateSegmentStats } from "./segmentStats.js";
+import { aggregateSegmentStats, computeKills } from "./segmentStats.js";
 
 const AWAY = {
   teamId: 1,
@@ -11,6 +11,23 @@ const HOME = {
   teamId: 2,
   teamTricode: "HME",
 };
+
+test("Kill totals normalize team IDs, ignore marker possessions, and treat missed free throws as scoreless", () => {
+  const actions = [
+    { orderNumber: 1, period: 1, possession: "0", actionType: "period", subType: "start" },
+    { orderNumber: 2, period: 1, possession: String(AWAY.teamId), teamId: AWAY.teamId, actionType: "turnover" },
+    { orderNumber: 3, period: 1, possession: String(HOME.teamId), teamId: HOME.teamId, actionType: "2pt", shotResult: "Made" },
+    { orderNumber: 4, period: 1, possession: String(AWAY.teamId), teamId: AWAY.teamId, actionType: "2pt", shotResult: "Missed" },
+    { orderNumber: 5, period: 1, possession: String(HOME.teamId), teamId: HOME.teamId, actionType: "2pt", shotResult: "Made" },
+    { orderNumber: 6, period: 1, possession: String(AWAY.teamId), teamId: AWAY.teamId, actionType: "freethrow", shotResult: "Missed" },
+    { orderNumber: 7, period: 1, possession: String(HOME.teamId), teamId: HOME.teamId, actionType: "turnover" },
+  ];
+
+  assert.deepEqual(computeKills(actions, "all", String(HOME.teamId), String(AWAY.teamId)), {
+    homeKills: 1,
+    awayKills: 0,
+  });
+});
 
 test("segment rebound totals exclude NBA team and dead-ball rebound rows", () => {
   const aggregated = aggregateSegmentStats({

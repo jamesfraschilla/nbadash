@@ -922,6 +922,7 @@ function addPossessionPressureAlerts({ alerts, seen, orderedActions, teamsById, 
         points: 0,
         secondChancePoints: 0,
         offensiveRebounds: 0,
+        pendingMissedFieldGoal: false,
       };
     }
     if (!possession) return;
@@ -929,6 +930,7 @@ function addPossessionPressureAlerts({ alerts, seen, orderedActions, teamsById, 
     const actionTeamId = normalizeTeamId(action?.teamId);
     if (actionTeamId === possession.teamId && (action?.actionType === "2pt" || action?.actionType === "3pt")) {
       possession.hasOutcome = true;
+      possession.pendingMissedFieldGoal = action?.shotResult !== "Made";
       if (action?.shotResult === "Made") {
         const points = action.actionType === "3pt" ? 3 : 2;
         possession.points += points;
@@ -937,14 +939,25 @@ function addPossessionPressureAlerts({ alerts, seen, orderedActions, teamsById, 
     }
     if (actionTeamId === possession.teamId && action?.actionType === "freethrow") {
       possession.hasOutcome = true;
+      possession.pendingMissedFieldGoal = false;
       if (action?.shotResult === "Made") {
         possession.points += 1;
         if (possession.offensiveRebounds > 0) possession.secondChancePoints += 1;
       }
     }
-    if (actionTeamId === possession.teamId && action?.actionType === "turnover") possession.hasOutcome = true;
-    if (actionTeamId === possession.teamId && action?.personId && action?.actionType === "rebound" && String(action?.subType || "").toLowerCase() === "offensive") {
-      possession.offensiveRebounds += 1;
+    if (actionTeamId === possession.teamId && action?.actionType === "turnover") {
+      possession.hasOutcome = true;
+      possession.pendingMissedFieldGoal = false;
+    }
+    if (action?.actionType === "rebound") {
+      if (
+        actionTeamId === possession.teamId
+        && String(action?.subType || "").toLowerCase() === "offensive"
+        && (normalizePlayerId(action?.personId) || possession.pendingMissedFieldGoal)
+      ) {
+        possession.offensiveRebounds += 1;
+      }
+      possession.pendingMissedFieldGoal = false;
     }
   });
   const trailingAction = possession?.lastAction;

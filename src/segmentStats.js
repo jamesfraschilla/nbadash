@@ -738,30 +738,34 @@ export function aggregateSegmentStats({
 
 export function computeKills(actions, segment, homeTeamId, awayTeamId) {
   const predicate = segmentPeriods(segment);
+  const homeId = String(homeTeamId ?? "").trim();
+  const awayId = String(awayTeamId ?? "").trim();
   const segmentActions = actions
     .filter((action) => predicate(action.period))
     .sort((a, b) => a.orderNumber - b.orderNumber);
 
   const streaks = {
-    [homeTeamId]: 0,
-    [awayTeamId]: 0,
+    [homeId]: 0,
+    [awayId]: 0,
   };
   const kills = {
-    [homeTeamId]: 0,
-    [awayTeamId]: 0,
+    [homeId]: 0,
+    [awayId]: 0,
   };
 
   let currentPossession = null;
   let possessionScored = false;
   let possessionTeam = null;
+  let possessionHasOutcome = false;
+  let possessionPeriod = 0;
 
   const finishPossession = () => {
-    if (!possessionTeam) return;
+    if (!possessionTeam || !possessionHasOutcome) return;
     if (!possessionScored) {
       streaks[possessionTeam] += 1;
       if (streaks[possessionTeam] >= 3 && streaks[possessionTeam] % 3 === 0) {
-        const opponent = possessionTeam === homeTeamId ? awayTeamId : homeTeamId;
-        kills[opponent] += 1;
+        const opponent = possessionTeam === homeId ? awayId : homeId;
+        if (opponent) kills[opponent] += 1;
       }
     } else {
       streaks[possessionTeam] = 0;
@@ -769,29 +773,46 @@ export function computeKills(actions, segment, homeTeamId, awayTeamId) {
   };
 
   segmentActions.forEach((action) => {
-    if (action.possession && action.possession !== currentPossession) {
+    const actionPeriod = Number(action?.period || 0);
+    if (possessionTeam && actionPeriod && possessionPeriod && actionPeriod !== possessionPeriod) {
       finishPossession();
-      currentPossession = action.possession;
-      possessionTeam = action.possession;
+      currentPossession = null;
+      possessionTeam = null;
       possessionScored = false;
+      possessionHasOutcome = false;
+    }
+
+    const nextPossession = String(action?.possession ?? "").trim();
+    if (nextPossession && nextPossession !== "0" && nextPossession !== currentPossession) {
+      finishPossession();
+      currentPossession = nextPossession;
+      possessionTeam = nextPossession;
+      possessionScored = false;
+      possessionHasOutcome = false;
     }
 
     if (!possessionTeam) return;
+    possessionPeriod = actionPeriod || possessionPeriod;
+    const actionTeam = String(action?.teamId ?? "").trim();
 
-    if ((action.actionType === "2pt" || action.actionType === "3pt") && action.shotResult === "Made") {
-      possessionScored = true;
+    if (actionTeam === possessionTeam && (action.actionType === "2pt" || action.actionType === "3pt")) {
+      possessionHasOutcome = true;
+      if (action.shotResult === "Made") possessionScored = true;
     }
 
-    if (action.actionType === "freethrow" && action.teamId === possessionTeam) {
-      possessionScored = true;
+    if (actionTeam === possessionTeam && action.actionType === "freethrow") {
+      possessionHasOutcome = true;
+      if (action.shotResult === "Made") possessionScored = true;
     }
+
+    if (actionTeam === possessionTeam && action.actionType === "turnover") possessionHasOutcome = true;
   });
 
   finishPossession();
 
   return {
-    homeKills: kills[homeTeamId] || 0,
-    awayKills: kills[awayTeamId] || 0,
+    homeKills: kills[homeId] || 0,
+    awayKills: kills[awayId] || 0,
   };
 }
 
