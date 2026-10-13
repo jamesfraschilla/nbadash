@@ -14,7 +14,15 @@ export function normalizeTeamRebounds(totals, players) {
   return normalized;
 }
 
-export function findIncompletePersonalFoulFeed(boxScore, computedTotals) {
+export function findIncompletePersonalFoulFeed(boxScore, computedTotals, actions = null) {
+  if (actions?.length) {
+    computedTotals = {};
+    for (const side of ["home", "away"]) {
+      const teamId = boxScore?.[side]?.teamId;
+      computedTotals[teamId] = { foulsPersonal: actions.filter((action) => String(action.teamId) === String(teamId)
+        && action.personId && action.actionType === "foul" && !String(action.subType).toLowerCase().includes("technical")).length };
+    }
+  }
   return ["home", "away"].flatMap((side) => {
     const team = boxScore?.[side];
     const official = Number(team?.totals?.foulsPersonal);

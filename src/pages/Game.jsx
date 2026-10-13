@@ -2897,7 +2897,7 @@ export default function Game({ variant = "full" }) {
 
   return (
     <div className={styles.container}>
-      {game?.gameStatus === 3 && segment === "all" && findIncompletePersonalFoulFeed(boxScore, segmentStats.teamTotals).map((warning) => (
+      {game?.gameStatus === 3 && findIncompletePersonalFoulFeed(boxScore, null, game.playByPlayActions).map((warning) => (
         <p key={warning} role="status">Data note: {warning}</p>
       ))}
       <div className={styles.backRow}>

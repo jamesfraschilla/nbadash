@@ -1599,6 +1599,10 @@ function buildFeaturePayload(
   const scoreTimeline = buildScoreTimeline(scoringEvents, rangeStartElapsed, startScore, homeTeamId, awayTeamId, regulationMinutes);
 
   const totals = aggregateRangeStats(rangeActions, scoringEvents, homeTeamId, awayTeamId);
+  if ((minutesData as Record<string, any>)?.periodStintRepairs?.some((repair: Record<string, any>) => Number(repair.period) >= minPeriod
+    && Number(repair.period) <= maxPeriod && String(repair.reason).includes("Period-end scores conflict"))) {
+    throw new Error("NBA period scores conflict with the scoring events. Analysis is withheld until the source data can be reconciled.");
+  }
   const playerTotals = buildPlayerRangeStats(rangeActions, scoringEvents);
   const runs = buildRunSummary(scoringEvents, homeTeamId, awayTeamId, regulationMinutes);
   const gameFlow = buildGameFlowContext(scoreTimeline, homeTeam, awayTeam);

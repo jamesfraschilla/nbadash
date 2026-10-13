@@ -188,7 +188,7 @@
     {
       "name": "game-analysis",
       "entrypoint": "supabase/functions/game-analysis/index.ts",
-      "sha256": "2e7f0ad0f77dcc3954dfa5b6377f32ac57b591a983dc07ae12a6d430373ad29a",
+      "sha256": "a605feefd8e1717e480e0660de6a22cbac1a27b8934c3320d2becb3bbc1133e8",
       "sourceFiles": [
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
