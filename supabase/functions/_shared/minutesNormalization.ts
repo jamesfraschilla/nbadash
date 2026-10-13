@@ -60,6 +60,21 @@ function repairOpeningQuarter(data: Row | null, game: Row | null, rebuild = fals
   if (regulationSeconds == null || regulationSeconds < firstSeconds) {
     return unresolved("The opening period boundary could not be verified.");
   }
+  // Some preseason feeds put a full-game score in a quarter-end row. Do not
+  // assign that jump to the last lineup. With a complete NBA box score and
+  // period endpoint, independently corroborate the score using made shots.
+  const end = actions.findLast((action) => action.actionType === "period" && action.subType === "end" && clockSeconds(action.clock) === 0);
+  if (end && /^00\d/.test(String(data.gameId || "")) && game.boxScore?.home?.players?.length && game.boxScore?.away?.players?.length) {
+    for (const side of ["home", "away"]) {
+      const teamId = String(data[`${side}Team`]?.teamId || game[`${side}Team`]?.teamId);
+      const madePoints = actions.reduce((sum, action) => {
+        if (String(action.teamId) !== teamId || String(action.shotResult).toLowerCase() !== "made") return sum;
+        return sum + (action.actionType === "3pt" ? 3 : action.actionType === "2pt" ? 2 : action.actionType === "freethrow" ? 1 : 0);
+      }, 0);
+      const key = side === "home" ? "scoreHome" : "scoreAway";
+      if (madePoints !== Number(end[key]) - Number(start[key] || 0)) return unresolved("Period-end scores conflict with the scoring events.");
+    }
+  }
   const sides = ["Away", "Home"] as const;
   const lineups: Record<string, Row[]> = {};
   const playersById = new Map<string, Row>();
@@ -258,6 +273,18 @@ export function normalizeOpeningMinutesData(data: Row | null, game: Row | null):
     const summedHome = period.stints.reduce((n: number, s: Row) => n + Number(s.homeScore || 0), 0);
     const summedAway = period.stints.reduce((n: number, s: Row) => n + Number(s.awayScore || 0), 0);
     const firstSeconds = Math.max(...period.stints.map((s: Row) => clockSeconds(s.startClock) ?? -1));
+    if (/^00\d/.test(String(data.gameId || "")) && last.actionType === "period" && last.subType === "end"
+      && clockSeconds(last.clock) === 0 && game.boxScore?.home?.players?.length && game.boxScore?.away?.players?.length) {
+      const madePoints = (side: string) => actions.reduce((sum, action) => {
+        const teamId = String(data[`${side}Team`]?.teamId || game[`${side}Team`]?.teamId);
+        return sum + (String(action.teamId) === teamId && String(action.shotResult).toLowerCase() === "made"
+          ? action.actionType === "3pt" ? 3 : action.actionType === "2pt" ? 2 : action.actionType === "freethrow" ? 1 : 0 : 0);
+      }, 0);
+      if (madePoints("home") !== expectedHome || madePoints("away") !== expectedAway) {
+        repairs.push({ period: period.period, status: "unresolved", reason: "Period-end scores conflict with the scoring events." });
+        return period;
+      }
+    }
     if (firstSeconds === clockSeconds(start.clock) && summedHome === expectedHome && summedAway === expectedAway) return period;
     const pseudo = { ...data, periods: [{ ...period, period: 1 }] };
     const pseudoGame = { ...game, playByPlayActions: actions.map((a) => ({ ...a, period: 1,

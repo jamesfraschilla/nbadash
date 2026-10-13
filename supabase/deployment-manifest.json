@@ -147,7 +147,7 @@
     {
       "name": "admin-users",
       "entrypoint": "supabase/functions/admin-users/index.ts",
-      "sha256": "d2a182caae568dca87fc96ae6c5312906390d446993cc51e5f80771a25f8f727",
+      "sha256": "51e84a508656ec57529a23fadcb70e5a8496cd5aded00ca8a6a51d4c50a32ffc",
       "sourceFiles": [
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
@@ -160,7 +160,7 @@
     {
       "name": "custom-requests",
       "entrypoint": "supabase/functions/custom-requests/index.ts",
-      "sha256": "c33e5178cbb9808477b6fcfe385527a7c20b47b926b0efa833dc3200174cef58",
+      "sha256": "a3eb686a66ae9c097d2fa23c1b7278148b5456fe1ff6296846822e9fd23534fd",
       "sourceFiles": [
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
@@ -175,7 +175,7 @@
     {
       "name": "export-image",
       "entrypoint": "supabase/functions/export-image/index.ts",
-      "sha256": "5c27531b44e4f9348d1d4ee583bc4e525742718efa17ab20acb09e98901527c8",
+      "sha256": "f1fda87da03ba3146d6ac5d735b985c1590cbd562302170bfca578d628913093",
       "sourceFiles": [
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
@@ -188,7 +188,7 @@
     {
       "name": "game-analysis",
       "entrypoint": "supabase/functions/game-analysis/index.ts",
-      "sha256": "ec01f1b9305234ec20a3f791a32c706c99bcfed4666bb22e3d43266bae1a7e3d",
+      "sha256": "2e7f0ad0f77dcc3954dfa5b6377f32ac57b591a983dc07ae12a6d430373ad29a",
       "sourceFiles": [
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
@@ -201,7 +201,7 @@
     {
       "name": "game-live-state",
       "entrypoint": "supabase/functions/game-live-state/index.ts",
-      "sha256": "d5b8f334468f6be3033cefa43592df1fa154373139292f0c0403c33250eaaf5a",
+      "sha256": "745f25dc24108a714b90e0dadea1fdda6e374e5c03e0ae544ec5b42c154a298d",
       "sourceFiles": [
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
@@ -214,7 +214,7 @@
     {
       "name": "game-metadata",
       "entrypoint": "supabase/functions/game-metadata/index.ts",
-      "sha256": "5894dbb4ea0e96fdb383fc3243e53b5a07ceee5f55661af4d8903aa34c7e345d",
+      "sha256": "387aeebfb7cb4b8510e74ff3fbf1614f2b955365e09f159738bbee02a8d114c0",
       "sourceFiles": [
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
@@ -227,7 +227,7 @@
     {
       "name": "gleague-rosters",
       "entrypoint": "supabase/functions/gleague-rosters/index.ts",
-      "sha256": "f814b7bf4e12d6e279a4a176c4ddda55719cc45ffe6f00d1a9f9aff78f5fc0bf",
+      "sha256": "7672b4fcc4bd598baedb69a52b0a9da99187d8e6e754e3a03bc4e9034806d360",
       "sourceFiles": [
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
@@ -240,7 +240,7 @@
     {
       "name": "nba-analytics-report",
       "entrypoint": "supabase/functions/nba-analytics-report/index.ts",
-      "sha256": "887c456a99decc145d9e06d3166c315c7f8e3b447340ee49344092cc038d9098",
+      "sha256": "cc8325cb3b08f9b9db4922baa344a36eb2319aee957fae6f459ba65f07cbc3f9",
       "sourceFiles": [
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
@@ -253,7 +253,7 @@
     {
       "name": "nba-matchup-defaults",
       "entrypoint": "supabase/functions/nba-matchup-defaults/index.ts",
-      "sha256": "adf11fc190516bc33358217a25173eeed3ded609b976b02a93e0a206de3c9fa8",
+      "sha256": "e7992cc3c6f4c6e9d7d33f8f39908a85f333d0c3029fe1436bd7bd69a5687502",
       "sourceFiles": [
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
@@ -266,7 +266,7 @@
     {
       "name": "nba-player-stats",
       "entrypoint": "supabase/functions/nba-player-stats/index.ts",
-      "sha256": "3a2572dc89ee4087b1d9b8ccec5e583ee1b78e0cce57c8210c3cc9add6801a96",
+      "sha256": "b2a60fa82b1ef95be45f44c267ebec1d46018e9cae9b756aa6fef0e716d71c24",
       "sourceFiles": [
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
@@ -280,7 +280,7 @@
     {
       "name": "nba-rosters",
       "entrypoint": "supabase/functions/nba-rosters/index.ts",
-      "sha256": "be49851b15cd8e6229f4b76ba503b17ec7a954b5b9228164c1e47d09fdb3e87a",
+      "sha256": "4090dff1dfaf84ad9b44979b642d82f5803c093a3b236a67ac648e431fb1497b",
       "sourceFiles": [
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
@@ -293,7 +293,7 @@
     {
       "name": "officiating-insights",
       "entrypoint": "supabase/functions/officiating-insights/index.ts",
-      "sha256": "419e4450d063a4e7e800f611097d0a97aef0af1d3d4dc15aab92db18e6c4a1b1",
+      "sha256": "d3cc8a36d06daafa55024a5c456bcccb10a33f648ba8fc7035a6bd4e413a27a3",
       "sourceFiles": [
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
@@ -306,7 +306,7 @@
     {
       "name": "player-headshot",
       "entrypoint": "supabase/functions/player-headshot/index.ts",
-      "sha256": "8c3609825fb767c2029fb53b1219c12784680fdac75e738f0c5e49088c427e53",
+      "sha256": "50a3c1809e389b6d81924a0c5aab19ae9b5d241ef33c04f4629646f6aeb3e2f1",
       "sourceFiles": [
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
@@ -319,7 +319,7 @@
     {
       "name": "pregame-scouting",
       "entrypoint": "supabase/functions/pregame-scouting/index.ts",
-      "sha256": "e0fb8edcd36f9ee45b2f679e33c516e1d5c936aecc764ce77e84b28ca0c92183",
+      "sha256": "167a4a8a6e5d33c535d476594a10fbdc9a495d0dbb0ae8e8d154bc0bac4f4e00",
       "sourceFiles": [
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
@@ -332,7 +332,7 @@
     {
       "name": "referee-assignments",
       "entrypoint": "supabase/functions/referee-assignments/index.ts",
-      "sha256": "47bcb4caccbb795d1c96eea31f8e1f7611a29a8a7dc8da2ae45bfc5f39eab171",
+      "sha256": "65048f641954b2fbcdb84b091e485fac643a82dab1987a053349f9379d84e073",
       "sourceFiles": [
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
@@ -346,7 +346,7 @@
     {
       "name": "team-games",
       "entrypoint": "supabase/functions/team-games/index.ts",
-      "sha256": "c5333cd0481bb7151ada7a00464ddc417bf4ca6c6197ff4aede315d047bbefc2",
+      "sha256": "897599088b3ca54187a907b3225ce435458b588a45ee772064ea53183c3056e4",
       "sourceFiles": [
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
@@ -360,7 +360,7 @@
     {
       "name": "wizards-analysis-prewarm",
       "entrypoint": "supabase/functions/wizards-analysis-prewarm/index.ts",
-      "sha256": "e974e234f9411aca5772631013acd75c1a73bf413e7bd66a01269b025f0c77b7",
+      "sha256": "10e2cd1639803d009cc64b9359720b5c301950994f19e637227c068c52cfb926",
       "sourceFiles": [
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/minutesNormalization.ts",

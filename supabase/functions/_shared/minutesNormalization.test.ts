@@ -1,6 +1,19 @@
 import { assertEquals } from "jsr:@std/assert@1";
 import { normalizeOpeningMinutesData } from "./minutesNormalization.ts";
 
+Deno.test("a corrupted period endpoint is flagged even when upstream stint totals agree with it", () => {
+  const { data, game } = fixture();
+  data.periods[0].stints[0].startClock = "12:00";
+  data.periods[0].stints[0].endClock = "0:00";
+  data.periods[0].stints[0].homeScore = 106;
+  data.periods[0].stints[0].awayScore = 10;
+  (game.boxScore as any).home = { players: [{}] };
+  game.playByPlayActions.push({ ...game.playByPlayActions[0], clock: "0:00", subType: "end", scoreHome: "106", scoreAway: "10", orderNumber: 6 });
+  const normalized = normalizeOpeningMinutesData(data, game)!;
+  assertEquals(normalized.periods[0].stints, data.periods[0].stints);
+  assertEquals(normalized.periodStintRepairs[0].status, "unresolved");
+});
+
 function fixture() {
   const away = [1, 2, 3, 4, 6].map((personId) => ({ personId, nameI: `A. Player${personId}` }));
   const home = [11, 12, 13, 14, 15].map((personId) => ({ personId, nameI: `H. Player${personId}` }));

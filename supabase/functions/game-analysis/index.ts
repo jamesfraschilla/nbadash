@@ -1627,6 +1627,14 @@ function buildFeaturePayload(
 
   const homeTotals = totals[homeTeamId];
   const awayTotals = totals[awayTeamId];
+  const sourceBox = game.boxScore as Record<string, any> | undefined;
+  if (/^00\d/.test(String(game.gameId || "")) && parseClockToSeconds(minClock) === periodLengthSeconds(minPeriod, regulationMinutes)
+    && parseClockToSeconds(maxClock) === 0 && sourceBox?.home?.players?.length && sourceBox?.away?.players?.length) {
+    const shootingPoints = (stats: typeof homeTotals) => (2 * stats.fieldGoalsMade) + stats.threePointersMade + stats.freeThrowsMade;
+    if (shootingPoints(homeTotals) !== homePoints || shootingPoints(awayTotals) !== awayPoints) {
+      throw new Error("NBA period scores conflict with the scoring events. Analysis is withheld until the source data can be reconciled.");
+    }
+  }
   const playerNotes = buildPlayerInsights(
     playerTotals,
     homeTeam,

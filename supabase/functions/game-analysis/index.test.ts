@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
+import { assert, assertEquals, assertStringIncludes, assertThrows } from "jsr:@std/assert@1";
 import { __test__ } from "./index.ts";
 
 Deno.test("run validation accepts both verified teams' pushes without mistaking a later game score for a run", () => {
@@ -9,6 +9,17 @@ Deno.test("run validation accepts both verified teams' pushes without mistaking 
   assertEquals(__test__.findInvalidTeamScoreAttributionClaims({ summary: "WAS outscored BKN 13-5 during its run." }, features), []);
   assert(__test__.findInvalidRunClaims({ summary: "WAS had a 111-0 run." }, features).length > 0);
   assert(__test__.findInvalidTeamScoreAttributionClaims({ summary: "WAS outscored BKN 13-5 in the full game." }, features).length > 0);
+});
+
+Deno.test("contradictory NBA quarter scores are not turned into a fictitious analysis", () => {
+  assertThrows(() => __test__.buildFeaturePayload({ gameId: "0012600027", gameStatus: 3, period: 1,
+    homeTeam, awayTeam, boxScore: { home: { players: [{}] }, away: { players: [{}] } },
+    playByPlayActions: [
+      { period: 1, clock: "12:00", actionType: "period", subType: "start", scoreHome: "0", scoreAway: "0" },
+      { period: 1, clock: "1:00", actionType: "2pt", teamId: homeTeam.teamId, personId: 11, shotResult: "Made", scoreHome: "2", scoreAway: "0" },
+      { period: 1, clock: "0:00", actionType: "period", subType: "end", scoreHome: "106", scoreAway: "0" },
+    ],
+  }, null, { minPeriod: 1, minClock: "12:00", maxPeriod: 1, maxClock: "0:00" }), Error, "scores conflict");
 });
 
 const homeTeam = {
