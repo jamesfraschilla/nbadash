@@ -11,6 +11,13 @@ import {
   validateAnalysisForm,
 } from "./gameAnalysis.js";
 
+test("full-game analysis shortcuts include overtime without changing the Q4 range", () => {
+  const game = { gameStatus: 3, period: 5, gameClock: "0:00" };
+  assert.equal(applyAnalysisSegmentShortcut("all", game, false).maxPeriod, "5");
+  assert.equal(applyAnalysisSegmentShortcut("second-half", game, false).maxPeriod, "5");
+  assert.equal(applyAnalysisSegmentShortcut("q4", game, false).maxPeriod, "4");
+});
+
 const summerGame = {
   gameId: "1322600001",
   gameStatus: 2,

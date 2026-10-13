@@ -1,6 +1,16 @@
 import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
 import { __test__ } from "./index.ts";
 
+Deno.test("run validation accepts both verified teams' pushes without mistaking a later game score for a run", () => {
+  const features = { teams: { home: { tricode: "WAS", name: "Wizards" }, away: { tricode: "BKN", name: "Nets" } },
+    momentumBursts: [{ team: "BKN", points: 16, opponentPoints: 8, verifiedBursts: [{ team: "WAS", points: 13, opponentPoints: 5 }] }],
+    score: { rangePoints: { home: 122, away: 131 } }, range: { endLabel: "Q4 0:00" } } as any;
+  assertEquals(__test__.findInvalidRunClaims({ summary: "WAS had a 13-5 push. BKN's run helped it outscore WAS 131-122." }, features), []);
+  assertEquals(__test__.findInvalidTeamScoreAttributionClaims({ summary: "WAS outscored BKN 13-5 during its run." }, features), []);
+  assert(__test__.findInvalidRunClaims({ summary: "WAS had a 111-0 run." }, features).length > 0);
+  assert(__test__.findInvalidTeamScoreAttributionClaims({ summary: "WAS outscored BKN 13-5 in the full game." }, features).length > 0);
+});
+
 const homeTeam = {
   teamId: "1610612764",
   teamTricode: "WAS",

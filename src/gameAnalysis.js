@@ -252,7 +252,7 @@ export function applyAnalysisSegmentShortcut(shortcut, game, isLive) {
     seconds: preset.minSeconds,
   }, game);
   const presetMaxPoint = normalizeAnalysisPoint({
-    period: preset.maxPeriod,
+    period: ["all", "second-half"].includes(shortcut) ? Math.max(preset.maxPeriod, Number(game?.period) || 4) : preset.maxPeriod,
     minutes: preset.maxMinutes,
     seconds: preset.maxSeconds,
   }, game);
@@ -285,7 +285,7 @@ export function buildCompletedAnalysisSegments(game, isLive) {
   return ANALYSIS_SEGMENT_PRESETS
     .map((segment) => {
       const segmentMaxPoint = normalizeAnalysisPoint({
-        period: segment.maxPeriod,
+        period: ["all", "second-half"].includes(segment.value) ? Math.max(segment.maxPeriod, Number(game?.period) || 4) : segment.maxPeriod,
         minutes: segment.maxMinutes,
         seconds: segment.maxSeconds,
       }, game);

@@ -11,6 +11,13 @@ const wizardsHomeGame = {
   awayTeam: { teamId: "1610612752", teamTricode: "NYK", teamName: "Knicks" },
 };
 
+Deno.test("full-game and second-half recaps include overtime, while Q4 remains regulation only", () => {
+  const segments = __test__.buildCompletedSegments({ ...wizardsHomeGame, gameStatus: 3, period: 5 }, false);
+  assertEquals(segments.find((s) => s.key === "all")?.range.maxPeriod, 5);
+  assertEquals(segments.find((s) => s.key === "second-half")?.range.maxPeriod, 5);
+  assertEquals(segments.find((s) => s.key === "q4")?.range.maxPeriod, 4);
+});
+
 Deno.test("Wizards prewarm completes Q1 at start of Q2", () => {
   const segments = __test__.buildCompletedSegments(wizardsHomeGame, true).map((segment) => segment.key);
   assertEquals(segments, ["q1"]);

@@ -125,12 +125,14 @@ function buildCompletedSegments(game: JsonRecord, isLive: boolean) {
 
   return ANALYSIS_SEGMENT_PRESETS
     .map((segment) => {
-      const segmentEndElapsed = pointToElapsedSeconds(segment.maxPeriod, formatClock(segment.maxMinutes, segment.maxSeconds));
+      const resolved = ["all", "second-half"].includes(segment.value)
+        ? { ...segment, maxPeriod: Math.max(segment.maxPeriod, Number(game.period) || 4) } : segment;
+      const segmentEndElapsed = pointToElapsedSeconds(resolved.maxPeriod, formatClock(segment.maxMinutes, segment.maxSeconds));
       if (!finalStatus && segmentEndElapsed > currentElapsed) return null;
       return {
         key: segment.value,
         label: segment.label,
-        range: buildAnalysisRange(segment),
+        range: buildAnalysisRange(resolved),
       };
     })
     .filter(Boolean) as Array<{ key: string; label: string; range: JsonRecord }>;

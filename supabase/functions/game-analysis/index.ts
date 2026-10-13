@@ -1067,6 +1067,7 @@ function buildMomentumBursts(
 
   return [{
     ...strongestBurst,
+    verifiedBursts: burstSummaries.map(({ team, teamId, points, opponentPoints, startLabel, endLabel }) => ({ team, teamId, points, opponentPoints, startLabel, endLabel })),
     items: chronologicalItems,
     strength: strongestBurst.strength,
   }];
@@ -1982,7 +1983,7 @@ function buildTemplateAnalysis(features: ReturnType<typeof buildFeaturePayload>)
   const sections = buildTemplateSections(features);
   const rangeLabel = rangeContextLabel(features);
   const strongestStat = buildInsightSignals(features)
-    .filter((signal) => !["gameFlow", "run", "momentum", "lineups", "lateSwing"].includes(signal.key))
+    .filter((signal) => !["shape", "run", "burst", "lineups", "lateSwing"].includes(signal.key))
     .sort((a, b) => b.strength - a.strength)[0]?.items[0];
 
   const summaryParts = [
@@ -2010,7 +2011,7 @@ function buildTemplateAnalysis(features: ReturnType<typeof buildFeaturePayload>)
 
 function buildAnalysisDataSignatureInput(features: ReturnType<typeof buildFeaturePayload>) {
   return {
-    analysisVersion: 4,
+    analysisVersion: 5,
     range: features.range,
     score: features.score,
     teams: features.teams,
@@ -2077,7 +2078,7 @@ function shootingStatFromContext(value: string) {
   if (/\b(?:threes?|3pt|3-point|3p|3fg)\b/.test(text)) return "three";
   if (/\brim\b/.test(text)) return "rim";
   if (/\bmid(?:range|-range)?\b/.test(text)) return "mid";
-  if (/\b(?:field goal|from the field|overall|shooting|shot)\b/.test(text)) return "fg";
+  if (/\b(?:field goal|from the field|overall|shooting|shot|fg)\b/.test(text)) return "fg";
   return "";
 }
 
@@ -2290,6 +2291,9 @@ function findInvalidTeamScoreAttributionClaims(
       while ((match = pattern.exec(text))) {
         const first = safeNumber(match[1], -1);
         const second = safeNumber(match[2], -1);
+        const context = text.slice(Math.max(0, match.index - 30), match.index + match[0].length + 40);
+        const verified = (features.momentumBursts || []).flatMap((burst) => [burst, ...((burst as Record<string, any>).verifiedBursts || [])]);
+        if (/\b(?:run|push|burst)\b/i.test(context) && verified.some((burst) => burst.team === team.tricode && burst.points === first && burst.opponentPoints === second)) continue;
         if (first !== expectedTeamPoints || second !== expectedOpponentPoints) {
           reasons.push(`${team.tricode} scoring attribution ${first}-${second} should be ${expectedTeamPoints}-${expectedOpponentPoints}`);
         }
@@ -2318,12 +2322,15 @@ function findInvalidRunClaims(
   });
   (features.momentumBursts || []).forEach((burst) => {
     allowedPairs.add(`${safeNumber(burst.points, 0)}-${safeNumber(burst.opponentPoints, 0)}`);
+    ((burst as Record<string, any>).verifiedBursts || []).forEach((verified: Record<string, any>) => {
+      allowedPairs.add(`${safeNumber(verified.points, 0)}-${safeNumber(verified.opponentPoints, 0)}`);
+    });
   });
 
   texts.forEach((text) => {
     const patterns = [
       /\b(\d{1,3})\s*[-–]\s*(\d{1,3})\s+(?:run|push|burst)\b/gi,
-      /\b(?:run|push|burst)\b[^.?!]{0,24}?\b(\d{1,3})\s*[-–]\s*(\d{1,3})\b/gi,
+      /\b(?:run|push|burst)\s*:?\s+(?:(?:of|was|at|totaled)\s+)?(\d{1,3})\s*[-–]\s*(\d{1,3})\b/gi,
     ];
     patterns.forEach((pattern) => {
       let match: RegExpExecArray | null;
@@ -2438,7 +2445,7 @@ async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayloa
     "If you describe the selected quarter, half, game, or span score, it must match the selected range scoring exactly.",
     `Allowed run/push/burst scoring pairs only: ${[
       ...[features.teams.home, features.teams.away].map((team) => `${team.largestRun?.points || 0}-0`),
-      ...(features.momentumBursts || []).map((burst) => `${burst.points}-${burst.opponentPoints}`),
+      ...(features.momentumBursts || []).flatMap((burst) => [burst, ...((burst as Record<string, any>).verifiedBursts || [])]).map((burst) => `${burst.points}-${burst.opponentPoints}`),
     ].join(", ")}. Do not invent another run or repurpose a lead/score as a run.`,
     `Verified shooting facts; copy the full percentage and fraction together: ${collectKnownShootingPercentages(features).map((ref) => `${ref.team} ${ref.stat}: ${ref.percentageText} (${ref.made}/${ref.attempted})`).join("; ")}.`,
   ];
@@ -2705,6 +2712,8 @@ export const __test__ = {
   formatPercentageWithAttempts,
   findAiAnalysisRejectReasons,
   findInvalidSpanScoreClaims,
+  findInvalidRunClaims,
+  findInvalidTeamScoreAttributionClaims,
   handleRequest,
   hasOverstatedAllTeamScoring,
   hasZeroMarginLanguage,
