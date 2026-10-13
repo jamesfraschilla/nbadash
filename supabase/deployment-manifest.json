@@ -135,6 +135,11 @@
       "order": 27,
       "path": "supabase/reliability_jobs.sql",
       "sha256": "41b34979fc956fb5f8a4ef7285ae5dc6ed85f005e55e4e0923e8ff20fe1086f3"
+    },
+    {
+      "order": 28,
+      "path": "supabase/officiating_overview_refresh.sql",
+      "sha256": "8f9418a5a009c6ba240f4ae862887426ea39f618e410ece2628e4eab55959903"
     }
   ],
   "edgeConfigSha256": "35c0e8985ac6eba567bb91fdd8b0ebffa74989d6f146b3c6fdba9aaf49c234f8",

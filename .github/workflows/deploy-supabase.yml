@@ -68,13 +68,15 @@ jobs:
       - name: Apply reliability schedules
         if: github.event_name == 'workflow_dispatch' && inputs.apply_reliability_jobs
         run: |
-          jq -n --rawfile query supabase/reliability_jobs.sql '{query: $query}' |
+          for migration in supabase/reliability_jobs.sql supabase/officiating_overview_refresh.sql; do
+          jq -n --rawfile query "$migration" '{query: $query}' |
           curl --fail-with-body --silent --show-error \
             --request POST \
             --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
             --header "Content-Type: application/json" \
             --data-binary @- \
             "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query"
+          done
           node scripts/verify-supabase-production.mjs --record-database
       - name: Refuse deployment when database scripts are not attested in production
         run: npm run supabase:production:check-database
