@@ -2,6 +2,7 @@ import { Link, useSearchParams, useParams } from "react-router-dom";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toggleNewNoteTag } from "../noteTags.js";
+import { normalizeTeamRebounds, findIncompletePersonalFoulFeed } from "../teamStatNormalization.js";
 import { createNote } from "../accountData.js";
 import { listCachedGameAnalyses, requestGameAnalysis, requestGameAnalysisPrewarm } from "../analysisData.js";
 import {
@@ -983,11 +984,11 @@ export default function Game({ variant = "full" }) {
     const missingKeys = completedAnalysisSegments
       .map((record) => record.key)
       .filter((key) => !cachedKeys.has(key));
-    if (!missingKeys.length) return;
-
-    const signature = `${gameId}:${missingKeys.join(",")}`;
+    // Revalidate completed ranges after source corrections, even if every
+    // key already exists. The server compares hashes and avoids new AI calls.
+    const signature = `${gameId}:${missingKeys.join(",")}:revalidate`;
     const now = Date.now();
-    if (now - Number(analysisPrewarmAttemptRef.current.get(signature) || 0) < 60_000) return;
+    if (now - Number(analysisPrewarmAttemptRef.current.get(signature) || 0) < (missingKeys.length ? 60_000 : 300_000)) return;
     analysisPrewarmAttemptRef.current.set(signature, now);
 
     const controller = new AbortController();
@@ -1315,6 +1316,7 @@ export default function Game({ variant = "full" }) {
     if (!periodSnapshots.length) return null;
     const map = new Map();
     periodSnapshots.forEach((row) => {
+      if (row.totals?._captureVersion !== 2) return;
       const period = Number(row.period);
       const teamId = String(row.team_id);
       if (!map.has(period)) map.set(period, new Map());
@@ -1944,7 +1946,7 @@ export default function Game({ variant = "full" }) {
   const baseAwayTotals = awayTeamId
     ? segment === "all"
       ? mergeAllSegmentTotals(
-        boxScore?.away?.totals || segmentStats.teamTotals[awayTeamId] || {},
+        normalizeTeamRebounds(boxScore?.away?.totals || segmentStats.teamTotals[awayTeamId] || {}, boxScore?.away?.players),
         computedAwayTotals,
         finalSnapshotTotals?.[awayTeamId]
       )
@@ -1953,7 +1955,7 @@ export default function Game({ variant = "full" }) {
   const baseHomeTotals = homeTeamId
     ? segment === "all"
       ? mergeAllSegmentTotals(
-        boxScore?.home?.totals || segmentStats.teamTotals[homeTeamId] || {},
+        normalizeTeamRebounds(boxScore?.home?.totals || segmentStats.teamTotals[homeTeamId] || {}, boxScore?.home?.players),
         computedHomeTotals,
         finalSnapshotTotals?.[homeTeamId]
       )
@@ -2895,6 +2897,9 @@ export default function Game({ variant = "full" }) {
 
   return (
     <div className={styles.container}>
+      {game?.gameStatus === 3 && segment === "all" && findIncompletePersonalFoulFeed(boxScore, segmentStats.teamTotals).map((warning) => (
+        <p key={warning} role="status">Data note: {warning}</p>
+      ))}
       <div className={styles.backRow}>
         <div className={styles.backRowLeft}>
           <Link className={styles.backButton} to={dateParam ? `/?d=${dateParam}` : "/"}>

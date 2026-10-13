@@ -2,8 +2,8 @@ name: Scan Referee Assignments
 
 on:
   schedule:
-    - cron: "3 9 * * *"
-      timezone: "America/New_York"
+    # Backup verifier; authoritative 9:03 Eastern dispatch is Supabase pg_cron.
+    - cron: "8 13,14 * * *"
   workflow_dispatch:
 
 permissions:

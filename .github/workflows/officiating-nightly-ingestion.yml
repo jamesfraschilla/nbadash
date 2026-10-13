@@ -3,7 +3,8 @@ name: Officiating Nightly Ingestion
 on:
   schedule:
     # 4:05 AM America/New_York across daylight and standard time.
-    - cron: "5 8,9 * * *"
+    - cron: "5 4 * * *"
+      timezone: "America/New_York"
   workflow_dispatch:
     inputs:
       lookback_days:

@@ -158,6 +158,9 @@ export default function Minutes() {
       </section>
 
       <section className={styles.periods}>
+        {(data.periodStintRepairs || []).filter((repair) => repair.status === "unresolved").map((repair) => (
+          <div key={repair.period} className={styles.stateMessage}>Period {repair.period} has incomplete lineup data. {repair.reason}</div>
+        ))}
         {data.openingStintRepair?.status === "unresolved" ? (
           <div className={styles.stateMessage}>
             The minutes feed is missing the opening Q1 lineup interval. {data.openingStintRepair.reason}

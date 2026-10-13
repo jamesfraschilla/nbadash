@@ -1,10 +1,11 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { segmentFeedSignature } from "../_shared/analysisFreshness.ts";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const WIZARDS_TEAM_ID = "1610612764";
 const CACHE_TABLE = "game_analysis_segments";
 const DEFAULT_MAX_SEGMENTS_PER_RUN = 3;
-const RECENT_FINAL_WINDOW_MS = 12 * 60 * 60 * 1000;
+const RECENT_FINAL_WINDOW_MS = 36 * 60 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 12_000;
 const FUNCTION_TIMEOUT_MS = 60_000;
 
@@ -255,15 +256,14 @@ async function fetchCandidateGameIds(body: JsonRecord, now = new Date()) {
 async function listCachedSegmentKeys(admin: SupabaseAdminClient, gameId: string) {
   const { data, error } = await admin
     .from(CACHE_TABLE)
-    .select("segment_key")
+    .select("segment_key,result")
     .eq("game_id", gameId)
     .abortSignal(AbortSignal.timeout(REQUEST_TIMEOUT_MS));
 
   if (error) throw error;
-  return new Set(
+  return new Map(
     (Array.isArray(data) ? data : [])
-      .map((row) => String((row as JsonRecord).segment_key || "").trim())
-      .filter(Boolean),
+      .map((row) => [String((row as JsonRecord).segment_key || "").trim(), String(((row as JsonRecord).result as JsonRecord)?.feedSignature || "")] as [string, string]),
   );
 }
 
@@ -325,6 +325,10 @@ async function prewarmGame(admin: SupabaseAdminClient, gameId: string, options: 
   }
 
   const cachedKeys = await listCachedSegmentKeys(admin, gameId);
+  for (const segment of completedSegments) {
+    const signature = await segmentFeedSignature(game, Number(segment.range.maxPeriod));
+    if (cachedKeys.get(segment.key) !== signature) cachedKeys.delete(segment.key);
+  }
   const missingSegments = completedSegments.filter((segment) => !cachedKeys.has(segment.key));
   const selectedSegments = missingSegments.slice(0, options.maxSegments);
   const skipped = [
@@ -390,8 +394,9 @@ export async function handleRequest(req: Request) {
       results.push(await prewarmGame(admin, gameId, { dryRun, maxSegments, now }));
     }
 
-    return jsonResponse(200, {
-      ok: true,
+    const failed = results.some((result) => result.errors?.length);
+    return jsonResponse(failed ? 502 : 200, {
+      ok: !failed,
       dryRun,
       checkedGameIds: gameIds,
       results,

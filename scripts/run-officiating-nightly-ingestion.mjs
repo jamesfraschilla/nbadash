@@ -39,14 +39,6 @@ async function loadEnvFile(filePath) {
   });
 }
 
-function easternHour() {
-  return Number(new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    hour: "2-digit",
-    hour12: false,
-  }).format(new Date()));
-}
-
 async function fetchSchedule() {
   const response = await fetch(SCHEDULE_URL, {
     headers: {
@@ -98,10 +90,7 @@ function runImporter(gameIds) {
 async function main() {
   await loadEnvFile(path.join(process.cwd(), ".env"));
   await loadEnvFile(path.join(process.cwd(), ".env.local"));
-  if (!hasFlag("force-time") && easternHour() !== 4) {
-    console.log("Skipping: nightly officiating ingestion only runs during the 4:00 AM America/New_York hour.");
-    return;
-  }
+  // Retry outstanding dates even when GitHub's scheduled runner starts late.
   if (!hasFlag("force-season") && Date.now() < SEASON_START) {
     console.log(`Skipping: ${CURRENT_SEASON} ingestion starts October 3, 2026.`);
     return;

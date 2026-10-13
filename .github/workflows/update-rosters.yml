@@ -6,6 +6,9 @@ on:
     - cron: "0 11 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   update-rosters:
     runs-on: ubuntu-latest
@@ -33,9 +36,11 @@ jobs:
             *) echo "Outside season window. Skipping."; exit 0 ;;
           esac
       - name: Build rosters
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
         run: |
           set -euo pipefail
-          timeout 120s python3 scripts/build_rosters.py
+          timeout 180s node scripts/build-rosters-from-live-feed.mjs
       - name: Validate generated rosters
         run: |
           npm run rosters:validate

@@ -1816,7 +1816,7 @@ export async function fetchMinutes(gameId, options = {}) {
   const url = `${API_BASE}/games/${gameId}/minutes`;
   try {
     const minutesData = normalizeOpeningMinutesData(normalizeSummerLeagueMinutesData(gameId, await requestJson(url)), null);
-    if (!needsOpeningStintRepair(minutesData)) return minutesData;
+    if (!options.game && !needsOpeningStintRepair(minutesData) && minutesData?.gameStatus !== 3) return minutesData;
     const game = options.game || await requestJson(`${API_BASE}/games/${gameId}`).catch(() => null);
     return normalizeOpeningMinutesData(minutesData, game);
   } catch (error) {

@@ -89,3 +89,36 @@ Deno.test("removes the zero-score 12-minute overtime placeholder without alterin
   assertEquals(normalized.periods[0].stints, [real]);
   assertEquals(data.periods[0].stints.length, 2);
 });
+
+Deno.test("restores a missing Q2 opening with period-relative, not cumulative scores", () => {
+  const { data, game } = fixture();
+  data.periods[0].period = 2;
+  game.playByPlayActions = game.playByPlayActions.filter((a) => a.period === 1).map((a) => ({ ...a, period: 2,
+    scoreHome: String(Number(a.scoreHome) + 40), scoreAway: String(Number(a.scoreAway) + 30) }));
+  game.playByPlayActions.push({ ...game.playByPlayActions[0], clock: "5:45", subType: "end", scoreHome: "57", scoreAway: "40", orderNumber: 6 });
+  const normalized = normalizeOpeningMinutesData(data, game)!;
+  assertEquals(normalized.periods[0].stints[0].startClock, "12:00");
+  assertEquals(normalized.periods[0].stints.reduce((n: number, s: { homeScore: number }) => n + s.homeScore, 0), 17);
+  assertEquals(normalized.periods[0].stints.reduce((n: number, s: { awayScore: number }) => n + s.awayScore, 0), 10);
+  assertEquals(normalized.periodStintRepairs[0].status, "repaired");
+});
+
+Deno.test("repairs scoring omitted between same-clock substitutions even with an existing 12:00 opening", () => {
+  const { data, game } = fixture();
+  data.periods[0].period = 3;
+  data.periods[0].stints[0].startClock = "12:00";
+  data.periods[0].stints[0].endClock = "0:00";
+  data.periods[0].stints[0].homeScore = 12;
+  data.periods[0].stints[0].awayScore = 10;
+  game.playByPlayActions = game.playByPlayActions.filter((a) => a.period === 1).map((a) => ({ ...a, period: 3 }));
+  // The opening lineup already contains player 6. Its between-period swap
+  // must not be applied again while rebuilding the scoring timeline.
+  game.playByPlayActions[2].clock = "12:00";
+  game.playByPlayActions[3].clock = "12:00";
+  game.playByPlayActions[2].scoreHome = "0"; game.playByPlayActions[2].scoreAway = "0";
+  game.playByPlayActions[3].scoreHome = "0"; game.playByPlayActions[3].scoreAway = "0";
+  game.playByPlayActions.push({ ...game.playByPlayActions[0], clock: "0:00", subType: "end", scoreHome: "13", scoreAway: "10", orderNumber: 6 });
+  const normalized = normalizeOpeningMinutesData(data, game)!;
+  assertEquals(normalized.periods[0].stints.reduce((n: number, s: { homeScore: number }) => n + s.homeScore, 0), 13);
+  assertEquals(normalized.periodStintRepairs[0].status, "repaired");
+});

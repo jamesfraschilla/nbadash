@@ -38,7 +38,8 @@ test("discovers a season page from the official archive", () => {
 
 test("weekly sync starts Sunday October 4 during the 5 AM Eastern hour", () => {
   assert.equal(shouldRunWeeklyChallengeSync({ now: new Date("2026-10-04T09:15:00Z") }), true);
-  assert.equal(shouldRunWeeklyChallengeSync({ now: new Date("2026-10-04T08:15:00Z") }), false);
+  assert.equal(shouldRunWeeklyChallengeSync({ now: new Date("2026-10-04T08:15:00Z") }), true);
+  assert.equal(shouldRunWeeklyChallengeSync({ now: new Date("2026-10-04T18:15:00Z") }), true);
   assert.equal(shouldRunWeeklyChallengeSync({ now: new Date("2026-09-27T09:15:00Z") }), false);
   assert.equal(shouldRunWeeklyChallengeSync({ now: new Date("2026-10-05T09:15:00Z") }), false);
 });

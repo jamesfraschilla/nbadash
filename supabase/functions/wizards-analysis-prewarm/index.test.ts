@@ -40,7 +40,7 @@ Deno.test("Wizards prewarm includes every standard segment for recent finals", (
 });
 
 Deno.test("Wizards prewarm ignores old finals and non-Wizards games", () => {
-  const now = new Date("2026-11-03T12:00:00Z");
+  const now = new Date("2026-11-03T13:00:00Z");
   assertEquals(__test__.shouldProcessGame({
     ...wizardsHomeGame,
     gameStatus: 3,

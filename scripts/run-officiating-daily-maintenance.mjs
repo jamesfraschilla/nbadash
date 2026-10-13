@@ -35,14 +35,6 @@ async function loadEnvFile(filePath) {
   });
 }
 
-function easternHour() {
-  return Number(new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    hour: "2-digit",
-    hour12: false,
-  }).format(new Date()));
-}
-
 async function latestUpdatedAt(supabase, table) {
   const { data, error } = await supabase
     .from(table)
@@ -106,10 +98,8 @@ async function shootingFoulIntegrityMismatch(supabase) {
 async function main() {
   await loadEnvFile(path.join(process.cwd(), ".env"));
   await loadEnvFile(path.join(process.cwd(), ".env.local"));
-  if (!hasFlag("force-time") && easternHour() !== 5) {
-    console.log("Skipping: daily officiating maintenance only runs during the 5:00 AM America/New_York hour.");
-    return;
-  }
+  // Scheduled runners can start hours late. Source timestamps below make this
+  // idempotent; the game-window guard still protects live Wizards games.
   if (!hasFlag("force-season") && Date.now() < SEASON_START) {
     console.log(`Skipping: ${CURRENT_SEASON} maintenance starts October 3, 2026.`);
     return;

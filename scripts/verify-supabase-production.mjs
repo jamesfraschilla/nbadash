@@ -27,6 +27,7 @@ if (process.argv.includes("--record") || recordDatabase || recordEdge) {
     database_sha256: recordEdge && !recordDatabase ? current?.database_sha256 : databaseSha256,
     edge_sha256: recordDatabase && !recordEdge ? current?.edge_sha256 : edgeSha256,
     deployed_by: process.env.GITHUB_SHA || "local-cli",
+    deployed_at: new Date().toISOString(),
   };
   const response = await fetch(`${url}/rest/v1/supabase_deployment_state?on_conflict=id`, {
     method: "POST",

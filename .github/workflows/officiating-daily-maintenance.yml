@@ -2,7 +2,8 @@ name: Officiating Daily Maintenance
 
 on:
   schedule:
-    - cron: "5 9,10 * * *"
+    - cron: "5 5 * * *"
+      timezone: "America/New_York"
   workflow_dispatch:
 
 permissions:

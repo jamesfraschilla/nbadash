@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { requestBodyTooLarge, requireActiveRateLimitedUser } from "../_shared/requestSecurity.ts";
 import { normalizeOpeningMinutesData } from "../_shared/minutesNormalization.ts";
+import { segmentFeedSignature } from "../_shared/analysisFreshness.ts";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
@@ -1980,25 +1981,20 @@ function buildTemplateAnalysis(features: ReturnType<typeof buildFeaturePayload>)
   const statOutliers = buildStatOutliers(features);
   const sections = buildTemplateSections(features);
   const rangeLabel = rangeContextLabel(features);
-  const dominantTitle = sections[0]?.title || "Game Flow";
-  let headlineDetail = "with the stronger overall stretch";
-  if (dominantTitle === "Run") headlineDetail = "behind the largest unanswered run";
-  if (dominantTitle === "Late Collapse") headlineDetail = "after the late-game swing";
-  if (dominantTitle === "Late Comeback") headlineDetail = "with the late comeback";
-  if (dominantTitle === "Momentum Swing") headlineDetail = "behind the key momentum push";
-  if (dominantTitle === "Lineups") headlineDetail = "behind the better lineup minutes";
-  if (dominantTitle === "Shooting") headlineDetail = "behind the shotmaking edge";
-  if (dominantTitle === "Shot Profile") headlineDetail = "behind the shot-profile edge";
+  const strongestStat = buildInsightSignals(features)
+    .filter((signal) => !["gameFlow", "run", "momentum", "lineups", "lateSwing"].includes(signal.key))
+    .sort((a, b) => b.strength - a.strength)[0]?.items[0];
 
   const summaryParts = [
-    `${leader.tricode} outscored ${trailer.tricode} ${leaderPoints}-${trailerPoints} in ${rangeLabel} over ${features.range.duration}, moving the score from ${formatScoreState(features.score.start, features)} to ${formatScoreState(features.score.end, features)}.`,
+    `${leader.tricode} ${margin === 0 ? "tied" : "outscored"} ${trailer.tricode} ${leaderPoints}-${trailerPoints} in ${rangeLabel}.`,
+    strongestStat,
     swingFactors[0],
     statOutliers[0],
   ].filter(Boolean);
 
   return {
     source: "template",
-    headline: sanitizeAnalysisText(`${leader.tricode} ${margin === 0 ? "played" : "won"} ${rangeLabel} ${leaderPoints}-${trailerPoints} ${headlineDetail}.`, features),
+    headline: sanitizeAnalysisText(`${margin === 0 ? `${leader.tricode} and ${trailer.tricode} tied` : `${leader.tricode} won`} ${rangeLabel} ${leaderPoints}-${trailerPoints}.${strongestStat ? ` ${strongestStat}` : ""}`, features),
     summary: sanitizeAnalysisText(summaryParts.join(" "), features),
     sections,
     uniformDetails: {
@@ -2014,7 +2010,7 @@ function buildTemplateAnalysis(features: ReturnType<typeof buildFeaturePayload>)
 
 function buildAnalysisDataSignatureInput(features: ReturnType<typeof buildFeaturePayload>) {
   return {
-    analysisVersion: 3,
+    analysisVersion: 4,
     range: features.range,
     score: features.score,
     teams: features.teams,
@@ -2078,10 +2074,10 @@ function collectKnownShootingPercentages(features: ReturnType<typeof buildFeatur
 function shootingStatFromContext(value: string) {
   const text = value.toLowerCase();
   if (/\b(?:free[ -]?throw|ft|at the line|from the line)\b/.test(text)) return "ft";
-  if (/\b(?:three|3pt|3-point|3p)\b/.test(text)) return "three";
+  if (/\b(?:threes?|3pt|3-point|3p|3fg)\b/.test(text)) return "three";
   if (/\brim\b/.test(text)) return "rim";
   if (/\bmid(?:range|-range)?\b/.test(text)) return "mid";
-  if (/\b(?:field goal|overall|shooting|shot)\b/.test(text)) return "fg";
+  if (/\b(?:field goal|from the field|overall|shooting|shot)\b/.test(text)) return "fg";
   return "";
 }
 
@@ -2116,7 +2112,10 @@ function repairBarePercentageInText(text: string, features: ReturnType<typeof bu
       const context = repaired.slice(sentenceStart, sentenceEnd);
       let candidates = references.filter((reference) => reference.percentageText === percentageText);
       const contextLower = context.toLowerCase();
-      const matchingTeams = [...new Set(candidates.map((reference) => reference.team).filter((team) => team && contextLower.includes(team)))];
+      const matchingTeams = [...new Set(candidates.map((reference) => reference.team).filter((team) => {
+        const record = [features.teams.home, features.teams.away].find((item) => String(item.tricode).toLowerCase() === team);
+        return team && (contextLower.includes(team) || (record?.name && contextLower.includes(String(record.name).toLowerCase())));
+      }))];
       if (matchingTeams.length === 1) candidates = candidates.filter((reference) => reference.team === matchingTeams[0]);
       const stat = shootingStatFromContext(context);
       if (stat) candidates = candidates.filter((reference) => reference.stat === stat);
@@ -2437,6 +2436,11 @@ async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayloa
     `End score: ${formatScoreState(features.score.end, features)}.`,
     `Selected range scoring: ${formatRangeScoringFacts(features)}.`,
     "If you describe the selected quarter, half, game, or span score, it must match the selected range scoring exactly.",
+    `Allowed run/push/burst scoring pairs only: ${[
+      ...[features.teams.home, features.teams.away].map((team) => `${team.largestRun?.points || 0}-0`),
+      ...(features.momentumBursts || []).map((burst) => `${burst.points}-${burst.opponentPoints}`),
+    ].join(", ")}. Do not invent another run or repurpose a lead/score as a run.`,
+    `Verified shooting facts; copy the full percentage and fraction together: ${collectKnownShootingPercentages(features).map((ref) => `${ref.team} ${ref.stat}: ${ref.percentageText} (${ref.made}/${ref.attempted})`).join("; ")}.`,
   ];
   const retryInstructions = previousRejectReasons.length
     ? [
@@ -2593,6 +2597,7 @@ export async function handleRequest(req: Request) {
 
     minutesData = normalizeOpeningMinutesData(minutesData, game);
     const features = buildFeaturePayload(game, minutesData, range);
+    const feedSignature = await segmentFeedSignature(game!, Number(range.maxPeriod || game!.period));
     const templateAnalysis = buildTemplateAnalysis(features);
     const dataSignature = await stableDigest(buildAnalysisDataSignatureInput(features));
 
@@ -2655,6 +2660,7 @@ export async function handleRequest(req: Request) {
       {
         cached: false,
         dataSignature,
+        feedSignature,
         ai: aiMetadata,
         fallbackReason,
       },

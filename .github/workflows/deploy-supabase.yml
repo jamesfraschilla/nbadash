@@ -13,6 +13,10 @@ on:
         description: Apply the Playcall note-sharing function migration (preserves existing note data)
         type: boolean
         default: false
+      apply_reliability_jobs:
+        description: Apply isolated referee and analysis reconciliation schedules
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -61,13 +65,31 @@ jobs:
       - name: Attest database after successful note-sharing migration
         if: github.event_name == 'workflow_dispatch' && inputs.apply_note_sharing
         run: node scripts/verify-supabase-production.mjs --record-database
+      - name: Apply reliability schedules
+        if: github.event_name == 'workflow_dispatch' && inputs.apply_reliability_jobs
+        run: |
+          jq -n --rawfile query supabase/reliability_jobs.sql '{query: $query}' |
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            --header "Content-Type: application/json" \
+            --data-binary @- \
+            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query"
+          node scripts/verify-supabase-production.mjs --record-database
       - name: Refuse deployment when database scripts are not attested in production
         run: npm run supabase:production:check-database
       - name: Deploy every repository Edge Function
         run: |
           node -e 'for (const row of require("./supabase/deployment-manifest.json").edgeFunctions) console.log(row.name)' |
           while read -r fn; do
-            npx -y supabase functions deploy "$fn" --project-ref "$SUPABASE_PROJECT_REF" --use-api
+            for attempt in 1 2 3; do
+              if npx -y supabase functions deploy "$fn" --project-ref "$SUPABASE_PROJECT_REF" --use-api; then
+                break
+              fi
+              if [ "$attempt" = 3 ]; then exit 1; fi
+              echo "Retrying $fn after deployment attempt $attempt failed."
+              sleep "$((attempt * 5))"
+            done
           done
       - run: npm run supabase:production:record-edge
       - run: npm run supabase:production:check

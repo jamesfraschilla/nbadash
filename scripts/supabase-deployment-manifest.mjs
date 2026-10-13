@@ -32,6 +32,7 @@ const sqlOrder = [
   "operational_hardening.sql",
   "wizards_analysis_prewarm_schedule.sql",
   "playcall_note_sharing.sql",
+  "reliability_jobs.sql",
 ];
 
 const sha256 = (file) => crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");

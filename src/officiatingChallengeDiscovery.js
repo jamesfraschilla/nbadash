@@ -80,5 +80,5 @@ export function shouldRunWeeklyChallengeSync({
     return result;
   }, {});
   const dateKey = `${parts.year}-${parts.month}-${parts.day}`;
-  return dateKey >= startDate && parts.weekday === "Sun" && Number(parts.hour) === 5;
+  return dateKey >= startDate && parts.weekday === "Sun";
 }
