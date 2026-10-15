@@ -178,4 +178,33 @@ begin
 end
 $$;
 
+-- The October 3 preseason feed emitted 200608 for Brent Barnaky while the
+-- NBA's established ID before and after that game is 201638. Collapse the
+-- one-game feed anomaly so it cannot split his career profile.
+update public.nba_official_game_assignments
+set official_id = '201638'
+where official_id = '200608';
+
+update public.nba_official_call_events
+set official_id = '201638'
+where official_id = '200608';
+
+delete from public.nba_official_game_facts duplicate
+using public.nba_official_game_facts canonical
+where duplicate.official_id = '200608'
+  and canonical.official_id = '201638'
+  and duplicate.game_id = canonical.game_id;
+
+update public.nba_official_game_facts
+set official_id = '201638'
+where official_id = '200608';
+
+update public.nba_coach_challenge_events
+set
+  crew_chief_id = case when crew_chief_id = '200608' then '201638' else crew_chief_id end,
+  whistling_official_id = case when whistling_official_id = '200608' then '201638' else whistling_official_id end
+where crew_chief_id = '200608' or whistling_official_id = '200608';
+
+delete from public.nba_official_identities where official_id = '200608';
+
 commit;

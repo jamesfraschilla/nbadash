@@ -74,7 +74,7 @@
     {
       "order": 15,
       "path": "supabase/referee_identity_registry.sql",
-      "sha256": "9b003146707f96888540fe5d9c1c620ec1d6a13088bcc4cfbd9e868073b24ca0"
+      "sha256": "c1c3449a979f7824dd33f9aeb098f9524f6cfe5ca05e9c1315a2c4b743c4bcef"
     },
     {
       "order": 16,

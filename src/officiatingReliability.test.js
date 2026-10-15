@@ -13,6 +13,7 @@ import {
 test("official identity aliases collapse known duplicate referee records", () => {
   assert.equal(canonicalOfficialId("11629177"), "1629177");
   assert.equal(canonicalOfficialId("196295108"), "1629171");
+  assert.equal(canonicalOfficialId("200608"), "201638");
   assert.deepEqual(canonicalOfficialIdentity({
     officialId: "11629177",
     officialName: "B. Maru",
