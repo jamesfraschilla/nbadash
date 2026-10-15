@@ -8,6 +8,10 @@ export type RefereeAssignment = {
   umpireNumber: string;
   alternate: string;
   alternateNumber: string;
+  crewChiefId?: string;
+  refereeId?: string;
+  umpireId?: string;
+  alternateId?: string;
 };
 
 function decodeHtml(value: string) {

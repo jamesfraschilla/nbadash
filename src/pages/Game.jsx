@@ -70,6 +70,7 @@ import StatBars from "../components/StatBars.jsx";
 import Officials from "../components/Officials.jsx";
 import OfficialsExportPanel from "../components/OfficialsExportPanel.jsx";
 import MatchUps from "../components/MatchUps.jsx";
+import { GameKpiTables } from "../components/KpiTables.jsx";
 import PlayerHeadshot from "../components/PlayerHeadshot.jsx";
 import TransitionStats from "../components/TransitionStats.jsx";
 import MiscStats from "../components/MiscStats.jsx";
@@ -3363,6 +3364,8 @@ export default function Game({ variant = "full" }) {
               homeProjectedStarterIds={homeProjectedStarterIds}
             />
           ) : null}
+
+          {isWashingtonGame ? <GameKpiTables gameId={gameId} /> : null}
 
           <StatBars
             title="Four Factors"

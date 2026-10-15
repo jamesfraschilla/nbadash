@@ -73,71 +73,76 @@
     },
     {
       "order": 15,
+      "path": "supabase/referee_identity_registry.sql",
+      "sha256": "9b003146707f96888540fe5d9c1c620ec1d6a13088bcc4cfbd9e868073b24ca0"
+    },
+    {
+      "order": 16,
       "path": "supabase/officiating_season_scoped_rollup_caches.sql",
       "sha256": "293c6086df91772cf0f928ee7fca62f681ae1e96408e4b60bea785917c0ad132"
     },
     {
-      "order": 16,
+      "order": 17,
       "path": "supabase/officiating_insights.sql",
       "sha256": "b0eeb7d36eb424a4485054ebe646d3c871aa010906e9a2affe20dfa22322f10e"
     },
     {
-      "order": 17,
+      "order": 18,
       "path": "supabase/officiating_insight_feedback.sql",
       "sha256": "aeaec87180a7de84d138cbe69418456bd2b11c692afc3e2977aefebeac3ec3ef"
     },
     {
-      "order": 18,
+      "order": 19,
       "path": "supabase/officiating_cache_rls.sql",
       "sha256": "e0db5984273feebae1bba747f6c5b0e3995ffcacbf308524219cc0b860c6bcff"
     },
     {
-      "order": 19,
+      "order": 20,
       "path": "supabase/fix_officiating_stat_accuracy.sql",
       "sha256": "081972a0b2e8254dc51e27e0cc9b91308beb355e1f353f3264262b9e014b1fc8"
     },
     {
-      "order": 20,
+      "order": 21,
       "path": "supabase/fix_challenge_foul_subtypes.sql",
       "sha256": "3575dc3487a0762a9442f4a3bf9d4f88bcb9d2cf398787c20b69adea35ff9b87"
     },
     {
-      "order": 21,
+      "order": 22,
       "path": "supabase/remove_pgr_insights.sql",
       "sha256": "3ace6b2e11e2e917917b4a8aef0a91326671fa9f71266f19e62cfad17e6721a3"
     },
     {
-      "order": 22,
+      "order": 23,
       "path": "supabase/challenge_context_tag_save_rpc.sql",
       "sha256": "0333462ca4e496aa67243176088732d5ea62869e9af95f5e0ac6bc65f8eed63e"
     },
     {
-      "order": 23,
+      "order": 24,
       "path": "supabase/database_storage_audit.sql",
       "sha256": "71b69f0988cbc0fc82bd4c227706ab5d2c105d63a5597776b3ac90f3686da995"
     },
     {
-      "order": 24,
+      "order": 25,
       "path": "supabase/operational_hardening.sql",
       "sha256": "69d464f37763becbfbb24f57f61d6b7794c6138b147613239c17f8485333c15e"
     },
     {
-      "order": 25,
+      "order": 26,
       "path": "supabase/wizards_analysis_prewarm_schedule.sql",
       "sha256": "1764a8ef8efd85d9462588d201be039dbcb56d2120bcee056b3bc171aabe8879"
     },
     {
-      "order": 26,
+      "order": 27,
       "path": "supabase/playcall_note_sharing.sql",
       "sha256": "37633801e95c367009d407c64228ab178ef426e1792495e88246dd47da1b8940"
     },
     {
-      "order": 27,
+      "order": 28,
       "path": "supabase/reliability_jobs.sql",
       "sha256": "41b34979fc956fb5f8a4ef7285ae5dc6ed85f005e55e4e0923e8ff20fe1086f3"
     },
     {
-      "order": 28,
+      "order": 29,
       "path": "supabase/officiating_overview_refresh.sql",
       "sha256": "8f9418a5a009c6ba240f4ae862887426ea39f618e410ece2628e4eab55959903"
     }
@@ -332,7 +337,7 @@
     {
       "name": "referee-assignments",
       "entrypoint": "supabase/functions/referee-assignments/index.ts",
-      "sha256": "65048f641954b2fbcdb84b091e485fac643a82dab1987a053349f9379d84e073",
+      "sha256": "d639810a591ee738bb30dc78dd6532567f5311f932af848303f48cfc2b4f5f57",
       "sourceFiles": [
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/minutesNormalization.ts",

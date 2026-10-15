@@ -782,6 +782,12 @@ export default function Tools({ section = "tools" }) {
   useEffect(() => {
     if (activeTab !== TOOL_TABS.GRAPHICS || activeGraphic !== TOOL_TABS.MATCHUP) return undefined;
     let cancelled = false;
+    const initialPreviewCanvas = matchupPreviewRef.current;
+    if (initialPreviewCanvas) {
+      const initialContext = initialPreviewCanvas.getContext("2d");
+      initialContext.fillStyle = "#000000";
+      initialContext.fillRect(0, 0, initialPreviewCanvas.width, initialPreviewCanvas.height);
+    }
 
     renderMatchupGraphicCanvas({
       league,

@@ -30,6 +30,16 @@ for (let attempt = 1; attempt <= attempts; attempt += 1) {
     assignments.forEach((assignment) => {
       console.log(`${assignment.game}: ${assignment.crewChief}, ${assignment.referee}, ${assignment.umpire}${assignment.alternate ? ` (alternate: ${assignment.alternate})` : ""}`);
     });
+    const unresolved = assignments.flatMap((assignment) => [
+      [assignment.game, assignment.crewChief, assignment.crewChiefId],
+      [assignment.game, assignment.referee, assignment.refereeId],
+      [assignment.game, assignment.umpire, assignment.umpireId],
+      ...(assignment.alternate ? [[assignment.game, assignment.alternate, assignment.alternateId]] : []),
+    ]).filter(([, name, officialId]) => name && !officialId);
+    if (unresolved.length) {
+      console.warn(`Identity registry review: ${unresolved.length} assignment(s) do not yet have a stable NBA official ID.`);
+      unresolved.forEach(([game, name]) => console.warn(`${game}: unresolved identity for ${name}`));
+    }
     process.exit(0);
   } catch (error) {
     if (attempt === attempts) throw error;

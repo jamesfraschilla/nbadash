@@ -20,6 +20,7 @@ const sqlOrder = [
   "officiating_intelligence.sql",
   "officiating_intelligence_hardening.sql",
   "officiating_reliability_hardening.sql",
+  "referee_identity_registry.sql",
   "officiating_season_scoped_rollup_caches.sql",
   "officiating_insights.sql",
   "officiating_insight_feedback.sql",

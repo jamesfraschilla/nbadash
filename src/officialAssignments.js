@@ -296,6 +296,10 @@ function normalizeAssignmentsPayload(payload) {
       umpireNumber: String(row?.umpireNumber || "").trim(),
       alternate: stripNumberSuffix(row?.alternate || ""),
       alternateNumber: String(row?.alternateNumber || "").trim(),
+      crewChiefId: String(row?.crewChiefId || "").trim(),
+      refereeId: String(row?.refereeId || "").trim(),
+      umpireId: String(row?.umpireId || "").trim(),
+      alternateId: String(row?.alternateId || "").trim(),
     }))
     .filter((row) => row.crewChief && row.referee && row.umpire);
 }
@@ -368,15 +372,15 @@ export async function fetchPublishedOfficials() {
   const officials = new Map();
   assignments.forEach((assignment) => {
     [
-      [assignment.crewChief, assignment.crewChiefNumber],
-      [assignment.referee, assignment.refereeNumber],
-      [assignment.umpire, assignment.umpireNumber],
-      [assignment.alternate, assignment.alternateNumber],
-    ].forEach(([name, jerseyNumber]) => {
+      [assignment.crewChief, assignment.crewChiefNumber, assignment.crewChiefId],
+      [assignment.referee, assignment.refereeNumber, assignment.refereeId],
+      [assignment.umpire, assignment.umpireNumber, assignment.umpireId],
+      [assignment.alternate, assignment.alternateNumber, assignment.alternateId],
+    ].forEach(([name, jerseyNumber, officialId]) => {
       const normalizedName = normalizeNameKey(name);
       if (!normalizedName) return;
       officials.set(normalizedName, {
-        id: `published:${normalizedName}`,
+        id: officialId || `published:${normalizedName}`,
         name: String(name || "").trim(),
         jerseyNumber: String(jerseyNumber || "").trim(),
       });
@@ -411,9 +415,9 @@ export function matchPublishedAssignmentForGame(assignments, game) {
   return {
     game: match.game,
     crew: [
-      { name: match.crewChief, jerseyNumber: match.crewChiefNumber || "", role: "Crew Chief", roleKey: "crewChief" },
-      { name: match.referee, jerseyNumber: match.refereeNumber || "", role: "Referee", roleKey: "referee" },
-      { name: match.umpire, jerseyNumber: match.umpireNumber || "", role: "Umpire", roleKey: "umpire" },
+      { name: match.crewChief, jerseyNumber: match.crewChiefNumber || "", role: "Crew Chief", roleKey: "crewChief", ...(match.crewChiefId ? { officialId: match.crewChiefId } : {}) },
+      { name: match.referee, jerseyNumber: match.refereeNumber || "", role: "Referee", roleKey: "referee", ...(match.refereeId ? { officialId: match.refereeId } : {}) },
+      { name: match.umpire, jerseyNumber: match.umpireNumber || "", role: "Umpire", roleKey: "umpire", ...(match.umpireId ? { officialId: match.umpireId } : {}) },
     ],
     alternate: match.alternate || "",
   };
@@ -427,12 +431,21 @@ export function mergeOfficialsWithPublishedAssignment(officials, publishedAssign
   const publishedByName = new Map(
     publishedCrew.map((official, index) => [normalizeNameKey(official.name), { ...official, index }])
   );
+  const publishedById = new Map(publishedCrew.filter((official) => official.officialId)
+    .map((official) => [String(official.officialId), official]));
   const merged = current.map((official) => {
-    const published = publishedByName.get(normalizeNameKey(getOfficialDisplayName(official)));
+    const currentId = String(official?.personId || official?.officialId || official?.id || "").trim();
+    const published = publishedById.get(currentId) || publishedByName.get(normalizeNameKey(getOfficialDisplayName(official)));
     if (!published) return official;
     publishedByName.delete(normalizeNameKey(published.name));
     return {
       ...official,
+      personId: currentId || published.officialId || official?.personId,
+      name: published.name || official?.name,
+      fullName: published.name || official?.fullName,
+      firstName: published.name ? "" : official?.firstName,
+      familyName: published.name ? "" : official?.familyName,
+      lastName: published.name ? "" : official?.lastName,
       jerseyNum: published.jerseyNumber || official?.jerseyNum || official?.jerseyNumber || "",
       jerseyNumber: published.jerseyNumber || official?.jerseyNumber || official?.jerseyNum || "",
       roleKey: published.roleKey,
@@ -443,7 +456,7 @@ export function mergeOfficialsWithPublishedAssignment(officials, publishedAssign
   publishedCrew.forEach((official, index) => {
     if (!publishedByName.has(normalizeNameKey(official.name))) return;
     merged.push({
-      personId: `published:${normalizeNameKey(official.name)}`,
+      personId: official.officialId || `published:${normalizeNameKey(official.name)}`,
       name: official.name,
       fullName: official.name,
       jerseyNum: official.jerseyNumber || "",

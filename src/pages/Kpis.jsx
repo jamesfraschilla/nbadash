@@ -4,6 +4,7 @@ import { isCapitalCityTeam, isWashingtonTeam } from "../pregamePlayers.js";
 import { useGame } from "../queries.js";
 import { supabase } from "../supabaseClient.js";
 import { readLocalStorage, writeLocalStorage } from "../storage.js";
+import { KpiTablesEditor } from "../components/KpiTables.jsx";
 import styles from "./Kpis.module.css";
 
 const KPI_STORAGE_PREFIX = "kpis:game:v1:";
@@ -527,6 +528,7 @@ export default function Kpis() {
               </section>
             ))}
           </div>
+          {isWashingtonTeam(game?.homeTeam) || isWashingtonTeam(game?.awayTeam) ? <KpiTablesEditor key={gameId} gameId={gameId} /> : null}
         </>
       ) : null}
 

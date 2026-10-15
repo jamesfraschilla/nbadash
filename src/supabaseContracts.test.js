@@ -9,6 +9,7 @@ const gameLiveStateSql = readFileSync(new URL("../supabase/game_live_state.sql",
 const gameLiveStateAtomicSql = readFileSync(new URL("../supabase/game_live_state_atomic.sql", import.meta.url), "utf8");
 const operationalSql = readFileSync(new URL("../supabase/operational_hardening.sql", import.meta.url), "utf8");
 const playcallSql = readFileSync(new URL("../supabase/playcall_note_sharing.sql", import.meta.url), "utf8");
+const refereeIdentitySql = readFileSync(new URL("../supabase/referee_identity_registry.sql", import.meta.url), "utf8");
 
 test("Playcall sharing preserves note ownership, revision checks and versions and verifies existing content", () => {
   assert.match(playcallSql, /or 'Playcall' = any\(n\.tags\)/);
@@ -74,4 +75,13 @@ test("operational hardening atomically rate-limits Edge requests and records dep
   assert.match(operationalSql, /grant execute .* to service_role/is);
   assert.match(operationalSql, /supabase_deployment_state/i);
   assert.match(operationalSql, /revoke all .* from public, anon, authenticated/is);
+});
+
+test("referee identity registry is compact, ID-based, and service-role maintained", () => {
+  assert.match(refereeIdentitySql, /official_id text primary key/i);
+  assert.match(refereeIdentitySql, /name_aliases text\[\]/i);
+  assert.match(refereeIdentitySql, /jersey_number_history text\[\]/i);
+  assert.match(refereeIdentitySql, /observe_nba_official_identities/i);
+  assert.match(refereeIdentitySql, /revoke all .* from public, anon, authenticated/is);
+  assert.doesNotMatch(refereeIdentitySql, /source_payload jsonb/i);
 });

@@ -1,0 +1,23 @@
+.dashboard { width: min(100%, 860px); margin: 0 auto 22px; }
+.toggleButton { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); color: var(--text); font: inherit; font-weight: 700; cursor: pointer; }
+.dashboardBody { margin-top: 10px; padding: 16px; border: 1px solid var(--border); border-radius: 16px; background: var(--panel); }
+.editor { margin-top: 30px; padding-top: 26px; border-top: 1px solid var(--border); }
+.editorHeading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.editorHeading h2 { margin: 0 0 6px; }
+.editorHeading p { margin: 0; color: var(--muted); }
+.saveStatus { flex: 0 0 auto; color: var(--muted); font-size: 13px; font-weight: 700; }
+.error { margin-bottom: 12px; color: #c62828; font-weight: 700; }
+.tableStack { display: grid; gap: 22px; }
+.tableSection h3 { margin: 0 0 9px; font-size: 1rem; }
+.tableWrap { max-width: 100%; overflow-x: auto; }
+.table { width: 100%; min-width: 600px; border-collapse: collapse; table-layout: fixed; }
+.table th, .table td { height: 48px; padding: 8px; border: 1px solid var(--border); text-align: center; }
+.table thead th { background: var(--bg); font-size: 0.82rem; }
+.labelColumn { width: 32%; }
+.table .labelHeader, .table .rowLabel { text-align: left; }
+.rowLabel { background: var(--bg); font-weight: 700; overflow-wrap: anywhere; }
+.rowLabel span { color: var(--muted); }
+.table input { box-sizing: border-box; width: 100%; min-width: 0; padding: 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel); color: var(--text); font: inherit; text-align: center; }
+.rowLabel input { text-align: left; }
+.totalCell { background: color-mix(in srgb, var(--panel) 72%, var(--bg)); font-weight: 800; }
+@media (max-width: 720px) { .editorHeading { flex-direction: column; } .dashboardBody { padding: 12px; } }

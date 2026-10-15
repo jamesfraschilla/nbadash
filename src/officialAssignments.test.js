@@ -40,6 +40,27 @@ test("published assignments populate missing preseason officials and current num
   ]);
 });
 
+test("stable referee IDs merge assignments even after a published name changes", () => {
+  const merged = mergeOfficialsWithPublishedAssignment([{
+    personId: "204058",
+    name: "Former Name",
+    jerseyNumber: "71",
+  }], {
+    crew: [{
+      officialId: "204058",
+      name: "Current Name",
+      jerseyNumber: "72",
+      role: "Crew Chief",
+      roleKey: "crewChief",
+    }],
+  });
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].personId, "204058");
+  assert.equal(merged[0].fullName, "Current Name");
+  assert.equal(merged[0].jerseyNumber, "72");
+  assert.equal(merged[0].roleKey, "crewChief");
+});
+
 test("does not use another game's assignment", () => {
   const result = matchPublishedAssignmentForGame([{
     game: "Boston @ Cleveland",
