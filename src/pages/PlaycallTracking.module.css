@@ -7,5 +7,8 @@
 .table { width: 100%; min-width: 650px; table-layout: fixed; border-collapse: collapse; }
 .shortColumn { width: 25%; }
 .table th, .table td { border: 1px solid var(--border); padding: 12px; text-align: left; vertical-align: top; }
+.sortButton { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 0; border: 0; color: inherit; background: transparent; font: inherit; font-weight: inherit; text-align: left; cursor: pointer; }
+.sortButton:focus-visible { outline: 2px solid var(--accent, #60a5fa); outline-offset: 4px; border-radius: 2px; }
+.sortIndicator { flex: 0 0 auto; color: var(--muted); font-size: 0.75em; }
 .table td span { display: block; min-height: 56px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .table textarea { display: block; box-sizing: border-box; width: 100%; resize: vertical; font: inherit; line-height: 1.5; color: inherit; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px; }

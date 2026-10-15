@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { NBA_TEAMS } from "../data/nbaTeams.js";
 import { fetchSharedStateRow, saveSharedStateRow } from "../sharedState.js";
+import { nextPlaycallSort, sortPlaycallRows } from "../playcallTrackingSort.js";
 import styles from "./PlaycallTracking.module.css";
 
 const SCOPE = "playcall_tracking";
@@ -17,6 +18,7 @@ function TeamTable({ team, onEditingChange, onSavingChange }) {
   const [version, setVersion] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [sort, setSort] = useState({ field: "", direction: "" });
   useEffect(() => {
     onEditingChange(Boolean(draft));
     if (!draft) return;
@@ -33,6 +35,10 @@ function TeamTable({ team, onEditingChange, onSavingChange }) {
     refetchOnWindowFocus: !draft,
   });
   const rows = Array.isArray(query.data?.payload?.rows) ? query.data.payload.rows : [];
+  const displayedRows = useMemo(
+    () => sortPlaycallRows(draft || rows, sort),
+    [draft, rows, sort],
+  );
   async function save() {
     setSaving(true);
     setError("");
@@ -76,11 +82,20 @@ function TeamTable({ team, onEditingChange, onSavingChange }) {
     {query.isPending ? <p>Loading playcalls…</p> : <div className={styles.tableWrap}>
       <table className={styles.table}>
         <colgroup><col className={styles.shortColumn} /><col className={styles.shortColumn} /><col /></colgroup>
-        <thead><tr>{columns.map((column) => <th key={column} scope="col">{column}</th>)}</tr></thead>
-        <tbody>{(draft || rows).map((row, index) => <tr key={index}>
+        <thead><tr>{columns.map((column, index) => {
+          const field = fields[index];
+          const active = sort.field === field;
+          return <th key={column} scope="col" aria-sort={active ? sort.direction : "none"}>
+            <button type="button" className={styles.sortButton} onClick={() => setSort((current) => nextPlaycallSort(current, field))}
+              aria-label={`Sort by ${column}${active ? `, currently ${sort.direction}` : ""}`}>
+              <span>{column}</span><span className={styles.sortIndicator} aria-hidden="true">{active ? sort.direction === "ascending" ? "▲" : "▼" : "↕"}</span>
+            </button>
+          </th>;
+        })}</tr></thead>
+        <tbody>{displayedRows.map(({ row, sourceIndex }) => <tr key={sourceIndex}>
           {fields.map((field, column) => <td key={field}>{draft
-            ? <textarea aria-label={`${columns[column]} row ${index + 1}`} value={row[field] || ""} disabled={saving} rows={3} maxLength={4000}
-              onChange={(event) => setDraft((current) => current.map((item, i) => i === index ? { ...item, [field]: event.target.value } : item))} />
+            ? <textarea aria-label={`${columns[column]} row ${sourceIndex + 1}`} value={row[field] || ""} disabled={saving} rows={3} maxLength={4000}
+              onChange={(event) => setDraft((current) => current.map((item, i) => i === sourceIndex ? { ...item, [field]: event.target.value } : item))} />
             : <span>{row[field] || ""}</span>}</td>)}
         </tr>)}</tbody>
       </table>

@@ -83,3 +83,37 @@ test("failed shared saves never publish or discard edits", async ({ page }) => {
   await page.getByLabel("NBA Team").selectOption("1610612751");
   await expect(page.getByLabel("NBA Team")).toHaveValue("1610612764");
 });
+
+test("column headers sort without changing which source row is edited", async ({ page }) => {
+  const stored = {
+    payload: { rows: [
+      { playcall: "Zoom 10", action: "Screen", description: "Third" },
+      { playcall: "Alpha", action: "Cut", description: "First" },
+      { playcall: "Zoom 2", action: "Drive", description: "Second" },
+    ] },
+    updated_at: "2026-10-15T13:03:00Z",
+  };
+  await page.route("**/rest/v1/rotations_shared_state**", async (route) => {
+    if (route.request().method() === "GET") {
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([stored]) });
+    }
+    const body = route.request().postDataJSON();
+    stored.payload = body.payload;
+    stored.updated_at = "2026-10-15T13:04:00Z";
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(stored) });
+  });
+
+  await page.goto("#/tools?tab=playcalls&team=1610612764");
+  await page.getByRole("button", { name: "Sort by Playcall" }).click();
+  await expect(page.locator("tbody tr").first()).toContainText("Alpha");
+  await expect(page.getByRole("columnheader", { name: /Playcall/ })).toHaveAttribute("aria-sort", "ascending");
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await page.getByLabel("Description row 2", { exact: true }).fill("Edited Alpha");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Edit", exact: true })).toBeVisible();
+  expect(stored.payload.rows.map((row) => row.description)).toEqual(["Third", "Edited Alpha", "Second"]);
+  await page.getByRole("button", { name: /Sort by Playcall/ }).click();
+  await expect(page.locator("tbody tr").first()).toContainText("Zoom 10");
+  await page.getByRole("button", { name: /Sort by Playcall/ }).click();
+  await expect(page.locator("tbody tr").first()).toContainText("Zoom 10");
+});
