@@ -480,11 +480,13 @@ function drawCenteredTextMiddle(context, text, x, y, width, height, size, color,
   const centerY = y + (height / 2);
 
   if (visuallyCenter) {
+    // Canvas text bounds are relative to the active baseline. The time cell
+    // leaves this as "middle", so normalize it before measuring either name.
+    context.textBaseline = "alphabetic";
     const metrics = context.measureText(String(text || ""));
     const ascent = Number(metrics.actualBoundingBoxAscent || 0);
     const descent = Number(metrics.actualBoundingBoxDescent || 0);
     if (ascent || descent) {
-      context.textBaseline = "alphabetic";
       context.fillText(text, x + (width / 2), centerY + ((ascent - descent) / 2));
       return;
     }
@@ -614,7 +616,7 @@ function drawPortraitExport(slots, playerById, headerLineTwo, logoImage, themeMo
     context.fillRect(tableX, y, timeColWidth, rowHeight);
     context.strokeStyle = colors.border;
     context.strokeRect(tableX, y, timeColWidth, rowHeight);
-    drawCenteredTextMiddle(context, slot.time, tableX, y, timeColWidth, rowHeight, showClock ? 18 : 24, colors.timeText, 700);
+    drawCenteredTextMiddle(context, slot.time, tableX, y, timeColWidth, rowHeight, showClock ? 18 : 24, colors.timeText, 700, true);
 
     const clockX = tableX + timeColWidth;
     if (showClock) {
@@ -622,7 +624,7 @@ function drawPortraitExport(slots, playerById, headerLineTwo, logoImage, themeMo
       context.fillRect(clockX, y, clockColWidth, rowHeight);
       context.strokeStyle = colors.border;
       context.strokeRect(clockX, y, clockColWidth, rowHeight);
-      drawCenteredTextMiddle(context, slot.clock || "", clockX, y, clockColWidth, rowHeight, 18, colors.timeText, 700);
+      drawCenteredTextMiddle(context, slot.clock || "", clockX, y, clockColWidth, rowHeight, 18, colors.timeText, 700, true);
     }
 
     const x1 = clockX + clockColWidth;
