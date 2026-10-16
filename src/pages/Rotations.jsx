@@ -1210,27 +1210,26 @@ function buildPdfColors(rgbBuilder) {
 }
 
 const PDF_QUARTER_TIME_COL_WIDTH = 24;
-const PDF_BASE_DEPTH_NAME_FONT_SIZE = 8.5;
-const PDF_BASE_QUARTER_NAME_FONT_SIZE = 8.2;
-const PDF_MIN_PLAYER_NAME_FONT_SIZE = 5.6;
-const PDF_PLAYER_TEXT_HORIZONTAL_PADDING = 4;
+const PDF_BASE_QUARTER_NAME_FONT_SIZE = 12;
+const PDF_MIN_PLAYER_NAME_FONT_SIZE = 1;
+const PDF_PLAYER_TEXT_HORIZONTAL_PADDING = 6;
+const PDF_QUARTER_OUTER_MARGIN = 0.25 * 72;
+const PDF_QUARTER_CENTER_GAP = 8;
+const PDF_QUARTER_TITLE_HEIGHT = 20;
+const PDF_QUARTER_HEADER_HEIGHT = 18;
 
-function getExportPlayerNames(depthChart, lineups) {
-  const depthNames = Array.isArray(depthChart)
-    ? depthChart.flat().map((value) => getDepthChartCellDisplay(value)).filter((value) => normalizeName(value))
-    : [];
-  const lineupNames = Object.values(lineups || {}).flatMap((quarterRows) => (
+function getExportPlayerNames(lineups) {
+  return Object.values(lineups || {}).flatMap((quarterRows) => (
     Array.isArray(quarterRows)
       ? quarterRows.flat().filter((value) => normalizeName(value))
       : []
   ));
-  return [...depthNames, ...lineupNames];
 }
 
 function getFittedPdfPlayerNameFontSize(font, playerNames, cellWidth) {
   const names = playerNames.filter(Boolean);
   if (!names.length) {
-    return Math.min(PDF_BASE_DEPTH_NAME_FONT_SIZE, PDF_BASE_QUARTER_NAME_FONT_SIZE);
+    return PDF_BASE_QUARTER_NAME_FONT_SIZE;
   }
 
   const availableWidth = Math.max(1, cellWidth - PDF_PLAYER_TEXT_HORIZONTAL_PADDING);
@@ -1239,24 +1238,11 @@ function getFittedPdfPlayerNameFontSize(font, playerNames, cellWidth) {
   ), 0);
 
   if (!longestNameWidthAtUnitSize) {
-    return Math.min(PDF_BASE_DEPTH_NAME_FONT_SIZE, PDF_BASE_QUARTER_NAME_FONT_SIZE);
+    return PDF_BASE_QUARTER_NAME_FONT_SIZE;
   }
 
   const maxAllowedFontSize = availableWidth / longestNameWidthAtUnitSize;
-  const baseFontSize = Math.min(PDF_BASE_DEPTH_NAME_FONT_SIZE, PDF_BASE_QUARTER_NAME_FONT_SIZE);
-  return Math.max(PDF_MIN_PLAYER_NAME_FONT_SIZE, Math.min(baseFontSize, maxAllowedFontSize));
-}
-
-function drawCenteredPdfText(page, text, font, size, x, y, width, color) {
-  const safeText = String(text || "");
-  const textWidth = font.widthOfTextAtSize(safeText, size);
-  page.drawText(safeText, {
-    x: x + Math.max(0, (width - textWidth) / 2),
-    y,
-    size,
-    font,
-    color,
-  });
+  return Math.max(PDF_MIN_PLAYER_NAME_FONT_SIZE, Math.min(PDF_BASE_QUARTER_NAME_FONT_SIZE, maxAllowedFontSize));
 }
 
 function drawPdfCell(page, {
@@ -1341,73 +1327,9 @@ function getExportCellDisplay(lineups, quarter, minuteIndex, positionIndex, hide
   return { text: cellState.value, fillColor: pdfColors.white };
 }
 
-function drawPdfDepthChart(page, font, x, topY, width, depthChart, playerFontSize, pdfColors) {
-  const titleHeight = 20;
-  const headerHeight = 18;
-  const rowHeight = 18;
-  const tableWidth = width;
-  const colWidth = tableWidth / POSITION_COLUMNS.length;
-
-  page.drawRectangle({
-    x,
-    y: topY - titleHeight,
-    width: tableWidth,
-    height: titleHeight,
-    color: pdfColors.red,
-    borderColor: pdfColors.border,
-    borderWidth: 1,
-  });
-  page.drawText("Depth Chart", {
-    x: x + 6,
-    y: topY - titleHeight + 5,
-    size: 10,
-    font,
-    color: pdfColors.white,
-  });
-
-  const headerY = topY - titleHeight - headerHeight;
-  POSITION_COLUMNS.forEach((position, index) => {
-    drawPdfCell(page, {
-      x: x + (index * colWidth),
-      y: headerY,
-      width: colWidth,
-      height: headerHeight,
-      text: String(position),
-      font,
-      fontSize: 9,
-      fillColor: pdfColors.headerFill,
-      textColor: pdfColors.bodyText,
-      borderColor: pdfColors.border,
-    });
-  });
-
-  DEPTH_ROW_INDICES.forEach((rowIndex) => {
-    const rowY = headerY - ((rowIndex + 1) * rowHeight);
-    POSITION_COLUMNS.forEach((_, index) => {
-      const cell = parseDepthChartCell(depthChart?.[rowIndex]?.[index] || "");
-      drawPdfCell(page, {
-        x: x + (index * colWidth),
-        y: rowY,
-        width: colWidth,
-        height: rowHeight,
-        text: cell.name,
-        font,
-        fontSize: playerFontSize,
-        fillColor: pdfColors.white,
-        textColor: cell.isOut ? pdfColors.red : pdfColors.bodyText,
-        borderColor: pdfColors.border,
-        strikeThrough: cell.isOut,
-      });
-    });
-  });
-
-  return titleHeight + headerHeight + (rowHeight * DEPTH_ROW_INDICES.length);
-}
-
-function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideNamesOnDuplicateRows, playerFontSize, pdfColors, minuteLabels = DEFAULT_MINUTES) {
-  const titleHeight = 20;
-  const headerHeight = 18;
-  const rowHeight = 18;
+function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideNamesOnDuplicateRows, playerFontSize, pdfColors, minuteLabels = DEFAULT_MINUTES, rowHeight = 18) {
+  const titleHeight = PDF_QUARTER_TITLE_HEIGHT;
+  const headerHeight = PDF_QUARTER_HEADER_HEIGHT;
   const timeColWidth = PDF_QUARTER_TIME_COL_WIDTH;
   const playerColWidth = (width - timeColWidth) / POSITION_COLUMNS.length;
 
@@ -1422,8 +1344,8 @@ function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideN
   });
   page.drawText(`${quarterLabel(quarter)} Quarter`, {
     x: x + 6,
-    y: topY - titleHeight + 5,
-    size: 10,
+    y: topY - titleHeight + 4,
+    size: 12,
     font,
     color: pdfColors.white,
   });
@@ -1436,7 +1358,7 @@ function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideN
     height: headerHeight,
     text: "",
     font,
-    fontSize: 9,
+    fontSize: 10.5,
     fillColor: pdfColors.headerFill,
     textColor: pdfColors.bodyText,
     borderColor: pdfColors.border,
@@ -1449,7 +1371,7 @@ function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideN
       height: headerHeight,
       text: String(position),
       font,
-      fontSize: 9,
+      fontSize: 10.5,
       fillColor: pdfColors.headerFill,
       textColor: pdfColors.bodyText,
       borderColor: pdfColors.border,
@@ -1465,7 +1387,7 @@ function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideN
       height: rowHeight,
       text: String(minute),
       font,
-      fontSize: 8.5,
+      fontSize: 10.5,
       fillColor: pdfColors.white,
       textColor: pdfColors.bodyText,
       borderColor: pdfColors.border,
@@ -1491,63 +1413,59 @@ function drawPdfQuarterTable(page, font, x, topY, width, quarter, lineups, hideN
   return titleHeight + headerHeight + (rowHeight * minuteLabels.length);
 }
 
-function drawRotationsPdfPage(page, { headerLine, depthChart, lineups, logoImage, font, side, hideNamesOnDuplicateRows, pdfColors, minuteLabels = DEFAULT_MINUTES }) {
+function drawRotationsPdfColumn(page, { lineups, font, side, quarters, hideNamesOnDuplicateRows, pdfColors, minuteLabels = DEFAULT_MINUTES }) {
   const pageWidth = page.getWidth();
   const pageHeight = page.getHeight();
   const columnWidth = 4.05 * 72;
   const columnX = side === "left" ? (0.1 * 72) : (pageWidth - (0.1 * 72) - columnWidth);
-  const headerTop = pageHeight - (0.54 * 72);
-  const contentTop = pageHeight - (0.92 * 72);
-  const logoSize = 0.62 * 72;
-  const logoBottom = 0.52 * 72;
+  const foldY = pageHeight / 2;
+  const quarterTableHeight = (
+    pageHeight
+    - (PDF_QUARTER_OUTER_MARGIN * 2)
+    - PDF_QUARTER_CENTER_GAP
+  ) / 2;
+  const quarterRowHeight = (
+    quarterTableHeight
+    - PDF_QUARTER_TITLE_HEIGHT
+    - PDF_QUARTER_HEADER_HEIGHT
+  ) / minuteLabels.length;
+  const upperQuarterTop = pageHeight - PDF_QUARTER_OUTER_MARGIN;
+  const lowerQuarterTop = foldY - (PDF_QUARTER_CENTER_GAP / 2);
   const quarterPlayerColWidth = (columnWidth - PDF_QUARTER_TIME_COL_WIDTH) / POSITION_COLUMNS.length;
   const playerFontSize = getFittedPdfPlayerNameFontSize(
     font,
-    getExportPlayerNames(depthChart, lineups),
+    getExportPlayerNames(lineups),
     quarterPlayerColWidth
   );
 
-  drawCenteredPdfText(page, headerLine, font, 18, columnX, headerTop, columnWidth, pdfColors.bodyText);
-
-  let currentTop = contentTop;
-  currentTop -= drawPdfDepthChart(page, font, columnX, currentTop, columnWidth, depthChart, playerFontSize, pdfColors);
-  currentTop -= 8;
-  currentTop -= drawPdfQuarterTable(
+  drawPdfQuarterTable(
     page,
     font,
     columnX,
-    currentTop,
+    upperQuarterTop,
     columnWidth,
-    side === "left" ? 1 : 3,
+    quarters[0],
     lineups,
     hideNamesOnDuplicateRows,
     playerFontSize,
     pdfColors,
-    minuteLabels
+    minuteLabels,
+    quarterRowHeight
   );
-  currentTop -= 8;
-  currentTop -= drawPdfQuarterTable(
+  drawPdfQuarterTable(
     page,
     font,
     columnX,
-    currentTop,
+    lowerQuarterTop,
     columnWidth,
-    side === "left" ? 2 : 4,
+    quarters[1],
     lineups,
     hideNamesOnDuplicateRows,
     playerFontSize,
     pdfColors,
-    minuteLabels
+    minuteLabels,
+    quarterRowHeight
   );
-
-  if (logoImage) {
-    page.drawImage(logoImage, {
-      x: columnX + ((columnWidth - logoSize) / 2),
-      y: logoBottom,
-      width: logoSize,
-      height: logoSize,
-    });
-  }
 }
 
 function buildRotationsPdfHtml({
@@ -1774,6 +1692,7 @@ export default function Rotations({ standalone = false }) {
   const [savedLineupsHydrated, setSavedLineupsHydrated] = useState(false);
   const [depthTemplateHydrated, setDepthTemplateHydrated] = useState(false);
   const [gameHydrated, setGameHydrated] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [confirmResetTarget, setConfirmResetTarget] = useState(null);
   const [versionMenuOpen, setVersionMenuOpen] = useState(false);
@@ -3304,8 +3223,9 @@ export default function Rotations({ standalone = false }) {
     setVersionMenuOpen(false);
   };
 
-  const handleExportPdf = async () => {
+  const handleExportPdf = async (cardLayout) => {
     if (typeof window === "undefined") return;
+    setExportModalOpen(false);
     const pdfWindow = window.open("", "_blank");
     if (pdfWindow?.document) {
       pdfWindow.document.title = "Generating Rotations PDF...";
@@ -3313,39 +3233,34 @@ export default function Rotations({ standalone = false }) {
     }
     const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
     const pdfColors = buildPdfColors(rgb);
-    const logoUrl = new URL("../assets/WWizards_Primary_Icon.png", import.meta.url).href;
-    const logoResponse = await fetch(logoUrl);
-    const logoBytes = await logoResponse.arrayBuffer();
 
     const pdfDoc = await PDFDocument.create();
     const pdfFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-    const logoImage = await pdfDoc.embedPng(logoBytes);
 
     const pageOne = pdfDoc.addPage([612, 792]);
     const pageTwo = pdfDoc.addPage([612, 792]);
 
-    drawRotationsPdfPage(pageOne, {
-      headerLine: exportHeaderLine,
-      depthChart,
-      lineups,
-      logoImage,
-      font: pdfFont,
-      side: "left",
-      hideNamesOnDuplicateRows: versionDisplayOptions.hideNamesOnDuplicateRows,
-      pdfColors,
-      minuteLabels,
-    });
-    drawRotationsPdfPage(pageTwo, {
-      headerLine: exportHeaderLine,
-      depthChart,
-      lineups,
-      logoImage,
-      font: pdfFont,
-      side: "right",
-      hideNamesOnDuplicateRows: versionDisplayOptions.hideNamesOnDuplicateRows,
-      pdfColors,
-      minuteLabels,
-    });
+    const drawPdfColumn = (page, side, quarters) => {
+      drawRotationsPdfColumn(page, {
+        lineups,
+        font: pdfFont,
+        side,
+        quarters,
+        hideNamesOnDuplicateRows: versionDisplayOptions.hideNamesOnDuplicateRows,
+        pdfColors,
+        minuteLabels,
+      });
+    };
+
+    if (cardLayout === "single") {
+      drawPdfColumn(pageOne, "left", [1, 2]);
+      drawPdfColumn(pageTwo, "right", [3, 4]);
+    } else {
+      ["left", "right"].forEach((side) => {
+        drawPdfColumn(pageOne, side, [1, 2]);
+        drawPdfColumn(pageTwo, side, [3, 4]);
+      });
+    }
 
     const pdfBytes = await pdfDoc.save();
     const blob = new Blob([pdfBytes], { type: "application/pdf" });
@@ -3682,7 +3597,7 @@ export default function Rotations({ standalone = false }) {
             <button
               type="button"
               className={styles.secondaryButton}
-              onClick={handleExportPdf}
+              onClick={() => setExportModalOpen(true)}
             >
               Export PDF
             </button>
@@ -3783,6 +3698,29 @@ export default function Rotations({ standalone = false }) {
       {standalone && vaultStatus ? (
         <div className={styles.vaultStatus}>{vaultStatus}</div>
       ) : null}
+
+      {exportModalOpen && (
+        <div className={styles.modalOverlay} onClick={() => setExportModalOpen(false)}>
+          <div
+            className={styles.modalCard}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="rotations-export-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3 id="rotations-export-title" className={styles.modalTitle}>Export PDF</h3>
+            <button type="button" className={styles.modalPrimary} onClick={() => handleExportPdf("single")}>
+              Single Card
+            </button>
+            <button type="button" className={styles.modalPrimary} onClick={() => handleExportPdf("double")}>
+              Double Card
+            </button>
+            <button type="button" className={styles.modalSecondary} onClick={() => setExportModalOpen(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {resetModalOpen && (
         <div className={styles.modalOverlay} onClick={() => setResetModalOpen(false)}>
