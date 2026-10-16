@@ -473,15 +473,28 @@ function drawCenteredText(context, text, x, y, width, size, color, weight = 700)
   context.fillText(text, x + (width / 2), y);
 }
 
-function drawCenteredTextMiddle(context, text, x, y, width, height, size, color, weight = 700) {
+function drawCenteredTextMiddle(context, text, x, y, width, height, size, color, weight = 700, visuallyCenter = false) {
   context.fillStyle = color;
   context.textAlign = "center";
-  context.textBaseline = "middle";
   context.font = `${weight} ${size}px "DIN", sans-serif`;
-  context.fillText(text, x + (width / 2), y + (height / 2));
+  const centerY = y + (height / 2);
+
+  if (visuallyCenter) {
+    const metrics = context.measureText(String(text || ""));
+    const ascent = Number(metrics.actualBoundingBoxAscent || 0);
+    const descent = Number(metrics.actualBoundingBoxDescent || 0);
+    if (ascent || descent) {
+      context.textBaseline = "alphabetic";
+      context.fillText(text, x + (width / 2), centerY + ((ascent - descent) / 2));
+      return;
+    }
+  }
+
+  context.textBaseline = "middle";
+  context.fillText(text, x + (width / 2), centerY);
 }
 
-function drawStackedNames(context, names, x, y, width, height, size, color, weight = 700, lineHeight = size) {
+function drawStackedNames(context, names, x, y, width, height, size, color, weight = 700, lineHeight = size, visuallyCenter = false) {
   const visibleNames = (names || []).filter(Boolean);
   if (!visibleNames.length) return;
   const spacing = visibleNames.length > 1
@@ -499,7 +512,8 @@ function drawStackedNames(context, names, x, y, width, height, size, color, weig
       lineHeight,
       size,
       color,
-      weight
+      weight,
+      visuallyCenter
     );
   });
 }
@@ -620,7 +634,7 @@ function drawPortraitExport(slots, playerById, headerLineTwo, logoImage, themeMo
       context.fillStyle = colors.cellBg;
       context.fillRect(x1, y, playerColWidth * 2, rowHeight);
       context.strokeRect(x1, y, playerColWidth * 2, rowHeight);
-      drawStackedNames(context, visibleDisplays.slice(0, 3), x1, y, playerColWidth * 2, rowHeight, 24, colors.cellText, 700, 24);
+      drawStackedNames(context, visibleDisplays.slice(0, 3), x1, y, playerColWidth * 2, rowHeight, 24, colors.cellText, 700, 24, true);
       return;
     }
 
@@ -631,10 +645,10 @@ function drawPortraitExport(slots, playerById, headerLineTwo, logoImage, themeMo
     context.strokeRect(x2, y, playerColWidth, rowHeight);
 
     if (visibleDisplays[0]) {
-      drawCenteredTextMiddle(context, visibleDisplays[0].toUpperCase(), x1, y, playerColWidth, rowHeight, 24, colors.cellText, 700);
+      drawCenteredTextMiddle(context, visibleDisplays[0].toUpperCase(), x1, y, playerColWidth, rowHeight, 24, colors.cellText, 700, true);
     }
     if (visibleDisplays[1]) {
-      drawCenteredTextMiddle(context, visibleDisplays[1].toUpperCase(), x2, y, playerColWidth, rowHeight, 24, colors.cellText, 700);
+      drawCenteredTextMiddle(context, visibleDisplays[1].toUpperCase(), x2, y, playerColWidth, rowHeight, 24, colors.cellText, 700, true);
     }
   });
 
