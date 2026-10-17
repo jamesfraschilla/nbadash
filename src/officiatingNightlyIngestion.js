@@ -71,7 +71,7 @@ export function selectCompletedScheduleGames(payload, {
     .sort((left, right) => left.gameId.localeCompare(right.gameId));
 }
 
-export function incompleteGameIds(games, assignmentRows = [], callRows = []) {
+export function incompleteGameIds(games, assignmentRows = [], callRows = [], challengeAuditRows = []) {
   const assignmentCounts = new Map();
   assignmentRows.forEach((row) => {
     if (row?.is_alternate) return;
@@ -83,8 +83,16 @@ export function incompleteGameIds(games, assignmentRows = [], callRows = []) {
     const gameId = String(row?.game_id || "");
     callCounts.set(gameId, (callCounts.get(gameId) || 0) + 1);
   });
+  const challengeAuditByGame = new Map(
+    challengeAuditRows.map((row) => [String(row?.game_id || row?.gameId || ""), row]),
+  );
 
   return games
-    .filter((game) => (assignmentCounts.get(game.gameId) || 0) < 3 || (callCounts.get(game.gameId) || 0) < 20)
+    .filter((game) => {
+      const challengeAudit = challengeAuditByGame.get(game.gameId);
+      return (assignmentCounts.get(game.gameId) || 0) < 3
+        || (callCounts.get(game.gameId) || 0) < 20
+        || Boolean(challengeAudit?.challenge_mismatch || challengeAudit?.challengeMismatch);
+    })
     .map((game) => game.gameId);
 }

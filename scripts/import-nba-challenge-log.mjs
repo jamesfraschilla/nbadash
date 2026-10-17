@@ -74,10 +74,17 @@ function readListArg(name, fallback = []) {
 
 async function fetchGame(gameId) {
   try {
-    const game = await fetchJson(`${API_BASE}/games/${encodeURIComponent(gameId)}`);
-    const statsActions = await fetchStatsPlayByPlayActions(gameId).catch(() => []);
+    const [game, liveBoxscore, statsActions] = await Promise.all([
+      fetchJson(`${API_BASE}/games/${encodeURIComponent(gameId)}`),
+      fetchJson(`https://cdn.nba.com/static/json/liveData/boxscore/boxscore_${encodeURIComponent(gameId)}.json`, {
+        headers: NBA_REQUEST_HEADERS,
+      }).catch(() => null),
+      fetchStatsPlayByPlayActions(gameId).catch(() => []),
+    ]);
+    const liveOfficials = Array.isArray(liveBoxscore?.game?.officials) ? liveBoxscore.game.officials : [];
     return {
       ...game,
+      officials: liveOfficials.length ? liveOfficials : game.officials,
       playByPlayActions: statsActions.length ? statsActions : game.playByPlayActions,
       source: statsActions.length ? `${game.source || "cloudfront"}+stats_playbyplayv3` : game.source,
     };
@@ -131,6 +138,10 @@ function normalizedGameDate(game, fallback = "") {
 function buildAssignmentRows(game, discovered = {}) {
   const officials = Array.isArray(game.officials) ? game.officials : [];
   return officials.map((official, index) => {
+    const assignment = String(official.assignment || "").trim().toUpperCase();
+    const assignmentNumber = Number(assignment.match(/^OFFICIAL([1234])$/)?.[1] || 0);
+    const assignmentOrder = assignmentNumber || index + 1;
+    const isAlternate = assignment === "ALTERNATE" || assignmentNumber >= 4 || index >= 3;
     const identity = canonicalOfficialIdentity({
       officialId: official.personId || official.officialId,
       officialName: [official.firstName, official.familyName || official.lastName].filter(Boolean).join(" "),
@@ -146,10 +157,10 @@ function buildAssignmentRows(game, discovered = {}) {
     official_id: identity.officialId,
     official_name: identity.officialName,
     jersey_number: identity.jerseyNumber,
-    role_key: index === 0 ? "crewChief" : index >= 3 ? "alternate" : "",
-    assignment_order: index + 1,
-    is_alternate: index >= 3,
-    source: "game_metadata",
+    role_key: assignmentNumber === 1 ? "crewChief" : assignmentNumber === 2 ? "referee" : assignmentNumber === 3 ? "umpire" : isAlternate ? "alternate" : "",
+    assignment_order: assignmentOrder,
+    is_alternate: isAlternate,
+    source: assignment ? "nba_live_boxscore" : "game_metadata",
     source_payload: official,
     });
   }).filter((row) => row.game_id && row.official_name);

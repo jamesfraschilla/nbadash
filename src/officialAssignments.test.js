@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { matchPublishedAssignmentForGame, mergeOfficialsWithPublishedAssignment } from "./officialAssignments.js";
+import { matchPublishedAssignmentForGame, mergeOfficialsWithPublishedAssignment, normalizeOfficialRole } from "./officialAssignments.js";
+
+test("maps official NBA live-boxscore assignments to crew roles", () => {
+  assert.equal(normalizeOfficialRole("OFFICIAL1"), "crewChief");
+  assert.equal(normalizeOfficialRole("OFFICIAL2"), "referee");
+  assert.equal(normalizeOfficialRole("OFFICIAL3"), "umpire");
+});
 
 test("matches the official NBA assignment to a scheduled game", () => {
   const result = matchPublishedAssignmentForGame([{
@@ -59,6 +65,43 @@ test("stable referee IDs merge assignments even after a published name changes",
   assert.equal(merged[0].fullName, "Current Name");
   assert.equal(merged[0].jerseyNumber, "72");
   assert.equal(merged[0].roleKey, "crewChief");
+  assert.equal(merged[0].assignmentOrder, 1);
+});
+
+test("published assignments discard unrelated officials from a transient oversized feed", () => {
+  const assignment = {
+    crew: [
+      { name: "Curtis Blair", roleKey: "crewChief" },
+      { name: "Evan Scott", roleKey: "referee" },
+      { name: "Michael Smith", roleKey: "umpire" },
+    ],
+  };
+  const merged = mergeOfficialsWithPublishedAssignment([
+    { personId: "1", name: "Curtis Blair" },
+    { personId: "2", name: "Evan Scott" },
+    { personId: "3", name: "Michael Smith" },
+    { personId: "4", name: "Eric Lewis" },
+    { personId: "5", name: "Matt Myers" },
+    { personId: "6", name: "Gediminas Petraitis" },
+  ], assignment);
+
+  assert.deepEqual(merged.map((official) => official.name), ["Curtis Blair", "Evan Scott", "Michael Smith"]);
+});
+
+test("a complete live crew preserves a legitimate replacement instead of restoring the published official", () => {
+  const merged = mergeOfficialsWithPublishedAssignment([
+    { personId: "1", name: "Official One", roleKey: "crewChief" },
+    { personId: "2", name: "Official Two", roleKey: "referee" },
+    { personId: "4", name: "Live Replacement", roleKey: "umpire" },
+  ], {
+    crew: [
+      { name: "Official One", roleKey: "crewChief" },
+      { name: "Official Two", roleKey: "referee" },
+      { name: "Original Official", roleKey: "umpire" },
+    ],
+  });
+
+  assert.deepEqual(merged.map((official) => official.name), ["Official One", "Official Two", "Live Replacement"]);
 });
 
 test("does not use another game's assignment", () => {

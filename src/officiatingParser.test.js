@@ -175,3 +175,35 @@ test("detectCoachChallengeActions extracts challenge rows from play-by-play", ()
   assert.equal(challenges[2].matchReason, "detected-pbp-timeout-challenge");
   assert.equal(challenges[2].challengeOutcome, "");
 });
+
+test("detectCoachChallengeActions carries the timeout team onto a teamless replay result", () => {
+  const challenges = detectCoachChallengeActions({
+    gameId: "0012600052",
+    homeTeam: { teamTricode: "MIL" },
+    awayTeam: { teamTricode: "CHI" },
+    playByPlayActions: [
+      { actionNumber: 100, actionType: "timeout", subType: "challenge", period: 3, clock: "PT05M27.00S", teamTricode: "MIL" },
+      { actionNumber: 101, actionType: "instantreplay", subType: "challenge", descriptor: "support", period: 3, clock: "PT05M27.00S", teamTricode: null },
+    ],
+  });
+
+  assert.equal(challenges.length, 1);
+  assert.equal(challenges[0].challengingTeam, "MIL");
+  assert.equal(challenges[0].challengeOutcome, "unsuccessful");
+  assert.equal(challenges[0].matchedActionNumber, 101);
+});
+
+test("detectCoachChallengeActions supports the Stats API challenge-ruling schema", () => {
+  const challenges = detectCoachChallengeActions({
+    gameId: "0012600060",
+    homeTeam: { teamTricode: "NOP" },
+    awayTeam: { teamTricode: "WAS" },
+    playByPlayActions: [
+      { actionNumber: 76, actionType: "Instant Replay", subType: "Coach Challenge Overturn Ruling", period: 1, clock: "PT07M47.00S", teamTricode: "WAS" },
+      { actionNumber: 259, actionType: "Instant Replay", subType: "Coach Challenge Support Ruling", period: 2, clock: "PT06M34.00S", teamTricode: "NOP" },
+    ],
+  });
+
+  assert.deepEqual(challenges.map((challenge) => challenge.challengeOutcome), ["successful", "unsuccessful"]);
+  assert.deepEqual(challenges.map((challenge) => challenge.challengingTeam), ["WAS", "NOP"]);
+});

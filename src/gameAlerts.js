@@ -855,7 +855,7 @@ function addPossessionPressureAlerts({ alerts, seen, orderedActions, teamsById, 
     } else {
       const streak = safeNumber(emptyStreaks.get(possession.teamId), 0) + 1;
       emptyStreaks.set(possession.teamId, streak);
-      if (streak >= 3 && streak % 3 === 0) {
+      if (streak === 3) {
         const total = safeNumber(killTotals.get(defenseId), 0) + 1;
         killTotals.set(defenseId, total);
         addAlert(alerts, seen, {
@@ -873,8 +873,14 @@ function addPossessionPressureAlerts({ alerts, seen, orderedActions, teamsById, 
 
     if (possession.offensiveRebounds > 0) {
       const key = `${possession.teamId}:${possession.lastAction.period}`;
-      const totals = secondChanceTotals.get(key) || { offensiveRebounds: 0, points: 0, conversions: 0 };
-      totals.offensiveRebounds += possession.offensiveRebounds;
+      const totals = secondChanceTotals.get(key) || {
+        offensiveRebounds: 0,
+        teamOffensiveRebounds: 0,
+        points: 0,
+        conversions: 0,
+      };
+      totals.offensiveRebounds += possession.creditedOffensiveRebounds;
+      totals.teamOffensiveRebounds += Math.max(0, possession.offensiveRebounds - possession.creditedOffensiveRebounds);
       totals.points += possession.secondChancePoints;
       if (possession.secondChancePoints > 0) totals.conversions += 1;
       secondChanceTotals.set(key, totals);
@@ -900,7 +906,11 @@ function addPossessionPressureAlerts({ alerts, seen, orderedActions, teamsById, 
         alert.title = totals.points >= 4
           ? `${teamLabel(offense)} have ${totals.points} second-chance points in ${periodLabel}`
           : `${teamLabel(offense)} grabbed ${totals.offensiveRebounds} offensive ${totals.offensiveRebounds === 1 ? "rebound" : "rebounds"} in ${periodLabel}`;
-        alert.detail = `${totals.offensiveRebounds} offensive ${totals.offensiveRebounds === 1 ? "rebound" : "rebounds"} created ${totals.points} second-chance ${totals.points === 1 ? "point" : "points"} on ${totals.conversions} scoring ${totals.conversions === 1 ? "possession" : "possessions"}.`;
+        const creditedText = `${totals.offensiveRebounds} credited offensive ${totals.offensiveRebounds === 1 ? "rebound" : "rebounds"}`;
+        const teamText = totals.teamOffensiveRebounds > 0
+          ? ` plus ${totals.teamOffensiveRebounds} team offensive ${totals.teamOffensiveRebounds === 1 ? "rebound" : "rebounds"}`
+          : "";
+        alert.detail = `${creditedText}${teamText} created ${totals.points} second-chance ${totals.points === 1 ? "point" : "points"} on ${totals.conversions} scoring ${totals.conversions === 1 ? "possession" : "possessions"}.`;
       }
     }
   };
@@ -922,6 +932,7 @@ function addPossessionPressureAlerts({ alerts, seen, orderedActions, teamsById, 
         points: 0,
         secondChancePoints: 0,
         offensiveRebounds: 0,
+        creditedOffensiveRebounds: 0,
         pendingMissedFieldGoal: false,
       };
     }
@@ -949,6 +960,13 @@ function addPossessionPressureAlerts({ alerts, seen, orderedActions, teamsById, 
       possession.hasOutcome = true;
       possession.pendingMissedFieldGoal = false;
     }
+    const isTurnoverHeave = action?.actionType === "heave"
+      && (Array.isArray(action?.qualifiers) ? action.qualifiers : [])
+        .some((qualifier) => String(qualifier || "").toLowerCase() === "fromturnover");
+    if (actionTeamId === possession.teamId && isTurnoverHeave) {
+      possession.hasOutcome = true;
+      possession.pendingMissedFieldGoal = false;
+    }
     if (action?.actionType === "rebound") {
       if (
         actionTeamId === possession.teamId
@@ -956,6 +974,7 @@ function addPossessionPressureAlerts({ alerts, seen, orderedActions, teamsById, 
         && (normalizePlayerId(action?.personId) || possession.pendingMissedFieldGoal)
       ) {
         possession.offensiveRebounds += 1;
+        if (normalizePlayerId(action?.personId)) possession.creditedOffensiveRebounds += 1;
       }
       possession.pendingMissedFieldGoal = false;
     }
@@ -1273,8 +1292,8 @@ function addTeamTrendCandidate(candidates, candidate) {
 
 function buildAssistedShotDetail(stats) {
   return [
-    `Assisted: ${stats.assistedFieldGoalsMade}/${stats.assistedFieldGoalsAttempted} FG (${stats.assistedFieldGoalPoints} Pts)`,
-    `Unassisted: ${stats.unassistedFieldGoalsMade}/${stats.unassistedFieldGoalsAttempted} FG (${stats.unassistedFieldGoalPoints} Pts)`,
+    `Assisted: ${stats.assistedFieldGoalsMade} FGM (${stats.assistedFieldGoalPoints} Pts)`,
+    `Unassisted: ${stats.unassistedFieldGoalsMade} FGM (${stats.unassistedFieldGoalPoints} Pts)`,
     `FT: ${stats.freeThrowsMade}/${stats.freeThrowsAttempted} (${stats.freeThrowPoints} Pts)`,
   ].join(", ");
 }
@@ -1374,7 +1393,7 @@ function buildBestTeamTrendCandidate({
         elapsed: elapsed + 0.6,
         teamId,
         strength: threeAttemptRate - 20,
-        title: `${label} took ${formatPercent(threeAttemptRate)} of their shots from three in ${periodLabel} (${periodStats.threesAttempted}/${periodStats.fieldGoalsAttempted} 3FG)`,
+        title: `${label} took ${formatPercent(threeAttemptRate)} of their shots from three in ${periodLabel} (${periodStats.threesAttempted} 3PA on ${periodStats.fieldGoalsAttempted} FGA)`,
       });
     }
   }

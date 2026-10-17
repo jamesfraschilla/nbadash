@@ -51,6 +51,48 @@ test("segment rebound totals exclude NBA team and dead-ball rebound rows", () =>
   assert.equal(aggregated.teamTotals[AWAY.teamId].reboundsOffensive, 1);
 });
 
+test("segment box-score fouls include player technicals without changing bonus rules", () => {
+  const aggregated = aggregateSegmentStats({
+    gameId: "0012600057",
+    actions: [
+      { actionNumber: 1, orderNumber: 1, period: 1, teamId: AWAY.teamId, actionType: "foul", subType: "technical", personId: 101 },
+      { actionNumber: 2, orderNumber: 2, period: 1, teamId: AWAY.teamId, actionType: "foul", subType: "personal", personId: 101 },
+    ],
+    segment: "q1",
+    minutesData: null,
+    homeTeam: HOME,
+    awayTeam: AWAY,
+    basePlayers: [{ personId: 101, foulsPersonal: 2 }],
+    currentPeriod: 2,
+    currentClock: "PT12M00.00S",
+    isLive: false,
+  });
+
+  assert.equal(aggregated.teamTotals[AWAY.teamId].foulsPersonal, 2);
+  assert.equal(aggregated.playerMap.get(101).foulsPersonal, 2);
+});
+
+test("segment box-score fouls exclude technicals omitted from the official PF total", () => {
+  const aggregated = aggregateSegmentStats({
+    gameId: "0012600018",
+    actions: [
+      { actionNumber: 1, orderNumber: 1, period: 1, teamId: AWAY.teamId, actionType: "foul", subType: "technical", personId: 101 },
+      { actionNumber: 2, orderNumber: 2, period: 1, teamId: AWAY.teamId, actionType: "foul", subType: "personal", personId: 101 },
+    ],
+    segment: "q1",
+    minutesData: null,
+    homeTeam: HOME,
+    awayTeam: AWAY,
+    basePlayers: [{ personId: 101, foulsPersonal: 1 }],
+    currentPeriod: 2,
+    currentClock: "PT12M00.00S",
+    isLive: false,
+  });
+
+  assert.equal(aggregated.teamTotals[AWAY.teamId].foulsPersonal, 1);
+  assert.equal(aggregated.playerMap.get(101).foulsPersonal, 1);
+});
+
 test("transition stats count fastbreak possessions once and include free throws", () => {
   const aggregated = aggregateSegmentStats({
     gameId: "0022500001",

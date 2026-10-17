@@ -41,6 +41,14 @@ export function markParticipatingAssignments(assignmentRows = [], callRows = [])
       const firstActive = ordered.find((assignment) => !assignment.is_alternate);
       if (firstActive) firstActive.role_key = "crewChief";
     }
+    const activeAssignments = ordered.filter((assignment) => !assignment.is_alternate);
+    const assignedRoles = new Set(activeAssignments.map((assignment) => assignment.role_key).filter(Boolean));
+    const missingRoles = ["crewChief", "referee", "umpire"].filter((role) => !assignedRoles.has(role));
+    activeAssignments
+      .filter((assignment) => !assignment.role_key)
+      .forEach((assignment) => {
+        assignment.role_key = missingRoles.shift() || "";
+      });
   });
 
   return assignmentRows;

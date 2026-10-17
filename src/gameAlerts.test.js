@@ -142,7 +142,7 @@ test("buildGameAlerts adds bounded team trend alerts at period checkpoints", () 
   assert.ok(alerts.some((alert) => (
     alert.category === "Team Trend" &&
     alert.title === "Nets scored 76.2% of their points from assisted shots through the end of Q1" &&
-    alert.detail === "Assisted: 6/6 FG (16 Pts), Unassisted: 2/2 FG (5 Pts), FT: 0/0 (0 Pts)"
+    alert.detail === "Assisted: 6 FGM (16 Pts), Unassisted: 2 FGM (5 Pts), FT: 0/0 (0 Pts)"
   )));
 });
 
@@ -243,7 +243,7 @@ test("buildGameAlerts adds assisted, unassisted, and free-throw detail to assist
   assert.ok(assistedTrend);
   assert.equal(
     assistedTrend.detail,
-    "Assisted: 2/2 FG (5 Pts), Unassisted: 5/5 FG (10 Pts), FT: 3/4 (3 Pts)",
+    "Assisted: 2 FGM (5 Pts), Unassisted: 5 FGM (10 Pts), FT: 3/4 (3 Pts)",
   );
 });
 
@@ -299,7 +299,7 @@ test("buildGameAlerts labels three-point attempt volume with 3FG", () => {
 
   assert.ok(alerts.some((alert) => (
     alert.category === "Team Trend" &&
-    alert.title === "Nets took 45.5% of their shots from three in Q1 (10/22 3FG)"
+    alert.title === "Nets took 45.5% of their shots from three in Q1 (10 3PA on 22 FGA)"
   )));
 });
 
@@ -630,7 +630,7 @@ test("an unfinished live possession is not counted as empty", () => {
   assert.equal(endedAlerts.some((alert) => alert.category === "Kill"), true);
 });
 
-test("Kill alerts fire for each completed group of three defensive stops", () => {
+test("one Kill alert represents an uninterrupted streak of three or more defensive stops", () => {
   const actions = [];
   let order = 0;
   for (let stop = 0; stop < 6; stop += 1) {
@@ -644,8 +644,26 @@ test("Kill alerts fire for each completed group of three defensive stops", () =>
   });
   assert.deepEqual(
     alerts.filter((alert) => alert.category === "Kill").map((alert) => alert.title),
-    ["Thunder just completed its 1st Kill of the game", "Thunder just completed its 2nd Kill of the game"],
+    ["Thunder just completed its 1st Kill of the game"],
   );
+});
+
+test("a scoreless end-of-period heave completes a defensive stop", () => {
+  const actions = [
+    { actionNumber: 1, orderNumber: 1, period: 1, clock: "PT03M00.00S", possession: AWAY.teamId, teamId: AWAY.teamId, actionType: "turnover", personId: 101 },
+    { actionNumber: 2, orderNumber: 2, period: 1, clock: "PT02M30.00S", possession: HOME.teamId, teamId: HOME.teamId, actionType: "2pt", shotResult: "Made", personId: 201 },
+    { actionNumber: 3, orderNumber: 3, period: 1, clock: "PT02M00.00S", possession: AWAY.teamId, teamId: AWAY.teamId, actionType: "turnover", personId: 101 },
+    { actionNumber: 4, orderNumber: 4, period: 1, clock: "PT01M30.00S", possession: HOME.teamId, teamId: HOME.teamId, actionType: "2pt", shotResult: "Made", personId: 201 },
+    { actionNumber: 5, orderNumber: 5, period: 1, clock: "PT00M01.00S", possession: AWAY.teamId, teamId: AWAY.teamId, actionType: "heave", qualifiers: ["fromturnover", "heave"], personId: null },
+    { actionNumber: 6, orderNumber: 6, period: 1, clock: "PT00M00.00S", possession: AWAY.teamId, actionType: "period", subType: "end" },
+    { actionNumber: 7, orderNumber: 7, period: 2, clock: "PT12M00.00S", possession: HOME.teamId, teamId: HOME.teamId, actionType: "2pt", shotResult: "Made", personId: 201 },
+  ];
+  const alerts = buildGameAlerts({
+    game: { gameId: "0012600060", gameStatus: 2, period: 2, gameClock: "PT12M00.00S", playByPlayActions: actions },
+    awayTeam: AWAY,
+    homeTeam: HOME,
+  });
+  assert.equal(alerts.filter((alert) => alert.category === "Kill" && alert.teamCode === HOME.teamTricode).length, 1);
 });
 
 test("second-chance pressure aggregates offensive rebounds and resulting points", () => {
@@ -665,7 +683,7 @@ test("second-chance pressure aggregates offensive rebounds and resulting points"
     homeTeam: HOME,
   }).find((candidate) => candidate.category === "Second Chance");
   assert.equal(alert?.title, "Nets have 5 second-chance points in Q1");
-  assert.equal(alert?.detail, "2 offensive rebounds created 5 second-chance points on 2 scoring possessions.");
+  assert.equal(alert?.detail, "2 credited offensive rebounds created 5 second-chance points on 2 scoring possessions.");
 });
 
 test("a team offensive rebound retains the possession, creates second-chance points, and does not create a false Kill", () => {
@@ -689,7 +707,7 @@ test("a team offensive rebound retains the possession, creates second-chance poi
   assert.equal(alerts.some((alert) => alert.category === "Kill" && alert.teamCode === HOME.teamTricode), false);
   const secondChance = alerts.find((alert) => alert.category === "Second Chance");
   assert.equal(secondChance?.title, "Nets have 4 second-chance points in Q3");
-  assert.equal(secondChance?.detail, "1 offensive rebound created 4 second-chance points on 1 scoring possession.");
+  assert.equal(secondChance?.detail, "0 credited offensive rebounds plus 1 team offensive rebound created 4 second-chance points on 1 scoring possession.");
 });
 
 test("offensive-rebound pressure leads with rebounds when second-chance scoring is marginal", () => {
@@ -711,7 +729,7 @@ test("offensive-rebound pressure leads with rebounds when second-chance scoring 
   }).find((candidate) => candidate.category === "Second Chance");
 
   assert.equal(alert?.title, "Nets grabbed 5 offensive rebounds in Q3");
-  assert.equal(alert?.detail, "5 offensive rebounds created 0 second-chance points on 0 scoring possessions.");
+  assert.equal(alert?.detail, "5 credited offensive rebounds created 0 second-chance points on 0 scoring possessions.");
 });
 
 test("second-chance possessions do not carry offensive rebounds across quarter boundaries", () => {

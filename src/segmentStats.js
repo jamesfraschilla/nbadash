@@ -177,11 +177,6 @@ function classifyShot(action) {
   return "mid";
 }
 
-function isPersonalFoul(action) {
-  const subtype = String(action.subType || "").toLowerCase();
-  return !subtype.includes("technical");
-}
-
 export function aggregateSegmentStats({
   gameId = null,
   actions,
@@ -227,6 +222,23 @@ export function aggregateSegmentStats({
   const playerMap = new Map();
   const baseMap = new Map();
   basePlayers.forEach((player) => baseMap.set(player.personId, player));
+  const foulActionKey = (action) => `${action.actionNumber ?? action.orderNumber ?? ""}:${action.period || ""}:${action.clock || ""}`;
+  const countableTechnicalFouls = new Set();
+  const foulsByPlayer = new Map();
+  actionsWithScoreDeltas.forEach((action) => {
+    if (action.actionType !== "foul" || !action.personId) return;
+    const playerFouls = foulsByPlayer.get(action.personId) || { nonTechnical: 0, technicals: [] };
+    if (String(action.subType || "").toLowerCase().includes("technical")) playerFouls.technicals.push(action);
+    else playerFouls.nonTechnical += 1;
+    foulsByPlayer.set(action.personId, playerFouls);
+  });
+  foulsByPlayer.forEach((playerFouls, personId) => {
+    const officialTotal = Number(baseMap.get(personId)?.foulsPersonal);
+    if (!Number.isFinite(officialTotal)) return;
+    const technicalsThatCount = Math.max(0, officialTotal - playerFouls.nonTechnical);
+    playerFouls.technicals.slice(0, technicalsThatCount)
+      .forEach((action) => countableTechnicalFouls.add(foulActionKey(action)));
+  });
   const creditedBlocks = new Set();
   const creditedTransitionTurnovers = new Set();
   let currentTransitionPossessionTeamId = null;
@@ -565,7 +577,11 @@ export function aggregateSegmentStats({
     if (action.actionType === "foul" && action.personId) {
       const qualifiers = action.qualifiers || [];
       if (qualifiers.includes("fastbreak")) currentTransitionPossessionIsFastbreak = true;
-      if (isPersonalFoul(action)) {
+      const isTechnical = String(action.subType || "").toLowerCase().includes("technical");
+      // Some player technicals count toward the NBA PF column and others do
+      // not. Reconcile them against the official player total, while bonus
+      // and team-foul logic remains separate in gameRules.js.
+      if (!isTechnical || countableTechnicalFouls.has(foulActionKey(action))) {
         const player = ensurePlayer(playerMap, action.personId, baseMap.get(action.personId));
         player.foulsPersonal += 1;
         if (teamStats) teamStats.foulsPersonal += 1;
@@ -763,7 +779,7 @@ export function computeKills(actions, segment, homeTeamId, awayTeamId) {
     if (!possessionTeam || !possessionHasOutcome) return;
     if (!possessionScored) {
       streaks[possessionTeam] += 1;
-      if (streaks[possessionTeam] >= 3 && streaks[possessionTeam] % 3 === 0) {
+      if (streaks[possessionTeam] === 3) {
         const opponent = possessionTeam === homeId ? awayId : homeId;
         if (opponent) kills[opponent] += 1;
       }
@@ -806,6 +822,10 @@ export function computeKills(actions, segment, homeTeamId, awayTeamId) {
     }
 
     if (actionTeam === possessionTeam && action.actionType === "turnover") possessionHasOutcome = true;
+    const isTurnoverHeave = action.actionType === "heave"
+      && (Array.isArray(action.qualifiers) ? action.qualifiers : [])
+        .some((qualifier) => String(qualifier || "").toLowerCase() === "fromturnover");
+    if (actionTeam === possessionTeam && isTurnoverHeave) possessionHasOutcome = true;
   });
 
   finishPossession();

@@ -52,21 +52,25 @@ async function exactCount(supabase, table, buildQuery) {
   return count || 0;
 }
 
-async function thinActiveCrewCount(supabase) {
-  const counts = new Map();
+async function crewIntegrityIssues(supabase) {
+  const crews = new Map();
   for (let start = 0; ; start += 1000) {
     const { data, error } = await supabase
       .from("nba_official_game_assignments")
-      .select("game_id")
+      .select("game_id,role_key")
       .eq("season", CURRENT_SEASON)
-      .not("season_type", "ilike", "Preseason")
       .eq("is_alternate", false)
       .range(start, start + 999);
     if (error) throw new Error(`Failed auditing active crews: ${error.message}`);
-    (data || []).forEach((row) => counts.set(row.game_id, (counts.get(row.game_id) || 0) + 1));
+    (data || []).forEach((row) => {
+      const crew = crews.get(row.game_id) || { active: 0, crewChiefs: 0 };
+      crew.active += 1;
+      if (String(row.role_key || "").toLowerCase() === "crewchief") crew.crewChiefs += 1;
+      crews.set(row.game_id, crew);
+    });
     if (!data || data.length < 1000) break;
   }
-  return [...counts.values()].filter((count) => count < 3).length;
+  return [...crews.values()].filter((crew) => crew.active < 3 || crew.crewChiefs !== 1).length;
 }
 
 async function shootingFoulIntegrityMismatch(supabase) {
@@ -148,24 +152,28 @@ async function main() {
     refreshed = true;
   }
 
-  const [missingCallOfficials, missingChallengeCrew, shootingFoulIntegrity, thinCrews] = await Promise.all([
+  const [missingCallOfficials, missingChallengeCrew, missingChallengeTeams, missingChallengeOutcomes, shootingFoulIntegrity, crewIssues] = await Promise.all([
     exactCount(supabase, "nba_official_call_events", (query) => query
       .eq("season", CURRENT_SEASON)
-      .not("season_type", "ilike", "Preseason")
       .is("official_id", null)
       .is("official_name", null)),
     exactCount(supabase, "nba_coach_challenge_events", (query) => query
       .eq("season", CURRENT_SEASON)
-      .not("season_type", "ilike", "Preseason")
       .is("crew_chief_id", null)
       .is("crew_chief_name", null)),
+    exactCount(supabase, "nba_coach_challenge_events", (query) => query
+      .eq("season", CURRENT_SEASON)
+      .or("challenging_team.is.null,challenging_team.eq.")),
+    exactCount(supabase, "nba_coach_challenge_events", (query) => query
+      .eq("season", CURRENT_SEASON)
+      .or("challenge_outcome.is.null,challenge_outcome.eq.")),
     shootingFoulIntegrityMismatch(supabase),
-    thinActiveCrewCount(supabase),
+    crewIntegrityIssues(supabase),
   ]);
 
-  const audit = { season: CURRENT_SEASON, refreshed, thinCrews, missingCallOfficials, missingChallengeCrew, shootingFoulIntegrity };
+  const audit = { season: CURRENT_SEASON, refreshed, crewIssues, missingCallOfficials, missingChallengeCrew, missingChallengeTeams, missingChallengeOutcomes, shootingFoulIntegrity };
   console.log(JSON.stringify(audit, null, 2));
-  if (thinCrews || missingCallOfficials || missingChallengeCrew || shootingFoulIntegrity.mismatch) process.exitCode = 1;
+  if (crewIssues || missingCallOfficials || missingChallengeCrew || missingChallengeTeams || missingChallengeOutcomes || shootingFoulIntegrity.mismatch) process.exitCode = 1;
 }
 
 main().catch((error) => {

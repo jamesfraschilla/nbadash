@@ -50,3 +50,13 @@ test("retries games with missing assignments or suspiciously few calls", () => {
   ];
   assert.deepEqual(incompleteGameIds(games, assignments, calls), ["b", "c"]);
 });
+
+test("retries a statistically complete game when its challenge audit mismatches", () => {
+  const games = [{ gameId: "a" }];
+  const assignments = Array.from({ length: 3 }, () => ({ game_id: "a", is_alternate: false }));
+  const calls = Array.from({ length: 20 }, () => ({ game_id: "a" }));
+  assert.deepEqual(incompleteGameIds(games, assignments, calls, [{
+    game_id: "a",
+    challenge_mismatch: true,
+  }]), ["a"]);
+});

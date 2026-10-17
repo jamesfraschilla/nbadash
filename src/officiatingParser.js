@@ -1,3 +1,5 @@
+import { correctedChallengeTeam } from "./officiatingCorrections.js";
+
 const OFFICIAL_TOKEN_PATTERN = /\(([^()]+)\)\s*$/;
 
 function cleanText(value) {
@@ -280,7 +282,6 @@ export function extractOfficialCallEvents(game = {}, context = {}) {
   const officials = Array.isArray(game.officials) ? game.officials : [];
   const homeTeam = cleanText(game.homeTeam?.teamTricode || game.homeTeam?.tricode || context.homeTeam);
   const awayTeam = cleanText(game.awayTeam?.teamTricode || game.awayTeam?.tricode || context.awayTeam);
-
   return actions
     .map((action) => buildOfficialCallEvent(action, {
       ...context,
@@ -303,26 +304,42 @@ export function detectCoachChallengeActions(game = {}, context = {}) {
       : [];
   const homeTeam = cleanText(game.homeTeam?.teamTricode || game.homeTeam?.tricode || context.homeTeam);
   const awayTeam = cleanText(game.awayTeam?.teamTricode || game.awayTeam?.tricode || context.awayTeam);
+  const timeoutTeamsByClock = new Map();
+  actions.forEach((action) => {
+    if (cleanText(action.actionType).toLowerCase() !== "timeout" || !cleanText(action.teamTricode)) return;
+    timeoutTeamsByClock.set(`${cleanText(action.period)}|${cleanText(action.clock)}`, cleanText(action.teamTricode));
+  });
 
   const challengeActionsByClock = new Map();
   actions
-    .filter((action) => cleanText(action.subType).toLowerCase() === "challenge")
+    .filter((action) => {
+      const subType = cleanText(action.subType).toLowerCase();
+      const description = cleanText(action.description).toLowerCase();
+      return subType === "challenge" || subType.includes("coach challenge") || description.includes("coach challenge");
+    })
     .forEach((action) => {
       const key = [
-        cleanText(action.teamTricode),
         cleanText(action.period),
         cleanText(action.clock),
       ].join("|");
       const existing = challengeActionsByClock.get(key);
-      if (!existing || cleanText(action.actionType).toLowerCase() === "instantreplay") {
-        challengeActionsByClock.set(key, action);
+      const isReplay = cleanText(action.actionType).replace(/[^a-z]/gi, "").toLowerCase() === "instantreplay";
+      if (!existing) {
+        challengeActionsByClock.set(key, { action, challengingTeam: cleanText(action.teamTricode) });
+        return;
       }
+      challengeActionsByClock.set(key, {
+        action: isReplay ? action : existing.action,
+        challengingTeam: cleanText(action.teamTricode) || existing.challengingTeam,
+      });
     });
 
   return [...challengeActionsByClock.values()]
-    .map((action) => {
-      const actionType = cleanText(action.actionType).toLowerCase();
+    .map(({ action, challengingTeam }) => {
+      const actionType = cleanText(action.actionType).replace(/[^a-z]/gi, "").toLowerCase();
       const descriptor = cleanText(action.descriptor).toLowerCase();
+      const subType = cleanText(action.subType).toLowerCase();
+      const outcomeText = `${descriptor} ${subType}`;
       return {
         season: cleanText(game.seasonYear || context.season),
         seasonType: cleanText(game.seasonType || context.seasonType),
@@ -330,10 +347,22 @@ export function detectCoachChallengeActions(game = {}, context = {}) {
         gameDate: cleanText(game.gameDate || game.gameEt || context.gameDate),
         homeTeam,
         awayTeam,
-        challengingTeam: cleanText(action.teamTricode),
+        challengingTeam: challengingTeam
+          || cleanText(action.teamTricode)
+          || timeoutTeamsByClock.get(`${cleanText(action.period)}|${cleanText(action.clock)}`)
+          || correctedChallengeTeam(
+            cleanText(game.gameId || context.gameId),
+            cleanText(action.period),
+            cleanText(action.clock),
+          )
+          || "",
         period: Number.isFinite(Number(action.period)) ? Number(action.period) : null,
         gameClock: cleanText(action.clock),
-        challengeOutcome: descriptor === "overturned" ? "successful" : descriptor ? "unsuccessful" : "",
+        challengeOutcome: /overturn/.test(outcomeText)
+          ? "successful"
+          : /(support|stands|upheld)/.test(outcomeText)
+            ? "unsuccessful"
+            : "",
         matchedActionNumber: Number.isFinite(Number(action.actionNumber)) ? Number(action.actionNumber) : null,
         matchConfidence: actionType === "instantreplay" ? 0.72 : 0.58,
         matchReason: actionType === "instantreplay"

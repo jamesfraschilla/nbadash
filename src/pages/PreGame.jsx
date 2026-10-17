@@ -22,6 +22,7 @@ import { supabase } from "../supabaseClient.js";
 import { createSerialTaskQueue } from "../serialTaskQueue.js";
 import { fetchSharedStateRow, saveSharedStateRow } from "../sharedState.js";
 import { chooseSavedPregameSchedule } from "../pregameScheduleState.js";
+import { buildDefaultPregameSlotOffsets } from "../pregameSlotDefaults.js";
 import { readLocalStorage, writeLocalStorage } from "../storage.js";
 import wizardsLogoUrl from "../assets/WWizards_Primary_Icon.png";
 import dinFontUrl from "../assets/fonts/DIN.ttf";
@@ -396,12 +397,11 @@ function parseGameStart(game) {
 
 export function buildDefaultSlots(game, count = 8, options = {}) {
   const slotCount = Math.max(1, Number(count) || 1);
+  const slotOffsets = buildDefaultPregameSlotOffsets(slotCount);
   if (options.standalone) {
-    const finalSlotMinutes = (19 * 60) - 50;
-    const firstSlotMinutes = finalSlotMinutes - ((slotCount - 1) * 15);
     return Array.from({ length: slotCount }, (_, index) => ({
       id: crypto.randomUUID(),
-      time: formatClockMinutes(firstSlotMinutes + (index * 15)),
+      time: formatClockMinutes((19 * 60) - slotOffsets[index]),
       clock: formatArenaClock(53 + ((slotCount - 1 - index) * 15)),
       showClock: false,
       playerIds: ["", ""],
@@ -410,10 +410,8 @@ export function buildDefaultSlots(game, count = 8, options = {}) {
 
   const start = parseGameStart(game);
   const timeZone = getGameTimeZone(game);
-  const finalSlot = new Date(start.getTime() - (50 * 60 * 1000));
-  const firstSlot = new Date(finalSlot.getTime() - ((slotCount - 1) * 15 * 60 * 1000));
   return Array.from({ length: slotCount }, (_, index) => {
-    const slotTime = new Date(firstSlot.getTime() + (index * 15 * 60 * 1000));
+    const slotTime = new Date(start.getTime() - (slotOffsets[index] * 60 * 1000));
     return {
       id: crypto.randomUUID(),
       time: formatTime(slotTime, timeZone),

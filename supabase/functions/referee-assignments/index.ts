@@ -89,10 +89,21 @@ Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (request.method !== "GET") return jsonResponse(405, { error: "Method not allowed." });
 
-  const forceRefresh = new URL(request.url).searchParams.get("refresh") === "1";
+  const requestUrl = new URL(request.url);
+  const forceRefresh = requestUrl.searchParams.get("refresh") === "1";
+  const requestedDate = requestUrl.searchParams.get("date") || "";
   try {
     const now = Date.now();
     const storage = storageClient();
+    if (requestedDate && requestedDate !== easternDate() && storage) {
+      const { data } = await storage.from("rotations_shared_state").select("payload")
+        .eq("scope_type", "referee_assignments").eq("scope_key", requestedDate).maybeSingle();
+      const payload = data?.payload;
+      if (Array.isArray(payload?.assignments) && payload.assignments.length) {
+        return jsonResponse(200, payload, 86400);
+      }
+      return jsonResponse(404, { error: `No referee assignment snapshot is stored for ${requestedDate}.` }, 0);
+    }
     if (!forceRefresh && !cache && storage) {
       const { data } = await storage.from("rotations_shared_state").select("payload")
         .eq("scope_type", "referee_assignments").eq("scope_key", "latest").maybeSingle();
@@ -134,8 +145,11 @@ Deno.serve(async (request) => {
     }
     cache = { fetchedAt: now, assignments };
     if (storage) {
-      const { error } = await storage.from("rotations_shared_state").upsert({ scope_type: "referee_assignments", scope_key: "latest",
-        payload: { date: easternDate(), assignments, fetchedAt: new Date(now).toISOString() } }, { onConflict: "scope_type,scope_key" });
+      const payload = { date: easternDate(), assignments, fetchedAt: new Date(now).toISOString() };
+      const { error } = await storage.from("rotations_shared_state").upsert([
+        { scope_type: "referee_assignments", scope_key: "latest", payload },
+        { scope_type: "referee_assignments", scope_key: easternDate(), payload },
+      ], { onConflict: "scope_type,scope_key" });
       if (error) throw new Error("Unable to persist today's referee assignments.");
     }
     return jsonResponse(200, { assignments, fetchedAt: new Date(now).toISOString() }, forceRefresh ? 0 : 300);

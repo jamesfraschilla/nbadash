@@ -3,9 +3,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { createClient } from "@supabase/supabase-js";
 import {
-  incompleteGameIds,
   recentCompletedDateKeys,
   selectCompletedScheduleGames,
 } from "../src/officiatingNightlyIngestion.js";
@@ -49,23 +47,6 @@ async function fetchSchedule() {
   });
   if (!response.ok) throw new Error(`NBA schedule request failed (${response.status})`);
   return response.json();
-}
-
-async function selectAllRows(supabase, table, columns, gameIds) {
-  if (!gameIds.length) return [];
-  const rows = [];
-  const pageSize = 1000;
-  for (let start = 0; ; start += pageSize) {
-    const { data, error } = await supabase
-      .from(table)
-      .select(columns)
-      .in("game_id", gameIds)
-      .range(start, start + pageSize - 1);
-    if (error) throw new Error(`Failed checking ${table}: ${error.message}`);
-    rows.push(...(data || []));
-    if (!data || data.length < pageSize) break;
-  }
-  return rows;
 }
 
 function runImporter(gameIds) {
@@ -112,19 +93,10 @@ async function main() {
     return;
   }
 
-  const supabase = createClient(url, key, { auth: { persistSession: false } });
   const gameIds = completedGames.map((game) => game.gameId);
-  const [assignments, calls] = await Promise.all([
-    selectAllRows(supabase, "nba_official_game_assignments", "game_id,is_alternate", gameIds),
-    selectAllRows(supabase, "nba_official_call_events", "game_id", gameIds),
-  ]);
-  const pendingGameIds = hasFlag("refresh-all")
-    ? gameIds
-    : incompleteGameIds(completedGames, assignments, calls);
-  if (!pendingGameIds.length) {
-    console.log(`All ${completedGames.length} recently completed games are already complete.`);
-    return;
-  }
+  // Reconcile every recently completed game on each run. Assignments, challenge
+  // outcomes, and replay metadata can all be corrected after the first posting.
+  const pendingGameIds = gameIds;
 
   console.log(`Importing ${pendingGameIds.length} completed games: ${pendingGameIds.join(", ")}`);
   await runImporter(pendingGameIds);

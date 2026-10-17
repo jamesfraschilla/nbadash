@@ -182,6 +182,7 @@ export function enrichChallengeEventsWithOfficials(challenges, calls, assignment
 
     return {
       ...challenge,
+      challenging_team: cleanText(challenge.challenging_team || challenge.challengingTeam || call?.charged_team || call?.chargedTeam),
       crew_chief_id: cleanText(challenge.crew_chief_id || crewChief?.official_id || crewChief?.officialId),
       crew_chief_name: cleanText(challenge.crew_chief_name || crewChief?.official_name || crewChief?.officialName),
       whistling_official_id: cleanText(challenge.whistling_official_id || call?.official_id || call?.officialId),

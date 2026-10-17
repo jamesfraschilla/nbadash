@@ -174,6 +174,29 @@ async function fetchStatsPlayByPlayActions(gameId) {
   return Array.isArray(payload?.game?.actions) ? payload.game.actions : [];
 }
 
+function isCoachChallengeAction(action = {}) {
+  const subType = String(action.subType || "").toLowerCase();
+  const description = String(action.description || "").toLowerCase();
+  return subType === "challenge" || subType.includes("coach challenge") || description.includes("coach challenge");
+}
+
+function mergeChallengeActions(primaryActions = [], supplementalActions = []) {
+  if (!primaryActions.length) return supplementalActions;
+  const challengeClocks = new Set(
+    supplementalActions.filter(isCoachChallengeAction)
+      .map((action) => `${action?.period || ""}|${action?.clock || ""}`),
+  );
+  const supplementalChallenges = supplementalActions.filter((action) => (
+    isCoachChallengeAction(action)
+    || (
+      String(action?.actionType || "").toLowerCase() === "timeout"
+      && challengeClocks.has(`${action?.period || ""}|${action?.clock || ""}`)
+    )
+  ));
+  if (!supplementalChallenges.length) return primaryActions;
+  return [...primaryActions, ...supplementalChallenges];
+}
+
 function parseRowSet(payload) {
   const resultSets = Array.isArray(payload?.resultSets) ? payload.resultSets : [];
   const resultSet = resultSets[0] || payload?.resultSet || {};
@@ -255,14 +278,25 @@ async function discoverLeagueGameIds({ season, seasonTypes, teamIds, maxGames, c
 
 async function fetchGame(gameId, options = {}) {
   try {
-    const game = await fetchJson(`${API_BASE}/games/${encodeURIComponent(gameId)}`, {
-      timeoutMs: 12_000,
-      retries: 1,
-    });
-    const statsActions = options.skipStatsPlayByPlay ? [] : await fetchStatsPlayByPlayActions(gameId).catch(() => []);
+    const [game, liveBoxscore, statsActions] = await Promise.all([
+      fetchJson(`${API_BASE}/games/${encodeURIComponent(gameId)}`, {
+        timeoutMs: 12_000,
+        retries: 1,
+      }),
+      fetchJson(`https://cdn.nba.com/static/json/liveData/boxscore/boxscore_${encodeURIComponent(gameId)}.json`, {
+        headers: NBA_REQUEST_HEADERS,
+        timeoutMs: 12_000,
+        retries: 1,
+      }).catch(() => null),
+      options.skipStatsPlayByPlay ? Promise.resolve([]) : fetchStatsPlayByPlayActions(gameId).catch(() => []),
+    ]);
+    const liveOfficials = Array.isArray(liveBoxscore?.game?.officials) ? liveBoxscore.game.officials : [];
     return {
       ...game,
-      playByPlayActions: statsActions.length ? statsActions : game.playByPlayActions,
+      officials: liveOfficials.length ? liveOfficials : game.officials,
+      playByPlayActions: statsActions.length
+        ? mergeChallengeActions(statsActions, game.playByPlayActions)
+        : game.playByPlayActions,
       source: statsActions.length ? `${game.source || "cloudfront"}+stats_playbyplayv3` : game.source,
     };
   } catch (cloudfrontError) {
@@ -287,7 +321,9 @@ async function fetchGame(gameId, options = {}) {
       return {
         ...(boxscorePayload.game || {}),
         gameId,
-        playByPlayActions: statsActions.length ? statsActions : livePlayByPlayPayload.game?.actions || [],
+        playByPlayActions: statsActions.length
+          ? mergeChallengeActions(statsActions, livePlayByPlayPayload.game?.actions || [])
+          : livePlayByPlayPayload.game?.actions || [],
         source: statsActions.length ? "nba_live_data+stats_playbyplayv3" : "nba_live_data",
       };
     } catch (liveDataError) {
@@ -344,6 +380,10 @@ function normalizedGameDate(game, fallback = "") {
 function buildAssignmentRows(game, discovered = {}, requestedSeason = DEFAULT_SEASON) {
   const officials = Array.isArray(game.officials) ? game.officials : [];
   return officials.map((official, index) => {
+    const assignment = String(official.assignment || "").trim().toUpperCase();
+    const assignmentNumber = Number(assignment.match(/^OFFICIAL([1234])$/)?.[1] || 0);
+    const assignmentOrder = assignmentNumber || index + 1;
+    const isAlternate = assignment === "ALTERNATE" || assignmentNumber >= 4 || index >= 3;
     const identity = canonicalOfficialIdentity({
       officialId: official.personId || official.officialId,
       officialName: [official.firstName, official.familyName || official.lastName].filter(Boolean).join(" "),
@@ -359,10 +399,10 @@ function buildAssignmentRows(game, discovered = {}, requestedSeason = DEFAULT_SE
     official_id: identity.officialId,
     official_name: identity.officialName,
     jersey_number: identity.jerseyNumber,
-    role_key: index === 0 ? "crewChief" : index >= 3 ? "alternate" : "",
-    assignment_order: index + 1,
-    is_alternate: index >= 3,
-    source: "game_metadata",
+    role_key: assignmentNumber === 1 ? "crewChief" : assignmentNumber === 2 ? "referee" : assignmentNumber === 3 ? "umpire" : isAlternate ? "alternate" : "",
+    assignment_order: assignmentOrder,
+    is_alternate: isAlternate,
+    source: assignment ? "nba_live_boxscore" : "game_metadata",
     source_payload: official,
     });
   }).filter((row) => row.game_id && row.official_name);
@@ -610,11 +650,22 @@ async function applyGameRows(supabase, gameId, assignmentRows, callRows, challen
 
   const existingRows = [];
   const newRows = [];
+  const nextChallengeKeys = new Set(challengeRows.map(challengeNaturalKey));
   challengeRows.forEach((row) => {
     const id = existingChallengeIds.get(challengeNaturalKey(row));
     if (id) existingRows.push({ ...row, id });
     else newRows.push(row);
   });
+  const staleChallengeIds = (existingChallenges || [])
+    .filter((row) => !nextChallengeKeys.has(challengeNaturalKey(row)))
+    .map((row) => row.id);
+  if (staleChallengeIds.length) {
+    const { error: staleDeleteError } = await supabase
+      .from("nba_coach_challenge_events")
+      .delete()
+      .in("id", staleChallengeIds);
+    if (staleDeleteError) throw new Error(`Failed removing stale challenges for ${gameId}: ${staleDeleteError.message}`);
+  }
   for (const chunk of chunkArray(existingRows, INSERT_BATCH_SIZE)) {
     const { error } = await supabase
       .from("nba_coach_challenge_events")
@@ -671,6 +722,11 @@ function buildGameAuditRows({ loadedGames, assignmentRows, callRows, challengeRo
     const challenges = challengesByGame.get(gameId) || [];
     const nonAlternateAssignments = assignments.filter((row) => !row.is_alternate);
     const crewChiefs = assignments.filter((row) => row.role_key === "crewChief");
+    const sourceChallengeKeys = new Set(
+      (Array.isArray(game.playByPlayActions) ? game.playByPlayActions : [])
+        .filter(isCoachChallengeAction)
+        .map((action) => `${action?.period || ""}|${action?.clock || ""}`),
+    );
     const callsByOfficial = calls.reduce((counts, row) => {
       const key = officialKey(row);
       if (!key) return counts;
@@ -688,6 +744,11 @@ function buildGameAuditRows({ loadedGames, assignmentRows, callRows, challengeRo
     }
     if (crewChiefs.length !== 1) flags.push(`expected-1-crew-chief-found-${crewChiefs.length}`);
     if (calls.length < 20) flags.push(`low-game-call-count-${calls.length}`);
+    if (sourceChallengeKeys.size !== challenges.length) {
+      flags.push(`challenge-source-count-${sourceChallengeKeys.size}-stored-${challenges.length}`);
+    }
+    if (challenges.some((row) => !row.challenging_team)) flags.push("challenge-missing-team");
+    if (challenges.some((row) => !row.challenge_outcome)) flags.push("challenge-missing-outcome");
     assignedOfficialCallCounts
       .filter((official) => official.calls === 0)
       .forEach((official) => flags.push(`zero-calls-${official.official_name || official.official_id}`));
@@ -702,6 +763,7 @@ function buildGameAuditRows({ loadedGames, assignmentRows, callRows, challengeRo
       crewChiefs: crewChiefs.length,
       officialCallEvents: calls.length,
       challengeReplayEvents: challenges.length,
+      sourceChallengeEvents: sourceChallengeKeys.size,
       matchedWhistleChallenges: challenges.filter((row) => row.whistling_official_name).length,
       matchedCrewChiefChallenges: challenges.filter((row) => row.crew_chief_name).length,
       assignedOfficialCallCounts,
@@ -836,6 +898,9 @@ async function main() {
       missingThreeOfficials: flaggedGames.filter((row) => row.flags.some((flag) => flag.startsWith("expected-3-or-4-officials"))).length,
       missingCrewChief: flaggedGames.filter((row) => row.flags.some((flag) => flag.startsWith("expected-1-crew-chief"))).length,
       zeroCallOfficials: flaggedGames.reduce((total, row) => total + row.flags.filter((flag) => flag.startsWith("zero-calls")).length, 0),
+      challengeCountMismatches: flaggedGames.filter((row) => row.flags.some((flag) => flag.startsWith("challenge-source-count"))).length,
+      challengesMissingTeam: challengeRows.filter((row) => !row.challenging_team).length,
+      challengesMissingOutcome: challengeRows.filter((row) => !row.challenge_outcome).length,
       unmatchedWhistleChallenges: challengeRows.filter((row) => !row.whistling_official_name).length,
       unmatchedCrewChiefChallenges: challengeRows.filter((row) => !row.crew_chief_name).length,
     },

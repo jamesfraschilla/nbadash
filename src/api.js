@@ -24,6 +24,7 @@ import { supabase } from "./supabaseClient.js";
 import { readLocalStorage, writeLocalStorage, writeLocalStorageWithEviction } from "./storage.js";
 import { isRosterFallbackUsable, rosterPayloadTimestampMs } from "./rosterFallback.js";
 import { currentSeasonString, formatDateInput } from "./utils.js";
+import { normalizeGameMidrangeStats } from "./boxScoreNormalization.js";
 import { needsOpeningStintRepair, normalizeOpeningMinutesData } from "../supabase/functions/_shared/minutesNormalization.ts";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
@@ -40,6 +41,7 @@ const SUPABASE_FUNCTIONS_BASE = SUPABASE_URL
   : "";
 const APP_BASE_PATH = apiEnv.BASE_URL || "/nbadash/";
 const ROSTER_CACHE_PREFIX = "nba-dashboard:roster-feed:v1:";
+const LIVE_BOXSCORE_BASE = "https://cdn.nba.com/static/json/liveData/boxscore";
 const NBA_CUP_METADATA_BY_GAME_ID = new Map(
   (Array.isArray(nbaCupSchedule2026_27?.games) ? nbaCupSchedule2026_27.games : [])
     .map((game) => [String(game?.gameId || ""), game])
@@ -1809,7 +1811,28 @@ export async function fetchGame(gameId, segment = null, options = {}) {
   }
   const segmentParam = segment ? `?segment=${segment}` : "";
   const url = `${API_BASE}/games/${gameId}${segmentParam}`;
-  return requestJson(url);
+  const [game, liveBoxscore] = await Promise.all([
+    requestJson(url),
+    requestJson(`${LIVE_BOXSCORE_BASE}/boxscore_${gameId}.json`).catch(() => null),
+  ]);
+  const liveOfficials = Array.isArray(liveBoxscore?.game?.officials)
+    ? liveBoxscore.game.officials
+    : [];
+  const roleByAssignment = {
+    OFFICIAL1: "crewChief",
+    OFFICIAL2: "referee",
+    OFFICIAL3: "umpire",
+    ALTERNATE: "alternate",
+  };
+  const officials = liveOfficials.length
+    ? liveOfficials.map((official, index) => ({
+      ...official,
+      roleKey: roleByAssignment[String(official?.assignment || "").toUpperCase()] || undefined,
+      assignmentOrder: index + 1,
+      isAlternate: String(official?.assignment || "").toUpperCase() === "ALTERNATE",
+    }))
+    : game?.officials;
+  return normalizeGameMidrangeStats({ ...game, officials });
 }
 
 export async function fetchMinutes(gameId, options = {}) {

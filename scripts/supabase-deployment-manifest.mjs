@@ -33,6 +33,7 @@ const sqlOrder = [
   "operational_hardening.sql",
   "wizards_analysis_prewarm_schedule.sql",
   "playcall_note_sharing.sql",
+  "user_notes_realtime.sql",
   "reliability_jobs.sql",
   "officiating_overview_refresh.sql",
 ];

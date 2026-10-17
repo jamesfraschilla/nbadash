@@ -10,6 +10,7 @@ const gameLiveStateAtomicSql = readFileSync(new URL("../supabase/game_live_state
 const operationalSql = readFileSync(new URL("../supabase/operational_hardening.sql", import.meta.url), "utf8");
 const playcallSql = readFileSync(new URL("../supabase/playcall_note_sharing.sql", import.meta.url), "utf8");
 const refereeIdentitySql = readFileSync(new URL("../supabase/referee_identity_registry.sql", import.meta.url), "utf8");
+const notesRealtimeSql = readFileSync(new URL("../supabase/user_notes_realtime.sql", import.meta.url), "utf8");
 
 test("Playcall sharing preserves note ownership, revision checks and versions and verifies existing content", () => {
   assert.match(playcallSql, /or 'Playcall' = any\(n\.tags\)/);
@@ -19,6 +20,12 @@ test("Playcall sharing preserves note ownership, revision checks and versions an
   assert.match(playcallSql, /current_hash <> saved\.content_hash/);
   assert.match(playcallSql, /'user_notes', 'user_note_versions', 'user_note_shares'/);
   assert.match(playcallSql, /on commit drop/);
+});
+
+test("note realtime publishes notes and shares without rewriting saved content", () => {
+  assert.match(notesRealtimeSql, /alter publication supabase_realtime add table public\.user_notes/i);
+  assert.match(notesRealtimeSql, /alter publication supabase_realtime add table public\.user_note_shares/i);
+  assert.doesNotMatch(notesRealtimeSql, /\b(update|delete|truncate)\s+public\.user_notes\b/i);
 });
 
 test("account-data migration defines atomic version, share, and revision contracts", () => {

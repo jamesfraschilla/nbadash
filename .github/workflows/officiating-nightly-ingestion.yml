@@ -30,7 +30,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Import recently completed non-preseason games
+      - name: Reconcile recently completed games and challenges
         env:
           SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -47,3 +47,5 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           LOOKBACK_DAYS: ${{ inputs.lookback_days || '3' }}
         run: npm run officiating:backfill:insight-facts -- --season=2026-27 --lookback-days="${LOOKBACK_DAYS}" --concurrency=2 --replace --apply
+      - name: Audit NBA feed schema contract
+        run: npm run nba-feed:audit

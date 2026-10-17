@@ -88,6 +88,10 @@ export function normalizeOfficialRole(rawValue) {
     if (numericRole === 2) return "referee";
     if (numericRole === 3) return "umpire";
   }
+  const officialNumber = String(rawValue || "").match(/^\s*official\s*([123])\s*$/i)?.[1];
+  if (officialNumber === "1") return "crewChief";
+  if (officialNumber === "2") return "referee";
+  if (officialNumber === "3") return "umpire";
   const compact = String(rawValue || "").replace(/[^a-z]/gi, "").toLowerCase();
   if (!compact) return null;
   if (compact.includes("alternate")) return "alternate";
@@ -304,12 +308,15 @@ function normalizeAssignmentsPayload(payload) {
     .filter((row) => row.crewChief && row.referee && row.umpire);
 }
 
-async function fetchAssignmentsViaProxy({ forceRefresh = false } = {}) {
+async function fetchAssignmentsViaProxy({ forceRefresh = false, date = "" } = {}) {
   for (const proxyUrl of ASSIGNMENTS_PROXY_URLS) {
     try {
       const requestUrl = new URL(proxyUrl, typeof window === "undefined" ? "https://localhost/" : window.location.href);
       if (forceRefresh && requestUrl.pathname.includes("referee-assignments")) {
         requestUrl.searchParams.set("refresh", "1");
+      }
+      if (date && requestUrl.pathname.includes("referee-assignments")) {
+        requestUrl.searchParams.set("date", date);
       }
       const response = await fetch(requestUrl.toString(), { cache: "no-store" });
       if (!response.ok) continue;
@@ -339,7 +346,11 @@ async function fetchFirstWorkingAssignments() {
   return [];
 }
 
-async function fetchPublishedAssignments({ forceRefresh = false } = {}) {
+async function fetchPublishedAssignments({ forceRefresh = false, date = "" } = {}) {
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+  if (date && date !== today) {
+    return fetchAssignmentsViaProxy({ forceRefresh: false, date });
+  }
   if (forceRefresh || !publishedAssignmentsPromise || Date.now() - publishedAssignmentsFetchedAt >= PUBLISHED_ASSIGNMENTS_CACHE_TTL_MS) {
     publishedAssignmentsFetchedAt = Date.now();
     publishedAssignmentsPromise = fetchAssignmentsViaProxy({ forceRefresh })
@@ -428,16 +439,20 @@ export function mergeOfficialsWithPublishedAssignment(officials, publishedAssign
   const publishedCrew = Array.isArray(publishedAssignment?.crew) ? publishedAssignment.crew : [];
   if (!publishedCrew.length) return current;
 
+  const decoratedPublishedCrew = publishedCrew.map((official, index) => ({ ...official, index }));
   const publishedByName = new Map(
-    publishedCrew.map((official, index) => [normalizeNameKey(official.name), { ...official, index }])
+    decoratedPublishedCrew.map((official) => [normalizeNameKey(official.name), official])
   );
-  const publishedById = new Map(publishedCrew.filter((official) => official.officialId)
+  const publishedById = new Map(decoratedPublishedCrew.filter((official) => official.officialId)
     .map((official) => [String(official.officialId), official]));
-  const merged = current.map((official) => {
+  const currentRoles = new Set(current.map((official) => getOfficialSortMeta(official).role).filter(Boolean));
+  const hasCompleteLiveCrew = ["crewChief", "referee", "umpire"].every((role) => currentRoles.has(role));
+  const matchedPublishedNames = new Set();
+  const mergeOfficial = (official) => {
     const currentId = String(official?.personId || official?.officialId || official?.id || "").trim();
     const published = publishedById.get(currentId) || publishedByName.get(normalizeNameKey(getOfficialDisplayName(official)));
-    if (!published) return official;
-    publishedByName.delete(normalizeNameKey(published.name));
+    if (!published) return hasCompleteLiveCrew ? official : null;
+    matchedPublishedNames.add(normalizeNameKey(published.name));
     return {
       ...official,
       personId: currentId || published.officialId || official?.personId,
@@ -451,10 +466,18 @@ export function mergeOfficialsWithPublishedAssignment(officials, publishedAssign
       roleKey: published.roleKey,
       assignmentOrder: published.index + 1,
     };
-  });
+  };
+  const merged = current
+    .map(mergeOfficial)
+    .filter(Boolean)
+    .filter((official) => {
+      if (!hasCompleteLiveCrew) return true;
+      const { role, isAlternate } = getOfficialSortMeta(official);
+      return isAlternate || role === "crewChief" || role === "referee" || role === "umpire";
+    });
 
-  publishedCrew.forEach((official, index) => {
-    if (!publishedByName.has(normalizeNameKey(official.name))) return;
+  decoratedPublishedCrew.forEach((official) => {
+    if (hasCompleteLiveCrew || matchedPublishedNames.has(normalizeNameKey(official.name))) return;
     merged.push({
       personId: official.officialId || `published:${normalizeNameKey(official.name)}`,
       name: official.name,
@@ -463,14 +486,15 @@ export function mergeOfficialsWithPublishedAssignment(officials, publishedAssign
       jerseyNumber: official.jerseyNumber || "",
       role: official.role,
       roleKey: official.roleKey,
-      assignmentOrder: index + 1,
+      assignmentOrder: official.index + 1,
     });
   });
   return merged;
 }
 
 export async function fetchPublishedAssignmentForGame(game, options = {}) {
-  return matchPublishedAssignmentForGame(await fetchPublishedAssignments(options), game);
+  const gameDate = String(game?.gameDate || game?.gameEt || game?.gameTimeUTC || "").slice(0, 10);
+  return matchPublishedAssignmentForGame(await fetchPublishedAssignments({ ...options, date: gameDate }), game);
 }
 
 export async function fetchPublishedOrderForOfficials(officials) {

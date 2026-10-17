@@ -138,11 +138,16 @@
     },
     {
       "order": 28,
+      "path": "supabase/user_notes_realtime.sql",
+      "sha256": "17fe5319016d4097e6e8db3b87a9c2d0da72237a1db7e2c3d9d2b4aedee4483c"
+    },
+    {
+      "order": 29,
       "path": "supabase/reliability_jobs.sql",
       "sha256": "41b34979fc956fb5f8a4ef7285ae5dc6ed85f005e55e4e0923e8ff20fe1086f3"
     },
     {
-      "order": 29,
+      "order": 30,
       "path": "supabase/officiating_overview_refresh.sql",
       "sha256": "8f9418a5a009c6ba240f4ae862887426ea39f618e410ece2628e4eab55959903"
     }
@@ -337,7 +342,7 @@
     {
       "name": "referee-assignments",
       "entrypoint": "supabase/functions/referee-assignments/index.ts",
-      "sha256": "d639810a591ee738bb30dc78dd6532567f5311f932af848303f48cfc2b4f5f57",
+      "sha256": "d5e4b63496ec1e80cf7c016f067b7425752c90f5d3140b5f1aeb76c1553b3207",
       "sourceFiles": [
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/minutesNormalization.ts",

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -7,6 +7,7 @@ import {
   updateNoteRecord,
 } from "../accountData.js";
 import { useAuth } from "../auth/useAuth.js";
+import { supabase } from "../supabaseClient.js";
 import styles from "./Notes.module.css";
 import { NOTE_TAG_OPTIONS } from "../noteTags.js";
 
@@ -61,6 +62,32 @@ export default function Notes() {
     queryFn: () => listNotesForGame(gameId, user?.id),
     enabled: Boolean(gameId && user?.id),
   });
+
+  useEffect(() => {
+    if (!supabase || !gameId || !user?.id) return undefined;
+    const refreshNotes = () => {
+      queryClient.invalidateQueries({ queryKey: ["notes", gameId] });
+    };
+    const channel = supabase
+      .channel(`game-notes:${gameId}:${user.id}`)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "user_notes",
+        filter: `game_id=eq.${gameId}`,
+      }, refreshNotes)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "user_note_shares",
+        filter: `user_id=eq.${user.id}`,
+      }, refreshNotes)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [gameId, queryClient, user?.id]);
 
   const filteredNotes = useMemo(() => {
     return notes.filter((note) => {

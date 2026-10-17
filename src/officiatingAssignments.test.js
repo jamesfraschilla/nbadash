@@ -17,7 +17,7 @@ test("replacement officials with calls become active and the zero-call original 
   markParticipatingAssignments(assignments, calls);
 
   assert.deepEqual(assignments.map((row) => row.is_alternate), [false, false, true, false]);
-  assert.equal(assignments[3].role_key, "");
+  assert.equal(assignments[3].role_key, "umpire");
 });
 
 test("all four officials remain participants when all four made calls", () => {
@@ -33,4 +33,18 @@ test("all four officials remain participants when all four made calls", () => {
   markParticipatingAssignments(assignments, calls);
 
   assert.equal(assignments.every((row) => !row.is_alternate), true);
+});
+
+test("a listed alternate who worked as the third official is assigned the missing umpire role", () => {
+  const assignments = [
+    { game_id: "game-3", official_id: "1", assignment_order: 1, role_key: "crewChief", is_alternate: false },
+    { game_id: "game-3", official_id: "2", assignment_order: 2, role_key: "referee", is_alternate: false },
+    { game_id: "game-3", official_id: "3", assignment_order: 3, role_key: "alternate", is_alternate: true },
+  ];
+  const calls = [1, 2, 3].map((id) => ({ game_id: "game-3", official_id: String(id) }));
+
+  markParticipatingAssignments(assignments, calls);
+
+  assert.deepEqual(assignments.map((row) => row.role_key), ["crewChief", "referee", "umpire"]);
+  assert.equal(assignments[2].is_alternate, false);
 });
