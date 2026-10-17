@@ -5,6 +5,7 @@ on:
     branches: ["main"]
     paths:
       - "supabase/**"
+      - ".github/workflows/deploy-supabase.yml"
       - "scripts/supabase-deployment-manifest.mjs"
       - "scripts/verify-supabase-production.mjs"
   workflow_dispatch:
@@ -87,7 +88,17 @@ jobs:
             --header "Content-Type: application/json" \
             --data-binary @- \
             "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query"
-          node scripts/verify-supabase-production.mjs --record-database
+      - name: Enable realtime delivery for shared Notes
+        run: |
+          jq -n --rawfile query supabase/user_notes_realtime.sql '{query: $query}' |
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            --header "Content-Type: application/json" \
+            --data-binary @- \
+            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query"
+      - name: Attest database after automatic migrations succeed
+        run: node scripts/verify-supabase-production.mjs --record-database
       - name: Refuse deployment when database scripts are not attested in production
         run: npm run supabase:production:check-database
       - name: Deploy every repository Edge Function

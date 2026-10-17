@@ -4,7 +4,8 @@ export const KPI_TABLE_SCOPE = "shared_game_kpi_tables";
 export const KPI_TABLE_SECTIONS = ["defense", "offense"];
 export const KPI_QUARTER_FIELDS = ["q1", "q2", "q3", "q4"];
 export const KPI_TABLE_COLUMNS = ["Q1", "Q2", "Q3", "Q4", "Total"];
-const EDITABLE_FIELDS = ["label", ...KPI_QUARTER_FIELDS];
+export const KPI_VALUE_FIELDS = [...KPI_QUARTER_FIELDS, "total"];
+const EDITABLE_FIELDS = ["label", ...KPI_VALUE_FIELDS];
 
 function blankRow(section, index) {
   return {
@@ -14,13 +15,14 @@ function blankRow(section, index) {
     q2: "",
     q3: "",
     q4: "",
+    total: "",
     fieldUpdatedAt: Object.fromEntries(EDITABLE_FIELDS.map((field) => [field, 0])),
   };
 }
 
 export function createDefaultKpiTablePayload() {
   return {
-    version: 1,
+    version: 2,
     updatedAt: 0,
     defense: Array.from({ length: 3 }, (_, index) => blankRow("defense", index)),
     offense: Array.from({ length: 3 }, (_, index) => blankRow("offense", index)),
@@ -43,7 +45,7 @@ export function normalizeKpiTablePayload(raw) {
   const updatedAt = Number(raw?.updatedAt || 0);
   const defaults = createDefaultKpiTablePayload();
   return {
-    version: 1,
+    version: 2,
     updatedAt,
     ...Object.fromEntries(KPI_TABLE_SECTIONS.map((section) => [
       section,
@@ -95,41 +97,26 @@ export function updateKpiTableField(payload, section, rowIndex, field, value, ti
   };
 }
 
-export function calculateKpiRowTotal(row) {
-  const values = KPI_QUARTER_FIELDS.map((field) => String(row?.[field] ?? "").trim());
-  if (values.every((value) => value === "")) return "";
-  const total = values.reduce((sum, value) => {
-    if (!value) return sum;
-    const number = Number(value);
-    return Number.isFinite(number) ? sum + number : sum;
-  }, 0);
-  return String(Number(total.toFixed(6)));
-}
-
 export async function fetchSharedKpiTables(gameId) {
-  const row = await fetchSharedStateRow(KPI_TABLE_SCOPE, String(gameId || ""));
-  return normalizeKpiTablePayload(row?.payload);
+  return (await fetchSharedKpiTableState(gameId)).payload;
 }
 
-export async function saveSharedKpiTables(gameId, localPayload, maxAttempts = 4) {
+export async function fetchSharedKpiTableState(gameId) {
   const scopeKey = String(gameId || "");
-  if (!scopeKey) return normalizeKpiTablePayload(localPayload);
-  let lastError = null;
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    try {
-      const current = await fetchSharedStateRow(KPI_TABLE_SCOPE, scopeKey);
-      const payload = mergeKpiTablePayload(current?.payload, localPayload);
-      const saved = await saveSharedStateRow({
-        scopeType: KPI_TABLE_SCOPE,
-        scopeKey,
-        payload,
-        expectedVersion: current?.version || null,
-      });
-      return normalizeKpiTablePayload(saved?.payload || payload);
-    } catch (error) {
-      lastError = error;
-      if (error?.code !== "SHARED_STATE_CONFLICT") throw error;
-    }
-  }
-  throw lastError || new Error("Unable to save shared KPI tables after multiple retries.");
+  const row = scopeKey ? await fetchSharedStateRow(KPI_TABLE_SCOPE, scopeKey) : null;
+  return { payload: normalizeKpiTablePayload(row?.payload), version: row?.version || null };
+}
+
+export async function saveSharedKpiTableDraft(gameId, localPayload, expectedVersion) {
+  const scopeKey = String(gameId || "");
+  const payload = normalizeKpiTablePayload(localPayload);
+  if (!scopeKey) return { payload, version: null };
+  const saved = await saveSharedStateRow({
+    scopeType: KPI_TABLE_SCOPE,
+    scopeKey,
+    payload,
+    expectedVersion,
+  });
+  if (!saved) throw new Error("Shared storage is unavailable.");
+  return { payload: normalizeKpiTablePayload(saved.payload || payload), version: saved.version || null };
 }

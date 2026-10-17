@@ -1,14 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  KPI_QUARTER_FIELDS,
   KPI_TABLE_COLUMNS,
   KPI_TABLE_SCOPE,
-  calculateKpiRowTotal,
+  KPI_VALUE_FIELDS,
   createDefaultKpiTablePayload,
+  fetchSharedKpiTableState,
   fetchSharedKpiTables,
-  mergeKpiTablePayload,
-  saveSharedKpiTables,
+  saveSharedKpiTableDraft,
   updateKpiTableField,
 } from "../kpiTableState.js";
 import styles from "./KpiTables.module.css";
@@ -29,14 +28,11 @@ function KpiTable({ section, rows, editable, disabled, onChange }) {
             ? <input aria-label={`${SECTION_LABELS[section]} row ${rowIndex + 1} label`} value={row.label} disabled={disabled}
               maxLength={100} placeholder="KPI" onChange={(event) => onChange(rowIndex, "label", event.target.value)} />
             : row.label || <span aria-hidden="true">—</span>}</th>
-          {KPI_QUARTER_FIELDS.map((field, columnIndex) => <td key={field}>{editable
+          {KPI_VALUE_FIELDS.map((field, columnIndex) => <td key={field} className={field === "total" ? styles.totalCell : undefined}>{editable
             ? <input aria-label={`${SECTION_LABELS[section]} row ${rowIndex + 1} ${KPI_TABLE_COLUMNS[columnIndex]}`}
-              value={row[field]} disabled={disabled} inputMode="decimal" maxLength={16}
-              onChange={(event) => {
-                if (/^-?\d*(?:\.\d*)?$/.test(event.target.value)) onChange(rowIndex, field, event.target.value);
-              }} />
+              value={row[field]} disabled={disabled} maxLength={100}
+              onChange={(event) => onChange(rowIndex, field, event.target.value)} />
             : row[field]}</td>)}
-          <td className={styles.totalCell}>{calculateKpiRowTotal(row)}</td>
         </tr>)}</tbody>
       </table>
     </div>
@@ -45,57 +41,74 @@ function KpiTable({ section, rows, editable, disabled, onChange }) {
 
 export function KpiTablesEditor({ gameId }) {
   const client = useQueryClient();
-  const queryKey = useMemo(() => [KPI_TABLE_SCOPE, gameId], [gameId]);
-  const [payload, setPayload] = useState(createDefaultKpiTablePayload);
-  const [revision, setRevision] = useState(0);
+  const queryKey = useMemo(() => [KPI_TABLE_SCOPE, gameId, "editor-state"], [gameId]);
+  const dashboardQueryKey = useMemo(() => [KPI_TABLE_SCOPE, gameId], [gameId]);
+  const [draft, setDraft] = useState(null);
+  const [version, setVersion] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const revisionRef = useRef(0);
   const query = useQuery({
     queryKey,
-    queryFn: () => fetchSharedKpiTables(gameId),
-    refetchInterval: 5_000,
-    refetchOnWindowFocus: true,
+    queryFn: () => fetchSharedKpiTableState(gameId),
+    refetchInterval: draft ? false : 5_000,
+    refetchOnWindowFocus: !draft,
   });
 
   useEffect(() => {
-    if (!query.data) return;
-    setPayload((current) => mergeKpiTablePayload(current, query.data));
-  }, [query.data]);
-
-  useEffect(() => {
-    if (!revision) return undefined;
-    const snapshotRevision = revision;
-    const timeoutId = window.setTimeout(() => {
-      setSaving(true);
-      setError("");
-      saveSharedKpiTables(gameId, payload)
-        .then((saved) => {
-          client.setQueryData(queryKey, saved);
-          setPayload((current) => mergeKpiTablePayload(current, saved));
-          if (revisionRef.current === snapshotRevision) setRevision(0);
-        })
-        .catch((cause) => setError(cause?.message || "Unable to save shared KPI tables."))
-        .finally(() => setSaving(false));
-    }, 750);
-    return () => window.clearTimeout(timeoutId);
-  }, [client, gameId, payload, queryKey, revision]);
+    if (!draft) return undefined;
+    const warn = (event) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [draft]);
 
   const update = (section, rowIndex, field, value) => {
-    setPayload((current) => updateKpiTableField(current, section, rowIndex, field, value));
-    revisionRef.current += 1;
-    setRevision(revisionRef.current);
+    setDraft((current) => updateKpiTableField(current, section, rowIndex, field, value));
   };
+
+  const save = async () => {
+    if (!draft || saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      await client.cancelQueries({ queryKey });
+      const saved = await saveSharedKpiTableDraft(gameId, draft, version);
+      client.setQueryData(queryKey, saved);
+      client.setQueryData(dashboardQueryKey, saved.payload);
+      setDraft(null);
+      setVersion(saved.version);
+    } catch (cause) {
+      setError(cause?.code === "SHARED_STATE_CONFLICT"
+        ? "Another user saved changes while you were editing. Your draft is preserved. Cancel and reload before trying again."
+        : `Unable to save. Your draft is preserved. ${cause?.message || "Please try again."}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const payload = draft || query.data?.payload || createDefaultKpiTablePayload();
 
   return <section className={styles.editor} aria-label="Shared KPI tables editor">
     <div className={styles.editorHeading}>
-      <div><h2>Game KPI Tables</h2><p>Changes are shared with everyone and appear on the main game dashboard.</p></div>
-      <span className={styles.saveStatus}>{saving ? "Saving…" : revision ? "Unsaved changes" : query.isPending ? "Loading…" : "Saved"}</span>
+      <div><h2>Game KPI Tables</h2><p>{draft ? "Editing — changes are shared only after you click Save." : "Shared game KPIs. Click Edit to make changes."}</p></div>
+      <div className={styles.editorActions}>
+        {draft ? <button type="button" className={styles.cancelButton} disabled={saving} onClick={() => {
+          if (!window.confirm("Discard your unpublished KPI edits?")) return;
+          setDraft(null); setError(""); void query.refetch();
+        }}>Cancel</button> : null}
+        <button type="button" className={styles.editButton}
+          disabled={saving || (!draft && (query.isFetching || query.isPending || Boolean(query.error)))}
+          onClick={() => {
+            if (draft) { void save(); return; }
+            setVersion(query.data?.version || null);
+            setDraft(structuredClone(query.data?.payload || createDefaultKpiTablePayload()));
+            setError("");
+          }}>{saving ? "Saving…" : draft ? "Save" : "Edit"}</button>
+      </div>
     </div>
     {(error || query.error) ? <div className={styles.error} role="alert">{error || "Unable to load shared KPI tables."}</div> : null}
     <div className={styles.tableStack}>
       {Object.keys(SECTION_LABELS).map((section) => <KpiTable key={section} section={section} rows={payload[section]}
-        editable disabled={saving} onChange={(rowIndex, field, value) => update(section, rowIndex, field, value)} />)}
+        editable={Boolean(draft)} disabled={saving} onChange={(rowIndex, field, value) => update(section, rowIndex, field, value)} />)}
     </div>
   </section>;
 }
