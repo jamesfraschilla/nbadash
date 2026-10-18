@@ -782,6 +782,37 @@ export async function deleteUploadedRefereeHeadshotAssets(uploadedRecord) {
   }
 }
 
+export async function activateRefereeHeadshotReplacement({
+  uploadedRecord,
+  previousUploadedRecord,
+  activate,
+  remove = deleteUploadedRefereeHeadshotAssets,
+}) {
+  if (!uploadedRecord || typeof activate !== "function") {
+    throw new Error("Missing replacement image or activation handler.");
+  }
+  try {
+    await activate(uploadedRecord);
+  } catch (activationError) {
+    try {
+      await remove(uploadedRecord);
+    } catch (cleanupError) {
+      throw new Error(`${activationError?.message || "Unable to activate the replacement image."} The new upload also could not be removed: ${cleanupError?.message || "Unknown cleanup error."}`);
+    }
+    throw activationError;
+  }
+
+  let cleanupError = null;
+  if (previousUploadedRecord) {
+    try {
+      await remove(previousUploadedRecord);
+    } catch (error) {
+      cleanupError = error;
+    }
+  }
+  return { uploadedRecord, cleanupError };
+}
+
 export function resolveRefereeHeadshotOverrideKey(fullName, overrides = null, preferences = null) {
   const effectiveOverrides = overrides || readStoredRefereeHeadshotOverrides();
   const effectivePreferences = preferences || readStoredRefereeHeadshotPreferences();

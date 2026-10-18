@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../auth/useAuth.js";
 import {
   broadcastRefereeHeadshotChange,
+  activateRefereeHeadshotReplacement,
   buildManualRefereeItemId,
   buildUploadedRefereeImageId,
   cacheStoredRefereeHeadshotOverrides,
@@ -591,29 +592,49 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
   const handleUploadFile = async (event) => {
     const file = event.target.files?.[0];
     if (!file || !selectedAssignedNameKey) return;
+    let uploadedRecord = null;
     try {
       if (!user?.id) {
         throw new Error("Sign in to upload referee photos.");
       }
+      const uploadNameKey = selectedAssignedNameKey;
+      const previousUploadedRecord = preferences.uploadedImagesByNameKey?.[uploadNameKey] || null;
       setUploadMessage("Uploading...");
       const [previewBlob, fullBlob] = await Promise.all([
         renderCompressedImageBlob(file, { maxEdge: 720, quality: 0.82 }),
         renderCompressedImageBlob(file, { maxEdge: 2200, quality: 0.92 }),
       ]);
-      const uploadedRecord = await uploadRefereeHeadshotAssets({
-        nameKey: selectedAssignedNameKey,
+      uploadedRecord = await uploadRefereeHeadshotAssets({
+        nameKey: uploadNameKey,
         originalFileName: file.name,
         previewBlob,
         fullBlob,
       });
-      setPreferences((current) => sanitizeRefereeHeadshotPreferences({
-        ...current,
+      const nextPreferences = sanitizeRefereeHeadshotPreferences({
+        ...preferences,
         uploadedImagesByNameKey: {
-          ...(current.uploadedImagesByNameKey || {}),
-          [selectedAssignedNameKey]: uploadedRecord,
+          ...(preferences.uploadedImagesByNameKey || {}),
+          [uploadNameKey]: uploadedRecord,
         },
-      }));
-      setUploadMessage("Replacement image uploaded.");
+      });
+
+      const replacement = await activateRefereeHeadshotReplacement({
+        uploadedRecord,
+        previousUploadedRecord,
+        activate: () => saveRemoteRefereeHeadshotState(user.id, { overrides, preferences: nextPreferences }),
+      });
+
+      setPreferences(nextPreferences);
+      savedOverridesSignatureRef.current = currentOverridesSignature;
+      savedPreferencesSignatureRef.current = serializeRefereeHeadshotPreferences(nextPreferences);
+
+      if (replacement.cleanupError) {
+        setUploadMessage(`Replacement image uploaded and activated, but the superseded files could not be removed: ${replacement.cleanupError?.message || "Unknown cleanup error."}`);
+        return;
+      }
+      setUploadMessage(previousUploadedRecord
+        ? "Replacement image uploaded. Superseded files removed."
+        : "Replacement image uploaded.");
     } catch (error) {
       setUploadMessage(error?.message || "Upload failed.");
     } finally {
