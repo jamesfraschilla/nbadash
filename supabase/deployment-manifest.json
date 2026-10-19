@@ -290,13 +290,14 @@
     {
       "name": "nba-rosters",
       "entrypoint": "supabase/functions/nba-rosters/index.ts",
-      "sha256": "4090dff1dfaf84ad9b44979b642d82f5803c093a3b236a67ac648e431fb1497b",
+      "sha256": "c756e3964f62f9d264eac51774b721d6ee315143b671c59a647d768a2f88ba51",
       "sourceFiles": [
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
         "supabase/functions/_shared/officiatingInsights.ts",
         "supabase/functions/_shared/requestSecurity.ts",
         "supabase/functions/_shared/rosterSnapshot.ts",
+        "supabase/functions/nba-rosters/espnRosterJerseys.ts",
         "supabase/functions/nba-rosters/index.ts"
       ]
     },

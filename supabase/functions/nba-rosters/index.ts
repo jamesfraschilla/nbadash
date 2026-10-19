@@ -1,4 +1,9 @@
 import { readRosterSnapshot, writeRosterSnapshot } from "../_shared/rosterSnapshot.ts";
+import {
+  extractEspnJerseys,
+  mergeEspnJerseys,
+  normalizeRosterPlayerName,
+} from "./espnRosterJerseys.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,8 +13,11 @@ const corsHeaders = {
 
 const COMMON_TEAM_ROSTER_URL = "https://stats.nba.com/stats/commonteamroster";
 const ESPN_TEAM_ROSTER_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams";
+const ESPN_TEAM_SCHEDULE_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams";
+const ESPN_GAME_SUMMARY_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary";
 const TEAM_REQUEST_TIMEOUT_MS = 8_000;
 const ESPN_REQUEST_TIMEOUT_MS = 4_000;
+const ESPN_RECENT_GAME_LIMIT = 3;
 const GLOBAL_REQUEST_DEADLINE_MS = 12_000;
 
 const ESPN_TEAM_SLUGS: Record<string, string> = {
@@ -117,16 +125,6 @@ function splitName(fullName: string) {
   };
 }
 
-function normalizePlayerName(value: unknown) {
-  return String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/\b(jr|sr|ii|iii|iv)\b/g, "")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
-
 function rosterNeedsJerseyCorrection(players: Array<{ jerseyNum: string }>) {
   const jerseyCounts = new Map<string, number>();
   for (const player of players) {
@@ -137,8 +135,7 @@ function rosterNeedsJerseyCorrection(players: Array<{ jerseyNum: string }>) {
   return [...jerseyCounts.values()].some((count) => count > 1);
 }
 
-async function fetchEspnJerseyCorrections(team: TeamRecord, parentSignal: AbortSignal) {
-  const slug = ESPN_TEAM_SLUGS[team.teamAbbreviation] || team.teamAbbreviation.toLowerCase();
+async function fetchEspnJson(url: string, parentSignal: AbortSignal) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort("espn-timeout"), ESPN_REQUEST_TIMEOUT_MS);
   const abortFromParent = () => controller.abort(parentSignal.reason || "global-deadline");
@@ -146,25 +143,54 @@ async function fetchEspnJerseyCorrections(team: TeamRecord, parentSignal: AbortS
   else parentSignal.addEventListener("abort", abortFromParent, { once: true });
 
   try {
-    const response = await fetch(`${ESPN_TEAM_ROSTER_URL}/${slug}/roster`, {
+    const response = await fetch(url, {
       headers: { Accept: "application/json" },
       signal: controller.signal,
     });
-    if (!response.ok) return new Map<string, string>();
-    const payload = await response.json();
-    const athletes = Array.isArray(payload?.athletes) ? payload.athletes : [];
-    return new Map<string, string>(athletes
-      .map((athlete: Record<string, unknown>) => [
-        normalizePlayerName(athlete?.fullName || athlete?.displayName),
-        String(athlete?.jersey || "").trim(),
-      ] as [string, string])
-      .filter(([name, jerseyNum]) => name && jerseyNum));
+    return response.ok ? await response.json() : null;
   } catch {
-    return new Map<string, string>();
+    return null;
   } finally {
     clearTimeout(timeoutId);
     parentSignal.removeEventListener("abort", abortFromParent);
   }
+}
+
+async function fetchEspnRosterJerseys(team: TeamRecord, parentSignal: AbortSignal) {
+  const slug = ESPN_TEAM_SLUGS[team.teamAbbreviation] || team.teamAbbreviation.toLowerCase();
+  const payload = await fetchEspnJson(`${ESPN_TEAM_ROSTER_URL}/${slug}/roster`, parentSignal);
+  return extractEspnJerseys(payload);
+}
+
+async function fetchEspnRecentGameJerseys(
+  team: TeamRecord,
+  season: string,
+  parentSignal: AbortSignal,
+) {
+  const slug = ESPN_TEAM_SLUGS[team.teamAbbreviation] || team.teamAbbreviation.toLowerCase();
+  const seasonEndYear = Number.parseInt(season.slice(0, 4), 10) + 1;
+  const schedulePayloads = await Promise.all([1, 2].map((seasonType) => (
+    fetchEspnJson(
+      `${ESPN_TEAM_SCHEDULE_URL}/${slug}/schedule?season=${seasonEndYear}&seasontype=${seasonType}`,
+      parentSignal,
+    )
+  )));
+  const now = Date.now();
+  const recentEventIds = [...new Set(schedulePayloads
+    .flatMap((payload) => Array.isArray(payload?.events) ? payload.events : [])
+    .filter((event) => {
+      const eventTime = Date.parse(String(event?.date || ""));
+      return String(event?.id || "").trim() && Number.isFinite(eventTime) && eventTime <= now;
+    })
+    .sort((a, b) => Date.parse(String(b?.date || "")) - Date.parse(String(a?.date || "")))
+    .map((event) => String(event.id).trim()))]
+    .slice(0, ESPN_RECENT_GAME_LIMIT);
+
+  const summaries = await Promise.all(recentEventIds.map((eventId) => (
+    fetchEspnJson(`${ESPN_GAME_SUMMARY_URL}?event=${encodeURIComponent(eventId)}`, parentSignal)
+  )));
+  // Merge oldest to newest so a number change observed in the latest game wins.
+  return mergeEspnJerseys(...summaries.reverse().map(extractEspnJerseys));
 }
 
 function findResultSet(payload: Record<string, unknown>, targetName: string) {
@@ -188,6 +214,10 @@ function mapRows(resultSet: Record<string, unknown>) {
 }
 
 async function fetchTeamRoster(team: TeamRecord, season: string, parentSignal: AbortSignal) {
+  // Start ESPN at the same time as the roster request. Previously it began only
+  // after the slower request finished and was frequently cancelled by the
+  // global deadline, leaving valid ESPN jersey numbers unused.
+  const espnRosterJerseysPromise = fetchEspnRosterJerseys(team, parentSignal);
   const url = new URL(COMMON_TEAM_ROSTER_URL);
   url.searchParams.set("LeagueID", "00");
   url.searchParams.set("Season", season);
@@ -249,13 +279,18 @@ async function fetchTeamRoster(team: TeamRecord, season: string, parentSignal: A
     })
     .filter((player): player is NonNullable<typeof player> => Boolean(player));
 
-  if (rosterNeedsJerseyCorrection(players)) {
-    const espnJerseysByName = await fetchEspnJerseyCorrections(team, parentSignal);
-    players.forEach((player) => {
-      const correctedJersey = espnJerseysByName.get(normalizePlayerName(player.fullName));
-      if (correctedJersey) player.jerseyNum = correctedJersey;
-    });
+  let espnJerseysByName = await espnRosterJerseysPromise;
+  const unresolvedPlayers = players.filter((player) => (
+    !player.jerseyNum || !espnJerseysByName.has(normalizeRosterPlayerName(player.fullName))
+  ));
+  if (rosterNeedsJerseyCorrection(players) && unresolvedPlayers.length) {
+    const recentGameJerseys = await fetchEspnRecentGameJerseys(team, season, parentSignal);
+    espnJerseysByName = mergeEspnJerseys(espnJerseysByName, recentGameJerseys);
   }
+  players.forEach((player) => {
+    const correctedJersey = espnJerseysByName.get(normalizeRosterPlayerName(player.fullName));
+    if (correctedJersey) player.jerseyNum = correctedJersey;
+  });
 
   players.sort((a, b) => {
     const jerseyCompare = toSortableJersey(a.jerseyNum) - toSortableJersey(b.jerseyNum);

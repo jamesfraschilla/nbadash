@@ -141,7 +141,7 @@
       "firstName": "Keshon",
       "familyName": "Gilbert",
       "fullName": "Keshon Gilbert",
-      "jerseyNum": "",
+      "jerseyNum": "00",
       "position": "G"
     }
   ],
@@ -693,7 +693,7 @@
       "firstName": "Tobe",
       "familyName": "Awaka",
       "fullName": "Tobe Awaka",
-      "jerseyNum": "",
+      "jerseyNum": "19",
       "position": "F"
     },
     {
@@ -701,7 +701,7 @@
       "firstName": "Jaylin",
       "familyName": "Sellers",
       "fullName": "Jaylin Sellers",
-      "jerseyNum": "",
+      "jerseyNum": "22",
       "position": ""
     }
   ],
@@ -847,7 +847,7 @@
       "firstName": "Tarik",
       "familyName": "Biberovic",
       "fullName": "Tarik Biberovic",
-      "jerseyNum": "",
+      "jerseyNum": "13",
       "position": "F"
     }
   ],
@@ -1269,7 +1269,7 @@
       "firstName": "Sean",
       "familyName": "Pedulla",
       "fullName": "Sean Pedulla",
-      "jerseyNum": "",
+      "jerseyNum": "0",
       "position": "G"
     },
     {
@@ -1277,7 +1277,7 @@
       "firstName": "Quadir",
       "familyName": "Copeland",
       "fullName": "Quadir Copeland",
-      "jerseyNum": "",
+      "jerseyNum": "25",
       "position": "G"
     }
   ],
@@ -1577,7 +1577,7 @@
       "firstName": "Arthur",
       "familyName": "Kaluma",
       "fullName": "Arthur Kaluma",
-      "jerseyNum": "",
+      "jerseyNum": "47",
       "position": "F"
     }
   ],
@@ -2275,7 +2275,7 @@
       "firstName": "Jaden",
       "familyName": "Akins",
       "fullName": "Jaden Akins",
-      "jerseyNum": "",
+      "jerseyNum": "14",
       "position": "G"
     }
   ],
@@ -2973,7 +2973,7 @@
       "firstName": "Jayson",
       "familyName": "Kent",
       "fullName": "Jayson Kent",
-      "jerseyNum": "",
+      "jerseyNum": "29",
       "position": "F"
     }
   ],
@@ -3387,7 +3387,7 @@
       "firstName": "Josh",
       "familyName": "Dix",
       "fullName": "Josh Dix",
-      "jerseyNum": "",
+      "jerseyNum": "21",
       "position": ""
     }
   ],
@@ -3817,7 +3817,7 @@
       "firstName": "Jahmai",
       "familyName": "Mashack",
       "fullName": "Jahmai Mashack",
-      "jerseyNum": "",
+      "jerseyNum": "21",
       "position": "G"
     },
     {
@@ -3825,7 +3825,7 @@
       "firstName": "Carson",
       "familyName": "Cooper",
       "fullName": "Carson Cooper",
-      "jerseyNum": "",
+      "jerseyNum": "20",
       "position": "F"
     }
   ],
@@ -4117,7 +4117,7 @@
       "firstName": "Ugonna",
       "familyName": "Onyenso",
       "fullName": "Ugonna Onyenso",
-      "jerseyNum": "",
+      "jerseyNum": "34",
       "position": "C"
     }
   ],
@@ -4255,7 +4255,7 @@
       "firstName": "Michael",
       "familyName": "Ajayi",
       "fullName": "Michael Ajayi",
-      "jerseyNum": "",
+      "jerseyNum": "10",
       "position": "G"
     },
     {
@@ -4263,7 +4263,7 @@
       "firstName": "Kylan",
       "familyName": "Boswell",
       "fullName": "Kylan Boswell",
-      "jerseyNum": "",
+      "jerseyNum": "18",
       "position": "G"
     }
   ]
