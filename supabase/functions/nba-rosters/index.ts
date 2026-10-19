@@ -136,24 +136,37 @@ function rosterNeedsJerseyCorrection(players: Array<{ jerseyNum: string }>) {
 }
 
 async function fetchEspnJson(url: string, parentSignal: AbortSignal) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort("espn-timeout"), ESPN_REQUEST_TIMEOUT_MS);
-  const abortFromParent = () => controller.abort(parentSignal.reason || "global-deadline");
-  if (parentSignal.aborted) abortFromParent();
-  else parentSignal.addEventListener("abort", abortFromParent, { once: true });
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort("espn-timeout"), ESPN_REQUEST_TIMEOUT_MS);
+    const abortFromParent = () => controller.abort(parentSignal.reason || "global-deadline");
+    if (parentSignal.aborted) abortFromParent();
+    else parentSignal.addEventListener("abort", abortFromParent, { once: true });
 
-  try {
-    const response = await fetch(url, {
-      headers: { Accept: "application/json" },
-      signal: controller.signal,
-    });
-    return response.ok ? await response.json() : null;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timeoutId);
-    parentSignal.removeEventListener("abort", abortFromParent);
+    try {
+      const response = await fetch(url, {
+        headers: {
+          Accept: "application/json",
+          "Accept-Language": "en-US,en;q=0.9",
+          Origin: "https://www.espn.com",
+          Referer: "https://www.espn.com/",
+          "User-Agent": "Mozilla/5.0 (compatible; NBA Dashboard Roster Resolver)",
+        },
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      if (response.ok) return await response.json();
+    } catch {
+      // Retry once because ESPN occasionally resets Edge Runtime connections.
+    } finally {
+      clearTimeout(timeoutId);
+      parentSignal.removeEventListener("abort", abortFromParent);
+    }
+
+    if (parentSignal.aborted) return null;
+    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 150));
   }
+  return null;
 }
 
 async function fetchEspnRosterJerseys(team: TeamRecord, parentSignal: AbortSignal) {
