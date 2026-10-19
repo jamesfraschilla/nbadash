@@ -64,6 +64,7 @@ import {
 import { buildMatchupDefaultLineupMap } from "../matchupDefaultLineups.js";
 import { findWashingtonOpponentTeamId } from "../matchupGameDefaults.js";
 import { resolvePersonnelFamilyName } from "../personnelGraphic.js";
+import { reconcileRosterPlayerFields } from "../rosterReconciliation.js";
 import { formatDateInputInTimeZone } from "../utils.js";
 import styles from "./Tools.module.css";
 
@@ -685,6 +686,7 @@ export default function Tools({ section = "tools" }) {
       : {};
     const next = {};
     NBA_TEAMS.forEach((team) => {
+      const fallbackRoster = getNbaTeamRoster(team.teamId);
       const remoteRoster = Array.isArray(remoteTeams?.[team.teamId]?.players)
         ? remoteTeams[team.teamId].players.map((player) => {
           const fullName = String(player?.fullName || "").trim();
@@ -697,7 +699,7 @@ export default function Tools({ section = "tools" }) {
           teamId: String(player?.teamId || team.teamId).trim() || team.teamId,
         }; }).filter((player) => player.personId && player.fullName)
         : [];
-      next[team.teamId] = remoteRoster.length ? remoteRoster : getNbaTeamRoster(team.teamId);
+      next[team.teamId] = reconcileRosterPlayerFields(remoteRoster, fallbackRoster);
     });
     return next;
   }, [remoteNbaRostersPayload]);

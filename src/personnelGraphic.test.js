@@ -297,6 +297,29 @@ test("populatePersonnelDraftFromRoster preserves configuration by player across 
   assert.deepEqual(populated.rows[2].selectedStats, DEFAULT_PERSONNEL_STAT_KEYS);
 });
 
+test("populatePersonnelDraftFromRoster refreshes stale identity fields without losing configuration", () => {
+  const draft = hydratePersonnelDraft({
+    teamId: "1610612766",
+    rows: [{
+      personId: "1642369",
+      fullName: "Michael Ajayi",
+      jerseyNum: "",
+      enabled: false,
+      tags: ["lefty"],
+    }],
+  });
+  const populated = populatePersonnelDraftFromRoster(draft, [{
+    personId: "1642369",
+    fullName: "Michael Ajayi",
+    jerseyNum: "10",
+    teamId: "1610612766",
+  }], { teamId: "1610612766" });
+
+  assert.equal(populated.rows[0].jerseyNum, "10");
+  assert.equal(populated.rows[0].enabled, false);
+  assert.deepEqual(populated.rows[0].tags, ["lefty"]);
+});
+
 test("toggle helpers allow unchecking and prevent selecting a fifth stat", () => {
   const unchecked = togglePersonnelStat(DEFAULT_PERSONNEL_STAT_KEYS, "RPG");
   assert.deepEqual(unchecked, ["ppg", "threePointPercentage", "apg"]);
