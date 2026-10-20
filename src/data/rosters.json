@@ -1,19 +1,19 @@
 {
   "1610612737": [
     {
+      "personId": "1642933",
+      "firstName": "Keshon",
+      "familyName": "Gilbert",
+      "fullName": "Keshon Gilbert",
+      "jerseyNum": "00",
+      "position": "G"
+    },
+    {
       "personId": "1629652",
       "firstName": "Luguentz",
       "familyName": "Dort",
       "fullName": "Luguentz Dort",
       "jerseyNum": "0",
-      "position": "G"
-    },
-    {
-      "personId": "1642484",
-      "firstName": "RayJ",
-      "familyName": "Dennis",
-      "fullName": "RayJ Dennis",
-      "jerseyNum": "00",
       "position": "G"
     },
     {
@@ -71,6 +71,14 @@
       "fullName": "Dorian Finney-Smith",
       "jerseyNum": "8",
       "position": "F"
+    },
+    {
+      "personId": "1642484",
+      "firstName": "RayJ",
+      "familyName": "Dennis",
+      "fullName": "RayJ Dennis",
+      "jerseyNum": "10",
+      "position": "G"
     },
     {
       "personId": "1643539",
@@ -135,14 +143,6 @@
       "fullName": "Jock Landale",
       "jerseyNum": "31",
       "position": "C"
-    },
-    {
-      "personId": "1642933",
-      "firstName": "Keshon",
-      "familyName": "Gilbert",
-      "fullName": "Keshon Gilbert",
-      "jerseyNum": "00",
-      "position": "G"
     }
   ],
   "1610612738": [
@@ -161,6 +161,14 @@
       "fullName": "Mitchell Robinson",
       "jerseyNum": "4",
       "position": "C-F"
+    },
+    {
+      "personId": "1631199",
+      "firstName": "Ron",
+      "familyName": "Harper Jr.",
+      "fullName": "Ron Harper Jr.",
+      "jerseyNum": "8",
+      "position": "G-F"
     },
     {
       "personId": "1628401",
@@ -195,28 +203,12 @@
       "position": "F"
     },
     {
-      "personId": "1631199",
-      "firstName": "Ron",
-      "familyName": "Harper Jr.",
-      "fullName": "Ron Harper Jr.",
-      "jerseyNum": "13",
-      "position": "G-F"
-    },
-    {
       "personId": "1641759",
       "firstName": "Dillon",
       "familyName": "Mitchell",
       "fullName": "Dillon Mitchell",
       "jerseyNum": "20",
       "position": "F"
-    },
-    {
-      "personId": "1642269",
-      "firstName": "Devin",
-      "familyName": "Carter",
-      "fullName": "Devin Carter",
-      "jerseyNum": "22",
-      "position": "G"
     },
     {
       "personId": "1641775",
@@ -281,6 +273,14 @@
       "fullName": "Neemias Queta",
       "jerseyNum": "88",
       "position": "C"
+    },
+    {
+      "personId": "1642269",
+      "firstName": "Devin",
+      "familyName": "Carter",
+      "fullName": "Devin Carter",
+      "jerseyNum": "99",
+      "position": "G"
     }
   ],
   "1610612739": [
@@ -405,20 +405,20 @@
       "position": "F"
     },
     {
+      "personId": "1643640",
+      "firstName": "Ernest",
+      "familyName": "Udeh, Jr.",
+      "fullName": "Ernest Udeh, Jr.",
+      "jerseyNum": "39",
+      "position": "C"
+    },
+    {
       "personId": "1628378",
       "firstName": "Donovan",
       "familyName": "Mitchell",
       "fullName": "Donovan Mitchell",
       "jerseyNum": "45",
       "position": "G"
-    },
-    {
-      "personId": "1643640",
-      "firstName": "Ernest",
-      "familyName": "Udeh, Jr.",
-      "fullName": "Ernest Udeh, Jr.",
-      "jerseyNum": "88",
-      "position": "C"
     }
   ],
   "1610612740": [
@@ -597,7 +597,7 @@
       "firstName": "Buddy",
       "familyName": "Hield",
       "fullName": "Buddy Hield",
-      "jerseyNum": "8",
+      "jerseyNum": "7",
       "position": "G"
     },
     {
@@ -649,6 +649,22 @@
       "position": "G"
     },
     {
+      "personId": "1643591",
+      "firstName": "Tobe",
+      "familyName": "Awaka",
+      "fullName": "Tobe Awaka",
+      "jerseyNum": "19",
+      "position": "F"
+    },
+    {
+      "personId": "1643637",
+      "firstName": "Jaylin",
+      "familyName": "Sellers",
+      "fullName": "Jaylin Sellers",
+      "jerseyNum": "22",
+      "position": "G"
+    },
+    {
       "personId": "1626181",
       "firstName": "Norman",
       "familyName": "Powell",
@@ -687,22 +703,6 @@
       "fullName": "Patrick Williams",
       "jerseyNum": "44",
       "position": "F"
-    },
-    {
-      "personId": "1643591",
-      "firstName": "Tobe",
-      "familyName": "Awaka",
-      "fullName": "Tobe Awaka",
-      "jerseyNum": "19",
-      "position": "F"
-    },
-    {
-      "personId": "1643637",
-      "firstName": "Jaylin",
-      "familyName": "Sellers",
-      "fullName": "Jaylin Sellers",
-      "jerseyNum": "22",
-      "position": ""
     }
   ],
   "1610612742": [
@@ -729,14 +729,6 @@
       "fullName": "Naji Marshall",
       "jerseyNum": "3",
       "position": "F"
-    },
-    {
-      "personId": "203939",
-      "firstName": "Dwight",
-      "familyName": "Powell",
-      "fullName": "Dwight Powell",
-      "jerseyNum": "7",
-      "position": "F-C"
     },
     {
       "personId": "1631204",
@@ -769,6 +761,14 @@
       "fullName": "Kyrie Irving",
       "jerseyNum": "11",
       "position": "G"
+    },
+    {
+      "personId": "1641844",
+      "firstName": "Tarik",
+      "familyName": "Biberovic",
+      "fullName": "Tarik Biberovic",
+      "jerseyNum": "13",
+      "position": "F"
     },
     {
       "personId": "1643516",
@@ -841,17 +841,17 @@
       "fullName": "Sergio de Larrea",
       "jerseyNum": "55",
       "position": "G"
-    },
-    {
-      "personId": "1641844",
-      "firstName": "Tarik",
-      "familyName": "Biberovic",
-      "fullName": "Tarik Biberovic",
-      "jerseyNum": "13",
-      "position": "F"
     }
   ],
   "1610612743": [
+    {
+      "personId": "1641715",
+      "firstName": "Cam",
+      "familyName": "Whitmore",
+      "fullName": "Cam Whitmore",
+      "jerseyNum": "00",
+      "position": "F"
+    },
     {
       "personId": "1631128",
       "firstName": "Christian",
@@ -859,14 +859,6 @@
       "fullName": "Christian Braun",
       "jerseyNum": "0",
       "position": "G"
-    },
-    {
-      "personId": "1641715",
-      "firstName": "Cam",
-      "familyName": "Whitmore",
-      "fullName": "Cam Whitmore",
-      "jerseyNum": "1",
-      "position": "F"
     },
     {
       "personId": "1631124",
@@ -1157,7 +1149,7 @@
       "firstName": "Julian",
       "familyName": "Phillips",
       "fullName": "Julian Phillips",
-      "jerseyNum": "4",
+      "jerseyNum": "3",
       "position": "F"
     },
     {
@@ -1183,6 +1175,14 @@
       "fullName": "Jae'Sean Tate",
       "jerseyNum": "8",
       "position": "F"
+    },
+    {
+      "personId": "1631131",
+      "firstName": "Oscar",
+      "familyName": "Tshiebwe",
+      "fullName": "Oscar Tshiebwe",
+      "jerseyNum": "9",
+      "position": "F-C"
     },
     {
       "personId": "1631095",
@@ -1217,6 +1217,14 @@
       "position": "F"
     },
     {
+      "personId": "1643595",
+      "firstName": "Quadir",
+      "familyName": "Copeland",
+      "fullName": "Quadir Copeland",
+      "jerseyNum": "25",
+      "position": "G"
+    },
+    {
       "personId": "1642384",
       "firstName": "Isaiah",
       "familyName": "Crawford",
@@ -1249,35 +1257,11 @@
       "position": "G"
     },
     {
-      "personId": "1631131",
-      "firstName": "Oscar",
-      "familyName": "Tshiebwe",
-      "fullName": "Oscar Tshiebwe",
-      "jerseyNum": "34",
-      "position": "F-C"
-    },
-    {
       "personId": "203935",
       "firstName": "Marcus",
       "familyName": "Smart",
       "fullName": "Marcus Smart",
       "jerseyNum": "36",
-      "position": "G"
-    },
-    {
-      "personId": "1642951",
-      "firstName": "Sean",
-      "familyName": "Pedulla",
-      "fullName": "Sean Pedulla",
-      "jerseyNum": "0",
-      "position": "G"
-    },
-    {
-      "personId": "1643595",
-      "firstName": "Quadir",
-      "familyName": "Copeland",
-      "fullName": "Quadir Copeland",
-      "jerseyNum": "25",
       "position": "G"
     }
   ],
@@ -1379,6 +1363,14 @@
       "position": "F"
     },
     {
+      "personId": "1629618",
+      "firstName": "Jalen",
+      "familyName": "Pickett",
+      "fullName": "Jalen Pickett",
+      "jerseyNum": "21",
+      "position": "G"
+    },
+    {
       "personId": "1641757",
       "firstName": "Jordan",
       "familyName": "Miller",
@@ -1399,14 +1391,6 @@
       "firstName": "Cam",
       "familyName": "Christie",
       "fullName": "Cam Christie",
-      "jerseyNum": "24",
-      "position": "G"
-    },
-    {
-      "personId": "1629618",
-      "firstName": "Jalen",
-      "familyName": "Pickett",
-      "fullName": "Jalen Pickett",
       "jerseyNum": "24",
       "position": "G"
     },
@@ -1443,22 +1427,6 @@
       "fullName": "Jarred Vanderbilt",
       "jerseyNum": "2",
       "position": "F"
-    },
-    {
-      "personId": "1642261",
-      "firstName": "Dalton",
-      "familyName": "Knecht",
-      "fullName": "Dalton Knecht",
-      "jerseyNum": "4",
-      "position": "F"
-    },
-    {
-      "personId": "1629680",
-      "firstName": "Matisse",
-      "familyName": "Thybulle",
-      "fullName": "Matisse Thybulle",
-      "jerseyNum": "4",
-      "position": "G-F"
     },
     {
       "personId": "1629656",
@@ -1525,6 +1493,14 @@
       "position": "G"
     },
     {
+      "personId": "1629680",
+      "firstName": "Matisse",
+      "familyName": "Thybulle",
+      "fullName": "Matisse Thybulle",
+      "jerseyNum": "26",
+      "position": "G-F"
+    },
+    {
       "personId": "1643024",
       "firstName": "Chris",
       "familyName": "Mañon",
@@ -1549,6 +1525,14 @@
       "position": "G"
     },
     {
+      "personId": "1641751",
+      "firstName": "Arthur",
+      "familyName": "Kaluma",
+      "fullName": "Arthur Kaluma",
+      "jerseyNum": "47",
+      "position": "F"
+    },
+    {
       "personId": "1630572",
       "firstName": "Sandro",
       "familyName": "Mamukelashvili",
@@ -1571,14 +1555,6 @@
       "fullName": "Luka Dončić",
       "jerseyNum": "77",
       "position": "F-G"
-    },
-    {
-      "personId": "1641751",
-      "firstName": "Arthur",
-      "familyName": "Kaluma",
-      "fullName": "Arthur Kaluma",
-      "jerseyNum": "47",
-      "position": "F"
     }
   ],
   "1610612748": [
@@ -1751,14 +1727,6 @@
       "fullName": "Gary Trent Jr.",
       "jerseyNum": "5",
       "position": "G"
-    },
-    {
-      "personId": "1629645",
-      "firstName": "Kevin",
-      "familyName": "Porter Jr.",
-      "fullName": "Kevin Porter Jr.",
-      "jerseyNum": "7",
-      "position": "G-F"
     },
     {
       "personId": "1642276",
@@ -2215,19 +2183,19 @@
       "position": "G"
     },
     {
-      "personId": "1630164",
-      "firstName": "James",
-      "familyName": "Wiseman",
-      "fullName": "James Wiseman",
-      "jerseyNum": "11",
-      "position": "C"
-    },
-    {
       "personId": "1642278",
       "firstName": "Tyler",
       "familyName": "Kolek",
       "fullName": "Tyler Kolek",
       "jerseyNum": "13",
+      "position": "G"
+    },
+    {
+      "personId": "1643022",
+      "firstName": "Jaden",
+      "familyName": "Akins",
+      "fullName": "Jaden Akins",
+      "jerseyNum": "14",
       "position": "G"
     },
     {
@@ -2245,6 +2213,14 @@
       "fullName": "Karl-Anthony Towns",
       "jerseyNum": "32",
       "position": "C-F"
+    },
+    {
+      "personId": "1630164",
+      "firstName": "James",
+      "familyName": "Wiseman",
+      "fullName": "James Wiseman",
+      "jerseyNum": "35",
+      "position": "C"
     },
     {
       "personId": "1629013",
@@ -2269,14 +2245,6 @@
       "fullName": "Tyler Nickel",
       "jerseyNum": "55",
       "position": "F"
-    },
-    {
-      "personId": "1643022",
-      "firstName": "Jaden",
-      "familyName": "Akins",
-      "fullName": "Jaden Akins",
-      "jerseyNum": "14",
-      "position": "G"
     }
   ],
   "1610612753": [
@@ -2581,14 +2549,6 @@
       "position": "G"
     },
     {
-      "personId": "1631126",
-      "firstName": "Caleb",
-      "familyName": "Love",
-      "fullName": "Caleb Love",
-      "jerseyNum": "2",
-      "position": "G"
-    },
-    {
       "personId": "1629014",
       "firstName": "Anfernee",
       "familyName": "Simons",
@@ -2605,6 +2565,14 @@
       "position": "G-F"
     },
     {
+      "personId": "1631126",
+      "firstName": "Caleb",
+      "familyName": "Love",
+      "fullName": "Caleb Love",
+      "jerseyNum": "8",
+      "position": "G"
+    },
+    {
       "personId": "1642348",
       "firstName": "Justin",
       "familyName": "Edwards",
@@ -2613,20 +2581,20 @@
       "position": "F"
     },
     {
+      "personId": "1641712",
+      "firstName": "Rayan",
+      "familyName": "Rupert",
+      "fullName": "Rayan Rupert",
+      "jerseyNum": "12",
+      "position": "G-F"
+    },
+    {
       "personId": "203954",
       "firstName": "Joel",
       "familyName": "Embiid",
       "fullName": "Joel Embiid",
       "jerseyNum": "21",
       "position": "C-F"
-    },
-    {
-      "personId": "1641712",
-      "firstName": "Rayan",
-      "familyName": "Rupert",
-      "fullName": "Rayan Rupert",
-      "jerseyNum": "21",
-      "position": "G-F"
     },
     {
       "personId": "2544",
@@ -2751,14 +2719,6 @@
       "position": "G"
     },
     {
-      "personId": "1642886",
-      "firstName": "Koby",
-      "familyName": "Brea",
-      "fullName": "Koby Brea",
-      "jerseyNum": "14",
-      "position": "G"
-    },
-    {
       "personId": "1626164",
       "firstName": "Devin",
       "familyName": "Booker",
@@ -2767,12 +2727,12 @@
       "position": "G"
     },
     {
-      "personId": "1631109",
-      "firstName": "Mark",
-      "familyName": "Williams",
-      "fullName": "Mark Williams",
-      "jerseyNum": "15",
-      "position": "C"
+      "personId": "1631166",
+      "firstName": "Drew",
+      "familyName": "Timme",
+      "fullName": "Drew Timme",
+      "jerseyNum": "17",
+      "position": "F"
     },
     {
       "personId": "1631123",
@@ -2799,14 +2759,6 @@
       "position": "F"
     },
     {
-      "personId": "1643047",
-      "firstName": "CJ",
-      "familyName": "Huntley",
-      "fullName": "CJ Huntley",
-      "jerseyNum": "22",
-      "position": "F"
-    },
-    {
       "personId": "1628970",
       "firstName": "Miles",
       "familyName": "Bridges",
@@ -2821,6 +2773,14 @@
       "fullName": "Jordan Goodwin",
       "jerseyNum": "23",
       "position": "G"
+    },
+    {
+      "personId": "1631109",
+      "firstName": "Mark",
+      "familyName": "Williams",
+      "fullName": "Mark Williams",
+      "jerseyNum": "25",
+      "position": "C"
     },
     {
       "personId": "1641871",
@@ -2865,11 +2825,11 @@
       "position": "G"
     },
     {
-      "personId": "1642959",
-      "firstName": "Chris",
-      "familyName": "Youngblood",
-      "fullName": "Chris Youngblood",
-      "jerseyNum": "3",
+      "personId": "1642910",
+      "firstName": "John",
+      "familyName": "Tonje",
+      "fullName": "John Tonje",
+      "jerseyNum": "2",
       "position": "G"
     },
     {
@@ -2889,14 +2849,6 @@
       "position": "F"
     },
     {
-      "personId": "1642910",
-      "firstName": "John",
-      "familyName": "Tonje",
-      "fullName": "John Tonje",
-      "jerseyNum": "8",
-      "position": "G"
-    },
-    {
       "personId": "1630695",
       "firstName": "Micah",
       "familyName": "Potter",
@@ -2911,6 +2863,14 @@
       "fullName": "Branden Carlson",
       "jerseyNum": "10",
       "position": "C"
+    },
+    {
+      "personId": "1642959",
+      "firstName": "Chris",
+      "familyName": "Youngblood",
+      "fullName": "Chris Youngblood",
+      "jerseyNum": "11",
+      "position": "G"
     },
     {
       "personId": "1642905",
@@ -2945,6 +2905,14 @@
       "position": "G"
     },
     {
+      "personId": "1643257",
+      "firstName": "Jayson",
+      "familyName": "Kent",
+      "fullName": "Jayson Kent",
+      "jerseyNum": "29",
+      "position": "F"
+    },
+    {
       "personId": "1641739",
       "firstName": "Toumani",
       "familyName": "Camara",
@@ -2967,14 +2935,6 @@
       "fullName": "Sidy Cissoko",
       "jerseyNum": "91",
       "position": "G"
-    },
-    {
-      "personId": "1643257",
-      "firstName": "Jayson",
-      "familyName": "Kent",
-      "fullName": "Jayson Kent",
-      "jerseyNum": "29",
-      "position": "F"
     }
   ],
   "1610612758": [
@@ -3033,14 +2993,6 @@
       "fullName": "Keegan Murray",
       "jerseyNum": "13",
       "position": "F"
-    },
-    {
-      "personId": "1641745",
-      "firstName": "Adam",
-      "familyName": "Flagler",
-      "fullName": "Adam Flagler",
-      "jerseyNum": "14",
-      "position": "G"
     },
     {
       "personId": "1629631",
@@ -3335,6 +3287,14 @@
       "position": "C"
     },
     {
+      "personId": "1643717",
+      "firstName": "Josh",
+      "familyName": "Dix",
+      "fullName": "Josh Dix",
+      "jerseyNum": "21",
+      "position": "G"
+    },
+    {
       "personId": "1641717",
       "firstName": "Cason",
       "familyName": "Wallace",
@@ -3381,25 +3341,9 @@
       "fullName": "Isaiah Hartenstein",
       "jerseyNum": "55",
       "position": "C-F"
-    },
-    {
-      "personId": "1643717",
-      "firstName": "Josh",
-      "familyName": "Dix",
-      "fullName": "Josh Dix",
-      "jerseyNum": "21",
-      "position": ""
     }
   ],
   "1610612761": [
-    {
-      "personId": "1642347",
-      "firstName": "Jamal",
-      "familyName": "Shead",
-      "fullName": "Jamal Shead",
-      "jerseyNum": "1",
-      "position": "G"
-    },
     {
       "personId": "202695",
       "firstName": "Kawhi",
@@ -3445,7 +3389,7 @@
       "firstName": "Kyle",
       "familyName": "Anderson",
       "fullName": "Kyle Anderson",
-      "jerseyNum": "13",
+      "jerseyNum": "12",
       "position": "F-G"
     },
     {
@@ -3479,6 +3423,14 @@
       "fullName": "Allen Graves",
       "jerseyNum": "22",
       "position": "F"
+    },
+    {
+      "personId": "1642347",
+      "firstName": "Jamal",
+      "familyName": "Shead",
+      "fullName": "Jamal Shead",
+      "jerseyNum": "23",
+      "position": "G"
     },
     {
       "personId": "1642867",
@@ -3701,22 +3653,6 @@
       "position": "F"
     },
     {
-      "personId": "1642383",
-      "firstName": "Walter",
-      "familyName": "Clayton Jr.",
-      "fullName": "Walter Clayton Jr.",
-      "jerseyNum": "4",
-      "position": "G"
-    },
-    {
-      "personId": "1642877",
-      "firstName": "Micah",
-      "familyName": "Peavy",
-      "fullName": "Micah Peavy",
-      "jerseyNum": "7",
-      "position": "G-F"
-    },
-    {
       "personId": "1642914",
       "firstName": "Javon",
       "familyName": "Small",
@@ -3747,6 +3683,22 @@
       "fullName": "Olivier-Maxence Prosper",
       "jerseyNum": "18",
       "position": "F"
+    },
+    {
+      "personId": "1643721",
+      "firstName": "Carson",
+      "familyName": "Cooper",
+      "fullName": "Carson Cooper",
+      "jerseyNum": "20",
+      "position": "F"
+    },
+    {
+      "personId": "1642942",
+      "firstName": "Jahmai",
+      "familyName": "Mashack",
+      "fullName": "Jahmai Mashack",
+      "jerseyNum": "21",
+      "position": "G"
     },
     {
       "personId": "1641707",
@@ -3810,22 +3762,6 @@
       "familyName": "Jackson",
       "fullName": "GG Jackson",
       "jerseyNum": "45",
-      "position": "F"
-    },
-    {
-      "personId": "1642942",
-      "firstName": "Jahmai",
-      "familyName": "Mashack",
-      "fullName": "Jahmai Mashack",
-      "jerseyNum": "21",
-      "position": "G"
-    },
-    {
-      "personId": "1643721",
-      "firstName": "Carson",
-      "familyName": "Cooper",
-      "fullName": "Carson Cooper",
-      "jerseyNum": "20",
       "position": "F"
     }
   ],
@@ -4089,6 +4025,14 @@
       "position": "G"
     },
     {
+      "personId": "1642391",
+      "firstName": "Ugonna",
+      "familyName": "Onyenso",
+      "fullName": "Ugonna Onyenso",
+      "jerseyNum": "34",
+      "position": "C"
+    },
+    {
       "personId": "1642449",
       "firstName": "Tolu",
       "familyName": "Smith",
@@ -4111,17 +4055,17 @@
       "fullName": "Elijah Harkless",
       "jerseyNum": "94",
       "position": "G"
-    },
-    {
-      "personId": "1642391",
-      "firstName": "Ugonna",
-      "familyName": "Onyenso",
-      "fullName": "Ugonna Onyenso",
-      "jerseyNum": "34",
-      "position": "C"
     }
   ],
   "1610612766": [
+    {
+      "personId": "1629675",
+      "firstName": "Naz",
+      "familyName": "Reid",
+      "fullName": "Naz Reid",
+      "jerseyNum": "0",
+      "position": "C-F"
+    },
     {
       "personId": "1626220",
       "firstName": "Royce",
@@ -4179,12 +4123,12 @@
       "position": "G"
     },
     {
-      "personId": "1629675",
-      "firstName": "Naz",
-      "familyName": "Reid",
-      "fullName": "Naz Reid",
-      "jerseyNum": "11",
-      "position": "C-F"
+      "personId": "1642369",
+      "firstName": "Michael",
+      "familyName": "Ajayi",
+      "fullName": "Michael Ajayi",
+      "jerseyNum": "10",
+      "position": "G"
     },
     {
       "personId": "1641750",
@@ -4219,6 +4163,14 @@
       "position": "G"
     },
     {
+      "personId": "1643573",
+      "firstName": "Kylan",
+      "familyName": "Boswell",
+      "fullName": "Kylan Boswell",
+      "jerseyNum": "18",
+      "position": "G"
+    },
+    {
       "personId": "1643419",
       "firstName": "Hannes",
       "familyName": "Steinbach",
@@ -4249,22 +4201,6 @@
       "fullName": "Liam McNeeley",
       "jerseyNum": "33",
       "position": "F"
-    },
-    {
-      "personId": "1642369",
-      "firstName": "Michael",
-      "familyName": "Ajayi",
-      "fullName": "Michael Ajayi",
-      "jerseyNum": "10",
-      "position": "G"
-    },
-    {
-      "personId": "1643573",
-      "firstName": "Kylan",
-      "familyName": "Boswell",
-      "fullName": "Kylan Boswell",
-      "jerseyNum": "18",
-      "position": "G"
     }
   ]
 }
