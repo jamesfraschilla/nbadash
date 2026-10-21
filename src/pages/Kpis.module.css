@@ -126,6 +126,73 @@
   margin-bottom: 0;
 }
 
+.detailInput {
+  min-height: 76px;
+  resize: vertical;
+  line-height: 1.35;
+}
+
+.colorFieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.colorFieldset legend {
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.colorOptions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.colorOption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.colorOptionSelected {
+  border-color: #5fa8ff;
+  box-shadow: 0 0 0 2px rgba(95, 168, 255, 0.28);
+}
+
+.colorSwatch {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  border: 1px solid rgba(0, 0, 0, 0.45);
+  border-radius: 4px;
+  background: #d9d9d9;
+}
+
+.colorOption_green .colorSwatch {
+  background: #198b45;
+}
+
+.colorOption_yellow .colorSwatch {
+  background: #dcae00;
+}
+
+.colorOption_red .colorSwatch {
+  background: #c9272c;
+}
+
 .stateMessage {
   padding: 40px 16px;
   text-align: center;
@@ -168,17 +235,21 @@
 }
 
 .contentColumn {
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 92px;
-  padding: 72px 74px;
+  height: 100%;
+  padding: 64px 74px;
 }
 
 .displayMetric {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 18px;
+  min-height: 0;
+  flex: 0 0 auto;
 }
 
 .displayMetricName {
@@ -186,7 +257,7 @@
   color: #ffffff;
   text-align: center;
   font-family: "DIN KPI Condensed", "Arial Narrow", sans-serif;
-  font-size: 74px;
+  font-size: 68px;
   font-weight: 700;
   line-height: 1;
   text-transform: uppercase;
@@ -194,13 +265,33 @@
 }
 
 .displayMetricValueBox {
+  box-sizing: border-box;
   width: 100%;
-  min-height: 194px;
+  min-height: 155px;
+  margin-top: 14px;
   background: #d9d9d9;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 16px 24px;
+}
+
+.displayMetricValueBox_green {
+  background: #198b45;
+}
+
+.displayMetricValueBox_yellow {
+  background: #dcae00;
+}
+
+.displayMetricValueBox_red {
+  background: #c9272c;
+}
+
+.displayMetricValueBox_green .displayMetricValue,
+.displayMetricValueBox_yellow .displayMetricValue,
+.displayMetricValueBox_red .displayMetricValue {
+  color: #ffffff;
 }
 
 .displayMetricValue {
@@ -209,6 +300,23 @@
   font-size: 110px;
   font-weight: 700;
   line-height: 1;
+}
+
+.displayMetricDetail {
+  width: 100%;
+  min-height: 40px;
+  margin-top: 24px;
+  overflow: hidden;
+  color: #ffffff;
+  text-align: center;
+  font-family: "DIN KPI Condensed", "Arial Narrow", sans-serif;
+  font-size: 35px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 @media (max-width: 720px) {

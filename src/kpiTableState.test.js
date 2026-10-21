@@ -6,6 +6,7 @@ import {
   mergeKpiTablePayload,
   normalizeKpiTablePayload,
   updateKpiTableField,
+  kpiTableTemplate,
 } from "./kpiTableState.js";
 
 test("KPI tables default to three Defense and Offense rows", () => {
@@ -22,6 +23,29 @@ test("KPI totals are independent free-text values", () => {
   payload = updateKpiTableField(payload, "defense", 0, "total", "Final", 20);
   assert.equal(payload.defense[0].total, "Final");
   assert.equal(normalizeKpiTablePayload({ defense: [{ q1: "2" }] }).defense[0].total, "");
+});
+
+test("existing KPI values survive adding saved fullscreen colors", () => {
+  const existing = { updatedAt: 10, defense: [{ label: "Kills", q1: "2", q2: "3", total: "5" }] };
+  const normalized = normalizeKpiTablePayload(existing);
+  assert.equal(normalized.defense[0].color, "default");
+  const colored = updateKpiTableField(normalized, "defense", 0, "color", "green", 20);
+  const merged = mergeKpiTablePayload(normalized, colored);
+  assert.equal(merged.defense[0].color, "green");
+  assert.equal(merged.defense[0].label, "Kills");
+  assert.equal(merged.defense[0].q1, "2");
+  assert.equal(merged.defense[0].q2, "3");
+  assert.equal(merged.defense[0].total, "5");
+  assert.equal(normalizeKpiTablePayload({ offense: [{ color: "invalid" }] }).offense[0].color, "default");
+});
+
+test("future-game templates retain labels and colors but never previous game statistics", () => {
+  const original = { defense: [{ label: "Kills", color: "green", q1: "2", q2: "3", total: "5" }] };
+  const template = kpiTableTemplate(original);
+  assert.equal(template.defense[0].label, "Kills");
+  assert.equal(template.defense[0].color, "green");
+  for (const field of ["q1", "q2", "q3", "q4", "total"]) assert.equal(template.defense[0][field], "");
+  assert.equal(original.defense[0].total, "5");
 });
 
 test("KPI table merge resolves each field independently by timestamp", () => {

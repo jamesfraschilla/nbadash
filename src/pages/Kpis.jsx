@@ -10,6 +10,7 @@ import styles from "./Kpis.module.css";
 const KPI_STORAGE_PREFIX = "kpis:game:v1:";
 const KPI_SHARED_TABLE = "rotations_shared_state";
 const KPI_SCOPE_TYPE = "shared_game_kpis";
+const KPI_TEMPLATE_KEY = "wizards:defaults";
 const STAGE_WIDTH = 3840;
 const STAGE_HEIGHT = 2160;
 const KPI_REMOTE_SAVE_DEBOUNCE_MS = 750;
@@ -17,10 +18,18 @@ const KPI_REMOTE_POLL_INTERVAL_MS = 5000;
 const KPI_REMOTE_SAVE_FAILURE_LIMIT = 2;
 const KPI_REMOTE_SAVE_MIN_COOLDOWN_MS = 10_000;
 const KPI_REMOTE_SAVE_MAX_COOLDOWN_MS = 2 * 60_000;
+const KPI_COLOR_OPTIONS = [
+  { value: "default", label: "Gray" },
+  { value: "green", label: "Green" },
+  { value: "yellow", label: "Yellow" },
+  { value: "red", label: "Red" },
+];
+const KPI_COLOR_VALUES = new Set(KPI_COLOR_OPTIONS.map((option) => option.value));
+const KPI_METRIC_FIELDS = ["name", "value", "detail", "color"];
 const DEFAULT_METRICS = [
-  { id: "kpi-1", name: "KPI #1", value: "50", nameUpdatedAt: 0, valueUpdatedAt: 0 },
-  { id: "kpi-2", name: "KPI #2", value: "127", nameUpdatedAt: 0, valueUpdatedAt: 0 },
-  { id: "kpi-3", name: "KPI #3", value: "32", nameUpdatedAt: 0, valueUpdatedAt: 0 },
+  { id: "kpi-1", name: "KPI #1", value: "", detail: "", color: "default", nameUpdatedAt: 0, valueUpdatedAt: 0, detailUpdatedAt: 0, colorUpdatedAt: 0 },
+  { id: "kpi-2", name: "KPI #2", value: "", detail: "", color: "default", nameUpdatedAt: 0, valueUpdatedAt: 0, detailUpdatedAt: 0, colorUpdatedAt: 0 },
+  { id: "kpi-3", name: "KPI #3", value: "", detail: "", color: "default", nameUpdatedAt: 0, valueUpdatedAt: 0, detailUpdatedAt: 0, colorUpdatedAt: 0 },
 ];
 
 function safeParseJson(raw, fallback) {
@@ -38,12 +47,18 @@ function normalizeMetrics(raw, fallbackUpdatedAt = 0) {
     const candidate = metrics[index];
     const hasName = candidate && Object.prototype.hasOwnProperty.call(candidate, "name");
     const hasValue = candidate && Object.prototype.hasOwnProperty.call(candidate, "value");
+    const hasDetail = candidate && Object.prototype.hasOwnProperty.call(candidate, "detail");
+    const candidateColor = String(candidate?.color || "default").toLowerCase();
     return {
       id: metric.id,
       name: String(hasName ? candidate.name ?? "" : metric.name),
       value: String(hasValue ? candidate.value ?? "" : metric.value),
+      detail: String(hasDetail ? candidate.detail ?? "" : metric.detail),
+      color: KPI_COLOR_VALUES.has(candidateColor) ? candidateColor : "default",
       nameUpdatedAt: Number(candidate?.nameUpdatedAt || fallbackUpdatedAt || 0),
       valueUpdatedAt: Number(candidate?.valueUpdatedAt || fallbackUpdatedAt || 0),
+      detailUpdatedAt: Number(candidate?.detailUpdatedAt || fallbackUpdatedAt || 0),
+      colorUpdatedAt: Number(candidate?.colorUpdatedAt || fallbackUpdatedAt || 0),
     };
   });
 }
@@ -79,21 +94,20 @@ function persistMetricsPayload(gameId, payload) {
 }
 
 function mergeMetricEntry(localMetric, remoteMetric) {
-  const localNameUpdatedAt = Number(localMetric?.nameUpdatedAt || 0);
-  const remoteNameUpdatedAt = Number(remoteMetric?.nameUpdatedAt || 0);
-  const localValueUpdatedAt = Number(localMetric?.valueUpdatedAt || 0);
-  const remoteValueUpdatedAt = Number(remoteMetric?.valueUpdatedAt || 0);
-
-  const useRemoteName = remoteNameUpdatedAt > localNameUpdatedAt;
-  const useRemoteValue = remoteValueUpdatedAt > localValueUpdatedAt;
-
-  return {
+  const merged = {
     id: String(localMetric?.id || remoteMetric?.id || crypto.randomUUID()),
-    name: String(useRemoteName ? remoteMetric?.name : localMetric?.name || ""),
-    value: String(useRemoteValue ? remoteMetric?.value : localMetric?.value || ""),
-    nameUpdatedAt: Math.max(localNameUpdatedAt, remoteNameUpdatedAt),
-    valueUpdatedAt: Math.max(localValueUpdatedAt, remoteValueUpdatedAt),
   };
+  KPI_METRIC_FIELDS.forEach((field) => {
+    const timestampField = `${field}UpdatedAt`;
+    const localUpdatedAt = Number(localMetric?.[timestampField] || 0);
+    const remoteUpdatedAt = Number(remoteMetric?.[timestampField] || 0);
+    const rawValue = remoteUpdatedAt > localUpdatedAt ? remoteMetric?.[field] : localMetric?.[field];
+    merged[field] = field === "color"
+      ? (KPI_COLOR_VALUES.has(String(rawValue || "default").toLowerCase()) ? String(rawValue || "default").toLowerCase() : "default")
+      : String(rawValue || "");
+    merged[timestampField] = Math.max(localUpdatedAt, remoteUpdatedAt);
+  });
+  return merged;
 }
 
 function mergeMetricsPayload(localPayload, remotePayload) {
@@ -106,12 +120,12 @@ function mergeMetricsPayload(localPayload, remotePayload) {
   const updatedAt = Math.max(
     normalizedLocal.updatedAt || 0,
     normalizedRemote.updatedAt || 0,
-    ...metrics.flatMap((metric) => [metric.nameUpdatedAt, metric.valueUpdatedAt])
+    ...metrics.flatMap((metric) => KPI_METRIC_FIELDS.map((field) => metric[`${field}UpdatedAt`]))
   );
   return { updatedAt, metrics };
 }
 
-async function fetchRemoteMetricsPayload(gameId) {
+async function fetchRemoteMetricsPayload(gameId, useWizardsDefaults = false) {
   if (!supabase || !gameId) return null;
   const { data, error } = await supabase
     .from(KPI_SHARED_TABLE)
@@ -119,11 +133,23 @@ async function fetchRemoteMetricsPayload(gameId) {
     .eq("scope_type", KPI_SCOPE_TYPE)
     .eq("scope_key", String(gameId))
     .maybeSingle();
-  if (error || !data?.payload) return null;
+  if (error) throw error;
+  if (!data?.payload) {
+    if (!useWizardsDefaults) return null;
+    const { data: template, error: templateError } = await supabase.from(KPI_SHARED_TABLE)
+      .select("payload").eq("scope_type", KPI_SCOPE_TYPE).eq("scope_key", KPI_TEMPLATE_KEY).maybeSingle();
+    if (templateError) throw templateError;
+    return template?.payload ? metricsTemplate(template.payload) : null;
+  }
   return normalizeMetricsPayload({
     updatedAt: data?.updated_at ? new Date(data.updated_at).getTime() : Number(data?.payload?.updatedAt || 0),
     metrics: data?.payload?.metrics,
   });
+}
+
+function metricsTemplate(raw) {
+  const payload = normalizeMetricsPayload(raw);
+  return { ...payload, metrics: payload.metrics.map((metric) => ({ ...metric, value: "", valueUpdatedAt: 0 })) };
 }
 
 async function saveSharedPayloadWithRetry({ scopeType, scopeKey, buildPayload, maxAttempts = 4 }) {
@@ -147,6 +173,7 @@ async function saveSharedPayloadWithRetry({ scopeType, scopeKey, buildPayload, m
       : null;
 
     const nextPayload = buildPayload(currentPayload);
+    if (currentPayload && JSON.stringify(currentPayload.metrics) === JSON.stringify(nextPayload.metrics)) return currentPayload;
 
     if (currentRow?.updated_at) {
       const { data: updatedRow, error: updateError } = await supabase
@@ -193,13 +220,21 @@ async function saveSharedPayloadWithRetry({ scopeType, scopeKey, buildPayload, m
   throw new Error("Unable to save KPI changes after multiple retries.");
 }
 
-async function saveRemoteMetricsPayload(gameId, payload) {
+async function saveRemoteMetricsPayload(gameId, payload, saveWizardsDefaults = false) {
   if (!supabase || !gameId) return payload;
-  return saveSharedPayloadWithRetry({
+  const saved = await saveSharedPayloadWithRetry({
     scopeType: KPI_SCOPE_TYPE,
     scopeKey: String(gameId),
     buildPayload: (remotePayload) => mergeMetricsPayload(payload, remotePayload),
   });
+  if (saveWizardsDefaults) {
+    await saveSharedPayloadWithRetry({
+      scopeType: KPI_SCOPE_TYPE,
+      scopeKey: KPI_TEMPLATE_KEY,
+      buildPayload: (remotePayload) => metricsTemplate(mergeMetricsPayload(metricsTemplate(payload), remotePayload)),
+    });
+  }
+  return saved;
 }
 
 export default function Kpis() {
@@ -226,6 +261,7 @@ export default function Kpis() {
     return isWashingtonTeam(homeTeam) || isWashingtonTeam(awayTeam) || isCapitalCityTeam(homeTeam) || isCapitalCityTeam(awayTeam);
   }, [game]);
   const remoteSyncEnabled = supportedTeamGame && Boolean(gameId);
+  const isWizardsGame = isWashingtonTeam(game?.homeTeam) || isWashingtonTeam(game?.awayTeam);
 
   const backUrl = dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`;
   const titleLine = useMemo(() => {
@@ -262,18 +298,12 @@ export default function Kpis() {
             ...baseMerged,
             metrics: baseMerged.metrics.map((metric, index) => {
               const currentMetric = current.metrics[index] || DEFAULT_METRICS[index];
-              if (activeField === `${metric.id}:name`) {
+              const field = KPI_METRIC_FIELDS.find((candidate) => activeField === `${metric.id}:${candidate}`);
+              if (field) {
                 return {
                   ...metric,
-                  name: currentMetric.name,
-                  nameUpdatedAt: currentMetric.nameUpdatedAt,
-                };
-              }
-              if (activeField === `${metric.id}:value`) {
-                return {
-                  ...metric,
-                  value: currentMetric.value,
-                  valueUpdatedAt: currentMetric.valueUpdatedAt,
+                  [field]: currentMetric[field],
+                  [`${field}UpdatedAt`]: currentMetric[`${field}UpdatedAt`],
                 };
               }
               return metric;
@@ -290,7 +320,7 @@ export default function Kpis() {
     };
 
     const loadRemoteMetrics = () => {
-      fetchRemoteMetricsPayload(gameId)
+      fetchRemoteMetricsPayload(gameId, isWizardsGame)
         .then((payload) => {
           if (cancelled || !payload) return;
           applyIncomingPayload(payload);
@@ -313,7 +343,7 @@ export default function Kpis() {
       window.clearInterval(intervalId);
       window.removeEventListener("focus", loadRemoteMetrics);
     };
-  }, [gameId, remoteSyncEnabled]);
+  }, [gameId, remoteSyncEnabled, isWizardsGame]);
 
   useEffect(() => {
     const updateFullscreenState = () => {
@@ -342,15 +372,13 @@ export default function Kpis() {
   }, [isFullscreen]);
 
   const updateMetric = (metricId, field, value) => {
+    if (!KPI_METRIC_FIELDS.includes(field)) return;
     const timestamp = Date.now();
     setMetricsPayload((current) => ({
       updatedAt: timestamp,
       metrics: current.metrics.map((metric) => {
         if (metric.id !== metricId) return metric;
-        if (field === "name") {
-          return { ...metric, name: value, nameUpdatedAt: timestamp };
-        }
-        return { ...metric, value, valueUpdatedAt: timestamp };
+        return { ...metric, [field]: value, [`${field}UpdatedAt`]: timestamp };
       }),
     }));
   };
@@ -371,7 +399,7 @@ export default function Kpis() {
         return;
       }
 
-      saveRemoteMetricsPayload(gameId, metricsPayload)
+      saveRemoteMetricsPayload(gameId, metricsPayload, isWizardsGame)
         .then((savedPayload) => {
           remoteSaveFailuresRef.current = 0;
           remoteSaveBlockedUntilRef.current = 0;
@@ -384,18 +412,12 @@ export default function Kpis() {
                 ...baseMerged,
                 metrics: baseMerged.metrics.map((metric, index) => {
                   const currentMetric = current.metrics[index] || DEFAULT_METRICS[index];
-                  if (activeField === `${metric.id}:name`) {
+                  const field = KPI_METRIC_FIELDS.find((candidate) => activeField === `${metric.id}:${candidate}`);
+                  if (field) {
                     return {
                       ...metric,
-                      name: currentMetric.name,
-                      nameUpdatedAt: currentMetric.nameUpdatedAt,
-                    };
-                  }
-                  if (activeField === `${metric.id}:value`) {
-                    return {
-                      ...metric,
-                      value: currentMetric.value,
-                      valueUpdatedAt: currentMetric.valueUpdatedAt,
+                      [field]: currentMetric[field],
+                      [`${field}UpdatedAt`]: currentMetric[`${field}UpdatedAt`],
                     };
                   }
                   return metric;
@@ -427,7 +449,7 @@ export default function Kpis() {
     }, KPI_REMOTE_SAVE_DEBOUNCE_MS);
 
     return () => window.clearTimeout(timeoutId);
-  }, [gameId, metricsPayload, remoteSyncEnabled]);
+  }, [gameId, metricsPayload, remoteSyncEnabled, isWizardsGame]);
 
   const handleEnterFullscreen = async () => {
     const element = fullscreenRootRef.current;
@@ -525,6 +547,42 @@ export default function Kpis() {
                     inputMode="numeric"
                   />
                 </label>
+                <label className={styles.fieldLabel}>
+                  Text below box
+                  <textarea
+                    className={`${styles.textInput} ${styles.detailInput}`}
+                    value={metric.detail}
+                    onChange={(event) => updateMetric(metric.id, "detail", event.target.value)}
+                    onFocus={() => {
+                      activeFieldRef.current = `${metric.id}:detail`;
+                    }}
+                    onBlur={() => {
+                      if (activeFieldRef.current === `${metric.id}:detail`) {
+                        activeFieldRef.current = "";
+                      }
+                    }}
+                    placeholder="Optional supporting text"
+                    maxLength={120}
+                    rows={2}
+                  />
+                </label>
+                <fieldset className={styles.colorFieldset}>
+                  <legend>Box color</legend>
+                  <div className={styles.colorOptions}>
+                    {KPI_COLOR_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={`${styles.colorOption} ${styles[`colorOption_${option.value}`] || ""} ${metric.color === option.value ? styles.colorOptionSelected : ""}`}
+                        aria-pressed={metric.color === option.value}
+                        onClick={() => updateMetric(metric.id, "color", option.value)}
+                      >
+                        <span className={styles.colorSwatch} aria-hidden="true" />
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
               </section>
             ))}
           </div>
@@ -551,9 +609,10 @@ export default function Kpis() {
                   {metricsPayload.metrics.map((metric) => (
                     <section key={metric.id} className={styles.displayMetric}>
                       <div className={styles.displayMetricName}>{metric.name || " "}</div>
-                      <div className={styles.displayMetricValueBox}>
+                      <div className={`${styles.displayMetricValueBox} ${styles[`displayMetricValueBox_${metric.color}`] || ""}`}>
                         <div className={styles.displayMetricValue}>{metric.value || " "}</div>
                       </div>
+                      <div className={styles.displayMetricDetail}>{metric.detail || " "}</div>
                     </section>
                   ))}
                 </div>
