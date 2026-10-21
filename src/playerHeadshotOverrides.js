@@ -6,12 +6,13 @@ import { fetchSharedStateRow, saveSharedStateRow } from "./sharedState.js";
 // and use a relative path like "player-headshots/1642066.png".
 // Values can be a single URL/path or an ordered array of URL/path candidates.
 export const playerHeadshotOverrides = {
-  // NBA's current `latest` headshot endpoints still return the generic fallback
-  // for these players. Shared/admin uploads still take precedence over these
-  // source-controlled fallbacks. Remove each entry after NBA publishes it.
+  // Shared/admin uploads take precedence over these source-controlled fallbacks.
+  // Keep entries here when NBA's `latest` endpoint is missing or still carries
+  // a superseded portrait, and remove them after NBA publishes the current asset.
   "1643539": "https://a.espncdn.com/i/headshots/nba/players/full/5105571.png", // Henri Veesaar
   "1641759": "https://a.espncdn.com/i/headshots/nba/players/full/5106283.png", // Dillon Mitchell
   "1643022": "https://a.espncdn.com/i/headshots/mens-college-basketball/players/full/4683730.png", // Jaden Akins
+  "1631157": "https://statpro.cc/nba/players/ryan-rollins/headshot-fYtHDLdcmS79vN8qYO7F-.png", // Ryan Rollins
 };
 
 export const PLAYER_HEADSHOT_STORAGE_KEY = "player_headshot_overrides_v1";

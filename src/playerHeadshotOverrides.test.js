@@ -31,6 +31,10 @@ test("current NBA roster headshot gaps have shared external fallbacks", () => {
     resolvePlayerHeadshotOverrideUrls("1643022", "/nbadash/"),
     ["https://a.espncdn.com/i/headshots/mens-college-basketball/players/full/4683730.png"]
   );
+  assert.deepEqual(
+    resolvePlayerHeadshotOverrideUrls("1631157", "/nbadash/"),
+    ["https://statpro.cc/nba/players/ryan-rollins/headshot-fYtHDLdcmS79vN8qYO7F-.png"]
+  );
 });
 
 test("player headshot overrides accept ordered external candidates", () => {

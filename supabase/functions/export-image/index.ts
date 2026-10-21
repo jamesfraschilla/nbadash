@@ -10,6 +10,7 @@ const ALLOWED_HOSTS = [
   "ak-static.cms.nba.com",
   "gleague.nba.com",
   "official.nba.com",
+  "statpro.cc",
 ];
 const MAX_REDIRECTS = 4;
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;

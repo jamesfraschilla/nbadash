@@ -185,7 +185,7 @@
     {
       "name": "export-image",
       "entrypoint": "supabase/functions/export-image/index.ts",
-      "sha256": "a6e3f6a2b532bb422f3749f536aaf67786faab7af25ecd5268381be2c1c3e3aa",
+      "sha256": "c28d200127afa202a5fcdd2018c3e008ea39fe5ca5571f08c2543899f384b36c",
       "sourceFiles": [
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
