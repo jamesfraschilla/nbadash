@@ -411,6 +411,27 @@ Deno.test("range aggregation excludes team rebounds and team turnovers", () => {
   assertEquals("transitionTurnovers" in totals[homeTeam.teamId], false);
 });
 
+Deno.test("range aggregation includes fast-break free throws in transition points", () => {
+  const totals = __test__.aggregateRangeStats([
+    { actionNumber: 1, actionType: "2pt", shotResult: "Made", teamId: homeTeam.teamId, qualifiers: ["fastbreak"] },
+    { actionNumber: 2, actionType: "freethrow", shotResult: "Made", teamId: homeTeam.teamId, qualifiers: ["fastbreak"] },
+    { actionNumber: 3, actionType: "freethrow", shotResult: "Missed", teamId: homeTeam.teamId, qualifiers: ["fastbreak"] },
+    { actionNumber: 4, actionType: "freethrow", shotResult: "Made", teamId: awayTeam.teamId, qualifiers: ["fastbreak"] },
+    { actionNumber: 5, actionType: "freethrow", shotResult: "Made", teamId: awayTeam.teamId, qualifiers: [] },
+  ], [
+    { actionNumber: 1, teamId: homeTeam.teamId, points: 2 },
+    { actionNumber: 2, teamId: homeTeam.teamId, points: 1 },
+    { actionNumber: 4, teamId: awayTeam.teamId, points: 1 },
+    { actionNumber: 5, teamId: awayTeam.teamId, points: 1 },
+  ], homeTeam.teamId, awayTeam.teamId);
+
+  assertEquals(totals[homeTeam.teamId].transitionPoints, 3);
+  assertEquals(totals[awayTeam.teamId].transitionPoints, 1);
+  assertEquals(totals[homeTeam.teamId].freeThrowsMade, 1);
+  assertEquals(totals[homeTeam.teamId].freeThrowsAttempted, 2);
+  assertEquals(totals[awayTeam.teamId].freeThrowsMade, 2);
+});
+
 Deno.test("quarter ranges exclude actions from the preceding period at the shared boundary", () => {
   const features = __test__.buildFeaturePayload({
     gameId: "0022600001",

@@ -18,6 +18,21 @@ test("player headshot overrides are resolved by personId and base-path normalize
   }
 });
 
+test("current NBA roster headshot gaps have shared external fallbacks", () => {
+  assert.deepEqual(
+    resolvePlayerHeadshotOverrideUrls("1643539", "/nbadash/"),
+    ["https://a.espncdn.com/i/headshots/nba/players/full/5105571.png"]
+  );
+  assert.deepEqual(
+    resolvePlayerHeadshotOverrideUrls("1641759", "/nbadash/"),
+    ["https://a.espncdn.com/i/headshots/nba/players/full/5106283.png"]
+  );
+  assert.deepEqual(
+    resolvePlayerHeadshotOverrideUrls("1643022", "/nbadash/"),
+    ["https://a.espncdn.com/i/headshots/mens-college-basketball/players/full/4683730.png"]
+  );
+});
+
 test("player headshot overrides accept ordered external candidates", () => {
   playerHeadshotOverrides["999998"] = [
     "https://example.com/primary.png",

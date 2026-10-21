@@ -5,7 +5,14 @@ import { fetchSharedStateRow, saveSharedStateRow } from "./sharedState.js";
 // For source-controlled images, add files under public/player-headshots/
 // and use a relative path like "player-headshots/1642066.png".
 // Values can be a single URL/path or an ordered array of URL/path candidates.
-export const playerHeadshotOverrides = {};
+export const playerHeadshotOverrides = {
+  // NBA's current `latest` headshot endpoints still return the generic fallback
+  // for these players. Shared/admin uploads still take precedence over these
+  // source-controlled fallbacks. Remove each entry after NBA publishes it.
+  "1643539": "https://a.espncdn.com/i/headshots/nba/players/full/5105571.png", // Henri Veesaar
+  "1641759": "https://a.espncdn.com/i/headshots/nba/players/full/5106283.png", // Dillon Mitchell
+  "1643022": "https://a.espncdn.com/i/headshots/mens-college-basketball/players/full/4683730.png", // Jaden Akins
+};
 
 export const PLAYER_HEADSHOT_STORAGE_KEY = "player_headshot_overrides_v1";
 export const PLAYER_HEADSHOT_CHANGE_EVENT = "player-headshots-updated";

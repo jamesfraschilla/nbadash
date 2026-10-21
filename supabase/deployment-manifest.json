@@ -185,7 +185,7 @@
     {
       "name": "export-image",
       "entrypoint": "supabase/functions/export-image/index.ts",
-      "sha256": "f1fda87da03ba3146d6ac5d735b985c1590cbd562302170bfca578d628913093",
+      "sha256": "a6e3f6a2b532bb422f3749f536aaf67786faab7af25ecd5268381be2c1c3e3aa",
       "sourceFiles": [
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
@@ -198,7 +198,7 @@
     {
       "name": "game-analysis",
       "entrypoint": "supabase/functions/game-analysis/index.ts",
-      "sha256": "a605feefd8e1717e480e0660de6a22cbac1a27b8934c3320d2becb3bbc1133e8",
+      "sha256": "04714007c47502c947c221324f9c5e5521aad83176bc6618a12200f13dda86e3",
       "sourceFiles": [
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/minutesNormalization.ts",

@@ -771,7 +771,13 @@ function aggregateRangeStats(
 
     if (actionType === "freethrow" && teamTotals) {
       teamTotals.freeThrowsAttempted += 1;
-      if (made) teamTotals.freeThrowsMade += 1;
+      if (made) {
+        teamTotals.freeThrowsMade += 1;
+        // The NBA feed marks free throws created during a fast break with the
+        // same qualifier used on field goals. Include those points so analysis
+        // totals match the dashboard's transition-point calculation.
+        if (qualifiers.includes("fastbreak")) teamTotals.transitionPoints += points;
+      }
     }
 
     if (actionType === "rebound" && teamTotals && getActionPlayerIdentity(action)) {
