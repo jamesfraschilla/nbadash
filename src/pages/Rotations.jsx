@@ -1977,7 +1977,13 @@ export default function Rotations({ standalone = false }) {
 
   useEffect(() => {
     if (!standalone || rotationParam || !vaultUserId || !ownedRotationRecordsFetched) return;
-    const latestRecord = ownedRotationRecords[0];
+    // The query cache can briefly retain the pre-save empty result when the
+    // user leaves and immediately reopens Graphics. For the guest vault, read
+    // its durable local record as a fallback so the saved draft still reopens.
+    const latestRecord = ownedRotationRecords[0]
+      || (!accountsEnabled
+        ? listSavedToolRecords(vaultUserId, ROTATIONS_VAULT_VERSION_LIST_OPTIONS)[0]
+        : null);
     if (!latestRecord?.id) return;
     const nextParams = new URLSearchParams(params);
     nextParams.set("tab", "graphics");
@@ -1987,6 +1993,7 @@ export default function Rotations({ standalone = false }) {
   }, [
     ownedRotationRecords,
     ownedRotationRecordsFetched,
+    accountsEnabled,
     params,
     rotationParam,
     setParams,
