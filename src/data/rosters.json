@@ -715,6 +715,14 @@
       "position": "G"
     },
     {
+      "personId": "1642383",
+      "firstName": "Walter",
+      "familyName": "Clayton Jr.",
+      "fullName": "Walter Clayton Jr.",
+      "jerseyNum": "1",
+      "position": "G"
+    },
+    {
       "personId": "1641726",
       "firstName": "Dereck",
       "familyName": "Lively II",
@@ -765,8 +773,8 @@
     {
       "personId": "1641844",
       "firstName": "Tarik",
-      "familyName": "Biberovic",
-      "fullName": "Tarik Biberovic",
+      "familyName": "Biberović",
+      "fullName": "Tarik Biberović",
       "jerseyNum": "13",
       "position": "F"
     },
@@ -1429,6 +1437,14 @@
       "position": "F"
     },
     {
+      "personId": "1629680",
+      "firstName": "Matisse",
+      "familyName": "Thybulle",
+      "fullName": "Matisse Thybulle",
+      "jerseyNum": "4",
+      "position": "G-F"
+    },
+    {
       "personId": "1629656",
       "firstName": "Quentin",
       "familyName": "Grimes",
@@ -1491,14 +1507,6 @@
       "fullName": "Austin Reaves",
       "jerseyNum": "15",
       "position": "G"
-    },
-    {
-      "personId": "1629680",
-      "firstName": "Matisse",
-      "familyName": "Thybulle",
-      "fullName": "Matisse Thybulle",
-      "jerseyNum": "26",
-      "position": "G-F"
     },
     {
       "personId": "1643024",
@@ -2535,8 +2543,8 @@
     {
       "personId": "1642889",
       "firstName": "Labaron",
-      "familyName": "Philon",
-      "fullName": "Labaron Philon",
+      "familyName": "Philon Jr.",
+      "fullName": "Labaron Philon Jr.",
       "jerseyNum": "00",
       "position": "G"
     },
@@ -3353,6 +3361,14 @@
   ],
   "1610612761": [
     {
+      "personId": "1642347",
+      "firstName": "Jamal",
+      "familyName": "Shead",
+      "fullName": "Jamal Shead",
+      "jerseyNum": "1",
+      "position": "G"
+    },
+    {
       "personId": "202695",
       "firstName": "Kawhi",
       "familyName": "Leonard",
@@ -3397,7 +3413,7 @@
       "firstName": "Kyle",
       "familyName": "Anderson",
       "fullName": "Kyle Anderson",
-      "jerseyNum": "12",
+      "jerseyNum": "13",
       "position": "F-G"
     },
     {
@@ -3431,14 +3447,6 @@
       "fullName": "Allen Graves",
       "jerseyNum": "22",
       "position": "F"
-    },
-    {
-      "personId": "1642347",
-      "firstName": "Jamal",
-      "familyName": "Shead",
-      "fullName": "Jamal Shead",
-      "jerseyNum": "23",
-      "position": "G"
     },
     {
       "personId": "1642867",
@@ -3595,14 +3603,6 @@
       "position": "F-C"
     },
     {
-      "personId": "1642396",
-      "firstName": "Blake",
-      "familyName": "Hinson",
-      "fullName": "Blake Hinson",
-      "jerseyNum": "25",
-      "position": "F"
-    },
-    {
       "personId": "1641729",
       "firstName": "Brice",
       "familyName": "Sensabaugh",
@@ -3751,8 +3751,8 @@
     {
       "personId": "1643510",
       "firstName": "Karim",
-      "familyName": "Lopez",
-      "fullName": "Karim Lopez",
+      "familyName": "López",
+      "fullName": "Karim López",
       "jerseyNum": "35",
       "position": "F"
     },
@@ -3785,8 +3785,8 @@
     {
       "personId": "1641774",
       "firstName": "Tristan",
-      "familyName": "Vukcevic",
-      "fullName": "Tristan Vukcevic",
+      "familyName": "Vukčević",
+      "fullName": "Tristan Vukčević",
       "jerseyNum": "00",
       "position": "F"
     },
