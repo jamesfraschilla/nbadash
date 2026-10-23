@@ -405,20 +405,20 @@
       "position": "F"
     },
     {
-      "personId": "1643640",
-      "firstName": "Ernest",
-      "familyName": "Udeh, Jr.",
-      "fullName": "Ernest Udeh, Jr.",
-      "jerseyNum": "39",
-      "position": "C"
-    },
-    {
       "personId": "1628378",
       "firstName": "Donovan",
       "familyName": "Mitchell",
       "fullName": "Donovan Mitchell",
       "jerseyNum": "45",
       "position": "G"
+    },
+    {
+      "personId": "1643640",
+      "firstName": "Ernest",
+      "familyName": "Udeh, Jr.",
+      "fullName": "Ernest Udeh, Jr.",
+      "jerseyNum": "88",
+      "position": "C"
     }
   ],
   "1610612740": [
@@ -813,8 +813,8 @@
     {
       "personId": "1630619",
       "firstName": "Moussa",
-      "familyName": "Cisse",
-      "fullName": "Moussa Cisse",
+      "familyName": "Cissé",
+      "fullName": "Moussa Cissé",
       "jerseyNum": "30",
       "position": "C"
     },
