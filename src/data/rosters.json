@@ -2183,14 +2183,6 @@
       "position": "F-G"
     },
     {
-      "personId": "1641755",
-      "firstName": "Kevin",
-      "familyName": "McCullar Jr.",
-      "fullName": "Kevin McCullar Jr.",
-      "jerseyNum": "9",
-      "position": "G"
-    },
-    {
       "personId": "1628973",
       "firstName": "Jalen",
       "familyName": "Brunson",
@@ -3081,6 +3073,14 @@
       "fullName": "Maxime Raynaud",
       "jerseyNum": "42",
       "position": "C"
+    },
+    {
+      "personId": "1642951",
+      "firstName": "Sean",
+      "familyName": "Pedulla",
+      "fullName": "Sean Pedulla",
+      "jerseyNum": "",
+      "position": "G"
     }
   ],
   "1610612759": [
@@ -3413,7 +3413,7 @@
       "firstName": "Kyle",
       "familyName": "Anderson",
       "fullName": "Kyle Anderson",
-      "jerseyNum": "13",
+      "jerseyNum": "12",
       "position": "F-G"
     },
     {
