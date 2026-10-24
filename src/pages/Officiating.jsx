@@ -670,7 +670,7 @@ function formatPreviousOfficialGame(row) {
   const away = String(row.away_team || "").trim();
   const home = String(row.home_team || "").trim();
   if (!away || !home) return "";
-  return `${formatShortDate(row.game_date)} ${away} @ ${home}${String(row.season_type || "").toLowerCase() === "preseason" ? " (Pre)" : ""}`;
+  return `${formatShortDate(row.game_date)} ${away} @ ${home}`;
 }
 
 function isPreviousReportGame(row, reportDate) {
@@ -704,7 +704,7 @@ function priorWizardsGames(schedule = [], reportDate, reportSeason) {
       const home = String(row.home_team || "").trim();
       const opponent = away === "WAS" ? home : away;
       const location = away === "WAS" ? "@" : "vs";
-      return `${formatShortDate(row.game_date)} ${location} ${opponent}${String(row.season_type || "").toLowerCase() === "preseason" ? " (Pre)" : ""}`;
+      return `${formatShortDate(row.game_date)} ${location} ${opponent}`;
     })
     .filter(Boolean);
 }
