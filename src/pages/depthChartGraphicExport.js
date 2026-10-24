@@ -1,5 +1,4 @@
-import { playerHeadshotUrls } from "../api.js";
-import { loadFirstImage } from "./matchupGraphicExport.js";
+import { buildPlayerHeadshotCandidates, loadFirstImage } from "./matchupGraphicExport.js";
 import { resolvePersonnelFamilyName } from "../personnelGraphic.js";
 
 const DEPTH_CHART_LAYOUT_SIZE = 400;
@@ -89,17 +88,7 @@ function getNumberLabel(slot) {
 }
 
 function buildHeadshotCandidates(slot) {
-  const customUrl = String(slot?.headshotDataUrl || slot?.headshotUrl || "").trim();
-  if (customUrl) return [customUrl];
-  const personId = String(slot?.personId || "").trim();
-  if (!personId) return [];
-  const candidates = playerHeadshotUrls(personId, slot?.teamId);
-  const isOfficialNbaHeadshot = (url) => /cdn\.nba\.com\/headshots\/nba\/latest\/(260x190|1040x760)\//i.test(String(url || ""));
-  return [
-    ...candidates.filter((url) => !isOfficialNbaHeadshot(url)),
-    ...candidates.filter((url) => isOfficialNbaHeadshot(url) && String(url || "").includes("/1040x760/")),
-    ...candidates.filter((url) => isOfficialNbaHeadshot(url) && !String(url || "").includes("/1040x760/")),
-  ];
+  return buildPlayerHeadshotCandidates(slot);
 }
 
 function drawContainBottom(context, image, x, y, width, height) {

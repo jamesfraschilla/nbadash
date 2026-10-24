@@ -1,4 +1,5 @@
 import { gLeagueHeadshotOverrides } from "./gLeagueHeadshotOverrides.js";
+import { refreshNbaHeadshotUrl } from "./playerHeadshotPolicy.js";
 import nbaCupSchedule2026_27 from "./data/nbaCupGames2026_27.json" with { type: "json" };
 import {
   normalizePlayerHeadshotOverrides,
@@ -1912,7 +1913,7 @@ export function playerHeadshotUrls(personId, teamId = null, options = {}) {
       ...(league === "wnba" ? [] : [gLeagueResolverUrl]),
     ];
 
-  return [...new Set(candidates.filter(Boolean))];
+  return [...new Set(candidates.filter(Boolean).map((url) => refreshNbaHeadshotUrl(url)))];
 }
 
 export function playerHeadshotUrl(personId, teamId = null, options = {}) {

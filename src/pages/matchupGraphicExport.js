@@ -2,6 +2,7 @@ import dinFontUrl from "../assets/fonts/DIN.ttf";
 import dinAltFontUrl from "../assets/fonts/DINalt.ttf";
 import slideBackgroundUrl from "../assets/graphics/slide-background.png";
 import { playerHeadshotUrls, teamLogoUrl } from "../api.js";
+import { preferLargeNbaHeadshots } from "../playerHeadshotPolicy.js";
 import {
   buildNbaFallbackHeadshotUrl,
   pixelBuffersMatch,
@@ -131,18 +132,11 @@ function getPlayerExportLabel(player) {
 export function buildPlayerHeadshotCandidates(player) {
   const customUrl = String(player?.headshotDataUrl || player?.headshotUrl || "").trim();
   if (customUrl) return [customUrl];
-  const personId = String(player?.personId || "").trim();
+  const personId = String(player?.headshotPersonId || player?.personId || "").trim();
   if (!personId) return [];
-  const candidates = [
-    ...playerHeadshotUrls(personId, player?.teamId),
-    `https://cdn.nba.com/headshots/nba/latest/1040x760/${personId}.png`,
-  ].filter((url, index, urls) => url && urls.indexOf(url) === index);
-  const isOfficialNbaHeadshot = (url) => /cdn\.nba\.com\/headshots\/nba\/latest\/(260x190|1040x760)\//i.test(String(url || ""));
-  return [
-    ...candidates.filter((url) => !isOfficialNbaHeadshot(url)),
-    ...candidates.filter((url) => isOfficialNbaHeadshot(url) && String(url || "").includes("/1040x760/")),
-    ...candidates.filter((url) => isOfficialNbaHeadshot(url) && !String(url || "").includes("/1040x760/")),
-  ];
+  return preferLargeNbaHeadshots(playerHeadshotUrls(personId, player?.teamId, {
+    overrideKeys: player?.headshotOverrideKeys,
+  }));
 }
 
 function buildProxyUrl(url) {
