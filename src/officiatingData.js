@@ -1386,7 +1386,6 @@ export async function fetchOfficialsReportData({
       .select(OFFICIAL_CATEGORY_ROLLUP_COLUMNS), season), { maxRows: PROFILE_DETAIL_LIMIT, requireComplete: true }),
     selectTable("nba_official_game_assignments", (query) => applySeasonFilter(query
       .select(ASSIGNMENT_COLUMNS)
-      .not("season_type", "ilike", "Preseason")
       .eq("is_alternate", false)
       .in("official_name", names), scheduleSeason)
       .order("game_date", { ascending: false }), { maxRows: 500, requireComplete: true }),
