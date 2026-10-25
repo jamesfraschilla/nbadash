@@ -8,6 +8,7 @@ import { markParticipatingAssignments } from "../src/officiatingAssignments.js";
 import { canonicalOfficialIdentity } from "../src/officiatingIdentity.js";
 import { enrichChallengeEventsWithOfficials } from "../src/officiatingChallengeMatcher.js";
 import { detectCoachChallengeActions, extractOfficialCallEvents } from "../src/officiatingParser.js";
+import { recoverOfficialReviewMarkers } from "../src/officiatingSourceRecovery.js";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const STATS_API_URL = "https://stats.nba.com/stats/leaguegamefinder";
@@ -291,7 +292,7 @@ async function fetchGame(gameId, options = {}) {
       options.skipStatsPlayByPlay ? Promise.resolve([]) : fetchStatsPlayByPlayActions(gameId).catch(() => []),
     ]);
     const liveOfficials = Array.isArray(liveBoxscore?.game?.officials) ? liveBoxscore.game.officials : [];
-    return {
+    let resolved = {
       ...game,
       officials: liveOfficials.length ? liveOfficials : game.officials,
       playByPlayActions: statsActions.length
@@ -299,6 +300,23 @@ async function fetchGame(gameId, options = {}) {
         : game.playByPlayActions,
       source: statsActions.length ? `${game.source || "cloudfront"}+stats_playbyplayv3` : game.source,
     };
+    if (!extractOfficialCallEvents(resolved).length) {
+      const live = await fetchJson(`https://cdn.nba.com/static/json/liveData/playbyplay/playbyplay_${encodeURIComponent(gameId)}.json`, {
+        headers: NBA_REQUEST_HEADERS, timeoutMs: 12_000, retries: 1,
+      });
+      if (live.game?.actions?.length) resolved = { ...resolved, playByPlayActions: live.game.actions, source: "nba_live_data_official_ids" };
+    }
+    if (detectCoachChallengeActions(resolved).some((event) => !event.challengeOutcome)) {
+      const slug = `${String(game.awayTeam?.teamTricode || "").toLowerCase()}-vs-${String(game.homeTeam?.teamTricode || "").toLowerCase()}`;
+      const response = await fetch(`https://www.nba.com/game/${slug}-${gameId}/play-by-play`, { signal: AbortSignal.timeout(20_000) });
+      if (!response.ok) throw new Error(`NBA review recovery failed (${response.status})`);
+      const html = await response.text();
+      const embedded = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+      if (!embedded) throw new Error("NBA review recovery: embedded play-by-play unavailable");
+      const page = JSON.parse(embedded[1]).props.pageProps;
+      resolved.playByPlayActions = recoverOfficialReviewMarkers(resolved, page.playByPlay?.actions || []);
+    }
+    return resolved;
   } catch (cloudfrontError) {
     const firstMessage = cloudfrontError instanceof Error ? cloudfrontError.message : "CloudFront fetch failed";
     if (firstMessage.includes("failed (404)")) {
@@ -680,16 +698,23 @@ async function applyIngestion({ gameIds, assignmentRows, callRows, challengeRows
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for --apply.");
   const supabase = createClient(url, key, { auth: { persistSession: false } });
+  const failures = [];
   for (const [index, gameId] of gameIds.entries()) {
-    await applyGameRows(
-      supabase,
-      gameId,
-      rowsForGameIds(assignmentRows, [gameId]),
-      rowsForGameIds(callRows, [gameId]),
-      rowsForGameIds(challengeRows, [gameId]),
-    );
-    console.error(`Applied ${index + 1}/${gameIds.length}: ${gameId}`);
+    try {
+      await applyGameRows(
+        supabase,
+        gameId,
+        rowsForGameIds(assignmentRows, [gameId]),
+        rowsForGameIds(callRows, [gameId]),
+        rowsForGameIds(challengeRows, [gameId]),
+      );
+      console.error(`Applied ${index + 1}/${gameIds.length}: ${gameId}`);
+    } catch (error) {
+      failures.push({ gameId, message: error.message });
+      console.error(`Failed applying ${gameId}: ${error.message}`);
+    }
   }
+  if (failures.length) throw new Error(`Officiating import failed for ${failures.length} games after attempting every game: ${JSON.stringify(failures)}`);
 }
 
 function rowsForGameIds(rows, gameIds) {

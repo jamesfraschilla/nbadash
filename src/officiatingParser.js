@@ -1,4 +1,5 @@
 import { correctedChallengeTeam } from "./officiatingCorrections.js";
+import { deduplicateOfficialCallEvents } from "./officiatingCallDeduplication.js";
 
 const OFFICIAL_TOKEN_PATTERN = /\(([^()]+)\)\s*$/;
 
@@ -250,7 +251,7 @@ export function buildOfficialCallEvent(action = {}, context = {}) {
     awayTeam: cleanText(context.awayTeam),
     period: Number.isFinite(Number(action.period)) ? Number(action.period) : null,
     gameClock: cleanText(action.clock),
-    actionNumber: Number.isFinite(Number(action.actionNumber)) ? Number(action.actionNumber) : null,
+    actionNumber: action.actionNumber != null && action.actionNumber !== "" && Number.isFinite(Number(action.actionNumber)) ? Number(action.actionNumber) : null,
     orderNumber: Number.isFinite(Number(action.orderNumber)) ? Number(action.orderNumber) : null,
     actionType: cleanText(action.actionType),
     subType: cleanText(action.subType),
@@ -282,7 +283,7 @@ export function extractOfficialCallEvents(game = {}, context = {}) {
   const officials = Array.isArray(game.officials) ? game.officials : [];
   const homeTeam = cleanText(game.homeTeam?.teamTricode || game.homeTeam?.tricode || context.homeTeam);
   const awayTeam = cleanText(game.awayTeam?.teamTricode || game.awayTeam?.tricode || context.awayTeam);
-  return actions
+  return deduplicateOfficialCallEvents(actions
     .map((action) => buildOfficialCallEvent(action, {
       ...context,
       officials,
@@ -293,7 +294,7 @@ export function extractOfficialCallEvents(game = {}, context = {}) {
       season: cleanText(game.seasonYear || context.season),
       seasonType: cleanText(game.seasonType || context.seasonType),
     }))
-    .filter(Boolean);
+    .filter(Boolean));
 }
 
 export function detectCoachChallengeActions(game = {}, context = {}) {
@@ -324,13 +325,15 @@ export function detectCoachChallengeActions(game = {}, context = {}) {
       ].join("|");
       const existing = challengeActionsByClock.get(key);
       const isReplay = cleanText(action.actionType).replace(/[^a-z]/gi, "").toLowerCase() === "instantreplay";
+      const isTimeout = cleanText(action.actionType).toLowerCase() === "timeout";
+      const markerTeam = isReplay || isTimeout ? cleanText(action.teamTricode) : "";
       if (!existing) {
-        challengeActionsByClock.set(key, { action, challengingTeam: cleanText(action.teamTricode) });
+        challengeActionsByClock.set(key, { action, challengingTeam: markerTeam });
         return;
       }
       challengeActionsByClock.set(key, {
         action: isReplay ? action : existing.action,
-        challengingTeam: cleanText(action.teamTricode) || existing.challengingTeam,
+        challengingTeam: markerTeam || existing.challengingTeam,
       });
     });
 
@@ -348,7 +351,6 @@ export function detectCoachChallengeActions(game = {}, context = {}) {
         homeTeam,
         awayTeam,
         challengingTeam: challengingTeam
-          || cleanText(action.teamTricode)
           || timeoutTeamsByClock.get(`${cleanText(action.period)}|${cleanText(action.clock)}`)
           || correctedChallengeTeam(
             cleanText(game.gameId || context.gameId),

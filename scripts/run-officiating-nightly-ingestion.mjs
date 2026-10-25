@@ -56,6 +56,7 @@ function runImporter(gameIds) {
       `--season=${CURRENT_SEASON}`,
       `--game-ids=${gameIds.join(",")}`,
       "--concurrency=3",
+      "--skip-stats-playbyplay",
       "--apply",
       "--require-complete",
       "--allow-incomplete-preseason",
