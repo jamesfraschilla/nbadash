@@ -1,0 +1,98 @@
+name: One-night Live Game Audit
+
+on:
+  schedule:
+    # Fifteen-minute lead time accommodates normal GitHub scheduling delays.
+    - cron: "45 20 25 10 *"
+    - cron: "15 23 25 10 *"
+    - cron: "45 0 26 10 *"
+  workflow_dispatch:
+    inputs:
+      game_id:
+        description: Approved audit game
+        required: true
+        type: choice
+        options: ["0022600112", "0022600117", "0022600118"]
+      dry_run:
+        description: One read-only capture, no analysis generation
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  select:
+    runs-on: ubuntu-latest
+    outputs:
+      game_id: ${{ steps.select.outputs.game_id }}
+    steps:
+      - name: Enforce one-night schedule
+        id: select
+        env:
+          EVENT: ${{ github.event_name }}
+          CRON: ${{ github.event.schedule }}
+          REQUESTED: ${{ inputs.game_id }}
+        shell: bash
+        run: |
+          if [ "$EVENT" = workflow_dispatch ]; then
+            echo "game_id=$REQUESTED" >> "$GITHUB_OUTPUT"
+          elif [ "$(date -u +%Y-%m-%d)" = 2026-10-25 ]; then
+            case "$CRON" in
+              '45 20 25 10 *') echo 'game_id=0022600112' >> "$GITHUB_OUTPUT" ;;
+              '15 23 25 10 *') echo 'game_id=0022600117' >> "$GITHUB_OUTPUT" ;;
+            esac
+          elif [ "$(date -u +%Y-%m-%d)" = 2026-10-26 ] && [ "$CRON" = '45 0 26 10 *' ]; then
+            echo 'game_id=0022600118' >> "$GITHUB_OUTPUT"
+          fi
+
+  audit:
+    needs: select
+    if: needs.select.outputs.game_id != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    concurrency:
+      group: live-audit-${{ needs.select.outputs.game_id }}
+      cancel-in-progress: false
+    env:
+      GAME_ID: ${{ needs.select.outputs.game_id }}
+      SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Validate collector
+        run: node --test src/liveAuditGames.test.js
+      - name: Capture live feeds and prepare shared segment analyses
+        shell: bash
+        run: |
+          test -n "$SUPABASE_URL"
+          test -n "$SUPABASE_SERVICE_ROLE_KEY"
+          if [ "$DRY_RUN" = true ]; then
+            node scripts/live-game-audit.mjs --game-id="$GAME_ID" --dry-run
+          else
+            node scripts/live-game-audit.mjs --game-id="$GAME_ID"
+          fi
+      - name: Preserve audit evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-audit-${{ env.GAME_ID }}-${{ github.run_id }}
+          path: output/live-audit/${{ env.GAME_ID }}/
+          retention-days: 2
+          if-no-files-found: warn
+      - name: Summarize
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "output/live-audit/$GAME_ID/summary.json" ]; then
+            echo '### Live audit summary' >> "$GITHUB_STEP_SUMMARY"
+            echo '```json' >> "$GITHUB_STEP_SUMMARY"
+            cat "output/live-audit/$GAME_ID/summary.json" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi

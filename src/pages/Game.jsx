@@ -5,6 +5,7 @@ import { toggleNewNoteTag } from "../noteTags.js";
 import { normalizeTeamRebounds, findIncompletePersonalFoulFeed } from "../teamStatNormalization.js";
 import { createNote } from "../accountData.js";
 import { listCachedGameAnalyses, requestGameAnalysis, requestGameAnalysisPrewarm } from "../analysisData.js";
+import { isLiveAuditGame } from "../liveAuditGames.js";
 import {
   fetchCurrentGLeagueRosters,
   fetchCurrentNbaRosters,
@@ -905,7 +906,7 @@ export default function Game({ variant = "full" }) {
   const awayTeamId = awayTeam?.teamId ?? null;
   const isWashingtonGame = isWashingtonTeam(homeTeam) || isWashingtonTeam(awayTeam);
   const isRotationsGame = isRotationsTeam(homeTeam) || isRotationsTeam(awayTeam);
-  const shouldUseSharedAnalysisRecaps = isRotationsGame;
+  const shouldUseSharedAnalysisRecaps = isRotationsGame || isLiveAuditGame(gameId);
   const [publishedOfficialOrder, setPublishedOfficialOrder] = useState(null);
   const [publishedOfficialAssignment, setPublishedOfficialAssignment] = useState(null);
   const displayedOfficials = useMemo(
