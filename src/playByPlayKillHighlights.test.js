@@ -13,9 +13,9 @@ const twoStops = () => [event(1, "2pt", OPP, { shotResult: "Missed" }),
   event(4, "turnover"), event(5, "steal", WAS), event(6, "2pt", WAS, { shotResult: "Made" })];
 const entries = (actions, options) => [...buildWashingtonKillHighlights(game(actions, options))];
 
-test("third confirmed stop highlights the possession including the Washington rebound", () => {
+test("third confirmed stop highlights only the Washington rebound, even at the same clock", () => {
   assert.deepEqual(entries([...twoStops(), event(7, "2pt", OPP, { shotResult: "Missed" }),
-    event(8, "rebound", WAS, { subType: "defensive" })]), [["action:7", "completed"], ["action:8", "completed"]]);
+    event(8, "rebound", WAS, { subType: "defensive", clock: "PT05M00.00S" })]), [["action:8", "completed"]]);
 });
 
 test("scoring on the third possession marks a missed opportunity rather than a Kill", () => {
@@ -28,19 +28,18 @@ test("a live miss or retained team offensive rebound is unresolved, not a Kill",
   assert.deepEqual(entries([...third, event(8, "rebound", OPP, { subType: "offensive", personId: null }), event(9, "timeout")]), []);
 });
 
-test("team offensive rebound then scoring makes the entire third possession yellow", () => {
+test("team offensive rebound then scoring highlights only the made basket yellow", () => {
   assert.deepEqual(entries([...twoStops(), event(7, "2pt", OPP, { shotResult: "Missed" }),
     event(8, "rebound", OPP, { subType: "offensive", personId: null }), event(9, "timeout"),
     event(10, "2pt", OPP, { shotResult: "Made" })]),
-  [["action:7", "missed"], ["action:8", "missed"], ["action:10", "missed"]]);
+  [["action:10", "missed"]]);
 });
 
 test("multiple offensive rebounds followed by a stop are only one possession", () => {
   const actions = [...twoStops(), event(7, "2pt", OPP, { shotResult: "Missed" }),
     event(8, "rebound", OPP, { subType: "offensive" }), event(9, "3pt", OPP, { shotResult: "Missed" }),
     event(10, "rebound", OPP, { subType: "offensive", personId: null }), event(11, "turnover")];
-  assert.equal(entries(actions).length, 5);
-  assert.ok(entries(actions).every(([, value]) => value === "completed"));
+  assert.deepEqual(entries(actions), [["action:11", "completed"]]);
 });
 
 test("a foul and a missed non-final free throw do not prematurely complete a Kill", () => {
@@ -48,21 +47,21 @@ test("a foul and a missed non-final free throw do not prematurely complete a Kil
     event(8, "freethrow", OPP, { subType: "1 of 2", shotResult: "Missed" })];
   assert.deepEqual(entries(actions), []);
   assert.deepEqual(entries([...actions, event(9, "freethrow", OPP, { subType: "2 of 2", shotResult: "Made" })]),
-    [["action:7", "missed"], ["action:8", "missed"], ["action:9", "missed"]]);
-  assert.ok(entries([...actions, event(9, "freethrow", OPP, { subType: "2 of 2", shotResult: "Missed" }),
-    event(10, "rebound", WAS, { subType: "defensive" })]).every(([, value]) => value === "completed"));
+    [["action:9", "missed"]]);
+  assert.deepEqual(entries([...actions, event(9, "freethrow", OPP, { subType: "2 of 2", shotResult: "Missed" }),
+    event(10, "rebound", WAS, { subType: "defensive" })]), [["action:10", "completed"]]);
 });
 
 test("the defensive rebound can retain the old possession owner in the feed", () => {
   assert.deepEqual(entries([...twoStops(), event(7, "2pt", OPP, { shotResult: "Missed" }),
     event(8, "rebound", WAS, { possession: OPP, subType: "defensive" })]),
-  [["action:7", "completed"], ["action:8", "completed"]]);
+  [["action:8", "completed"]]);
 });
 
 test("timeout and substitution rows are never marked as defensive possessions", () => {
   const result = entries([...twoStops(), event(7, "2pt", OPP, { shotResult: "Missed" }), event(8, "timeout"),
     event(9, "substitution"), event(10, "turnover")]);
-  assert.deepEqual(result, [["action:7", "completed"], ["action:10", "completed"]]);
+  assert.deepEqual(result, [["action:10", "completed"]]);
 });
 
 test("period-end confirms a scoreless third possession without coloring period markers", () => {

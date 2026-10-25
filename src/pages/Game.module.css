@@ -152,8 +152,8 @@
 }
 
 .pbpCardTimeout {
-  background-color: #ef4444;
-  border-color: #b91c1c;
+  background-color: #fff;
+  border-color: #d1d5db;
 }
 
 .pbpCardTimeout .pbpText,
@@ -161,7 +161,33 @@
 .pbpCardTimeout .pbpFooter,
 .pbpCardTimeout .pbpTeam,
 .pbpCardTimeout .pbpScore {
+  color: #111;
+}
+
+.pbpCardKill {
+  background-color: #dc2626;
+  border-color: #dc2626;
+}
+
+.pbpCardMissedKill {
+  background-color: #fff4a3;
+  border-color: #eab308;
+}
+
+.pbpCardKill .pbpText,
+.pbpCardKill .pbpHeader,
+.pbpCardKill .pbpFooter,
+.pbpCardKill .pbpTeam,
+.pbpCardKill .pbpScore {
   color: #fff;
+}
+
+.pbpCardMissedKill .pbpText,
+.pbpCardMissedKill .pbpHeader,
+.pbpCardMissedKill .pbpFooter,
+.pbpCardMissedKill .pbpTeam,
+.pbpCardMissedKill .pbpScore {
+  color: #111;
 }
 
 html[data-theme="dark"] .container {

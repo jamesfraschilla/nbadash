@@ -13,23 +13,45 @@ const actions = [event(1, "turnover", OPP), event(2, "turnover", WAS), event(3, 
   event(16, "substitution", WAS, { subType: "out", personId: 42, playerName: "Test Player" }),
   event(17, "substitution", WAS, { subType: "in", personId: 43, playerName: "Other Player" })];
 
-async function openGame(page, washington = true) {
+async function openGame(page, washington = true, wheel = false) {
   await page.route("**/api/games/**", (route) => {
     if (route.request().url().includes("byDate")) return route.fulfill({ json: [] });
     return route.fulfill({ json: { gameId: "0022600108", seasonYear: "2026-27", gameStatus: 3, period: 4,
       gameClock: "PT00M00.00S", homeTeam: { teamId: washington ? WAS : 1610612737, teamName: washington ? "Wizards" : "Hawks", teamTricode: washington ? "WAS" : "ATL" },
-      awayTeam: { teamId: OPP, teamName: "Pelicans", teamTricode: "NOP" }, playByPlayActions: actions } });
+      awayTeam: { teamId: OPP, teamName: "Pelicans", teamTricode: "NOP" }, playByPlayActions: actions,
+      boxScore: { home: { teamId: WAS, players: [], totals: {} }, away: { teamId: OPP, players: [], totals: {} } },
+      teamStats: { home: {}, away: {} }, officials: [] } });
   });
   await page.route("**/boxscore_*.json", (route) => route.fulfill({ json: {} }));
-  await page.goto("#/g/0022600108/events");
-  await expect(page.getByRole("heading", { name: "Play-by-Play Events" })).toBeVisible();
+  await page.goto(wheel ? "#/g/0022600108" : "#/g/0022600108/events");
+  if (!wheel) await expect(page.getByRole("heading", { name: "Play-by-Play Events" })).toBeVisible();
 }
+
+test("dashboard scroll wheel shares single Kill markers and white timeouts in both themes", async ({ page }) => {
+  await openGame(page, true, true);
+  const wheel = page.locator('[class*="pbpWheelInner"]');
+  await expect(wheel).toBeVisible();
+  const completed = wheel.locator('[data-kill-highlight="completed"]');
+  const missed = wheel.locator('[data-kill-highlight="missed"]');
+  await expect(completed).toHaveCount(1);
+  await expect(completed).toContainText("Event 7");
+  await expect(missed).toHaveCount(1);
+  await expect(missed).toContainText("Event 15");
+  const timeout = wheel.locator('[class*="pbpCardTimeout"]');
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((value) => document.documentElement.dataset.theme = value, theme);
+    await expect(timeout).toHaveCSS("background-color", "rgb(255, 255, 255)");
+    await expect(timeout.locator('[class*="pbpText"]')).toHaveCSS("color", "rgb(17, 17, 17)");
+    await expect(completed).toHaveCSS("background-color", "rgb(220, 38, 38)");
+    await expect(missed).toHaveCSS("background-color", "rgb(255, 244, 163)");
+  }
+});
 
 test("Wizards possessions use red/yellow, while timeouts stay white including hover", async ({ page }) => {
   await openGame(page);
   const completed = page.locator('[data-kill-highlight="completed"]');
   const missed = page.locator('[data-kill-highlight="missed"]');
-  await expect(completed).toHaveCount(2);
+  await expect(completed).toHaveCount(1);
   await expect(missed).toHaveCount(1);
   await expect(completed.first()).toHaveCSS("background-color", "rgb(220, 38, 38)");
   await expect(missed.first()).toHaveCSS("background-color", "rgb(255, 244, 163)");
@@ -45,10 +67,10 @@ test("Wizards possessions use red/yellow, while timeouts stay white including ho
   await expect(timeout).toHaveCSS("background-color", "rgb(255, 255, 255)");
   await expect(timeout.locator('[class*="clock"]')).toHaveCSS("color", "rgb(17, 17, 17)");
   await page.getByRole("checkbox", { name: "Latest First" }).uncheck();
-  await expect(completed).toHaveCount(2);
+  await expect(completed).toHaveCount(1);
   await expect(missed).toHaveCount(1);
   await page.getByRole("button", { name: "Q1", exact: true }).click();
-  await expect(completed).toHaveCount(2);
+  await expect(completed).toHaveCount(1);
 });
 
 test("non-Wizards games retain white timeouts without any Kill highlights", async ({ page }) => {
@@ -72,22 +94,22 @@ test("Kill filters work independently, combine, and preserve period/order/substi
   const total = await rows.count();
 
   await kills.check();
-  await expect(rows).toHaveCount(2);
-  await expect(page.locator('[data-kill-highlight="completed"]')).toHaveCount(2);
-  await expect(page.getByText("Total Events: 2", { exact: true })).toBeVisible();
+  await expect(rows).toHaveCount(1);
+  await expect(page.locator('[data-kill-highlight="completed"]')).toHaveCount(1);
+  await expect(page.getByText("Total Events: 1", { exact: true })).toBeVisible();
   await kills.uncheck();
   await potential.check();
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toHaveAttribute("data-kill-highlight", "missed");
 
   await kills.check();
-  await expect(rows).toHaveCount(3);
+  await expect(rows).toHaveCount(2);
   await page.getByRole("checkbox", { name: "Latest First" }).uncheck();
-  await expect(rows.first()).toContainText("Event 5");
+  await expect(rows.first()).toContainText("Event 7");
   await page.getByRole("button", { name: "Q2", exact: true }).click();
   await expect(rows).toHaveCount(0);
   await page.getByRole("button", { name: "Q1", exact: true }).click();
-  await expect(rows).toHaveCount(3);
+  await expect(rows).toHaveCount(2);
 
   await kills.uncheck();
   await potential.uncheck();
@@ -95,7 +117,7 @@ test("Kill filters work independently, combine, and preserve period/order/substi
   await expect(rows).toHaveCount(1);
   await kills.check();
   await potential.check();
-  await expect(rows).toHaveCount(4);
+  await expect(rows).toHaveCount(3);
   await kills.uncheck();
   await potential.uncheck();
   await subs.uncheck();

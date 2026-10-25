@@ -6,6 +6,7 @@ import { normalizeTeamRebounds, findIncompletePersonalFoulFeed } from "../teamSt
 import { createNote } from "../accountData.js";
 import { listCachedGameAnalyses, requestGameAnalysis, requestGameAnalysisPrewarm } from "../analysisData.js";
 import { isLiveAuditGame } from "../liveAuditGames.js";
+import { buildWashingtonKillHighlights, playByPlayActionKey } from "../playByPlayKillHighlights.js";
 import {
   fetchCurrentGLeagueRosters,
   fetchCurrentNbaRosters,
@@ -1352,6 +1353,8 @@ export default function Game({ variant = "full" }) {
     };
   }, [periodSnapshotMap, segment, awayTeamId, homeTeamId]);
 
+  const killHighlights = useMemo(() => buildWashingtonKillHighlights(game), [game]);
+
   const pbpWheelItems = useMemo(() => {
     const actions = game?.playByPlayActions || [];
     const filtered = actions.filter((action) => (
@@ -1359,11 +1362,12 @@ export default function Game({ variant = "full" }) {
       action.actionType === "3pt" ||
       action.actionType === "turnover" ||
       action.actionType === "foul" ||
-      action.actionType === "timeout"
+      action.actionType === "timeout" ||
+      killHighlights.has(playByPlayActionKey(action))
     ));
     const sorted = filtered.slice().sort(compareActionsByChronology);
     return sorted.slice(-16);
-  }, [game?.playByPlayActions]);
+  }, [game?.playByPlayActions, killHighlights]);
 
   const videoEventIdByActionNumber = useMemo(
     () => buildVideoEventIdByActionNumber(game?.playByPlayActions || []),
@@ -3252,13 +3256,17 @@ export default function Game({ variant = "full" }) {
                 const descriptor = cleanWheelDescriptor(describePlayByPlayAction(action) || action.actionType || "");
                 const isHome = action.teamId && action.teamId === homeTeam?.teamId;
                 const isTimeout = action.actionType === "timeout";
+                const killHighlight = isTimeout ? null : killHighlights.get(playByPlayActionKey(action));
+                const killClass = killHighlight === "completed" ? styles.pbpCardKill
+                  : killHighlight === "missed" ? styles.pbpCardMissedKill : "";
                 const scoreText = action.scoreHome && action.scoreAway
                   ? `${action.scoreAway}-${action.scoreHome}`
                   : "";
                 return (
                   <div
                     key={action.actionNumber || `${action.period}-${action.clock}-${descriptor}`}
-                    className={`${styles.pbpCard} ${isHome ? styles.pbpCardHome : ""} ${isTimeout ? styles.pbpCardTimeout : ""}`}
+                    className={`${styles.pbpCard} ${isHome ? styles.pbpCardHome : ""} ${isTimeout ? styles.pbpCardTimeout : ""} ${killClass}`}
+                    data-kill-highlight={killHighlight || undefined}
                     onMouseDown={handleHoldStart(action)}
                     onMouseUp={handleHoldEnd}
                     onMouseLeave={handleHoldEnd}

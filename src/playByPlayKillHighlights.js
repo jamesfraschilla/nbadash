@@ -30,9 +30,14 @@ export function buildWashingtonKillHighlights(game) {
     stops = possession.scored ? 0 : stops + 1;
     const kind = missedOpportunity ? "missed" : !possession.scored && stops % 3 === 0 ? "completed" : null;
     if (!kind) return;
-    for (const action of possession.actions) {
-      if (!ADMIN_TYPES.has(typeOf(action))) highlights.set(playByPlayActionKey(action), kind);
-    }
+    // One marker per possession, not one per feed row. A defensive rebound
+    // confirms the stop; the first made shot/FT confirms a missed opportunity.
+    const candidates = possession.actions.filter((action) => !ADMIN_TYPES.has(typeOf(action)));
+    const marker = kind === "missed"
+      ? candidates.find((action) => ["2pt", "3pt", "freethrow"].includes(typeOf(action))
+        && String(action.shotResult).toLowerCase() === "made")
+      : candidates.at(-1);
+    if (marker) highlights.set(playByPlayActionKey(marker), kind);
   };
 
   for (const action of actions) {
