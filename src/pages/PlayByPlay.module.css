@@ -161,20 +161,86 @@
 }
 
 .timeout {
-  background-color: #ef4444;
+  background-color: #fff;
 }
 
 .timeout .eventContent,
 .timeout .clock,
 .timeout .score,
 .timeout .periodLabel {
-  color: #fff;
+  color: #111;
 }
 
 .timeout .clipLink {
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.45);
+  color: #111;
+  border-color: rgba(17, 17, 17, 0.25);
 }
+
+.killLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin: 0 0 14px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.killLegend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.killSwatch,
+.missedKillSwatch,
+.timeoutSwatch {
+  width: 12px;
+  height: 12px;
+  border: 1px solid #888;
+  border-radius: 2px;
+  background: #dc2626;
+}
+
+.missedKillSwatch { background: #fff4a3; }
+.timeoutSwatch { background: #fff; }
+
+.eventRow.killCompleted,
+.eventRow.killCompleted:hover,
+.eventRow.killCompleted:active {
+  background-color: #dc2626;
+  color: #fff;
+}
+
+.killCompleted .eventContent,
+.killCompleted .clock,
+.killCompleted .score,
+.killCompleted .periodLabel,
+.killCompleted .clipLink {
+  color: #fff;
+}
+
+.killCompleted .clipLink { border-color: rgba(255, 255, 255, 0.6); }
+
+.eventRow.killMissed,
+.eventRow.killMissed:hover,
+.eventRow.killMissed:active {
+  background-color: #fff4a3;
+  color: #111;
+}
+
+.killMissed .eventContent,
+.killMissed .clock,
+.killMissed .score,
+.killMissed .periodLabel,
+.killMissed .clipLink {
+  color: #111;
+}
+
+.killMissed .clipLink { border-color: rgba(17, 17, 17, 0.25); }
+
+.eventRow.timeout,
+.eventRow.timeout:hover,
+.eventRow.timeout:active { background-color: #fff; }
 
 @media (hover: hover) and (pointer: fine) {
   .eventRow:hover {

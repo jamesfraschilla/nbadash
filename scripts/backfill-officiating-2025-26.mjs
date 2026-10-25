@@ -481,6 +481,7 @@ function toChallengeRow(event) {
     whistling_official_id: event.whistling_official_id,
     whistling_official_name: event.whistling_official_name,
     challenge_outcome: event.challengeOutcome,
+    video_url: event.video_url || event.videoUrl || null,
     matched_action_number: event.matched_action_number ?? event.matchedActionNumber,
     match_confidence: event.match_confidence ?? event.matchConfidence,
     match_reason: event.match_reason ?? event.matchReason,
@@ -526,7 +527,7 @@ function buildIngestSql({ gameIds, assignmentRows, callRows, challengeRows }) {
   const challengeColumns = [
     "season", "season_type", "game_id", "game_date", "home_team", "away_team", "challenging_team", "period",
     "game_clock", "crew_chief_id", "crew_chief_name", "whistling_official_id", "whistling_official_name",
-    "challenge_outcome", "matched_action_number", "match_confidence", "match_reason", "challenge_sub_type",
+    "challenge_outcome", "video_url", "matched_action_number", "match_confidence", "match_reason", "challenge_sub_type",
     "review_status", "source", "source_payload",
   ];
   const commonTypes = {
@@ -603,6 +604,7 @@ function buildIngestSql({ gameIds, assignmentRows, callRows, challengeRows }) {
         whistling_official_id: "text",
         whistling_official_name: "text",
         challenge_outcome: "text",
+        video_url: "text",
         matched_action_number: "integer",
         match_confidence: "numeric",
         match_reason: "text",

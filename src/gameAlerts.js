@@ -855,7 +855,7 @@ function addPossessionPressureAlerts({ alerts, seen, orderedActions, teamsById, 
     } else {
       const streak = safeNumber(emptyStreaks.get(possession.teamId), 0) + 1;
       emptyStreaks.set(possession.teamId, streak);
-      if (streak === 3) {
+      if (streak % 3 === 0) {
         const total = safeNumber(killTotals.get(defenseId), 0) + 1;
         killTotals.set(defenseId, total);
         addAlert(alerts, seen, {

@@ -12,10 +12,11 @@ import {
   fetchTeamProfileDetails,
   saveChallengeContextTags,
 } from "../officiatingData.js";
-import { nbaEventVideoUrl, teamLogoUrl } from "../api.js";
+import { teamLogoUrl } from "../api.js";
 import { useGamesByDate } from "../queries.js";
 import { formatDateInputInTimeZone } from "../utils.js";
 import { CALL_CATEGORY_GROUPS } from "../officiatingCategoryNormalization.js";
+import { verifiedChallengeVideoUrl } from "../officiatingChallengeLinks.js";
 import { loadRefereeHeadshotUrl } from "../refereeHeadshots.js";
 import { fetchPublishedAssignmentForGame } from "../officialAssignments.js";
 import {
@@ -89,32 +90,9 @@ function challengeClockLabel(row) {
   return value;
 }
 
-function challengePbpVideoUrl(row) {
-  const matcherPayload = row?.source_payload?.officialMatcher || row?.sourcePayload?.officialMatcher || {};
-  const matchedCall = matcherPayload.matchedCall || {};
-  const nearbyLocationContext = matcherPayload.nearbyLocationContext || {};
-  const actionNumber = row?.matched_action_number
-    ?? row?.matchedActionNumber
-    ?? nearbyLocationContext.actionNumber
-    ?? nearbyLocationContext.action_number;
-  const title = matchedCall.description
-    || nearbyLocationContext.description
-    || row?.description
-    || row?.initial_call
-    || row?.initialCall
-    || row?.challenge_type
-    || row?.challengeType;
-  return nbaEventVideoUrl({
-    gameId: row?.game_id || row?.gameId,
-    actionNumber,
-    seasonYear: row?.season || row?.seasonYear,
-    title,
-  });
-}
-
 function ChallengeClockLink({ row }) {
   const label = challengeClockLabel(row);
-  const url = challengePbpVideoUrl(row);
+  const url = verifiedChallengeVideoUrl(row);
   if (!url) return label;
   return (
     <a href={url} target="_blank" rel="noreferrer" className={styles.inlineLink}>
@@ -1600,8 +1578,8 @@ function ChallengeLog({ rows, filteredRows, filters, filterOptions, onFilterChan
                   ) : "-"}
                 </td>
                 <td>
-                  {row.video_url ? (
-                    <a href={row.video_url} target="_blank" rel="noreferrer">Watch</a>
+                  {verifiedChallengeVideoUrl(row) ? (
+                    <a href={verifiedChallengeVideoUrl(row)} target="_blank" rel="noreferrer">Watch</a>
                   ) : "-"}
                 </td>
               </tr>
@@ -1662,7 +1640,7 @@ function MiniChallengeLog({ rows, isLoading = false, officialColumn = "role", on
                   ? row.crew_chief_name || "-"
                   : row.profileChallengeRole === "crewChief" ? "Crew Chief" : row.profileChallengeRole === "whistle" ? "Whistle" : row.profileChallengeRole === "crew" ? "Crew" : "-"}
               </td>
-              <td>{row.video_url ? <a href={row.video_url} target="_blank" rel="noreferrer">Watch</a> : "-"}</td>
+              <td>{verifiedChallengeVideoUrl(row) ? <a href={verifiedChallengeVideoUrl(row)} target="_blank" rel="noreferrer">Watch</a> : "-"}</td>
             </tr>
           ))}
         </tbody>

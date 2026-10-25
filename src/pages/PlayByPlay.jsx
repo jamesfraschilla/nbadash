@@ -22,6 +22,7 @@ import {
   isSubstitutionAction,
 } from "../substitutionUtils.js";
 import { normalizeClock } from "../utils.js";
+import { buildWashingtonKillHighlights, playByPlayActionKey } from "../playByPlayKillHighlights.js";
 import styles from "./PlayByPlay.module.css";
 
 function shouldShowClip(action) {
@@ -56,6 +57,8 @@ export default function PlayByPlay() {
   const [period, setPeriod] = useState(null);
   const [latestFirst, setLatestFirst] = useState(true);
   const [substitutionsOnly, setSubstitutionsOnly] = useState(false);
+  const [killsOnly, setKillsOnly] = useState(false);
+  const [potentialKillsOnly, setPotentialKillsOnly] = useState(false);
   const [noteModalOpen, setNoteModalOpen] = useState(false);
   const [savingNewNote, setSavingNewNote] = useState(false);
   const [noteSourceAction, setNoteSourceAction] = useState(null);
@@ -77,6 +80,9 @@ export default function PlayByPlay() {
   });
 
   const actions = game?.playByPlayActions || [];
+  const killHighlights = useMemo(() => buildWashingtonKillHighlights(game), [game]);
+  const isWizardsGame = [game?.homeTeam?.teamId, game?.awayTeam?.teamId]
+    .some((id) => String(id) === "1610612764");
 
   const scoreTracked = useMemo(() => {
     let awayScore = 0;
@@ -99,11 +105,19 @@ export default function PlayByPlay() {
   const filtered = useMemo(() => {
     const collapsedActions = collapseSubstitutionActions(scoreTracked, { describeAction: describePlayByPlayAction });
     const periodFiltered = period ? collapsedActions.filter((action) => action.period === period) : collapsedActions;
-    const list = substitutionsOnly
-      ? periodFiltered.filter((action) => action.isSubstitutionDisplay || isSubstitutionAction(action, describePlayByPlayAction))
-      : periodFiltered;
+    const showKills = isWizardsGame && killsOnly;
+    const showPotentialKills = isWizardsGame && potentialKillsOnly;
+    // Event-type filters combine as a union, rather than intersecting unrelated
+    // categories (a substitution cannot also be a Kill possession event).
+    const list = substitutionsOnly || showKills || showPotentialKills
+      ? periodFiltered.filter((action) => {
+        const kind = killHighlights.get(playByPlayActionKey(action));
+        return (substitutionsOnly && (action.isSubstitutionDisplay || isSubstitutionAction(action, describePlayByPlayAction)))
+          || (showKills && kind === "completed")
+          || (showPotentialKills && kind === "missed");
+      }) : periodFiltered;
     return latestFirst ? [...list].reverse() : list;
-  }, [scoreTracked, period, latestFirst, substitutionsOnly]);
+  }, [scoreTracked, period, latestFirst, substitutionsOnly, killsOnly, potentialKillsOnly, isWizardsGame, killHighlights]);
 
   const videoEventIdByActionNumber = useMemo(() => buildVideoEventIdByActionNumber(actions), [actions]);
 
@@ -221,7 +235,27 @@ export default function PlayByPlay() {
             onChange={(event) => setSubstitutionsOnly(event.target.checked)}
           />
         </label>
+        {isWizardsGame && (
+          <>
+            <label className={styles.toggle}>
+              <span>Kills</span>
+              <input type="checkbox" checked={killsOnly} onChange={(event) => setKillsOnly(event.target.checked)} />
+            </label>
+            <label className={styles.toggle} title="Third defensive possessions where the opponent scored after two consecutive stops">
+              <span>Potential Kills</span>
+              <input type="checkbox" checked={potentialKillsOnly} onChange={(event) => setPotentialKillsOnly(event.target.checked)} />
+            </label>
+          </>
+        )}
       </div>
+
+      {isWizardsGame && (
+        <div className={styles.killLegend} aria-label="Play-by-play highlight colors">
+          <span><i className={styles.killSwatch} aria-hidden="true" />Washington Kill</span>
+          <span><i className={styles.missedKillSwatch} aria-hidden="true" />Missed Kill opportunity</span>
+          <span><i className={styles.timeoutSwatch} aria-hidden="true" />Timeout</span>
+        </div>
+      )}
 
       <div className={styles.periodButtons}>
         <button
@@ -260,6 +294,9 @@ export default function PlayByPlay() {
           const isAway = action.teamId === game.awayTeam?.teamId;
           const isHome = action.teamId === game.homeTeam?.teamId;
           const isTimeout = action.actionType === "timeout";
+          const killHighlight = isTimeout ? null : killHighlights.get(playByPlayActionKey(action));
+          const killClass = killHighlight === "completed" ? styles.killCompleted
+            : killHighlight === "missed" ? styles.killMissed : "";
           const actionNumber = action.actionNumber ?? null;
           const actionDescription = getActionDescription(action, describePlayByPlayAction);
           const displayPersonId = action.displayPersonId || action.personId;
@@ -277,7 +314,10 @@ export default function PlayByPlay() {
           return (
             <div
               key={rowKey}
-              className={`${styles.eventRow} ${isTimeout ? styles.timeout : ""}`}
+              className={`${styles.eventRow} ${isTimeout ? styles.timeout : ""} ${killClass}`}
+              data-kill-highlight={killHighlight || undefined}
+              title={killHighlight === "completed" ? "Washington Kill: third consecutive scoreless defensive possession"
+                : killHighlight === "missed" ? "Missed Washington Kill: opponent scored after two consecutive defensive stops" : undefined}
               onPointerDown={handleHoldStart(action)}
               onPointerUp={handleHoldEnd}
               onPointerLeave={handleHoldEnd}

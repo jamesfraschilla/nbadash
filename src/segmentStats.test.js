@@ -29,6 +29,20 @@ test("Kill totals normalize team IDs, ignore marker possessions, and treat misse
   });
 });
 
+test("seven, five, three, five, and three consecutive stops total six Kills", () => {
+  const actions = [];
+  let order = 0;
+  for (const length of [7, 5, 3, 5, 3]) {
+    for (let stop = 0; stop < length; stop++) {
+      actions.push({ orderNumber: ++order, period: 1, possession: AWAY.teamId, teamId: AWAY.teamId, actionType: "turnover" });
+      actions.push({ orderNumber: ++order, period: 1, possession: HOME.teamId, teamId: HOME.teamId, actionType: "2pt", shotResult: "Made" });
+    }
+    actions.push({ orderNumber: ++order, period: 1, possession: AWAY.teamId, teamId: AWAY.teamId, actionType: "2pt", shotResult: "Made" });
+    actions.push({ orderNumber: ++order, period: 1, possession: HOME.teamId, teamId: HOME.teamId, actionType: "2pt", shotResult: "Made" });
+  }
+  assert.deepEqual(computeKills(actions, "all", HOME.teamId, AWAY.teamId), { homeKills: 6, awayKills: 0 });
+});
+
 test("segment rebound totals exclude NBA team and dead-ball rebound rows", () => {
   const aggregated = aggregateSegmentStats({
     gameId: "0012600035",

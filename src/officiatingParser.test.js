@@ -193,6 +193,41 @@ test("detectCoachChallengeActions carries the timeout team onto a teamless repla
   assert.equal(challenges[0].matchedActionNumber, 101);
 });
 
+test("detectCoachChallengeActions links an unambiguous same-clock challenged play instead of the replay marker", () => {
+  const challenges = detectCoachChallengeActions({
+    gameId: "0012600019",
+    seasonYear: "2026-27",
+    homeTeam: { teamTricode: "GSW" },
+    awayTeam: { teamTricode: "POR" },
+    playByPlayActions: [
+      { actionNumber: 370, actionType: "2pt", period: 2, clock: "PT01M55.00S", description: "Curry 2PT Shot" },
+      { actionNumber: 371, actionType: "turnover", subType: "outofbounds", period: 2, clock: "PT01M37.00S", teamTricode: "POR", description: "Lillard Out of Bounds - Bad Pass Turnover" },
+      { actionNumber: 375, actionType: "timeout", subType: "challenge", period: 2, clock: "PT01M37.00S", teamTricode: "GSW" },
+      { actionNumber: 376, actionType: "instantreplay", subType: "challenge", descriptor: "overturned", period: 2, clock: "PT01M37.00S", teamTricode: "GSW" },
+    ],
+  });
+
+  assert.equal(challenges.length, 1);
+  assert.equal(challenges[0].matchedActionNumber, 376);
+  assert.match(challenges[0].videoUrl, /GameEventID=371/);
+  assert.equal(challenges[0].sourcePayload.challengedAction.actionNumber, 371);
+});
+
+test("detectCoachChallengeActions does not guess a challenged play across different clocks", () => {
+  const [challenge] = detectCoachChallengeActions({
+    gameId: "0012609999",
+    seasonYear: "2026-27",
+    playByPlayActions: [
+      { actionNumber: 10, actionType: "foul", period: 3, clock: "PT04M01.00S", description: "Personal foul" },
+      { actionNumber: 11, actionType: "timeout", subType: "challenge", period: 3, clock: "PT04M00.00S", teamTricode: "WAS" },
+      { actionNumber: 12, actionType: "instantreplay", subType: "challenge", period: 3, clock: "PT04M00.00S", teamTricode: "WAS" },
+    ],
+  });
+
+  assert.equal(challenge.videoUrl, "");
+  assert.equal(challenge.sourcePayload.challengedAction, null);
+});
+
 test("detectCoachChallengeActions supports the Stats API challenge-ruling schema", () => {
   const challenges = detectCoachChallengeActions({
     gameId: "0012600060",

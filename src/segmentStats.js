@@ -779,7 +779,7 @@ export function computeKills(actions, segment, homeTeamId, awayTeamId) {
     if (!possessionTeam || !possessionHasOutcome) return;
     if (!possessionScored) {
       streaks[possessionTeam] += 1;
-      if (streaks[possessionTeam] === 3) {
+      if (streaks[possessionTeam] % 3 === 0) {
         const opponent = possessionTeam === homeId ? awayId : homeId;
         if (opponent) kills[opponent] += 1;
       }

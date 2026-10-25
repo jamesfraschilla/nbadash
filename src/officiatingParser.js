@@ -7,6 +7,61 @@ function cleanText(value) {
   return String(value || "").trim();
 }
 
+function normalizedActionType(action = {}) {
+  return cleanText(action.actionType).replace(/[^a-z0-9]/gi, "").toLowerCase();
+}
+
+function isCoachChallengeMarker(action = {}) {
+  const subType = cleanText(action.subType).toLowerCase();
+  const description = cleanText(action.description).toLowerCase();
+  return subType === "challenge" || subType.includes("coach challenge") || description.includes("coach challenge");
+}
+
+function isReviewableSourceAction(action = {}) {
+  if (isCoachChallengeMarker(action)) return false;
+  return [
+    "2pt",
+    "3pt",
+    "foul",
+    "freethrow",
+    "jumpball",
+    "rebound",
+    "turnover",
+    "violation",
+  ].includes(normalizedActionType(action));
+}
+
+export function findChallengedPlayAction(actions = [], challengeIndex = -1) {
+  const marker = actions[challengeIndex];
+  if (!marker || challengeIndex <= 0) return null;
+  const period = Number(marker.period);
+  const clock = cleanText(marker.clock);
+  if (!Number.isFinite(period) || !clock) return null;
+
+  for (let index = challengeIndex - 1; index >= 0; index -= 1) {
+    const candidate = actions[index];
+    if (Number(candidate?.period) !== period) break;
+    if (cleanText(candidate?.clock) !== clock) break;
+    if (isReviewableSourceAction(candidate) && Number.isFinite(Number(candidate.actionNumber))) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function inferredChallengeVideoUrl({ gameId, season, action }) {
+  if (!gameId || !action || !Number.isFinite(Number(action.actionNumber))) return "";
+  const params = new URLSearchParams({
+    flag: "1",
+    GameID: cleanText(gameId),
+    GameEventID: String(action.actionNumber),
+  });
+  const seasonText = cleanText(season);
+  if (/^\d{4}-\d{2}$/.test(seasonText)) params.set("Season", seasonText);
+  if (cleanText(action.description)) params.set("title", cleanText(action.description));
+  return `https://www.nba.com/stats/events?${params.toString()}`;
+}
+
 function otherTeam(team, context = {}) {
   const current = cleanText(team);
   const home = cleanText(context.homeTeam);
@@ -313,12 +368,9 @@ export function detectCoachChallengeActions(game = {}, context = {}) {
 
   const challengeActionsByClock = new Map();
   actions
-    .filter((action) => {
-      const subType = cleanText(action.subType).toLowerCase();
-      const description = cleanText(action.description).toLowerCase();
-      return subType === "challenge" || subType.includes("coach challenge") || description.includes("coach challenge");
-    })
-    .forEach((action) => {
+    .map((action, index) => ({ action, index }))
+    .filter(({ action }) => isCoachChallengeMarker(action))
+    .forEach(({ action, index }) => {
       const key = [
         cleanText(action.period),
         cleanText(action.clock),
@@ -328,25 +380,33 @@ export function detectCoachChallengeActions(game = {}, context = {}) {
       const isTimeout = cleanText(action.actionType).toLowerCase() === "timeout";
       const markerTeam = isReplay || isTimeout ? cleanText(action.teamTricode) : "";
       if (!existing) {
-        challengeActionsByClock.set(key, { action, challengingTeam: markerTeam });
+        challengeActionsByClock.set(key, {
+          action,
+          challengingTeam: markerTeam,
+          firstMarkerIndex: index,
+        });
         return;
       }
       challengeActionsByClock.set(key, {
         action: isReplay ? action : existing.action,
         challengingTeam: markerTeam || existing.challengingTeam,
+        firstMarkerIndex: Math.min(existing.firstMarkerIndex, index),
       });
     });
 
   return [...challengeActionsByClock.values()]
-    .map(({ action, challengingTeam }) => {
+    .map(({ action, challengingTeam, firstMarkerIndex }) => {
       const actionType = cleanText(action.actionType).replace(/[^a-z]/gi, "").toLowerCase();
       const descriptor = cleanText(action.descriptor).toLowerCase();
       const subType = cleanText(action.subType).toLowerCase();
       const outcomeText = `${descriptor} ${subType}`;
+      const challengedAction = findChallengedPlayAction(actions, firstMarkerIndex);
+      const gameId = cleanText(game.gameId || context.gameId);
+      const season = cleanText(game.seasonYear || context.season);
       return {
-        season: cleanText(game.seasonYear || context.season),
+        season,
         seasonType: cleanText(game.seasonType || context.seasonType),
-        gameId: cleanText(game.gameId || context.gameId),
+        gameId,
         gameDate: cleanText(game.gameDate || game.gameEt || context.gameDate),
         homeTeam,
         awayTeam,
@@ -370,8 +430,13 @@ export function detectCoachChallengeActions(game = {}, context = {}) {
         matchReason: actionType === "instantreplay"
           ? "detected-pbp-instantreplay-challenge"
           : `detected-pbp-${actionType || "unknown"}-challenge`,
+        videoUrl: inferredChallengeVideoUrl({ gameId, season, action: challengedAction }),
         source: "play_by_play",
-        sourcePayload: compactActionPayload(action),
+        sourcePayload: {
+          ...compactActionPayload(action),
+          challengedAction: challengedAction ? compactActionPayload(challengedAction) : null,
+          videoLinkReason: challengedAction ? "immediately-preceding-reviewable-action-at-same-clock" : "no-unambiguous-source-action",
+        },
       };
     });
 }

@@ -630,7 +630,7 @@ test("an unfinished live possession is not counted as empty", () => {
   assert.equal(endedAlerts.some((alert) => alert.category === "Kill"), true);
 });
 
-test("one Kill alert represents an uninterrupted streak of three or more defensive stops", () => {
+test("six consecutive stops produce two non-overlapping Kill alerts", () => {
   const actions = [];
   let order = 0;
   for (let stop = 0; stop < 6; stop += 1) {
@@ -644,7 +644,7 @@ test("one Kill alert represents an uninterrupted streak of three or more defensi
   });
   assert.deepEqual(
     alerts.filter((alert) => alert.category === "Kill").map((alert) => alert.title),
-    ["Thunder just completed its 1st Kill of the game"],
+    ["Thunder just completed its 1st Kill of the game", "Thunder just completed its 2nd Kill of the game"],
   );
 });
 
