@@ -2253,6 +2253,14 @@
       "fullName": "Tyler Nickel",
       "jerseyNum": "55",
       "position": "F"
+    },
+    {
+      "personId": "1642261",
+      "firstName": "Dalton",
+      "familyName": "Knecht",
+      "fullName": "Dalton Knecht",
+      "jerseyNum": "99",
+      "position": "F"
     }
   ],
   "1610612753": [
@@ -2955,6 +2963,14 @@
       "position": "G"
     },
     {
+      "personId": "1642951",
+      "firstName": "Sean",
+      "familyName": "Pedulla",
+      "fullName": "Sean Pedulla",
+      "jerseyNum": "3",
+      "position": "G"
+    },
+    {
       "personId": "1643411",
       "firstName": "Darius",
       "familyName": "Acuff Jr.",
@@ -3073,14 +3089,6 @@
       "fullName": "Maxime Raynaud",
       "jerseyNum": "42",
       "position": "C"
-    },
-    {
-      "personId": "1642951",
-      "firstName": "Sean",
-      "familyName": "Pedulla",
-      "fullName": "Sean Pedulla",
-      "jerseyNum": "",
-      "position": "G"
     }
   ],
   "1610612759": [
