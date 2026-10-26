@@ -5,12 +5,12 @@ import dinAltFontUrl from "../assets/fonts/DINalt.ttf";
 import {
   REFEREE_HEADSHOT_CHANGE_EVENT,
   buildCanvasAvatarPlacement,
-  buildRefereeHeadshotTransform,
   getRefereeHeadshotOverride,
   loadRefereeHeadshotExportUrl,
   loadRefereeHeadshotUrl,
 } from "../refereeHeadshots.js";
 import styles from "./OfficialsExportPanel.module.css";
+import RefereeHeadshotPreview from "./RefereeHeadshotPreview.jsx";
 
 export const OFFICIALS_EXPORT_SPECS = {
   portrait: {
@@ -378,7 +378,7 @@ function drawAvatar(context, image, official, x, y, size, radius, variant) {
   context.save();
   drawRoundedRectPath(context, x, y, size, size, radius);
   context.clip();
-  context.fillStyle = "#E8E8E8";
+  context.fillStyle = "#FFFFFF";
   context.fillRect(x, y, size, size);
   context.drawImage(image, drawX, drawY, drawWidth, drawHeight);
   context.restore();
@@ -630,11 +630,10 @@ function VisibleOfficialTile({ official }) {
     <div className={styles.officialTile}>
       <div className={styles.avatarFrame}>
         {official.headshotUrl ? (
-          <img
-            className={styles.avatarImage}
+          <RefereeHeadshotPreview
             src={official.headshotUrl}
-            alt={official.fullName}
-            style={{ transform: buildRefereeHeadshotTransform(getRefereeHeadshotOverride(official.fullName), 84) }}
+            name={official.fullName}
+            override={getRefereeHeadshotOverride(official.fullName)}
           />
         ) : (
           <div className={styles.avatarFallback}>{getInitials(official.fullName)}</div>

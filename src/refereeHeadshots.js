@@ -437,24 +437,17 @@ export function buildCanvasAvatarPlacement({
   targetY,
   targetSize,
   override,
-  variant,
 }) {
   const safeWidth = Math.max(1, Number(sourceWidth) || 1);
   const safeHeight = Math.max(1, Number(sourceHeight) || 1);
   const containScale = Math.min(targetSize / safeWidth, targetSize / safeHeight);
-  const baseScale = Number.isFinite(override?.exportScale)
-    ? override.exportScale
-    : (Number.isFinite(override?.scale) ? override.scale : 1);
+  // The editor crop is authoritative in every output. Legacy export-only
+  // adjustments must not silently override what the user previews and saves.
+  const baseScale = Number.isFinite(override?.scale) ? override.scale : 1;
   const scaleX = baseScale * (Number.isFinite(override?.scaleX) ? override.scaleX : 1);
   const scaleY = baseScale * (Number.isFinite(override?.scaleY) ? override.scaleY : 1);
   const offsetX = scaleRefereeOffset(override?.offsetX, targetSize);
-  let offsetY = scaleRefereeOffset(override?.offsetY, targetSize);
-
-  if (variant === "portrait" && Number.isFinite(override?.exportOffsetYPortrait)) {
-    offsetY = override.exportOffsetYPortrait;
-  } else if (variant === "landscape" && Number.isFinite(override?.exportOffsetYLandscape)) {
-    offsetY = override.exportOffsetYLandscape;
-  }
+  const offsetY = scaleRefereeOffset(override?.offsetY, targetSize);
 
   const drawWidth = safeWidth * containScale * scaleX;
   const drawHeight = safeHeight * containScale * scaleY;

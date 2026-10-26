@@ -8,7 +8,6 @@ import {
   cacheStoredRefereeHeadshotOverrides,
   cacheStoredRefereeHeadshotPreferences,
   buildRefereeHeadshotGroups,
-  buildRefereeHeadshotTransform,
   choosePreferredRefereeHeadshot,
   DEFAULT_REFEREE_HEADSHOT_OVERRIDES,
   DEFAULT_REFEREE_HEADSHOT_PREFERENCES,
@@ -31,6 +30,7 @@ import {
   writeStoredRefereeHeadshotState,
 } from "../refereeHeadshots.js";
 import styles from "./RefereeHeadshotsPreview.module.css";
+import RefereeHeadshotPreview from "../components/RefereeHeadshotPreview.jsx";
 
 const DUPLICATE_FILE_NAMES = new Set([
   "Agon Abazi.jpg",
@@ -772,14 +772,14 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
               </div>
 
               <div className={styles.selectedPreview}>
-                <div className={styles.previewLabel}>Final 84x84 preview</div>
+                <div className={styles.previewLabel}>Final export crop (enlarged)</div>
                 <div className={styles.selectedCropFrame}>
                   {selectedPreviewSrc ? (
-                    <img
-                      src={selectedPreviewSrc}
-                      alt={selectedItem.fullName}
-                      className={styles.cropImage}
-                      style={{ transform: buildRefereeHeadshotTransform(selectedDraft, 84) }}
+                    <RefereeHeadshotPreview
+                      src={selectedFullPreviewSrc || selectedPreviewSrc}
+                      name={selectedItem.fullName}
+                      override={selectedDraft}
+                      size={252}
                     />
                   ) : (
                     <div className={styles.emptyAvatar}>{getInitials(selectedAssignedName || selectedItem.fullName)}</div>
@@ -1031,11 +1031,10 @@ export default function RefereeHeadshotsPreview({ embedded = false }) {
               >
                 <div className={styles.cropFrame}>
                   {item.url ? (
-                    <img
+                    <RefereeHeadshotPreview
                       src={item.url}
-                      alt={item.fullName}
-                      className={styles.cropImage}
-                      style={{ transform: buildRefereeHeadshotTransform(draft, 84) }}
+                      name={item.fullName}
+                      override={draft}
                     />
                   ) : (
                     <div className={styles.emptyAvatar}>{getInitials(getAssignedRefereeName(item, preferences))}</div>

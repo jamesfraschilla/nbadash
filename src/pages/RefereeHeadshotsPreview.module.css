@@ -169,9 +169,15 @@
   position: relative;
   overflow: hidden;
   border-radius: 18px;
-  background: #e8e8e8;
+  background: #ffffff;
   width: 84px;
   height: 84px;
+}
+
+.selectedCropFrame {
+  width: 252px;
+  height: 252px;
+  max-width: 100%;
 }
 
 .cropImage {
