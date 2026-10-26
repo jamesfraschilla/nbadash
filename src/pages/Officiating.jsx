@@ -1019,11 +1019,6 @@ function OfficialsReportCard({ profile, role, populationSize, teamOne = "WAS", t
           <div>
             <span>{role}</span>
             <h3>{profile?.jerseyNumber ? `#${profile.jerseyNumber} ` : ""}{profile?.name || "Official unavailable"}</h3>
-            <small className={styles.reportSample}>
-              {Number(profile?.games) || 0} games · {Number(profile?.games) >= MIN_OFFICIAL_GAMES_FOR_PERCENTILES
-                ? `${profile?.percentileSample?.population ?? "--"} eligible officials`
-                : "Limited sample — unranked"}
-            </small>
           </div>
         </div>
         <section className={`${styles.reportWizardsHistory} ${styles.reportPreviousGames}`}>
