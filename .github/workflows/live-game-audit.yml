@@ -43,7 +43,16 @@ jobs:
             headers: { apikey: key, authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(15000),
           });
           if (!response.ok) throw new Error(`Shared analysis access failed (${response.status}).`);
-          console.log('Shared analysis access verified.');
+          const analysis = await fetch(`${url}/functions/v1/game-analysis`, {
+            method: 'POST', headers: { apikey: key, authorization: `Bearer ${key}`,
+              'x-internal-service-key': key, 'content-type': 'application/json' },
+            body: JSON.stringify({ gameId: 'audit-auth-probe' }), signal: AbortSignal.timeout(15000),
+          });
+          const result = await analysis.json();
+          if (analysis.status !== 400 || result.error !== 'A valid game ID is required.') {
+            throw new Error(`Internal analysis access failed (${analysis.status}).`);
+          }
+          console.log('Shared analysis read and generation authentication verified; no model call was made.');
           JS
       - name: Arm bounded start timer
         env:
