@@ -3287,14 +3287,6 @@
       "position": "C"
     },
     {
-      "personId": "1642923",
-      "firstName": "Otega",
-      "familyName": "Oweh",
-      "fullName": "Otega Oweh",
-      "jerseyNum": "13",
-      "position": "G"
-    },
-    {
       "personId": "1642892",
       "firstName": "Bennett",
       "familyName": "Stirtz",
@@ -3309,6 +3301,14 @@
       "fullName": "Aday Mara",
       "jerseyNum": "15",
       "position": "C"
+    },
+    {
+      "personId": "1642877",
+      "firstName": "Micah",
+      "familyName": "Peavy",
+      "fullName": "Micah Peavy",
+      "jerseyNum": "16",
+      "position": "G-F"
     },
     {
       "personId": "1643717",
@@ -3421,7 +3421,7 @@
       "firstName": "Kyle",
       "familyName": "Anderson",
       "fullName": "Kyle Anderson",
-      "jerseyNum": "12",
+      "jerseyNum": "13",
       "position": "F-G"
     },
     {
@@ -3520,6 +3520,14 @@
       "familyName": "George",
       "fullName": "Keyonte George",
       "jerseyNum": "3",
+      "position": "G"
+    },
+    {
+      "personId": "1641723",
+      "firstName": "Kobe",
+      "familyName": "Bufkin",
+      "fullName": "Kobe Bufkin",
+      "jerseyNum": "4",
       "position": "G"
     },
     {
