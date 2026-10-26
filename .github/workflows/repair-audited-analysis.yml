@@ -1,0 +1,39 @@
+name: Repair Audited Segment Analyses
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Regenerate the four affected saved recaps (backs up existing records first)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repair-audited-analysis-20261025
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      APPLY: ${{ inputs.apply }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify live conflict guard and repair only the audited recaps
+        run: node scripts/repair-audited-analysis.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: audited-analysis-repair-${{ github.run_id }}
+          path: output/audited-analysis-repair/
+          retention-days: 2
+          if-no-files-found: warn
