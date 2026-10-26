@@ -593,6 +593,14 @@
   overflow-wrap: anywhere;
 }
 
+.reportSample {
+  display: block;
+  margin-top: 0.03in;
+  font-size: 0.075in;
+  color: #475569;
+  line-height: 1.2;
+}
+
 .reportWizardsHistory {
   min-width: 0;
   padding: 0.025in 0.012in;
@@ -1102,11 +1110,14 @@
 }
 
 .officialsReportFooter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.02in;
   padding-top: 0.04in;
   border-top: 1px solid #cbd5e1;
   text-align: center;
   color: #5f6877;
-  font-size: 0.08in;
+  font-size: 0.065in;
   font-weight: 900;
   letter-spacing: 0.08em;
   line-height: 1;

@@ -34,6 +34,19 @@ const awayTeam = {
   teamName: "Knicks",
 };
 
+Deno.test("live snapshot conflicts defer generation without applying a final-game blanket guard", () => {
+  const game = { gameId: "0022600112", gameStatus: 2, period: 1, homeTeam, awayTeam,
+    playByPlayActions: [{ actionNumber: 1, orderNumber: 1, period: 1, clock: "11:00", teamId: homeTeam.teamId,
+      personId: 1, actionType: "2pt", shotResult: "Made", scoreHome: 2, scoreAway: 0 }],
+    boxScore: { home: { totals: { points: 0, fieldGoalsMade: 0, fieldGoalsAttempted: 0 } }, away: { totals: { points: 0 } } } };
+  const conflicts = __test__.liveSnapshotConflicts(game);
+  assert(conflicts.some((row) => row.field === "points"));
+  assertEquals(__test__.liveSnapshotConflicts({ ...game, gameStatus: 3 }), []);
+  assertEquals(__test__.liveSnapshotConflicts({ ...game, boxScore: {
+    ...game.boxScore, home: { totals: { points: 2, fieldGoalsMade: 1, fieldGoalsAttempted: 1 } },
+  } }), []);
+});
+
 Deno.test("lineup analysis retains a point scored between same-clock substitutions", () => {
   const players = [{ personId: "1", nameI: "A. Player" }];
   const notes = __test__.buildLineupInsights({ periods: [{ period: 1, stints: [

@@ -1,13 +1,29 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { LIVE_AUDIT_GAMES, isLiveAuditGame } from "./liveAuditGames.js";
+import { LIVE_AUDIT_GAMES, isLiveAuditGame, auditStartPlan, auditCoverage } from "./liveAuditGames.js";
 import { auditConfiguration, readySegments, segmentRange, reconcileGame } from "../scripts/live-game-audit.mjs";
 
-test("only the approved three games receive prepared recaps", () => {
-  assert.equal(LIVE_AUDIT_GAMES.length, 3);
+test("only explicitly approved games receive prepared recaps", () => {
+  assert.equal(LIVE_AUDIT_GAMES.length, 4);
   for (const game of LIVE_AUDIT_GAMES) assert.equal(isLiveAuditGame(game.gameId), true);
   assert.equal(isLiveAuditGame("0022600108"), false);
   assert.throws(() => auditConfiguration("0022600108"), /approved/);
+});
+
+test("armed start uses an absolute timestamp and is not lost at midnight UTC", () => {
+  const plan = auditStartPlan("0022600119", Date.parse("2026-10-26T18:00:00Z"));
+  assert.equal(plan.startsAt, Date.parse("2026-10-26T22:45:00Z"));
+  assert.equal(auditStartPlan("0022600117", Date.parse("2026-10-26T01:14:00Z")).gameId, "0022600117");
+  assert.throws(() => auditStartPlan("0022600117", Date.parse("2026-10-26T05:00:00Z")), /expired/);
+  assert.throws(() => auditStartPlan("0022600119", Date.parse("2026-10-26T10:00:00Z")), /Arm/);
+});
+
+test("late and postgame-only captures cannot produce a successful full live audit", () => {
+  assert.equal(auditCoverage({ status: 2 }, [3, 4]).complete, false);
+  assert.equal(auditCoverage({ status: 3 }, []).complete, false);
+  assert.equal(auditCoverage({ status: 1 }, [1, 2, 3]).complete, false);
+  assert.equal(auditCoverage({ status: 1 }, [1, 2, 3, 4]).complete, true);
+  assert.equal(auditCoverage({ status: 1 }, [1, 2, 3, 4], 5).complete, false);
 });
 
 test("automatic collection expires after the one-night window", () => {

@@ -2,6 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { requestBodyTooLarge, requireActiveRateLimitedUser } from "../_shared/requestSecurity.ts";
 import { normalizeOpeningMinutesData } from "../_shared/minutesNormalization.ts";
 import { segmentFeedSignature } from "../_shared/analysisFreshness.ts";
+import { invalidEndingMargins, invalidPlayerClaims } from "../_shared/analysisClaimValidation.ts";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
@@ -1552,6 +1553,24 @@ function formatRangeScoringFacts(features: ReturnType<typeof buildFeaturePayload
   return `${features.teams.away.tricode} ${features.score.rangePoints.away}, ${features.teams.home.tricode} ${features.score.rangePoints.home}`;
 }
 
+function liveSnapshotConflicts(game: Record<string, any>) {
+  if (Number(game.gameStatus) !== 2 || !game.playByPlayActions?.length) return [];
+  const homeId = String(game.homeTeam?.teamId || "");
+  const awayId = String(game.awayTeam?.teamId || "");
+  const regulationMinutes = inferRegulationMinutes(game, String(game.gameId || ""));
+  const actions = sortActions(game.playByPlayActions, regulationMinutes);
+  const totals = aggregateRangeStats(actions, buildScoringEvents(actions, homeId, awayId, regulationMinutes), homeId, awayId);
+  const fields = ["points", "fieldGoalsMade", "fieldGoalsAttempted", "threePointersMade", "threePointersAttempted", "freeThrowsMade", "freeThrowsAttempted", "turnovers"];
+  return ["home", "away"].flatMap((side) => {
+    const box = game.boxScore?.[side]?.totals;
+    const derived = totals[String(game[`${side}Team`]?.teamId)] as Record<string, unknown>;
+    if (!box || !derived) return [];
+    return fields.filter((field) => box[field] != null && Number.isFinite(Number(box[field]))
+      && Number(box[field]) !== Number(derived[field]))
+      .map((field) => ({ team: side, field, box: Number(box[field]), playByPlay: Number(derived[field]) }));
+  });
+}
+
 function buildFeaturePayload(
   game: Record<string, unknown>,
   minutesData: Record<string, unknown> | null,
@@ -1690,6 +1709,7 @@ function buildFeaturePayload(
       home: {
         tricode: teamLabel(homeTeam),
         name: String(homeTeam.teamName || teamLabel(homeTeam)),
+        city: String(homeTeam.teamCity || ""),
         totals: homeTotals,
         shooting: {
           fgPct: percentage(homeTotals.fieldGoalsMade, homeTotals.fieldGoalsAttempted),
@@ -1703,6 +1723,7 @@ function buildFeaturePayload(
       away: {
         tricode: teamLabel(awayTeam),
         name: String(awayTeam.teamName || teamLabel(awayTeam)),
+        city: String(awayTeam.teamCity || ""),
         totals: awayTotals,
         shooting: {
           fgPct: percentage(awayTotals.fieldGoalsMade, awayTotals.fieldGoalsAttempted),
@@ -1714,6 +1735,7 @@ function buildFeaturePayload(
         largestRun: runs[awayTeamId],
       },
     },
+    players: playerTotals,
     playerNotes,
     gameFlow,
     momentumBursts,
@@ -2029,11 +2051,12 @@ function buildTemplateAnalysis(features: ReturnType<typeof buildFeaturePayload>)
 
 function buildAnalysisDataSignatureInput(features: ReturnType<typeof buildFeaturePayload>) {
   return {
-    analysisVersion: 5,
+    analysisVersion: 6,
     range: features.range,
     score: features.score,
     teams: features.teams,
     playerNotes: features.playerNotes,
+    players: features.players,
     gameFlow: features.gameFlow,
     momentumBursts: features.momentumBursts,
     lateSwing: features.lateSwing,
@@ -2271,6 +2294,7 @@ function teamTextAliases(team: Record<string, unknown>) {
   return [...new Set([
     String(team.tricode || "").trim(),
     String(team.name || "").trim(),
+    String(team.city || "").trim(),
   ].filter(Boolean))];
 }
 
@@ -2333,6 +2357,9 @@ function findInvalidRunClaims(
     sections: analysis.sections,
   });
   const allowedPairs = new Set<string>();
+  if (features.lateSwing?.closingRun) {
+    allowedPairs.add(`${features.lateSwing.closingRun.points}-${features.lateSwing.closingRun.opponentPoints}`);
+  }
   [features.teams.home, features.teams.away].forEach((team) => {
     if (safeNumber(team.largestRun?.points, 0) > 0) {
       allowedPairs.add(`${safeNumber(team.largestRun?.points, 0)}-0`);
@@ -2420,6 +2447,8 @@ function findAiAnalysisRejectReasons(analysis: Record<string, unknown>, features
   reasons.push(...findInvalidTeamScoreAttributionClaims(analysis, features));
   reasons.push(...findInvalidRunClaims(analysis, features));
   reasons.push(...findInvalidWinnerAttributionClaims(analysis, features));
+  reasons.push(...invalidEndingMargins(analysis, features));
+  reasons.push(...invalidPlayerClaims(analysis, features));
 
   return [...new Set(reasons)];
 }
@@ -2460,10 +2489,13 @@ async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayloa
     `Start score: ${formatScoreState(features.score.start, features)}.`,
     `End score: ${formatScoreState(features.score.end, features)}.`,
     `Selected range scoring: ${formatRangeScoringFacts(features)}.`,
+    `Actual game margin at the selected endpoint: home ${features.score.end.home - features.score.end.away}, away ${features.score.end.away - features.score.end.home}. This is NOT the selected range's scoring margin.`,
+    "Player shooting fractions must come from that exact player's row in players, never from team totals. Omit a claim if no exact player statistic supports it.",
     "If you describe the selected quarter, half, game, or span score, it must match the selected range scoring exactly.",
     `Allowed run/push/burst scoring pairs only: ${[
       ...[features.teams.home, features.teams.away].map((team) => `${team.largestRun?.points || 0}-0`),
       ...(features.momentumBursts || []).flatMap((burst) => [burst, ...((burst as Record<string, any>).verifiedBursts || [])]).map((burst) => `${burst.points}-${burst.opponentPoints}`),
+      ...(features.lateSwing?.closingRun ? [`${features.lateSwing.closingRun.points}-${features.lateSwing.closingRun.opponentPoints}`] : []),
     ].join(", ")}. Do not invent another run or repurpose a lead/score as a run.`,
     `Verified shooting facts; copy the full percentage and fraction together: ${collectKnownShootingPercentages(features).map((ref) => `${ref.team} ${ref.stat}: ${ref.percentageText} (${ref.made}/${ref.attempted})`).join("; ")}.`,
   ];
@@ -2616,6 +2648,18 @@ export async function handleRequest(req: Request) {
     if (!game) {
       game = await requestJson(`${API_BASE}/games/${gameId}`);
     }
+    const conflicts = liveSnapshotConflicts(game);
+    if (conflicts.length) {
+      const response = jsonResponse(409, {
+        error: "Live box score and play-by-play are temporarily out of sync. Analysis will retry after the feeds reconcile.",
+        retryable: true,
+        retryAfterSeconds: 30,
+        code: "LIVE_FEED_CONFLICT",
+        conflicts,
+      });
+      response.headers.set("Retry-After", "30");
+      return response;
+    }
     if (!minutesData) {
       minutesData = await requestJson(`${API_BASE}/games/${gameId}/minutes`).catch(() => null);
     }
@@ -2720,6 +2764,7 @@ export async function handleRequest(req: Request) {
 }
 
 export const __test__ = {
+  liveSnapshotConflicts,
   aggregateRangeStats,
   buildFeaturePayload,
   buildLineupInsights,

@@ -27,6 +27,7 @@ import { isRosterFallbackUsable, rosterPayloadTimestampMs } from "./rosterFallba
 import { currentSeasonString, formatDateInput } from "./utils.js";
 import { normalizeGameMidrangeStats } from "./boxScoreNormalization.js";
 import { createTeamScheduleResultsLoader } from "./teamScheduleResults.js";
+import { needsThreeQuarterFallback, rebuildThreeQuarterFeed } from "./segmentFeedFallback.js";
 import { needsOpeningStintRepair, normalizeOpeningMinutesData } from "../supabase/functions/_shared/minutesNormalization.ts";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
@@ -1824,10 +1825,13 @@ export async function fetchGame(gameId, segment = null, options = {}) {
   }
   const segmentParam = segment ? `?segment=${segment}` : "";
   const url = `${API_BASE}/games/${gameId}${segmentParam}`;
-  const [game, liveBoxscore] = await Promise.all([
+  const [segmentGame, liveBoxscore] = await Promise.all([
     requestJson(url),
     requestJson(`${LIVE_BOXSCORE_BASE}/boxscore_${gameId}.json`).catch(() => null),
   ]);
+  const game = needsThreeQuarterFallback(segmentGame, segment)
+    ? rebuildThreeQuarterFeed(segmentGame, await requestJson(`${API_BASE}/games/${gameId}`))
+    : segmentGame;
   const liveOfficials = Array.isArray(liveBoxscore?.game?.officials)
     ? liveBoxscore.game.officials
     : [];

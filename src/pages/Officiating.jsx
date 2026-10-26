@@ -10,6 +10,8 @@ import {
   fetchOfficialsReportData,
   fetchOfficiatingDashboardData,
   fetchTeamProfileDetails,
+  MIN_OFFICIAL_GAMES_FOR_PERCENTILES,
+  MIN_TEAM_OFFICIAL_GAMES_FOR_PERCENTILES,
   saveChallengeContextTags,
 } from "../officiatingData.js";
 import { teamLogoUrl } from "../api.js";
@@ -1017,6 +1019,11 @@ function OfficialsReportCard({ profile, role, populationSize, teamOne = "WAS", t
           <div>
             <span>{role}</span>
             <h3>{profile?.jerseyNumber ? `#${profile.jerseyNumber} ` : ""}{profile?.name || "Official unavailable"}</h3>
+            <small className={styles.reportSample}>
+              {Number(profile?.games) || 0} games · {Number(profile?.games) >= MIN_OFFICIAL_GAMES_FOR_PERCENTILES
+                ? `${profile?.percentileSample?.population ?? "--"} eligible officials`
+                : "Limited sample — unranked"}
+            </small>
           </div>
         </div>
         <section className={`${styles.reportWizardsHistory} ${styles.reportPreviousGames}`}>
@@ -1144,7 +1151,8 @@ function TonightOfficialsReport({ rows, crew, isLoading, assignmentError, onExpo
           </div>
         )}
         <footer className={styles.officialsReportFooter}>
-          2024-Present regular season + playoffs · Percentiles: low blue / average grey / high red · Net calls: red negative / green positive
+          <div>2024-Present regular season + playoffs · Percentiles: {MIN_OFFICIAL_GAMES_FOR_PERCENTILES}+ games; challenges also need 5 reviews · Team net: {MIN_TEAM_OFFICIAL_GAMES_FOR_PERCENTILES}+ games</div>
+          <div>Limited samples unranked · Frequency: low blue / average grey / high red · Net calls: red negative / green positive</div>
         </footer>
       </div>
     </section>

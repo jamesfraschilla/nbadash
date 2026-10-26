@@ -20,8 +20,9 @@ const ASSIGNMENT_LIMIT = 25000;
 const PROFILE_LIMIT = 500;
 const PROFILE_DETAIL_LIMIT = 10000;
 const CONTEXT_TAG_PAGE_SIZE = 100;
-export const MIN_OFFICIAL_GAMES_FOR_PERCENTILES = 4;
-export const MIN_TEAM_OFFICIAL_GAMES_FOR_PERCENTILES = MIN_OFFICIAL_GAMES_FOR_PERCENTILES;
+export const MIN_OFFICIAL_GAMES_FOR_PERCENTILES = 25;
+// Team-specific samples are a distinct metric; do not inherit the career cutoff.
+export const MIN_TEAM_OFFICIAL_GAMES_FOR_PERCENTILES = 4;
 const MIN_CHALLENGE_ATTEMPTS_FOR_PERCENTILES = 5;
 const EXCLUDED_STAT_SEASON_TYPES = new Set(["preseason"]);
 const CONTEXT_TAG_COLUMNS = "id,label";
@@ -1218,6 +1219,7 @@ export function buildTeamProfiles(callEvents, challengeEvents) {
 }
 
 function metricEligibility(row, rankKey) {
+  if (!row.team && Number(row.games) < MIN_OFFICIAL_GAMES_FOR_PERCENTILES) return false;
   if (rankKey === "whistleChallengeRateRank") return Number(row.whistleChallenges) >= MIN_CHALLENGE_ATTEMPTS_FOR_PERCENTILES;
   if (rankKey === "crewChiefChallengeRateRank") return Number(row.crewChiefChallenges) >= MIN_CHALLENGE_ATTEMPTS_FOR_PERCENTILES;
   if (rankKey === "crewChallengeRateRank") return Number(row.crewChallenges) >= MIN_CHALLENGE_ATTEMPTS_FOR_PERCENTILES;
@@ -1248,7 +1250,8 @@ function addCategoryRanks(rows) {
     Object.keys(row.callsByCategory || {}).forEach((category) => categories.add(category));
   });
   categories.forEach((category) => {
-    const eligibleRows = rows.filter((row) => Number(row.games) >= MIN_OFFICIAL_GAMES_FOR_PERCENTILES);
+    const eligibleRows = rows.filter((row) => Number(row.games) >= (row.team
+      ? MIN_TEAM_OFFICIAL_GAMES_FOR_PERCENTILES : MIN_OFFICIAL_GAMES_FOR_PERCENTILES));
     const values = eligibleRows.map((row) => Number(row.callsByCategory?.[category]?.value) || 0);
     eligibleRows.forEach((row) => {
       if (!row.callsByCategory?.[category]) return;
@@ -1458,6 +1461,11 @@ export async function fetchOfficialsReportData({
         const wizardsNet = netCallsForByTeam.WAS || { value: 0, percentile: null };
         return {
           ...profile,
+          percentileSample: {
+            games: Number(profile.games) || 0,
+            minimumGames: MIN_OFFICIAL_GAMES_FOR_PERCENTILES,
+            population: rankedProfiles.filter((row) => Number(row.games) >= MIN_OFFICIAL_GAMES_FOR_PERCENTILES).length,
+          },
           netCallsForByTeam,
           wizardsNetCallsFor: wizardsNet.value,
           wizardsNetCallsForPercentile: wizardsNet.percentile,

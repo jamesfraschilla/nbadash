@@ -11,6 +11,8 @@ import {
   specificCallCategory,
   TEAM_CATEGORY_ROLLUP_COLUMNS,
   TEAM_ROLLUP_COLUMNS,
+  MIN_OFFICIAL_GAMES_FOR_PERCENTILES,
+  MIN_TEAM_OFFICIAL_GAMES_FOR_PERCENTILES,
 } from "./officiatingData.js";
 import {
   CALL_CATEGORY_GROUPS,
@@ -74,6 +76,8 @@ test("preferAuthoritativeChallengeEvents keeps daily PBP rows until weekly offic
 });
 
 test("team net percentiles apply the four-game minimum to both subject and peers", () => {
+  assert.equal(MIN_OFFICIAL_GAMES_FOR_PERCENTILES, 25);
+  assert.equal(MIN_TEAM_OFFICIAL_GAMES_FOR_PERCENTILES, 4);
   const population = [
     { net: -8, games: 4 },
     { net: 0, games: 4 },
@@ -83,6 +87,26 @@ test("team net percentiles apply the four-game minimum to both subject and peers
   assert.equal(eligibleRateMetric({ net: 6, games: 3 }, population).percentile, null);
   assert.equal(eligibleRateMetric(null, population).percentile, null);
   assert.equal(eligibleRateMetric({ net: 5, games: 5 }, population).percentile, 100);
+});
+
+test("official rates remain visible below 25 games but neither subjects nor peers are ranked", () => {
+  const assignments = [];
+  const calls = [];
+  for (const [id, games] of [["small", 24], ["eligible", 25], ["large", 30]]) {
+    for (let index = 0; index < games; index++) {
+      assignments.push({ official_id: id, official_name: id, game_id: `${id}-${index}`, season_type: "Regular Season" });
+      calls.push({ official_id: id, official_name: id, game_id: `${id}-${index}`, season_type: "Regular Season", primary_category: "foul", secondary_category: "offensive" });
+    }
+  }
+  const profiles = buildOfficialProfiles(calls, [], assignments);
+  const small = profiles.find((row) => row.name === "small");
+  const eligible = profiles.find((row) => row.name === "eligible");
+  assert.equal(small.foulsPerGame, 1);
+  assert.equal(small.foulsPerGameRankPercentile, null);
+  assert.equal(small.callsRankPercentile, null);
+  assert.equal(small.callsByCategory["Offensive Foul"].percentile, null);
+  assert.equal(eligible.foulsPerGameRankPopulation, 2);
+  assert.equal(eligible.foulsPerGameRankPercentile, 51);
 });
 
 test("specificCallCategory displays detailed foul and violation types", () => {

@@ -1,5 +1,29 @@
 import { expect, test } from "@playwright/test";
 
+test("report compares only 25-game peers while retaining limited-sample rates", async ({ page }) => {
+  await page.route("**/rest/v1/**", (route) => {
+    const table = new URL(route.request().url()).pathname.split("/").at(-1);
+    const officials = [["small", 24, 24], ["eligible", 25, 25], ["high", 30, 60]];
+    const data = table === "nba_official_profiles_cache" ? officials.map(([id, games, calls]) => ({
+      season: "2026-27", id, official_id: id, name: id, games, calls, fouls: calls,
+    })) : table === "nba_official_call_category_rollups_cache" ? officials.map(([id, games, calls]) => ({
+      season: "2026-27", official_key: id, official_id: id, official_name: id, category: "Offensive Foul", games, calls,
+    })) : [];
+    return route.fulfill({ json: data });
+  });
+  await page.goto("visual-test.html");
+  const report = await page.evaluate(async () => {
+    const { fetchOfficialsReportData } = await import("/nbadash/src/officiatingData.js");
+    return fetchOfficialsReportData({ officialNames: ["small", "eligible", "high"] });
+  });
+  const small = report.profiles.find((row) => row.name === "small");
+  const eligible = report.profiles.find((row) => row.name === "eligible");
+  expect(small.percentileSample).toEqual({ games: 24, minimumGames: 25, population: 2 });
+  expect(small.callsByCategory["Offensive Foul"].value).toBe(1);
+  expect(small.callsByCategory["Offensive Foul"].percentile).toBeNull();
+  expect(eligible.callsByCategory["Offensive Foul"].percentile).toBe(1);
+});
+
 test("Officials Report assignment history includes preseason without broadening statistical queries", async ({ page }) => {
   const excludedPreseason = [];
   await page.route("**/rest/v1/**", async (route) => {

@@ -4,7 +4,8 @@ import { pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
 import { setDefaultResultOrder } from "node:dns";
-import { LIVE_AUDIT_GAMES } from "../src/liveAuditGames.js";
+import { LIVE_AUDIT_GAMES, auditCoverage } from "../src/liveAuditGames.js";
+import { segmentFeedSignature } from "../supabase/functions/_shared/analysisFreshness.ts";
 import { buildCompletedAnalysisSegments } from "../src/gameAnalysis.js";
 import { aggregateSegmentStats, computeKills, countPossessionsByTeam } from "../src/segmentStats.js";
 import { buildGameAlerts } from "../src/gameAlerts.js";
@@ -18,7 +19,7 @@ const POST_FINAL_MS = 15 * 60_000;
 
 export function auditConfiguration(gameId, now = Date.now(), dryRun = false) {
   const game = LIVE_AUDIT_GAMES.find((item) => item.gameId === String(gameId));
-  if (!game) throw new Error("Game is not in the approved three-game audit cohort.");
+  if (!game) throw new Error("Game is not in the approved audit cohort.");
   const tipMs = Date.parse(game.tipUtc);
   const deadline = tipMs + 5 * 60 * 60_000;
   if (!dryRun && (now < tipMs - 20 * 60_000 || now >= deadline)) {
@@ -75,7 +76,11 @@ export function reconcileGame(game, minutesData) {
 async function requestJson(url, options = {}, timeout = 20_000) {
   const response = await fetch(url, { ...options, signal: AbortSignal.timeout(timeout) });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.error) throw new Error(`Request failed (${response.status}): ${payload.error || new URL(url).pathname}`);
+  if (!response.ok || payload.error) {
+    const error = new Error(`Request failed (${response.status}): ${payload.error || new URL(url).pathname}`);
+    error.retryable = payload.retryable === true;
+    throw error;
+  }
   return payload;
 }
 
@@ -99,6 +104,10 @@ export async function runAudit({ gameId, dryRun = false, outputRoot = "output/li
   let generation = null;
   const attempted = new Map();
   const completed = new Set();
+  const completedSignatures = new Map();
+  const livePeriods = new Set();
+  let firstCapture = null;
+  let finalPeriod = 4;
   const checkpoints = new Set();
   const archive = async (kind, data) => {
     const bytes = gzipSync(JSON.stringify({ capturedAt: new Date().toISOString(), ...data }));
@@ -126,9 +135,14 @@ export async function runAudit({ gameId, dryRun = false, outputRoot = "output/li
         }, 70_000);
         await archive(`analysis-${segment.key}`, { segment: segment.key, result });
         completed.add(segment.key);
+        completedSignatures.set(segment.key, result.feedSignature);
         summary.generated.push({ segment: segment.key, at: new Date().toISOString(), source: result.source, cached: result.cached });
         console.log(`Prepared ${gameId} ${segment.key}`);
-      } catch (error) { errorRecord(`analysis:${segment.key}`, error); }
+      } catch (error) {
+        // Transient source disagreements are deferred, not three burned retries.
+        if (error.retryable) attempted.set(segment.key, Math.max(0, (attempted.get(segment.key) || 1) - 1));
+        errorRecord(`analysis:${segment.key}`, error);
+      }
     }
   };
   const checkpoint = async (game, keys) => {
@@ -159,6 +173,9 @@ export async function runAudit({ gameId, dryRun = false, outputRoot = "output/li
       try {
         const game = await requestJson(`${API}/${gameId}`);
         if (String(game.gameId) !== gameId || !game.homeTeam?.teamId || !game.awayTeam?.teamId) throw new Error("Game feed identity/teams invalid");
+        if (!firstCapture) firstCapture = { at: new Date().toISOString(), status: game.gameStatus, period: game.period, clock: game.gameClock };
+        if (Number(game.gameStatus) === 2 && Number(game.period) > 0) livePeriods.add(Number(game.period));
+        finalPeriod = Math.max(finalPeriod, Number(game.period) || 0);
         if (!minutesData || tickStart - minutesAt >= 5 * 60_000 || Number(game.period) !== lastPeriod) {
           try { minutesData = normalizeOpeningMinutesData(await requestJson(`${API}/${gameId}/minutes`), game); minutesAt = tickStart; }
           catch (error) { errorRecord("minutes", error); }
@@ -180,9 +197,14 @@ export async function runAudit({ gameId, dryRun = false, outputRoot = "output/li
           lastAnalysisHash = analysisHash;
         }
         const segments = readySegments(game);
-        for (const row of analyses) {
-          if (!completed.has(row.segment_key) && row.result?.feedSignature) {
-            completed.add(row.segment_key); summary.reused.push(row.segment_key);
+        for (const segment of segments) {
+          const signature = await segmentFeedSignature(game, Number(segment.form.maxPeriod));
+          if (completed.has(segment.key) && completedSignatures.get(segment.key) !== signature) completed.delete(segment.key);
+          const row = analyses.find((row) => row.segment_key === segment.key);
+          if (!completed.has(segment.key) && row?.result?.feedSignature === signature) {
+            completed.add(segment.key);
+            completedSignatures.set(segment.key, signature);
+            if (!summary.reused.includes(segment.key)) summary.reused.push(segment.key);
           }
         }
         const newKeys = segments.map((s) => s.key).filter((key) => !checkpoints.has(key));
@@ -213,10 +235,12 @@ export async function runAudit({ gameId, dryRun = false, outputRoot = "output/li
     if (generation) await generation;
     summary.finishedAt = new Date().toISOString();
     summary.attempts = Object.fromEntries(attempted);
+    summary.firstCapture = firstCapture;
+    summary.coverage = auditCoverage(firstCapture, [...livePeriods], finalPeriod);
     summary.missingSegments = ["q1", "q2", "first-half", "q3", "q1-q3", "q4", "second-half", "all"].filter((key) => !completed.has(key));
     await fs.writeFile(path.join(directory, "summary.json"), JSON.stringify(summary, null, 2));
   }
-  if (!summary.captures || (!dryRun && (!summary.completed || summary.missingSegments.length))) {
+  if (!summary.captures || (!dryRun && (!summary.completed || summary.missingSegments.length || !summary.coverage.complete))) {
     throw new Error("Audit ended incomplete; inspect summary.json and workflow errors.");
   }
   return summary;

@@ -1,18 +1,14 @@
-name: One-night Live Game Audit
+name: Live Game Audit
 
 on:
-  schedule:
-    # Fifteen-minute lead time accommodates normal GitHub scheduling delays.
-    - cron: "45 20 25 10 *"
-    - cron: "15 23 25 10 *"
-    - cron: "45 0 26 10 *"
+  # Arm explicitly ahead of tip. A running timer avoids delayed cron starts.
   workflow_dispatch:
     inputs:
       game_id:
         description: Approved audit game
         required: true
         type: choice
-        options: ["0022600112", "0022600117", "0022600118"]
+        options: ["0022600112", "0022600117", "0022600118", "0022600119"]
       dry_run:
         description: One read-only capture, no analysis generation
         type: boolean
@@ -21,44 +17,59 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: live-audit-${{ inputs.game_id }}
+  cancel-in-progress: false
+
 jobs:
-  select:
+  arm:
     runs-on: ubuntu-latest
-    outputs:
-      game_id: ${{ steps.select.outputs.game_id }}
+    timeout-minutes: 360
     steps:
-      - name: Enforce one-night schedule
-        id: select
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Validate shared analysis access before waiting
         env:
-          EVENT: ${{ github.event_name }}
-          CRON: ${{ github.event.schedule }}
-          REQUESTED: ${{ inputs.game_id }}
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          node --input-type=module <<'JS'
+          const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+          const url = process.env.SUPABASE_URL;
+          if (!key || !url) throw new Error('Audit credentials are missing.');
+          const response = await fetch(`${url}/rest/v1/game_analysis_segments?select=game_id&limit=1`, {
+            headers: { apikey: key, authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(15000),
+          });
+          if (!response.ok) throw new Error(`Shared analysis access failed (${response.status}).`);
+          console.log('Shared analysis access verified.');
+          JS
+      - name: Arm bounded start timer
+        env:
+          GAME_ID: ${{ inputs.game_id }}
+          DRY_RUN: ${{ inputs.dry_run }}
         shell: bash
         run: |
-          if [ "$EVENT" = workflow_dispatch ]; then
-            echo "game_id=$REQUESTED" >> "$GITHUB_OUTPUT"
-          elif [ "$(date -u +%Y-%m-%d)" = 2026-10-25 ]; then
-            case "$CRON" in
-              '45 20 25 10 *') echo 'game_id=0022600112' >> "$GITHUB_OUTPUT" ;;
-              '15 23 25 10 *') echo 'game_id=0022600117' >> "$GITHUB_OUTPUT" ;;
-            esac
-          elif [ "$(date -u +%Y-%m-%d)" = 2026-10-26 ] && [ "$CRON" = '45 0 26 10 *' ]; then
-            echo 'game_id=0022600118' >> "$GITHUB_OUTPUT"
-          fi
+          node --input-type=module <<'JS'
+          import { auditStartPlan } from './src/liveAuditGames.js';
+          const plan = auditStartPlan(process.env.GAME_ID, Date.now(), process.env.DRY_RUN === 'true');
+          console.log(`Armed ${plan.gameId}; collection starts ${new Date(plan.startsAt).toISOString()}`);
+          while (Date.now() < plan.startsAt) {
+            await new Promise(resolve => setTimeout(resolve, Math.min(60_000, plan.startsAt - Date.now())));
+          }
+          console.log('Start window reached.');
+          JS
 
   audit:
-    needs: select
-    if: needs.select.outputs.game_id != ''
+    needs: arm
     runs-on: ubuntu-latest
     timeout-minutes: 330
-    concurrency:
-      group: live-audit-${{ needs.select.outputs.game_id }}
-      cancel-in-progress: false
     env:
-      GAME_ID: ${{ needs.select.outputs.game_id }}
+      GAME_ID: ${{ inputs.game_id }}
       SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+      DRY_RUN: ${{ inputs.dry_run }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -85,7 +96,7 @@ jobs:
           name: live-audit-${{ env.GAME_ID }}-${{ github.run_id }}
           path: output/live-audit/${{ env.GAME_ID }}/
           retention-days: 2
-          if-no-files-found: warn
+          if-no-files-found: error
       - name: Summarize
         if: always()
         shell: bash
