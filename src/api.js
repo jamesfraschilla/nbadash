@@ -26,6 +26,7 @@ import { readLocalStorage, writeLocalStorage, writeLocalStorageWithEviction } fr
 import { isRosterFallbackUsable, rosterPayloadTimestampMs } from "./rosterFallback.js";
 import { currentSeasonString, formatDateInput } from "./utils.js";
 import { normalizeGameMidrangeStats } from "./boxScoreNormalization.js";
+import { createTeamScheduleResultsLoader } from "./teamScheduleResults.js";
 import { needsOpeningStintRepair, normalizeOpeningMinutesData } from "../supabase/functions/_shared/minutesNormalization.ts";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
@@ -1546,6 +1547,9 @@ const SEASON_GAMES_CACHE = new Map();
 const SEASON_GAMES_PROMISES = new Map();
 const TEAM_SEASON_GAMES_CACHE = new Map();
 const TEAM_SEASON_GAMES_PROMISES = new Map();
+const refreshTeamScheduleResults = createTeamScheduleResultsLoader((date) => requestJson(
+  `${API_BASE}/games/byDate?date=${encodeURIComponent(date)}`, { timeoutMs: 8000 }
+));
 const SEASON_GAMES_STORAGE_PREFIX = "nba-dashboard-season-games:v2:";
 const TEAM_SEASON_GAMES_STORAGE_PREFIX = "nba-dashboard-team-season-games:v2:";
 const SEASON_GAMES_STORAGE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -1584,6 +1588,9 @@ function compactSeasonGame(game) {
     gameStatus: Number(game?.gameStatus || 0),
     gameStatusText: String(game?.gameStatusText || ""),
     gameClock: String(game?.gameClock || ""),
+    period: Number(game?.period || 0),
+    gameTimeUTC: String(game?.gameTimeUTC || ""),
+    gameEt: String(game?.gameEt || ""),
     seasonType: String(game?.seasonType || ""),
     ...nbaCupInfo,
     homeTeam: compactSeasonGameTeam(game?.homeTeam),
@@ -1787,7 +1794,12 @@ export async function fetchTeamSeasonGames(teamId, opponentTeamId = "", season =
     TEAM_SEASON_GAMES_CACHE.set(teamSeasonCacheKey, seasonGames);
   }
 
-  return filterSeasonGamesForTeam(seasonGames, safeTeamId, safeOpponentTeamId);
+  const refreshed = await refreshTeamScheduleResults(seasonGames);
+  if (refreshed.some((game, index) => game !== seasonGames[index])) {
+    TEAM_SEASON_GAMES_CACHE.set(teamSeasonCacheKey, refreshed);
+    saveTeamSeasonGamesToStorage(safeTeamId, safeSeason, refreshed);
+  }
+  return filterSeasonGamesForTeam(refreshed, safeTeamId, safeOpponentTeamId);
 }
 
 export async function fetchGame(gameId, segment = null, options = {}) {

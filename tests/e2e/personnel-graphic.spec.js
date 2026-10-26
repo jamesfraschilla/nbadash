@@ -113,6 +113,21 @@ test("personnel stat columns default, bulk-toggle, and drag in export order", as
 
   await page.getByLabel("NBA Team").selectOption("1610612764");
   await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
+  await page.getByRole("button", { name: /^3P color:/ }).first().click();
+  const colorDialog = page.getByRole("dialog");
+  await expect(colorDialog.getByText("Bar volume: 0.0%", { exact: true })).toBeVisible();
+  await colorDialog.getByLabel("3FGA", { exact: true }).fill("40");
+  await colorDialog.getByLabel("Total FGA", { exact: true }).fill("100");
+  await colorDialog.getByLabel("Yellow", { exact: true }).check();
+  await expect(colorDialog.getByText("Bar volume: 40.0%", { exact: true })).toBeVisible();
+  await colorDialog.getByRole("button", { name: "Close", exact: true }).click();
+  await page.getByRole("button", { name: "3P color: Yellow", exact: true }).click();
+  await expect(colorDialog.getByLabel("3FGA", { exact: true })).toHaveValue("40");
+  await expect(colorDialog.getByLabel("Total FGA", { exact: true })).toHaveValue("100");
+  await colorDialog.getByRole("button", { name: "Close", exact: true }).click();
+  await page.getByRole("button", { name: /^3P color:/ }).nth(1).click();
+  await expect(colorDialog.getByLabel("3FGA", { exact: true })).toHaveValue("");
+  await colorDialog.getByRole("button", { name: "Close", exact: true }).click();
   await page.getByLabel("Unselect APG for all players").click();
   await expect(page.getByLabel("APG", { exact: true }).nth(0)).not.toBeChecked();
   await expect(page.getByLabel("APG", { exact: true }).nth(1)).not.toBeChecked();

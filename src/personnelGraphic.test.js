@@ -19,6 +19,7 @@ import {
   hasExactlyFourPersonnelStats,
   hydratePersonnelDraft,
   mergePersonnelStatOverrides,
+  mergePersonnelAttemptOverrides,
   normalizePersonnelPlayerStats,
   normalizePersonnelSeason,
   normalizePersonnelStatOrder,
@@ -32,6 +33,31 @@ import {
   togglePersonnelStat,
   validatePersonnelDraftForExport,
 } from "./personnelGraphic.js";
+
+test("manual attempts size the bar without season stats and reject invalid pairs", () => {
+  const ratio = (threePointAttempts, fieldGoalAttempts, stats = {}) => calculateThreePointAttemptRatio(
+    mergePersonnelAttemptOverrides(stats, { threePointAttempts, fieldGoalAttempts })
+  );
+  assert.equal(ratio("40", "100"), 0.4);
+  assert.equal(ratio("2.5", "10"), 0.25);
+  assert.equal(ratio("0", "10"), 0);
+  assert.equal(ratio("10", "10"), 1);
+  for (const pair of [["4", ""], ["", "10"], ["4", "0"], ["-1", "10"], ["11", "10"], ["abc", "10"]]) {
+    assert.equal(ratio(...pair), 0);
+  }
+  const stats = { threePointAttemptsPerGame: 3, fieldGoalAttemptsPerGame: 10 };
+  assert.equal(ratio("40", "100", stats), 0.4);
+  assert.equal(ratio("", "", stats), 0.3);
+  assert.deepEqual(stats, { threePointAttemptsPerGame: 3, fieldGoalAttemptsPerGame: 10 });
+});
+
+test("attempt overrides survive saved-draft hydration and roster refresh by player", () => {
+  const draft = createPersonnelDraft({ rows: [{ personId: "1", attemptOverrides: { threePointAttempts: 40, fieldGoalAttempts: 100 } }] });
+  const hydrated = hydratePersonnelDraft(JSON.parse(JSON.stringify(draft)));
+  const refreshed = populatePersonnelDraftFromRoster(hydrated, [{ personId: "2", fullName: "Other Player" }, { personId: "1", fullName: "New Player" }]);
+  assert.deepEqual(refreshed.rows[1].attemptOverrides, { threePointAttempts: "40", fieldGoalAttempts: "100" });
+  assert.deepEqual(refreshed.rows[0].attemptOverrides, { threePointAttempts: "", fieldGoalAttempts: "" });
+});
 
 test("personnel family names preserve suffixes without treating the suffix as the surname", () => {
   assert.equal(resolvePersonnelFamilyName("II", "Ron Holland II"), "Holland II");
@@ -121,7 +147,7 @@ test("createPersonnelDraft produces 25 independent rows with the exact draft sha
   assert.equal(draft.rows.length, 25);
   assert.deepEqual(Object.keys(draft.rows[0]), [
     "id", "enabled", "personId", "teamId", "fullName", "firstName", "familyName", "jerseyNum",
-    "selectedStats", "statOverrides", "customStatLabel", "tags", "threePointColor", "threePointColorEdited",
+    "selectedStats", "statOverrides", "attemptOverrides", "customStatLabel", "tags", "threePointColor", "threePointColorEdited",
   ]);
   assert.deepEqual(draft.rows[0], {
     id: "personnel-slot-1",
@@ -134,6 +160,7 @@ test("createPersonnelDraft produces 25 independent rows with the exact draft sha
     jerseyNum: "",
     selectedStats: ["ppg", "threePointPercentage", "rpg", "apg"],
     statOverrides: {},
+    attemptOverrides: { threePointAttempts: "", fieldGoalAttempts: "" },
     customStatLabel: "",
     tags: [],
     threePointColor: "bright_green",
@@ -170,11 +197,13 @@ test("changing personnel seasons clears every manual stat override", () => {
   const draft = createPersonnelDraft({ season: "2026-27" });
   draft.rows[0].statOverrides = { ppg: "20.1" };
   draft.rows[0].customStatLabel = "MIN";
+  draft.rows[0].attemptOverrides = { threePointAttempts: "4", fieldGoalAttempts: "10" };
   draft.rows[1].statOverrides = { rpg: "7.2" };
   const changed = clearPersonnelStatOverridesForSeason(draft, "2025-26");
   assert.equal(changed.season, "2025-26");
   assert.deepEqual(changed.rows[0].statOverrides, {});
   assert.equal(changed.rows[0].customStatLabel, "");
+  assert.deepEqual(changed.rows[0].attemptOverrides, { threePointAttempts: "", fieldGoalAttempts: "" });
   assert.deepEqual(changed.rows[1].statOverrides, {});
 });
 
@@ -198,6 +227,7 @@ test("createPersonnelRow and hydration sanitize aliases while preserving 0 throu
     jerseyNum: "",
     selectedStats: ["ppg", "rpg", "threePointPercentage", "apg", "bpg", "spg", "fta", "custom"],
     statOverrides: { ppg: "12.25", threePointPercentage: "41.8", custom: "11/22" },
+    attemptOverrides: { threePointAttempts: "", fieldGoalAttempts: "" },
     customStatLabel: "RIMFG%",
     tags: ["fire", "drives_right"],
     threePointColor: "dark_green",

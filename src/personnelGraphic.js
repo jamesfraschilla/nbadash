@@ -328,6 +328,10 @@ export function createPersonnelRow(index = 0, overrides = {}) {
     jerseyNum: normalizeString(firstPresentValue(source, ["jerseyNum", "jerseyNumber", "number", "NUM"])),
     selectedStats: normalizeSelectedStats(selectedStats, selectedStats === undefined),
     statOverrides: normalizeStatOverrides(statOverrides),
+    attemptOverrides: {
+      threePointAttempts: normalizeString(source.attemptOverrides?.threePointAttempts),
+      fieldGoalAttempts: normalizeString(source.attemptOverrides?.fieldGoalAttempts),
+    },
     customStatLabel: normalizePersonnelCustomStatLabel(customStatLabel),
     tags: normalizeTags(tags),
     threePointColor: normalizeThreePointColor(threePointColor),
@@ -399,6 +403,7 @@ export function populatePersonnelDraftFromRoster(draft, roster, options = {}) {
         enabled: row.enabled,
         selectedStats: row.selectedStats,
         statOverrides: row.statOverrides,
+        attemptOverrides: row.attemptOverrides,
         customStatLabel: row.customStatLabel,
         tags: row.tags,
         threePointColor: row.threePointColor,
@@ -571,12 +576,27 @@ export function mergePersonnelStatOverrides(stats, statOverrides) {
   return { ...(stats || {}), ...normalizedOverrides };
 }
 
+export function mergePersonnelAttemptOverrides(stats, attemptOverrides = {}) {
+  const three = normalizeString(attemptOverrides.threePointAttempts);
+  const total = normalizeString(attemptOverrides.fieldGoalAttempts);
+  if (!three && !total) return stats || {};
+  const threeValue = toFiniteNumber(three);
+  const totalValue = toFiniteNumber(total);
+  const valid = threeValue !== null && totalValue !== null
+    && threeValue >= 0 && totalValue > 0 && threeValue <= totalValue;
+  return {
+    ...(stats || {}),
+    threePointAttemptsPerGame: valid ? threeValue : 0,
+    fieldGoalAttemptsPerGame: valid ? totalValue : 0,
+  };
+}
+
 export function clearPersonnelStatOverridesForSeason(draft, season) {
   const hydrated = hydratePersonnelDraft(draft);
   return {
     ...hydrated,
     season: normalizePersonnelSeason(season, hydrated.season),
-    rows: hydrated.rows.map((row) => ({ ...row, statOverrides: {}, customStatLabel: "" })),
+    rows: hydrated.rows.map((row) => ({ ...row, statOverrides: {}, attemptOverrides: { threePointAttempts: "", fieldGoalAttempts: "" }, customStatLabel: "" })),
   };
 }
 

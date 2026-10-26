@@ -17,6 +17,7 @@ import {
   PERSONNEL_STAT_OPTIONS,
   PERSONNEL_TAG_OPTIONS,
   PERSONNEL_THREE_POINT_COLOR_OPTIONS,
+  calculateThreePointAttemptRatio,
   createPersonnelDraft,
   createPersonnelRow,
   clearPersonnelStatOverridesForSeason,
@@ -27,6 +28,7 @@ import {
   hasExactlyFourPersonnelStats,
   hydratePersonnelDraft,
   mergePersonnelStatOverrides,
+  mergePersonnelAttemptOverrides,
   normalizePersonnelCustomStatLabel,
   normalizePersonnelStatsMap,
   orderPersonnelSelectedStats,
@@ -199,7 +201,9 @@ function buildExportItems(rows, rosterById, statsById, statOrder) {
   return rows.map((row) => ({
     player: rosterById[row.personId] || row,
     stats: {
-      ...mergePersonnelStatOverrides(statsById[row.personId] || {}, row.statOverrides),
+      ...mergePersonnelAttemptOverrides(
+        mergePersonnelStatOverrides(statsById[row.personId] || {}, row.statOverrides), row.attemptOverrides
+      ),
       customStatLabel: row.customStatLabel,
     },
     selectedStats: orderPersonnelSelectedStats(row.selectedStats, statOrder),
@@ -955,6 +959,16 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
   const currentColor = PERSONNEL_THREE_POINT_COLOR_OPTIONS.find(
     (option) => option.key === activeDialogRow?.threePointColor
   );
+  const dialogAttemptRatio = calculateThreePointAttemptRatio(mergePersonnelAttemptOverrides(
+    statsById[activeDialogRow?.personId] || {}, activeDialogRow?.attemptOverrides
+  ));
+  const manualThreeAttempts = activeDialogRow?.attemptOverrides?.threePointAttempts || "";
+  const manualTotalAttempts = activeDialogRow?.attemptOverrides?.fieldGoalAttempts || "";
+  const invalidManualAttempts = Boolean(manualThreeAttempts || manualTotalAttempts)
+    && !(manualThreeAttempts !== "" && manualTotalAttempts !== ""
+      && Number.isFinite(Number(manualThreeAttempts)) && Number.isFinite(Number(manualTotalAttempts))
+      && Number(manualThreeAttempts) >= 0 && Number(manualTotalAttempts) > 0
+      && Number(manualThreeAttempts) <= Number(manualTotalAttempts));
 
   return (
     <div className={styles.panel} aria-busy={statsBlocking}>
@@ -1245,7 +1259,7 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
           </>
         ) : (
           <>
-            <p className={styles.dialogHint}>Choose one color. Fill length always comes from 3PA ÷ FGA.</p>
+            <p className={styles.dialogHint}>Choose a color. Bar volume is 3FGA ÷ total FGA.</p>
             <div className={`${styles.dialogGrid} ${styles.colorDialogGrid}`}>
               {PERSONNEL_THREE_POINT_COLOR_OPTIONS.map((option) => (
                 <label key={option.key} className={`${styles.dialogOption} ${styles.colorDialogOption}`} title={option.label}>
@@ -1262,6 +1276,30 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
                 </label>
               ))}
             </div>
+            <div className={styles.attemptInputs}>
+              {[["threePointAttempts", "3FGA"], ["fieldGoalAttempts", "Total FGA"]].map(([key, label]) => (
+                <label key={key}>
+                  <span>{label}</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    inputMode="decimal"
+                    placeholder="Automatic"
+                    value={activeDialogRow?.attemptOverrides?.[key] || ""}
+                    onChange={(event) => updateRow(dialog.rowIndex, (row) => ({
+                      ...row,
+                      attemptOverrides: { ...row.attemptOverrides, [key]: event.target.value },
+                    }), { autoSaveTagsAndColors: true })}
+                  />
+                </label>
+              ))}
+            </div>
+            <p className={styles.dialogHint}>Enter both values using season totals or per-game averages. Total FGA includes 3FGA. Clear both to use season stats.</p>
+            <p className={styles.dialogHint} role="status">Bar volume: {(dialogAttemptRatio * 100).toFixed(1)}%</p>
+            {invalidManualAttempts ? (
+                <p className={styles.dialogHint}>Enter valid attempts: 0 ≤ 3FGA ≤ total FGA, with total FGA greater than 0.</p>
+              ) : null}
           </>
         )}
       </Dialog>
