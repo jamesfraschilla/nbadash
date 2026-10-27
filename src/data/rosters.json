@@ -2687,6 +2687,14 @@
       "position": "F"
     },
     {
+      "personId": "1631166",
+      "firstName": "Drew",
+      "familyName": "Timme",
+      "fullName": "Drew Timme",
+      "jerseyNum": "2",
+      "position": "F"
+    },
+    {
       "personId": "1628415",
       "firstName": "Dillon",
       "familyName": "Brooks",
@@ -2741,14 +2749,6 @@
       "fullName": "Devin Booker",
       "jerseyNum": "15",
       "position": "G"
-    },
-    {
-      "personId": "1631166",
-      "firstName": "Drew",
-      "familyName": "Timme",
-      "fullName": "Drew Timme",
-      "jerseyNum": "17",
-      "position": "F"
     },
     {
       "personId": "1631123",
@@ -3369,14 +3369,6 @@
   ],
   "1610612761": [
     {
-      "personId": "1642347",
-      "firstName": "Jamal",
-      "familyName": "Shead",
-      "fullName": "Jamal Shead",
-      "jerseyNum": "1",
-      "position": "G"
-    },
-    {
       "personId": "202695",
       "firstName": "Kawhi",
       "familyName": "Leonard",
@@ -3421,8 +3413,16 @@
       "firstName": "Kyle",
       "familyName": "Anderson",
       "fullName": "Kyle Anderson",
-      "jerseyNum": "13",
+      "jerseyNum": "12",
       "position": "F-G"
+    },
+    {
+      "personId": "1642927",
+      "firstName": "Nate",
+      "familyName": "Bittle",
+      "fullName": "Nate Bittle",
+      "jerseyNum": "12",
+      "position": "C"
     },
     {
       "personId": "1642266",
@@ -3457,6 +3457,14 @@
       "position": "F"
     },
     {
+      "personId": "1642347",
+      "firstName": "Jamal",
+      "familyName": "Shead",
+      "fullName": "Jamal Shead",
+      "jerseyNum": "23",
+      "position": "G"
+    },
+    {
       "personId": "1642867",
       "firstName": "Collin",
       "familyName": "Murray-Boyles",
@@ -3487,14 +3495,6 @@
       "fullName": "Jamison Battle",
       "jerseyNum": "77",
       "position": "F"
-    },
-    {
-      "personId": "1642927",
-      "firstName": "Nate",
-      "familyName": "Bittle",
-      "fullName": "Nate Bittle",
-      "jerseyNum": "",
-      "position": "C"
     }
   ],
   "1610612762": [
