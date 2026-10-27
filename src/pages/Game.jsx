@@ -16,6 +16,7 @@ import {
   teamLogoUrl,
 } from "../api.js";
 import { useGame, useMinutes } from "../queries.js";
+import { buildCustomPlaycallClipMeta } from "../noteClipLinks.js";
 import { useAuth } from "../auth/useAuth.js";
 import {
   buildDefaultNoteForm,
@@ -1591,7 +1592,14 @@ export default function Game({ variant = "full" }) {
           action: noteSourceAction,
           videoEventId: videoEventIdByActionNumber.get(noteSourceAction.actionNumber),
         })
-        : null,
+        : buildCustomPlaycallClipMeta({
+          gameId,
+          periodLabel: noteForm.period,
+          minutes: minutesValue,
+          seconds: secondsValue,
+          tags: noteForm.tags,
+          actions: game?.playByPlayActions || [],
+        }),
     };
     try {
       setSavingNewNote(true);
