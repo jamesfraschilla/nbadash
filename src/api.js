@@ -29,6 +29,7 @@ import { normalizeGameMidrangeStats } from "./boxScoreNormalization.js";
 import { createTeamScheduleResultsLoader } from "./teamScheduleResults.js";
 import { needsThreeQuarterFallback, rebuildThreeQuarterFeed } from "./segmentFeedFallback.js";
 import { needsOpeningStintRepair, normalizeOpeningMinutesData } from "../supabase/functions/_shared/minutesNormalization.ts";
+import { assertNonEmptyLiveFeed } from "../supabase/functions/_shared/liveFeedIntegrity.ts";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const ALL_ORIGINS_RAW_URL = "https://api.allorigins.win/raw?url=";
@@ -1829,9 +1830,13 @@ export async function fetchGame(gameId, segment = null, options = {}) {
     requestJson(url),
     requestJson(`${LIVE_BOXSCORE_BASE}/boxscore_${gameId}.json`).catch(() => null),
   ]);
-  const game = needsThreeQuarterFallback(segmentGame, segment)
-    ? rebuildThreeQuarterFeed(segmentGame, await requestJson(`${API_BASE}/games/${gameId}`))
-    : segmentGame;
+  let game = segmentGame;
+  if (needsThreeQuarterFallback(segmentGame, segment)) {
+    const fullGame = await requestJson(`${API_BASE}/games/${gameId}`);
+    assertNonEmptyLiveFeed(fullGame);
+    game = rebuildThreeQuarterFeed(segmentGame, fullGame);
+  }
+  if (!segment || segment === "all") assertNonEmptyLiveFeed(game);
   const liveOfficials = Array.isArray(liveBoxscore?.game?.officials)
     ? liveBoxscore.game.officials
     : [];

@@ -6,6 +6,21 @@ const strings = (value: unknown): string[] => typeof value === "string" ? [value
   : Array.isArray(value) ? value.flatMap(strings)
   : value && typeof value === "object" ? Object.values(value).flatMap(strings) : [];
 
+export function invalidScoringDirectionClaims(analysis: RecordValue): string[] {
+  const reasons: string[] = [];
+  for (const text of strings({ headline: analysis.headline, summary: analysis.summary, sections: analysis.sections })) {
+    // A valid numeric pair is still wrong when its verb reverses the result.
+    // Do not match passive "was outscored" (the subject lost that span).
+    const normalized = normalize(text);
+    const pattern = /\b(outscored|outscoring|outscore)\b[^.!?;\d]{0,75}?(\d{1,3})\s*-\s*(\d{1,3})\b/g;
+    for (const match of normalized.matchAll(pattern)) {
+      if (/\b(?:was|were|been|being|got)\s+$/.test(normalized.slice(0, match.index))) continue;
+      if (Number(match[2]) <= Number(match[3])) reasons.push(`outscored claim contradicts score ${match[2]}-${match[3]}`);
+    }
+  }
+  return [...new Set(reasons)];
+}
+
 // Validate explicit ENDING margins against the actual game score, never the
 // selected quarter's scoring differential. Peak/run margins are different facts.
 export function invalidEndingMargins(analysis: RecordValue, features: RecordValue): string[] {
@@ -68,6 +83,11 @@ export function invalidPlayerClaims(analysis: RecordValue, features: RecordValue
         return matches.length ? [{ player, ...matches[0] }] : [];
       }).sort((a, b) => a.index - b.index);
       mentions.forEach(({ player, index, length }, mentionIndex) => {
+        const roleContext = sentence.slice(Math.max(0, index - 35), index + length + 45);
+        if (/\b(?:bench standout|bench scorer|off the bench|bench production)\b/.test(roleContext)
+          && player.isStarter !== false) {
+          reasons.push(`${player.name} bench role is not verified by the supplied data`);
+        }
         let clause = sentence.slice(index + length, mentions[mentionIndex + 1]?.index);
         // A subsequent explicit team shooting statement starts a new subject.
         if (nextTeamSubject) clause = clause.split(nextTeamSubject)[0];

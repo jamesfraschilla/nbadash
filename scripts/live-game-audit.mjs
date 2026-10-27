@@ -10,6 +10,8 @@ import { buildCompletedAnalysisSegments } from "../src/gameAnalysis.js";
 import { aggregateSegmentStats, computeKills, countPossessionsByTeam } from "../src/segmentStats.js";
 import { buildGameAlerts } from "../src/gameAlerts.js";
 import { normalizeOpeningMinutesData } from "../supabase/functions/_shared/minutesNormalization.ts";
+import { assertNonEmptyLiveFeed } from "../supabase/functions/_shared/liveFeedIntegrity.ts";
+import { AnalysisRetryPolicy } from "../src/analysisRetryPolicy.js";
 
 setDefaultResultOrder("ipv4first");
 const API = "https://d1rjt2wyntx8o7.cloudfront.net/api/games";
@@ -101,8 +103,10 @@ export async function runAudit({ gameId, dryRun = false, outputRoot = "output/li
   let minutesAt = 0;
   let lastPeriod = 0;
   let finalSeenAt = null;
+  let lastAcceptedGame = null;
   let generation = null;
   const attempted = new Map();
+  const retryPolicy = new AnalysisRetryPolicy();
   const completed = new Set();
   const completedSignatures = new Map();
   const livePeriods = new Set();
@@ -124,9 +128,10 @@ export async function runAudit({ gameId, dryRun = false, outputRoot = "output/li
     console.error(JSON.stringify(record));
   };
   const readAnalyses = () => requestJson(`${supabaseUrl}/rest/v1/game_analysis_segments?game_id=eq.${gameId}&select=segment_key,generated_at,source,result`, { headers });
-  const prepare = async (segments) => {
+  const prepare = async (segments, game) => {
     for (const segment of segments) {
-      if (completed.has(segment.key) || (attempted.get(segment.key) || 0) >= 3) continue;
+      const signature = await segmentFeedSignature(game, Number(segment.form.maxPeriod));
+      if (completed.has(segment.key) || !retryPolicy.begin(segment.key, signature, Date.now(), Number(game.gameStatus) === 3)) continue;
       attempted.set(segment.key, (attempted.get(segment.key) || 0) + 1);
       try {
         const result = await requestJson(`${supabaseUrl}/functions/v1/game-analysis`, {
@@ -134,13 +139,18 @@ export async function runAudit({ gameId, dryRun = false, outputRoot = "output/li
           body: JSON.stringify({ gameId, range: segmentRange(segment), cache: { segmentKey: segment.key, segmentLabel: segment.label } }),
         }, 70_000);
         await archive(`analysis-${segment.key}`, { segment: segment.key, result });
-        completed.add(segment.key);
+        // A request can finish after the collector has observed a correction.
+        // Do not let that older response mark the new revision complete.
+        if (retryPolicy.states.get(segment.key)?.signature === result.feedSignature) completed.add(segment.key);
         completedSignatures.set(segment.key, result.feedSignature);
         summary.generated.push({ segment: segment.key, at: new Date().toISOString(), source: result.source, cached: result.cached });
         console.log(`Prepared ${gameId} ${segment.key}`);
       } catch (error) {
         // Transient source disagreements are deferred, not three burned retries.
-        if (error.retryable) attempted.set(segment.key, Math.max(0, (attempted.get(segment.key) || 1) - 1));
+        if (error.retryable) {
+          attempted.set(segment.key, Math.max(0, (attempted.get(segment.key) || 1) - 1));
+          retryPolicy.defer(segment.key, signature);
+        }
         errorRecord(`analysis:${segment.key}`, error);
       }
     }
@@ -173,6 +183,8 @@ export async function runAudit({ gameId, dryRun = false, outputRoot = "output/li
       try {
         const game = await requestJson(`${API}/${gameId}`);
         if (String(game.gameId) !== gameId || !game.homeTeam?.teamId || !game.awayTeam?.teamId) throw new Error("Game feed identity/teams invalid");
+        assertNonEmptyLiveFeed(game);
+        lastAcceptedGame = game;
         if (!firstCapture) firstCapture = { at: new Date().toISOString(), status: game.gameStatus, period: game.period, clock: game.gameClock };
         if (Number(game.gameStatus) === 2 && Number(game.period) > 0) livePeriods.add(Number(game.period));
         finalPeriod = Math.max(finalPeriod, Number(game.period) || 0);
@@ -199,6 +211,7 @@ export async function runAudit({ gameId, dryRun = false, outputRoot = "output/li
         const segments = readySegments(game);
         for (const segment of segments) {
           const signature = await segmentFeedSignature(game, Number(segment.form.maxPeriod));
+          retryPolicy.observe(segment.key, signature, tickStart);
           if (completed.has(segment.key) && completedSignatures.get(segment.key) !== signature) completed.delete(segment.key);
           const row = analyses.find((row) => row.segment_key === segment.key);
           if (!completed.has(segment.key) && row?.result?.feedSignature === signature) {
@@ -212,7 +225,7 @@ export async function runAudit({ gameId, dryRun = false, outputRoot = "output/li
           await checkpoint(game, newKeys);
           newKeys.forEach((key) => checkpoints.add(key));
         }
-        if (!dryRun && !generation) generation = prepare(segments).finally(() => { generation = null; });
+        if (!dryRun && !generation) generation = prepare(segments, game).finally(() => { generation = null; });
         if (Number(game.gameStatus) === 3) {
           if (!finalSeenAt) finalSeenAt = tickStart;
           if (tickStart - finalSeenAt >= POST_FINAL_MS) {
@@ -233,6 +246,17 @@ export async function runAudit({ gameId, dryRun = false, outputRoot = "output/li
     } while (Date.now() < config.deadline);
   } finally {
     if (generation) await generation;
+    if (!dryRun && lastAcceptedGame) {
+      completed.clear();
+      try {
+        const analyses = await readAnalyses();
+        await archive("final-saved-analysis", { analyses });
+        for (const segment of readySegments(lastAcceptedGame)) {
+          const signature = await segmentFeedSignature(lastAcceptedGame, Number(segment.form.maxPeriod));
+          if (analyses.some((row) => row.segment_key === segment.key && row.result?.feedSignature === signature)) completed.add(segment.key);
+        }
+      } catch (error) { errorRecord("final-analysis-verification", error); }
+    }
     summary.finishedAt = new Date().toISOString();
     summary.attempts = Object.fromEntries(attempted);
     summary.firstCapture = firstCapture;

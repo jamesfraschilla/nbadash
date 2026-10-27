@@ -1,5 +1,20 @@
 import { assertEquals, assert } from "jsr:@std/assert@1";
-import { invalidEndingMargins, invalidPlayerClaims } from "./analysisClaimValidation.ts";
+import { invalidEndingMargins, invalidPlayerClaims, invalidScoringDirectionClaims } from "./analysisClaimValidation.ts";
+
+Deno.test("WAS–CHA second-half scoring cannot reverse the winner with an accurate numeric pair", () => {
+  assert(invalidScoringDirectionClaims({ summary: "They outscored Washington Wizards 56–59 in the 24-minute span but maintained a 7-point advantage." }).length > 0);
+  assert(invalidScoringDirectionClaims({ summary: "Charlotte outscored Washington 56-56." }).length > 0);
+  assertEquals(invalidScoringDirectionClaims({ summary: "Washington outscored Charlotte 59-56, but Charlotte won the game 110-103." }), []);
+  assertEquals(invalidScoringDirectionClaims({ summary: "Charlotte was outscored 59-56 in the second half." }), []);
+  assertEquals(invalidScoringDirectionClaims({ summary: "Charlotte scored 56-59 in a close second half." }), []);
+});
+
+Deno.test("Brandon Miller cannot be labeled a bench standout without verified role data", () => {
+  const analysis = { summary: "Charlotte's bench standout Miller scored 31 Pts." };
+  assert(invalidPlayerClaims(analysis, { players: [{ name: "B. Miller", points: 31 }] }).length > 0);
+  assertEquals(invalidPlayerClaims({ summary: "Miller scored 31 Pts." }, { players: [{ name: "B. Miller", points: 31 }] }), []);
+  assertEquals(invalidPlayerClaims(analysis, { players: [{ name: "B. Miller", points: 31, isStarter: false }] }), []);
+});
 
 Deno.test("MEM–SAC ending margins cannot be replaced with quarter differentials", () => {
   const halftime = { score: { end: { home: 59, away: 67 } } };

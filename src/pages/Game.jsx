@@ -2758,7 +2758,7 @@ export default function Game({ variant = "full" }) {
     return <div className={styles.stateMessage}>Loading game details...</div>;
   }
 
-  if (error || !game) {
+  if (!game) {
     return <div className={styles.stateMessage}>Failed to load game details.</div>;
   }
 
@@ -2903,6 +2903,7 @@ export default function Game({ variant = "full" }) {
 
   return (
     <div className={styles.container}>
+      {error && <p role="status">Live update delayed. Showing the last valid snapshot while the feed retries.</p>}
       {game?.gameStatus === 3 && findIncompletePersonalFoulFeed(boxScore, null, game.playByPlayActions).map((warning) => (
         <p key={warning} role="status">Data note: {warning}</p>
       ))}

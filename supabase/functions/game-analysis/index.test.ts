@@ -1,5 +1,38 @@
-import { assert, assertEquals, assertStringIncludes, assertThrows } from "jsr:@std/assert@1";
+import { assert, assertEquals, assertStringIncludes, assertThrows, assertRejects } from "jsr:@std/assert@1";
 import { __test__ } from "./index.ts";
+
+Deno.test("unchanged analysis facts acknowledge a corrected feed without regenerating the recap", async () => {
+  const originalFetch = globalThis.fetch;
+  const oldUrl = Deno.env.get("SUPABASE_URL");
+  const oldKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  Deno.env.set("SUPABASE_URL", "https://cache-test.supabase.co");
+  Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "test-key");
+  const writes: any[] = [];
+  let conflict = false;
+  globalThis.fetch = async (_input, init) => {
+    if (init?.method === "PATCH") {
+      writes.push(JSON.parse(String(init.body)));
+      return Response.json(conflict ? null : { updated_at: "revalidated" });
+    }
+    return Response.json({ game_id: "0022600119", segment_key: "q3", segment_label: "Q3", range_label: "Q3",
+      data_signature: "same-facts", generated_at: "original-generation", updated_at: "old-revision",
+      source: "ai", result: { summary: "Existing recap", feedSignature: "old-feed", source: "ai", ai: { used: true } } });
+  };
+  try {
+    const result = await __test__.readCachedSegment("0022600119", "q3", "same-facts", true, "corrected-feed");
+    assertEquals(result?.summary, "Existing recap");
+    assertEquals(result?.feedSignature, "corrected-feed");
+    assertEquals((result?.cache as any).generatedAt, "original-generation");
+    assertEquals(writes, [{ result: { summary: "Existing recap", feedSignature: "corrected-feed", source: "ai", ai: { used: true } } }]);
+    conflict = true;
+    const error = await assertRejects(() => __test__.readCachedSegment("0022600119", "q3", "same-facts", true, "newer-feed"));
+    assertEquals((error as any).retryable, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (oldUrl === undefined) Deno.env.delete("SUPABASE_URL"); else Deno.env.set("SUPABASE_URL", oldUrl);
+    if (oldKey === undefined) Deno.env.delete("SUPABASE_SERVICE_ROLE_KEY"); else Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", oldKey);
+  }
+});
 
 Deno.test("run validation accepts both verified teams' pushes without mistaking a later game score for a run", () => {
   const features = { teams: { home: { tricode: "WAS", name: "Wizards" }, away: { tricode: "BKN", name: "Nets" } },

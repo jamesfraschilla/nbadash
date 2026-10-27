@@ -2,7 +2,8 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { requestBodyTooLarge, requireActiveRateLimitedUser } from "../_shared/requestSecurity.ts";
 import { normalizeOpeningMinutesData } from "../_shared/minutesNormalization.ts";
 import { segmentFeedSignature } from "../_shared/analysisFreshness.ts";
-import { invalidEndingMargins, invalidPlayerClaims } from "../_shared/analysisClaimValidation.ts";
+import { invalidEndingMargins, invalidPlayerClaims, invalidScoringDirectionClaims } from "../_shared/analysisClaimValidation.ts";
+import { hasEmptyLivePlayByPlay } from "../_shared/liveFeedIntegrity.ts";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
@@ -340,7 +341,7 @@ async function listCachedSegments(gameId: string, requesterIsAdmin = false) {
   });
 }
 
-async function readCachedSegment(gameId: string, segmentKey: string, dataSignature: string, requesterIsAdmin = false) {
+async function readCachedSegment(gameId: string, segmentKey: string, dataSignature: string, requesterIsAdmin = false, feedSignature = "") {
   const supabase = requireAdminClient();
 
   const { data, error } = await supabase
@@ -355,6 +356,21 @@ async function readCachedSegment(gameId: string, segmentKey: string, dataSignatu
     throw new Error("Unable to read shared analysis recap.");
   }
   if (!data || data.data_signature !== dataSignature || !data.result) return null;
+
+  // A feed revision can leave all analysis facts unchanged. Acknowledge that
+  // revision without another model call or falsely changing generated_at.
+  if (feedSignature && data.result.feedSignature !== feedSignature) {
+    const result = { ...data.result, feedSignature };
+    const { data: acknowledged, error: acknowledgeError } = await supabase.from(CACHE_TABLE)
+      .update({ result }).eq("game_id", gameId).eq("segment_key", segmentKey)
+      .eq("data_signature", dataSignature).eq("updated_at", data.updated_at)
+      .select("updated_at").maybeSingle();
+    if (acknowledgeError || !acknowledged) throw Object.assign(new Error("Analysis changed during revalidation; retry with the latest feed."), {
+      retryable: true, code: "ANALYSIS_REVALIDATION_CONFLICT",
+    });
+    data.result = result;
+    data.updated_at = acknowledged.updated_at;
+  }
 
   return stripAdminOnlyAnalysisMetadata({
     ...data.result,
@@ -2036,7 +2052,7 @@ function buildTemplateAnalysis(features: ReturnType<typeof buildFeaturePayload>)
   return {
     source: "template",
     headline: sanitizeAnalysisText(`${margin === 0 ? `${leader.tricode} and ${trailer.tricode} tied` : `${leader.tricode} won`} ${rangeLabel} ${leaderPoints}-${trailerPoints}.${strongestStat ? ` ${strongestStat}` : ""}`, features),
-    summary: sanitizeAnalysisText(summaryParts.join(" "), features),
+    summary: sanitizeAnalysisText([...new Set(summaryParts)].join(" "), features),
     sections,
     uniformDetails: {
       swingFactors,
@@ -2051,7 +2067,7 @@ function buildTemplateAnalysis(features: ReturnType<typeof buildFeaturePayload>)
 
 function buildAnalysisDataSignatureInput(features: ReturnType<typeof buildFeaturePayload>) {
   return {
-    analysisVersion: 6,
+    analysisVersion: 7,
     range: features.range,
     score: features.score,
     teams: features.teams,
@@ -2449,6 +2465,7 @@ function findAiAnalysisRejectReasons(analysis: Record<string, unknown>, features
   reasons.push(...findInvalidWinnerAttributionClaims(analysis, features));
   reasons.push(...invalidEndingMargins(analysis, features));
   reasons.push(...invalidPlayerClaims(analysis, features));
+  reasons.push(...invalidScoringDirectionClaims(analysis));
 
   return [...new Set(reasons)];
 }
@@ -2511,6 +2528,8 @@ async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayloa
     "Use only the structured game data provided.",
     "Use player names exactly as provided in the JSON input and do not expand initials into guessed full names.",
     "Do not invent stats, possessions, or player impact claims.",
+    "Do not infer starter or bench roles: those roles are not verified in this input. Never label a player a bench standout or say he came off the bench.",
+    "Use 'outscored' only for the team with MORE points in the specified span. A team can lose a half yet win the game; describe those separately.",
     "Do not overstate player scoring share; if a player scored 10 Pts for a team that scored 38, do not say he scored all of the team's points.",
     "When citing team edges in categories like paint Pts or Pts off TO, name the team with the higher value.",
     "For turnovers, lower is better; never say a team won turnovers because it committed more turnovers. Say the lower-turnover team committed fewer turnovers.",
@@ -2648,6 +2667,12 @@ export async function handleRequest(req: Request) {
     if (!game) {
       game = await requestJson(`${API_BASE}/games/${gameId}`);
     }
+    if (hasEmptyLivePlayByPlay(game)) {
+      const response = jsonResponse(503, { error: "Live play-by-play is temporarily unavailable. Analysis will retry with a complete feed.",
+        code: "EMPTY_LIVE_FEED", retryable: true, retryAfterSeconds: 30 });
+      response.headers.set("Retry-After", "30");
+      return response;
+    }
     const conflicts = liveSnapshotConflicts(game);
     if (conflicts.length) {
       const response = jsonResponse(409, {
@@ -2671,7 +2696,7 @@ export async function handleRequest(req: Request) {
     const dataSignature = await stableDigest(buildAnalysisDataSignatureInput(features));
 
     if (cacheRequest) {
-      const cached = await readCachedSegment(gameId, cacheRequest.segmentKey, dataSignature, requesterIsAdmin);
+      const cached = await readCachedSegment(gameId, cacheRequest.segmentKey, dataSignature, requesterIsAdmin, feedSignature);
       if (cached) {
         return jsonResponse(200, cached);
       }
@@ -2757,6 +2782,12 @@ export async function handleRequest(req: Request) {
 
     return jsonResponse(200, stripAdminOnlyAnalysisMetadata(responsePayload, requesterIsAdmin));
   } catch (error) {
+    if (error && typeof error === "object" && "retryable" in error && error.retryable) {
+      const response = jsonResponse(409, { error: error instanceof Error ? error.message : "Analysis will retry.",
+        retryable: true, retryAfterSeconds: 30 });
+      response.headers.set("Retry-After", "30");
+      return response;
+    }
     return jsonResponse(500, {
       error: error instanceof Error ? error.message : "Unable to generate analysis.",
     });
@@ -2764,6 +2795,7 @@ export async function handleRequest(req: Request) {
 }
 
 export const __test__ = {
+  readCachedSegment,
   liveSnapshotConflicts,
   aggregateRangeStats,
   buildFeaturePayload,
