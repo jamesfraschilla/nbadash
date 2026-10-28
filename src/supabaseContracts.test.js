@@ -69,7 +69,7 @@ test("deployment applies revision repair and tests real RPCs before attesting sc
   assert.ok(repair > 0 && verify > repair && attest > verify);
   const verification = readFileSync(new URL("../scripts/verify-note-edit-rollback.sql", import.meta.url), "utf8");
   assert.match(verification, /NOTE_CONFLICT/);
-  assert.match(verification, /DRAWING_CONFLICT/);
+  assert.match(verification, /is distinct from 'NOTE_CONFLICT'/);
   assert.match(verification, /Unauthorized note edit was not rejected/);
   assert.match(verification, /rollback;\s*$/i);
   assert.doesNotMatch(verification, /\bcommit\s*;/i);
