@@ -20,6 +20,7 @@ import {
 } from "../toolVault.js";
 import styles from "./UserContent.module.css";
 import { NOTE_TAG_OPTIONS as DEFAULT_NOTE_TAG_OPTIONS } from "../noteTags.js";
+import NoteClipLink from "../components/NoteClipLink.jsx";
 
 
 const VAULT_RECORD_LIMIT = 200;
@@ -60,11 +61,6 @@ function formatTimestamp(value) {
 function formatClock(note) {
   if (note.minutes == null || note.seconds == null) return "--";
   return `${note.minutes}:${String(note.seconds).padStart(2, "0")}`;
-}
-
-function getClipUrl(note) {
-  const clipUrl = note?.source_meta?.clip_url;
-  return clipUrl ? String(clipUrl) : "";
 }
 
 function isWashingtonTeam(team) {
@@ -127,6 +123,7 @@ function buildGameMeta(game) {
   const trackedLabel = trackedTeam ? buildOpponentLabel(trackedTeam) : "";
   return {
     gameDate,
+    isWashington: isWashingtonTeam(away) || isWashingtonTeam(home),
     opponentLabel,
     opponentLeague,
     opponentKey: opponentTeam ? `${opponentLeague}:${opponentTeam.teamId || opponentLabel}` : "",
@@ -723,7 +720,6 @@ export default function UserContent() {
               {filteredNotes.map((note) => {
                 const meta = gameMetaById.get(String(note.game_id || "").trim());
                 const isDeleting = deletingKey === `note:${note.id}`;
-                const clipUrl = getClipUrl(note);
                 return (
                   <article key={note.id} className={styles.card}>
                     <div className={styles.cardHeader}>
@@ -734,18 +730,8 @@ export default function UserContent() {
                         </div>
                       </div>
                       <div className={styles.cardActions}>
-                        {clipUrl ? (
-                          <a
-                            className={styles.clipLink}
-                            href={clipUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            aria-label="Open play clip"
-                            title="Open play clip"
-                          >
-                            <span className={styles.playIcon} aria-hidden="true" />
-                          </a>
-                        ) : null}
+                        <NoteClipLink note={note} className={styles.clipLink} isWashington={meta?.isWashington}
+                          allowLookup={Boolean(meta?.isWashington)} />
                         <Link className={styles.cardLink} to={`/g/${note.game_id}/notes`}>
                           Open Notes
                         </Link>

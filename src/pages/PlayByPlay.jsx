@@ -24,7 +24,7 @@ import {
 import { normalizeClock } from "../utils.js";
 import { buildWashingtonKillHighlights, playByPlayActionKey } from "../playByPlayKillHighlights.js";
 import styles from "./PlayByPlay.module.css";
-import { NBA_CLIPS_TRIAL_GAME_ID, nbaClipsTrialUrl } from "../nbaClipsTrial.js";
+import { washingtonEventClipUrl } from "../nbaClipsTrial.js";
 
 function shouldShowClip(action) {
   const actionText = [
@@ -60,8 +60,6 @@ export default function PlayByPlay() {
   const [substitutionsOnly, setSubstitutionsOnly] = useState(false);
   const [killsOnly, setKillsOnly] = useState(false);
   const [potentialKillsOnly, setPotentialKillsOnly] = useState(false);
-  const [useNbaClipsTrial, setUseNbaClipsTrial] = useState(true);
-  const isNbaClipsTrial = gameId === NBA_CLIPS_TRIAL_GAME_ID;
   const [noteModalOpen, setNoteModalOpen] = useState(false);
   const [savingNewNote, setSavingNewNote] = useState(false);
   const [noteSourceAction, setNoteSourceAction] = useState(null);
@@ -157,6 +155,7 @@ export default function PlayByPlay() {
       text: String(noteForm.text || "").trim(),
       tags: Array.isArray(noteForm.tags) ? noteForm.tags : [],
       sourceMeta: buildPlayByPlaySourceMeta({
+        game,
         gameId,
         seasonYear: game?.seasonYear,
         action: noteSourceAction,
@@ -222,12 +221,6 @@ export default function PlayByPlay() {
 
       <div className={styles.controls}>
         <span>Total Events: {filtered.length}</span>
-        {isNbaClipsTrial && (
-          <label className={styles.toggle}>
-            <span>NBA Clips (test)</span>
-            <input type="checkbox" checked={useNbaClipsTrial} onChange={(event) => setUseNbaClipsTrial(event.target.checked)} />
-          </label>
-        )}
         <label className={styles.toggle}>
           <span>Latest First</span>
           <input
@@ -258,7 +251,6 @@ export default function PlayByPlay() {
         )}
       </div>
 
-      {isNbaClipsTrial && <p role="note">NBA Clips test: 20-second windows based on event timestamps; video alignment is not yet verified. Uncheck NBA Clips (test) to use the original links. Events without a valid timestamp keep their original link.</p>}
       {isWizardsGame && (
         <div className={styles.killLegend} aria-label="Play-by-play highlight colors">
           <span><i className={styles.killSwatch} aria-hidden="true" />Washington Kill</span>
@@ -320,9 +312,9 @@ export default function PlayByPlay() {
             seasonYear: game.seasonYear,
             title: actionDescription,
           });
-          const trialClipUrl = isNbaClipsTrial && useNbaClipsTrial ? nbaClipsTrialUrl(gameId, action) : null;
-          const clipUrl = trialClipUrl || originalClipUrl;
-          const showClip = shouldShowClip(action);
+          const washingtonClipUrl = washingtonEventClipUrl(game, action);
+          const clipUrl = isWizardsGame ? washingtonClipUrl : originalClipUrl;
+          const showClip = isWizardsGame || shouldShowClip(action);
           return (
             <div
               key={rowKey}
@@ -369,13 +361,14 @@ export default function PlayByPlay() {
                     target="_blank"
                     rel="noreferrer"
                     aria-label="Play clip"
-                    title={trialClipUrl ? "NBA Clips (test): event timestamp ±10 seconds" : "Play clip"}
+                    title={washingtonClipUrl ? "NBA Clips: event timestamp ±10 seconds" : "Play clip"}
                     onPointerDown={(event) => event.stopPropagation()}
                     onClick={(event) => event.stopPropagation()}
                   >
                     <span className={styles.playIcon} aria-hidden="true" />
                   </a>
-                ) : null}
+                ) : showClip && isWizardsGame ? <button type="button" className={styles.clipLink} disabled
+                  aria-label="Video unavailable" title="This event has no usable video timestamp.">▶</button> : null}
               </div>
               <div className={styles.homeColumn}>
                 {isHome && (

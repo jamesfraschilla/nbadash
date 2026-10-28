@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildCustomPlaycallClipMeta } from "./noteClipLinks.js";
+import { buildCustomPlaycallClipMeta, buildTimedNoteClipMeta, resolveNoteClipUrl } from "./noteClipLinks.js";
 
 const action = (clock = "PT04M53.00S", extra = {}) => ({
   actionNumber: 1, period: 1, clock, actionType: "2pt", timeActual: "2026-10-26T23:30:10Z", ...extra,
@@ -51,4 +51,30 @@ test("ambiguous multiple overtimes never borrow the wrong period's timestamp", (
     actions: [action("PT02M50.00S", { period: 5 })] };
   assert.ok(buildCustomPlaycallClipMeta(otNote));
   assert.equal(buildCustomPlaycallClipMeta({ ...otNote, actions: [...otNote.actions, action("PT02M50.00S", { period: 6 })] }), null);
+});
+
+test("all timed note tags get clips while only custom Playcall shifts the clock", () => {
+  const ordinary = buildTimedNoteClipMeta({ ...note, minutes: 4, seconds: 53, tags: ["Officiating"] });
+  assert.equal(ordinary.type, "custom_note");
+  assert.equal(new URL(ordinary.clip_url).searchParams.get("inTime"), "19300000");
+  assert.ok(buildTimedNoteClipMeta({ ...note, minutes: 4, seconds: 53, tags: [] }));
+});
+
+test("live Playcall entry can create the shifted clip before its future event exists", () => {
+  const meta = buildCustomPlaycallClipMeta({ ...note, actions: [action("PT05M03.00S")] });
+  assert.equal(new URL(meta.clip_url).searchParams.get("inTime"), "19301000");
+  assert.equal(new URL(meta.clip_url).searchParams.get("outTime"), "19303000");
+});
+
+test("legacy Washington notes resolve new URLs on read without changing saved notes", () => {
+  const game = { gameId: note.gameId, awayTeam: { teamId: 1610612764 }, playByPlayActions: [action()] };
+  const legacy = { game_id: note.gameId, period_label: "Q1", minutes: 5, seconds: 3, tags: ["Playcall"], text: "Original note",
+    source_meta: { clip_url: "https://www.nba.com/stats/events?GameEventID=1" } };
+  const before = JSON.stringify(legacy);
+  assert.equal(new URL(resolveNoteClipUrl(legacy, game)).searchParams.get("inTime"), "19300000");
+  assert.equal(JSON.stringify(legacy), before);
+  assert.equal(resolveNoteClipUrl(legacy, { ...game, awayTeam: { teamId: 1610612737 } }), legacy.source_meta.clip_url);
+  const pbp = { ...legacy, source_meta: { ...legacy.source_meta, type: "pbp", action_number: 1 } };
+  assert.equal(new URL(resolveNoteClipUrl(pbp, game)).searchParams.get("inTime"), "19300000");
+  assert.equal(resolveNoteClipUrl({ ...legacy, minutes: null, seconds: null, source_meta: {}, created_at: "2026-10-28T00:00:00Z" }, game), null);
 });

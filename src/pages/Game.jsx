@@ -16,7 +16,8 @@ import {
   teamLogoUrl,
 } from "../api.js";
 import { useGame, useMinutes } from "../queries.js";
-import { buildCustomPlaycallClipMeta } from "../noteClipLinks.js";
+import { buildCustomPlaycallClipMeta, buildTimedNoteClipMeta } from "../noteClipLinks.js";
+import { washingtonEventClipUrl } from "../nbaClipsTrial.js";
 import { useAuth } from "../auth/useAuth.js";
 import {
   buildDefaultNoteForm,
@@ -1359,7 +1360,7 @@ export default function Game({ variant = "full" }) {
   const pbpWheelItems = useMemo(() => {
     const actions = game?.playByPlayActions || [];
     const filtered = actions.filter((action) => (
-      action.actionType === "2pt" ||
+      isWashingtonGame || action.actionType === "2pt" ||
       action.actionType === "3pt" ||
       action.actionType === "turnover" ||
       action.actionType === "foul" ||
@@ -1368,7 +1369,7 @@ export default function Game({ variant = "full" }) {
     ));
     const sorted = filtered.slice().sort(compareActionsByChronology);
     return sorted.slice(-16);
-  }, [game?.playByPlayActions, killHighlights]);
+  }, [game?.playByPlayActions, killHighlights, isWashingtonGame]);
 
   const videoEventIdByActionNumber = useMemo(
     () => buildVideoEventIdByActionNumber(game?.playByPlayActions || []),
@@ -1587,12 +1588,13 @@ export default function Game({ variant = "full" }) {
       tags: Array.isArray(noteForm.tags) ? noteForm.tags : [],
       sourceMeta: noteSourceAction
         ? buildPlayByPlaySourceMeta({
+          game,
           gameId,
           seasonYear: game?.seasonYear,
           action: noteSourceAction,
           videoEventId: videoEventIdByActionNumber.get(noteSourceAction.actionNumber),
         })
-        : buildCustomPlaycallClipMeta({
+        : (isWashingtonGame ? buildTimedNoteClipMeta : buildCustomPlaycallClipMeta)({
           gameId,
           periodLabel: noteForm.period,
           minutes: minutesValue,
@@ -3271,6 +3273,7 @@ export default function Game({ variant = "full" }) {
                 const scoreText = action.scoreHome && action.scoreAway
                   ? `${action.scoreAway}-${action.scoreHome}`
                   : "";
+                const clipUrl = washingtonEventClipUrl(game, action);
                 return (
                   <div
                     key={action.actionNumber || `${action.period}-${action.clock}-${descriptor}`}
@@ -3317,6 +3320,9 @@ export default function Game({ variant = "full" }) {
                     </div>
                     <div className={styles.pbpFooter}>
                       <span>{periodText}</span>
+                      {clipUrl && <a href={clipUrl} target="_blank" rel="noreferrer" aria-label="Open play clip"
+                        title="NBA Clips" onMouseDown={(event) => event.stopPropagation()}
+                        onTouchStart={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>▶ Clip</a>}
                       <span className={styles.pbpScore}>{scoreText}</span>
                     </div>
                   </div>

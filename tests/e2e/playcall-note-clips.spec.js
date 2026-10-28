@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-test("saving a custom Playcall preserves Q1 5:03 and stores its shifted video URL", async ({ page }) => {
+for (const tag of ["Playcall", "Officiating"]) {
+test(`saving a custom ${tag} note preserves its clock and stores an NBA Clips URL`, async ({ page }) => {
   let savedNote;
   await page.route("**/functions/v1/**", (route) => route.fulfill({ status: 503, json: {} }));
   await page.route("**/rest/v1/**", async (route) => {
@@ -26,14 +27,15 @@ test("saving a custom Playcall preserves Q1 5:03 and stores its shifted video UR
   const dialog = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Add Note", exact: true }) });
   const selects = dialog.locator("select");
   await selects.nth(0).selectOption("Q1");
-  await selects.nth(1).selectOption("5");
-  await selects.nth(2).selectOption("03");
-  await dialog.getByRole("checkbox", { name: "Playcall", exact: true }).check();
+  await selects.nth(1).selectOption(tag === "Playcall" ? "5" : "4");
+  await selects.nth(2).selectOption(tag === "Playcall" ? "03" : "53");
+  await dialog.getByRole("checkbox", { name: tag, exact: true }).check();
   await dialog.locator("textarea").fill("Test playcall");
   await dialog.getByRole("button", { name: "OK", exact: true }).click();
   await expect.poll(() => savedNote?.source_meta?.clip_url).toBe(
     "https://clips.nba.com/?gameNo=0022600119&inTime=19300000&outTime=19302000&source=grs",
   );
-  expect(savedNote).toMatchObject({ period_label: "Q1", minutes: 5, seconds: 3, text: "Test playcall",
-    tags: ["Playcall"], sharing_scope: "shared", source_meta: { type: "custom_playcall" } });
+  expect(savedNote).toMatchObject({ period_label: "Q1", minutes: tag === "Playcall" ? 5 : 4, seconds: tag === "Playcall" ? 3 : 53, text: "Test playcall",
+    tags: [tag], sharing_scope: tag === "Playcall" ? "shared" : "private", source_meta: { type: tag === "Playcall" ? "custom_playcall" : "custom_note" } });
 });
+}

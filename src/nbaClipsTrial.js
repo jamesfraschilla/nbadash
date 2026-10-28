@@ -1,5 +1,7 @@
-// Deliberately restricted until video timecodes are validated across games.
-export const NBA_CLIPS_TRIAL_GAME_ID = "0022600119";
+export function isWashingtonGame(game) {
+  return [game?.homeTeam, game?.awayTeam].some((team) => String(team?.teamId) === "1610612764"
+    || String(team?.teamTricode || "").toUpperCase() === "WAS");
+}
 const easternTime = new Intl.DateTimeFormat("en-GB", {
   timeZone: "America/New_York", hourCycle: "h23",
   hour: "2-digit", minute: "2-digit", second: "2-digit",
@@ -26,6 +28,12 @@ export function nbaClipsUrl(gameId, action) {
   return `https://clips.nba.com/?${params}`;
 }
 
-export function nbaClipsTrialUrl(gameId, action) {
-  return String(gameId) === NBA_CLIPS_TRIAL_GAME_ID ? nbaClipsUrl(gameId, action) : null;
+export function washingtonEventClipUrl(game, action) {
+  if (!isWashingtonGame(game)) return null;
+  const direct = nbaClipsUrl(game.gameId, action);
+  if (direct) return direct;
+  if (!action?.clock || !action?.period) return null;
+  const matching = (game.playByPlayActions || []).find((event) => Number(event.period) === Number(action.period)
+    && event.clock === action.clock && nbaClipsUrl(game.gameId, event));
+  return matching ? nbaClipsUrl(game.gameId, matching) : null;
 }
