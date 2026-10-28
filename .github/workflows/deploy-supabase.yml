@@ -97,6 +97,24 @@ jobs:
             --header "Content-Type: application/json" \
             --data-binary @- \
             "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query"
+      - name: Repair Notes and Drawings revision columns without changing saved content
+        run: |
+          jq -n --rawfile query supabase/account_revision_columns.sql '{query: $query}' |
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            --header "Content-Type: application/json" \
+            --data-binary @- \
+            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query"
+      - name: Verify note edits, privacy, and version conflicts with rolled-back test records
+        run: |
+          jq -n --rawfile query scripts/verify-note-edit-rollback.sql '{query: $query}' |
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            --header "Content-Type: application/json" \
+            --data-binary @- \
+            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query"
       - name: Attest database after automatic migrations succeed
         run: node scripts/verify-supabase-production.mjs --record-database
       - name: Refuse deployment when database scripts are not attested in production

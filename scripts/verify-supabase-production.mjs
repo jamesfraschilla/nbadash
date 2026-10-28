@@ -15,6 +15,11 @@ const key = String(process.env.SUPABASE_SERVICE_ROLE_KEY || "");
 if (!url || !key) throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.");
 
 const headers = { apikey: key, authorization: `Bearer ${key}`, "content-type": "application/json" };
+// A recorded manifest is not proof that the live schema has its required fields.
+for (const table of ["user_notes", "user_drawings", "user_tool_records"]) {
+  const response = await fetch(`${url}/rest/v1/${table}?select=revision&limit=0`, { headers });
+  if (!response.ok) throw new Error(`Required revision column missing or inaccessible in ${table} (${response.status}). Apply account_revision_columns.sql before attesting deployment.`);
+}
 const recordDatabase = process.argv.includes("--record-database");
 const recordEdge = process.argv.includes("--record-edge");
 if (process.argv.includes("--record") || recordDatabase || recordEdge) {

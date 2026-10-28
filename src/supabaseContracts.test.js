@@ -46,6 +46,37 @@ test("account-data migration defines atomic version, share, and revision contrac
   assert.match(atomicSql, /DRAWING_CONFLICT/);
 });
 
+test("revision repair is additive and fingerprints existing notes, drawings, versions, and shares", () => {
+  const sql = readFileSync(new URL("../supabase/account_revision_columns.sql", import.meta.url), "utf8");
+  for (const table of ["user_notes", "user_drawings"]) {
+    assert.match(sql, new RegExp(`alter table public\\.${table} add column if not exists revision integer not null default 1`, "i"));
+  }
+  for (const table of ["user_notes", "user_note_versions", "user_note_shares", "user_drawings", "user_drawing_versions", "user_drawing_shares"]) {
+    assert.ok(sql.includes(`'${table}'`));
+  }
+  assert.match(sql, /current_hash <> saved\.content_hash/);
+  assert.match(sql, /to_jsonb\(t\) - ''revision''/);
+  assert.match(sql, /on commit drop/);
+  assert.doesNotMatch(sql, /\b(?:update|delete|truncate|drop table)\s+public\./i);
+  assert.doesNotMatch(sql, /create or replace function|alter policy|disable row level security/i);
+});
+
+test("deployment applies revision repair and tests real RPCs before attesting schema", () => {
+  const workflow = readFileSync(new URL("../.github/workflows/deploy-supabase.yml", import.meta.url), "utf8");
+  const repair = workflow.indexOf("--rawfile query supabase/account_revision_columns.sql");
+  const verify = workflow.indexOf("--rawfile query scripts/verify-note-edit-rollback.sql");
+  const attest = workflow.indexOf("- name: Attest database after automatic migrations succeed");
+  assert.ok(repair > 0 && verify > repair && attest > verify);
+  const verification = readFileSync(new URL("../scripts/verify-note-edit-rollback.sql", import.meta.url), "utf8");
+  assert.match(verification, /NOTE_CONFLICT/);
+  assert.match(verification, /DRAWING_CONFLICT/);
+  assert.match(verification, /Unauthorized note edit was not rejected/);
+  assert.match(verification, /rollback;\s*$/i);
+  assert.doesNotMatch(verification, /\bcommit\s*;/i);
+  const productionCheck = readFileSync(new URL("../scripts/verify-supabase-production.mjs", import.meta.url), "utf8");
+  assert.match(productionCheck, /select=revision&limit=0/);
+});
+
 test("graphic headshot bucket enforces owner folders and PNG size limits", () => {
   assert.match(storageSql, /'graphic-headshots'/);
   assert.match(storageSql, /5242880/);
