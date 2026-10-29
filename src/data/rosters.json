@@ -1517,14 +1517,6 @@
       "position": "G"
     },
     {
-      "personId": "1643758",
-      "firstName": "AK",
-      "familyName": "Okereke",
-      "fullName": "AK Okereke",
-      "jerseyNum": "31",
-      "position": "F"
-    },
-    {
       "personId": "1643418",
       "firstName": "Cameron",
       "familyName": "Carr",
@@ -1563,6 +1555,14 @@
       "fullName": "Luka Dončić",
       "jerseyNum": "77",
       "position": "F-G"
+    },
+    {
+      "personId": "1643133",
+      "firstName": "Lawson",
+      "familyName": "Lovering",
+      "fullName": "Lawson Lovering",
+      "jerseyNum": "",
+      "position": "C"
     }
   ],
   "1610612748": [
