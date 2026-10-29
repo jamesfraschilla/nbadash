@@ -23,7 +23,12 @@ test("Graphics opens on a neutral landing page with Rotations first", async ({ p
 
 test("Rotations reopens the guest user's most recently saved Graphics draft", async ({ page }) => {
   await page.route("**/functions/v1/**", (route) => route.fulfill({ status: 503, contentType: "application/json", body: "{}" }));
-  await page.route("**/rest/v1/**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
+  // This is a guest/local-persistence test. A successful empty remote vault
+  // response authoritatively clears local drafts, racing the simulated save.
+  await page.route("**/rest/v1/**", (route) => route.fulfill({
+    status: route.request().url().includes("user_tool_records") ? 503 : 200,
+    contentType: "application/json", body: "[]",
+  }));
   await page.goto(appUrl("/graphics?graphic=rotations"));
   await page.getByLabel("Opponent line").fill("VS PERSISTENCE TEST");
   await page.getByRole("button", { name: "Save", exact: true }).click();
