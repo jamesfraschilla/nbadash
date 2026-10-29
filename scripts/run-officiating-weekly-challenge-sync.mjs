@@ -13,6 +13,7 @@ import {
   isChallengeSeasonPage,
 } from "../src/officiatingChallengeDiscovery.js";
 import { assertOutsideWizardsGameWindow } from "./lib/game-window-guard.mjs";
+import { CHALLENGE_CLOCK_LINK_VERSION } from "../src/officiatingChallengeLinks.js";
 
 const CURRENT_SEASON = "2026-27";
 const START_DATE = "2026-10-04";
@@ -83,7 +84,7 @@ async function alreadyImported(supabase, sha256) {
     .select("id,expected_rows:source_payload->>expectedDocumentRows", { count: "exact" })
     .eq("season", CURRENT_SEASON)
     .eq("source", SOURCE)
-    .contains("source_payload", { pdfSha256: sha256, importComplete: true, clockLinkVersion: 2 })
+    .contains("source_payload", { pdfSha256: sha256, importComplete: true, clockLinkVersion: CHALLENGE_CLOCK_LINK_VERSION })
     .limit(1);
   if (error) throw new Error(`Failed checking imported challenge documents: ${error.message}`);
   // A failed multi-batch import must not make a partial document look complete.

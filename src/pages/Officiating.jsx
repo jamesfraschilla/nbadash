@@ -95,10 +95,10 @@ function challengeClockLabel(row) {
 function ChallengeClockLink({ row }) {
   const label = challengeClockLabel(row);
   const url = challengeClockClipUrl(row);
-  if (!url) return label;
+  if (!url) return <span title="Clock clip unavailable: the original challenged play could not be safely identified. Use the official Video link when available.">{label}</span>;
   return (
     <a href={url} target="_blank" rel="noreferrer" className={styles.inlineLink}
-      title="NBA Clips: game-event timestamp ±10 seconds (may show the review); video may not be available live">
+      title="NBA Clips: original-play timestamp ±10 seconds; video may not be available live">
       {label}
     </a>
   );

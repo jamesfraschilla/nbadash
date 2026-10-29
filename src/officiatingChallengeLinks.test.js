@@ -43,33 +43,55 @@ test("official Video and timestamp-based Clock remain distinct, in any team's ga
   assert.equal(buildChallengeClockClipUrl(row, { ...game, gameId: "0022600119" }), null);
 });
 
-test("PBP Clock prefers the challenged action, with an explicit review-timestamp fallback", () => {
+test("PBP Clock prefers the challenged action, not an unrelated review-timestamp fallback", () => {
   const row = { game_id: "0022600118", source_payload: {
     timeActual: "2026-10-26T01:21:00Z", challengedAction: { timeActual: "2026-10-26T01:19:29Z" },
   } };
   assert.equal(new URL(challengeClockClipUrl(row)).searchParams.get("inTime"), "21191900");
   assert.equal(challengeClockClipUrl({ ...row, source_payload: { timeActual: "2026-10-26T01:21:00Z" } }), null);
-  assert.equal(new URL(challengeClockClipUrl({ ...row, source: "play_by_play",
-    source_payload: { timeActual: "2026-10-26T01:21:00Z" } })).searchParams.get("inTime"), "21205000");
+  assert.equal(challengeClockClipUrl({ ...row, source: "play_by_play",
+    source_payload: { timeActual: "2026-10-26T01:21:00Z" } }), null);
   assert.equal(new URL(challengeClockClipUrl({ game_id: row.game_id, clock_time_actual: "2026-10-26T01:19:29Z" })).searchParams.get("inTime"), "21191900");
 });
 
-test("PDF trigger clocks may differ by two seconds, but ambiguous or distant plays are not guessed", () => {
+test("a two-second clock discrepancy requires an explicit compatible action link", () => {
   const row = { game_id: "0012600060", challenging_team: "WAS", period: 2, game_clock: "06:36.0" };
   const game = { gameId: row.game_id, playByPlayActions: [
-    { period: 2, clock: "PT06M34.00S", actionType: "foul", timeActual: "2026-10-17T00:50:07Z" },
+    { actionNumber: 15, period: 2, clock: "PT06M34.00S", actionType: "foul", timeActual: "2026-10-17T00:50:07Z" },
   ] };
-  assert.ok(buildChallengeClockClipUrl(row, game));
+  assert.equal(buildChallengeClockClipUrl(row, game), null);
+  assert.ok(buildChallengeClockClipUrl({ ...row, challenge_type: "Foul", matched_action_number: 15 }, game));
   assert.equal(buildChallengeClockClipUrl({ ...row, game_clock: "06:37.0" }, game), null);
   assert.equal(buildChallengeClockClipUrl(row, { ...game, playByPlayActions: [...game.playByPlayActions,
     { period: 2, clock: "PT06M38.00S", actionType: "foul", timeActual: "2026-10-17T00:50:03Z" }] }), null);
   assert.equal(challengeLinkIdentity(row), challengeLinkIdentity({ ...row, game_clock: "PT06M36.00S" }));
 });
 
-test("a corrected feed may retain only the review event, which still has a valid timestamp clip", () => {
+test("a review timestamp is not presented as a clip of the original play", () => {
   const row = { game_id: "0022600118", period: 1, game_clock: "07:26.0" };
   const game = { gameId: row.game_id, playByPlayActions: [
     { period: 1, clock: "PT07M26.00S", actionType: "instantreplay", timeActual: "2026-10-26T01:21:00Z" },
   ] };
-  assert.equal(new URL(buildChallengeClockClipUrl(row, game)).searchParams.get("inTime"), "21205000");
+  assert.equal(buildChallengeClockClipUrl(row, game), null);
+});
+
+test("TOR-WAS Q2 0:54 never links to the prior foul and free-throw possession", () => {
+  const row = { game_id: "0022600097", period: 2, game_clock: "00:54.2", challenge_type: "OOB" };
+  const game = { gameId: row.game_id, playByPlayActions: [
+    { actionNumber: 416, period: 2, clock: "PT00M55.80S", actionType: "foul", timeActual: "2026-10-24T00:15:58Z" },
+    { actionNumber: 418, period: 2, clock: "PT00M55.80S", actionType: "freethrow", timeActual: "2026-10-24T00:16:25Z" },
+    { actionNumber: 424, period: 2, clock: "PT00M53.50S", actionType: "instantreplay", subType: "challenge", timeActual: "2026-10-24T00:17:12Z" },
+  ] };
+  assert.equal(buildChallengeClockClipUrl(row, game), null);
+  assert.equal(challengeClockClipUrl({ ...row, clock_link_version: "3", clock_time_actual: "2026-10-24T00:15:58Z" }), null);
+});
+
+test("even an explicit foul event link cannot cross intervening free throws", () => {
+  const row = { game_id: "0022600097", period: 2, game_clock: "00:54.2", challenge_type: "Foul", matched_action_number: 416 };
+  const game = { gameId: row.game_id, playByPlayActions: [
+    { actionNumber: 416, period: 2, clock: "PT00M55.80S", actionType: "foul", timeActual: "2026-10-24T00:15:58Z" },
+    { actionNumber: 418, period: 2, clock: "PT00M55.80S", actionType: "freethrow", timeActual: "2026-10-24T00:16:25Z" },
+    { actionNumber: 424, period: 2, clock: "PT00M53.50S", actionType: "instantreplay", subType: "challenge", timeActual: "2026-10-24T00:17:12Z" },
+  ] };
+  assert.equal(buildChallengeClockClipUrl(row, game), null);
 });

@@ -9,6 +9,7 @@ import { parseGamebookChallenges, reconcileGamebookChallenge, challengeClockSeco
 import { enrichChallengeEventsWithOfficials } from "../src/officiatingChallengeMatcher.js";
 import { extractOfficialCallEvents } from "../src/officiatingParser.js";
 import { assertOutsideWizardsGameWindow } from "./lib/game-window-guard.mjs";
+import { buildChallengeClockClip, CHALLENGE_CLOCK_LINK_VERSION } from "../src/officiatingChallengeLinks.js";
 
 const runFile = promisify(execFile);
 const arg = (name, fallback = "") => process.argv.find(v => v.startsWith(`--${name}=`))?.split("=").slice(1).join("=") || fallback;
@@ -90,10 +91,16 @@ try {
             sourceId: officialSource.id,
           } } } : enriched[index];
         const after = reconcileGamebookChallenge(candidate, bookRows, assignments, url);
+        const clip = buildChallengeClockClip(after, game);
+        after.source_payload = { ...after.source_payload, clockClipUrl: clip.url,
+          clockLinkReason: clip.reason, clockLinkActionNumber: clip.actionNumber,
+          clockLinkVersion: CHALLENGE_CLOCK_LINK_VERSION };
         const changedFields = fields.filter(key => (before[key] ?? "") !== (after[key] ?? ""));
         // jsonb key ordering differs from JavaScript insertion order. Compare
         // values structurally so unchanged books never cause daily rewrites.
-        const newEvidence = !isDeepStrictEqual(before.source_payload?.gamebookChallenge, after.source_payload?.gamebookChallenge);
+        const newEvidence = !isDeepStrictEqual(before.source_payload?.gamebookChallenge, after.source_payload?.gamebookChallenge)
+          || ["clockClipUrl", "clockLinkReason", "clockLinkActionNumber", "clockLinkVersion"]
+            .some(key => before.source_payload?.[key] !== after.source_payload?.[key]);
         if (after.review_status === "needs_review") {
           const issue = { id: before.id, gameId, period: before.period, clock: before.game_clock, reason: after.match_reason };
           report.needsReview.push(issue);

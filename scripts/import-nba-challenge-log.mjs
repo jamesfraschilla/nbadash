@@ -8,7 +8,7 @@ import { assertOutsideWizardsGameWindow } from "./lib/game-window-guard.mjs";
 import { canonicalOfficialIdentity } from "../src/officiatingIdentity.js";
 import { enrichChallengeEventsWithOfficials } from "../src/officiatingChallengeMatcher.js";
 import { extractOfficialCallEvents } from "../src/officiatingParser.js";
-import { buildChallengeClockClipUrl, challengeLinkIdentity } from "../src/officiatingChallengeLinks.js";
+import { buildChallengeClockClip, CHALLENGE_CLOCK_LINK_VERSION, challengeLinkIdentity } from "../src/officiatingChallengeLinks.js";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const OFFICIAL_PAGE_URL = "https://official.nba.com/2025-26-nba-coachs-challenge-reviews/";
@@ -650,10 +650,11 @@ async function enrichOfficialRows(challengeRows, { season, concurrency }) {
     gameDate: challengeRows.find((row) => row.game_id === gameId)?.game_date,
   }).map(toCallRow));
   const gamesById = new Map(games.map(({ gameId, game }) => [gameId, game]));
-  return enrichChallengeEventsWithOfficials(challengeRows, callRows, assignmentRows).map(row => ({
-    ...row, source_payload: { ...row.source_payload,
-      clockClipUrl: buildChallengeClockClipUrl(row, gamesById.get(row.game_id)) },
-  }));
+  return enrichChallengeEventsWithOfficials(challengeRows, callRows, assignmentRows).map(row => {
+    const clip = buildChallengeClockClip(row, gamesById.get(row.game_id));
+    return { ...row, source_payload: { ...row.source_payload, clockClipUrl: clip.url,
+      clockLinkReason: clip.reason, clockLinkActionNumber: clip.actionNumber } };
+  });
 }
 
 async function main() {
@@ -691,7 +692,7 @@ async function main() {
     ? baseChallengeRows
     : await enrichOfficialRows(baseChallengeRows, { season, concurrency: enrichmentConcurrency });
   const challengeRows = enrichedRows.map(row => ({ ...row, source_payload: {
-    ...row.source_payload, expectedDocumentRows: enrichedRows.length, importComplete: false, clockLinkVersion: 2,
+    ...row.source_payload, expectedDocumentRows: enrichedRows.length, importComplete: false, clockLinkVersion: CHALLENGE_CLOCK_LINK_VERSION,
   } }));
   let generatedSqlChunks = [];
   if (sqlOut) {
