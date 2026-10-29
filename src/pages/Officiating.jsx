@@ -18,7 +18,7 @@ import { teamLogoUrl } from "../api.js";
 import { useGamesByDate } from "../queries.js";
 import { formatDateInputInTimeZone } from "../utils.js";
 import { CALL_CATEGORY_GROUPS } from "../officiatingCategoryNormalization.js";
-import { verifiedChallengeVideoUrl } from "../officiatingChallengeLinks.js";
+import { verifiedChallengeVideoUrl, challengeClockClipUrl } from "../officiatingChallengeLinks.js";
 import { loadRefereeHeadshotUrl } from "../refereeHeadshots.js";
 import { fetchPublishedAssignmentForGame } from "../officialAssignments.js";
 import {
@@ -94,10 +94,11 @@ function challengeClockLabel(row) {
 
 function ChallengeClockLink({ row }) {
   const label = challengeClockLabel(row);
-  const url = verifiedChallengeVideoUrl(row);
+  const url = challengeClockClipUrl(row);
   if (!url) return label;
   return (
-    <a href={url} target="_blank" rel="noreferrer" className={styles.inlineLink}>
+    <a href={url} target="_blank" rel="noreferrer" className={styles.inlineLink}
+      title="NBA Clips: game-event timestamp ±10 seconds (may show the review); video may not be available live">
       {label}
     </a>
   );

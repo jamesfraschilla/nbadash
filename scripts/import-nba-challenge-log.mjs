@@ -8,6 +8,7 @@ import { assertOutsideWizardsGameWindow } from "./lib/game-window-guard.mjs";
 import { canonicalOfficialIdentity } from "../src/officiatingIdentity.js";
 import { enrichChallengeEventsWithOfficials } from "../src/officiatingChallengeMatcher.js";
 import { extractOfficialCallEvents } from "../src/officiatingParser.js";
+import { buildChallengeClockClipUrl, challengeLinkIdentity } from "../src/officiatingChallengeLinks.js";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const OFFICIAL_PAGE_URL = "https://official.nba.com/2025-26-nba-coachs-challenge-reviews/";
@@ -58,14 +59,6 @@ async function fetchJson(url, options = {}) {
   }
 }
 
-async function fetchStatsPlayByPlayActions(gameId) {
-  const payload = await fetchJson(
-    `https://stats.nba.com/stats/playbyplayv3?GameID=${encodeURIComponent(gameId)}&StartPeriod=0&EndPeriod=0`,
-    { headers: NBA_REQUEST_HEADERS }
-  );
-  return Array.isArray(payload?.game?.actions) ? payload.game.actions : [];
-}
-
 function readListArg(name, fallback = []) {
   const value = readArg(name);
   if (!value) return fallback;
@@ -74,36 +67,33 @@ function readListArg(name, fallback = []) {
 
 async function fetchGame(gameId) {
   try {
-    const [game, liveBoxscore, statsActions] = await Promise.all([
+    const [game, liveBoxscore] = await Promise.all([
       fetchJson(`${API_BASE}/games/${encodeURIComponent(gameId)}`),
       fetchJson(`https://cdn.nba.com/static/json/liveData/boxscore/boxscore_${encodeURIComponent(gameId)}.json`, {
         headers: NBA_REQUEST_HEADERS,
       }).catch(() => null),
-      fetchStatsPlayByPlayActions(gameId).catch(() => []),
     ]);
     const liveOfficials = Array.isArray(liveBoxscore?.game?.officials) ? liveBoxscore.game.officials : [];
     return {
       ...game,
       officials: liveOfficials.length ? liveOfficials : game.officials,
-      playByPlayActions: statsActions.length ? statsActions : game.playByPlayActions,
-      source: statsActions.length ? `${game.source || "cloudfront"}+stats_playbyplayv3` : game.source,
+      playByPlayActions: game.playByPlayActions,
     };
   } catch (cloudfrontError) {
     try {
-      const [boxscorePayload, livePlayByPlayPayload, statsActions] = await Promise.all([
+      const [boxscorePayload, livePlayByPlayPayload] = await Promise.all([
         fetchJson(`https://cdn.nba.com/static/json/liveData/boxscore/boxscore_${encodeURIComponent(gameId)}.json`, {
           headers: NBA_REQUEST_HEADERS,
         }),
         fetchJson(`https://cdn.nba.com/static/json/liveData/playbyplay/playbyplay_${encodeURIComponent(gameId)}.json`, {
           headers: NBA_REQUEST_HEADERS,
         }),
-        fetchStatsPlayByPlayActions(gameId).catch(() => []),
       ]);
       return {
         ...(boxscorePayload.game || {}),
         gameId,
-        playByPlayActions: statsActions.length ? statsActions : livePlayByPlayPayload.game?.actions || [],
-        source: statsActions.length ? "nba_live_data+stats_playbyplayv3" : "nba_live_data",
+        playByPlayActions: livePlayByPlayPayload.game?.actions || [],
+        source: "nba_live_data",
       };
     } catch (liveDataError) {
       const firstMessage = cloudfrontError instanceof Error ? cloudfrontError.message : "CloudFront fetch failed";
@@ -502,7 +492,6 @@ async function loadExistingOfficialRows(supabase, season) {
       .from("nba_coach_challenge_events")
       .select("id,game_id,challenging_team,period,game_clock,source")
       .eq("season", season)
-      .eq("source", SOURCE)
       .range(start, start + pageSize - 1);
     if (error) throw new Error(`Failed loading existing challenge rows: ${error.message}`);
     rows.push(...(data || []));
@@ -517,20 +506,52 @@ async function applyChallengeRows(rows, season) {
   if (!url || !key) throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for --apply.");
   const supabase = createClient(url, key, { auth: { persistSession: false } });
   const existingRows = await loadExistingOfficialRows(supabase, season);
-  const existingIds = new Map(existingRows.map((row) => [challengeNaturalKey(row), row.id]));
+  const existingIds = new Map(existingRows.filter(row => row.source === SOURCE).map((row) => [challengeNaturalKey(row), row.id]));
   const writes = rows.map((row) => {
     const id = existingIds.get(challengeNaturalKey(row));
     return id ? { ...row, id } : row;
   });
+  const savedRows = [];
   for (const chunk of chunkArray(writes)) {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("nba_coach_challenge_events")
-      .upsert(chunk, { onConflict: "id" });
+      .upsert(chunk, { onConflict: "id" }).select("id,game_id,challenging_team,period,game_clock");
     if (error) throw new Error(`Failed applying official challenge rows: ${error.message}`);
+    savedRows.push(...(data || []));
+  }
+  // Keep user annotations visible when a PDF row supersedes a PBP row. Copy,
+  // never delete, tags on the same normalized game/team/quarter/clock identity.
+  const targetIds = new Map(savedRows.map(row => [challengeLinkIdentity(row), row.id]));
+  const originalById = new Map(existingRows.map(row => [row.id, row]));
+  let preservedTags = 0;
+  for (const chunk of chunkArray(existingRows.map(row => row.id))) {
+    const { data, error } = await supabase.from("nba_challenge_context_event_tags")
+      .select("challenge_event_id,tag_id,tagged_by,tagged_at").in("challenge_event_id", chunk);
+    if (error) throw new Error(`Failed preserving challenge annotations: ${error.message}`);
+    const copies = new Map();
+    for (const tag of data || []) {
+      const target = targetIds.get(challengeLinkIdentity(originalById.get(tag.challenge_event_id)));
+      if (target && target !== tag.challenge_event_id) copies.set(`${target}:${tag.tag_id}`, { ...tag, challenge_event_id: target });
+    }
+    if (copies.size) {
+      const { error: tagError } = await supabase.from("nba_challenge_context_event_tags")
+        .upsert([...copies.values()], { onConflict: "challenge_event_id,tag_id", ignoreDuplicates: true });
+      if (tagError) throw new Error(`Failed preserving challenge annotations: ${tagError.message}`);
+      preservedTags += copies.size;
+    }
+  }
+  // Mark completion only after every row AND annotation has been saved.
+  for (const chunk of chunkArray(writes)) {
+    const finalized = chunk.map(row => ({ ...row, id: targetIds.get(challengeLinkIdentity(row)),
+      source_payload: { ...row.source_payload, importComplete: true } }));
+    if (finalized.some(row => !row.id)) throw new Error("Missing saved challenge ID while finalizing import.");
+    const { error } = await supabase.from("nba_coach_challenge_events").upsert(finalized, { onConflict: "id" });
+    if (error) throw new Error(`Failed finalizing challenge document: ${error.message}`);
   }
   return {
     inserted: writes.filter((row) => !row.id).length,
     updated: writes.filter((row) => row.id).length,
+    preservedTags,
   };
 }
 
@@ -624,7 +645,11 @@ async function enrichOfficialRows(challengeRows, { season, concurrency }) {
     seasonType: challengeRows.find((row) => row.game_id === gameId)?.season_type,
     gameDate: challengeRows.find((row) => row.game_id === gameId)?.game_date,
   }).map(toCallRow));
-  return enrichChallengeEventsWithOfficials(challengeRows, callRows, assignmentRows);
+  const gamesById = new Map(games.map(({ gameId, game }) => [gameId, game]));
+  return enrichChallengeEventsWithOfficials(challengeRows, callRows, assignmentRows).map(row => ({
+    ...row, source_payload: { ...row.source_payload,
+      clockClipUrl: buildChallengeClockClipUrl(row, gamesById.get(row.game_id)) },
+  }));
 }
 
 async function main() {
@@ -658,9 +683,12 @@ async function main() {
     })),
     { seasonTypes, gameIdPrefixes }
   ), maxGames);
-  const challengeRows = hasFlag("skip-official-enrichment")
+  const enrichedRows = hasFlag("skip-official-enrichment")
     ? baseChallengeRows
     : await enrichOfficialRows(baseChallengeRows, { season, concurrency: enrichmentConcurrency });
+  const challengeRows = enrichedRows.map(row => ({ ...row, source_payload: {
+    ...row.source_payload, expectedDocumentRows: enrichedRows.length, importComplete: false, clockLinkVersion: 2,
+  } }));
   let generatedSqlChunks = [];
   if (sqlOut) {
     await mkdir(path.dirname(sqlOut), { recursive: true });

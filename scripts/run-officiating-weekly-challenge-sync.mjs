@@ -10,6 +10,7 @@ import {
   discoverChallengeReviewDocuments,
   discoverSeasonPageUrl,
   shouldRunWeeklyChallengeSync,
+  isChallengeSeasonPage,
 } from "../src/officiatingChallengeDiscovery.js";
 import { assertOutsideWizardsGameWindow } from "./lib/game-window-guard.mjs";
 
@@ -17,6 +18,7 @@ const CURRENT_SEASON = "2026-27";
 const START_DATE = "2026-10-04";
 const OFFICIAL_ORIGIN = "https://official.nba.com";
 const EXPECTED_PAGE_URL = `${OFFICIAL_ORIGIN}/${CURRENT_SEASON}-nba-coachs-challenge-reviews/`;
+const LEGACY_PAGE_URL = `${OFFICIAL_ORIGIN}/2025-26-nba-coachs-challenge-reviews/`;
 const ARCHIVE_URL = `${OFFICIAL_ORIGIN}/archive/`;
 const SOURCE = "nba_official_challenge_pdf";
 const REQUEST_HEADERS = {
@@ -57,27 +59,35 @@ async function fetchResponse(url, acceptMissing = false) {
 }
 
 async function discoverSeasonPage() {
-  const expected = await fetchResponse(EXPECTED_PAGE_URL, true);
-  if (expected) return { pageUrl: EXPECTED_PAGE_URL, html: await expected.text() };
+  const candidates = await Promise.all([EXPECTED_PAGE_URL, LEGACY_PAGE_URL].map(async (pageUrl) => {
+    const response = await fetchResponse(pageUrl, true);
+    if (!response) return null;
+    const html = await response.text();
+    return isChallengeSeasonPage(html, CURRENT_SEASON) ? { pageUrl, html } : null;
+  }));
+  const matching = candidates.find(Boolean);
+  if (matching) return matching;
 
   const archive = await fetchResponse(ARCHIVE_URL);
   const archiveHtml = await archive.text();
   const pageUrl = discoverSeasonPageUrl(archiveHtml, CURRENT_SEASON, ARCHIVE_URL);
   if (!pageUrl) return null;
   const page = await fetchResponse(pageUrl);
-  return { pageUrl, html: await page.text() };
+  const html = await page.text();
+  return isChallengeSeasonPage(html, CURRENT_SEASON) ? { pageUrl, html } : null;
 }
 
 async function alreadyImported(supabase, sha256) {
-  const { data, error } = await supabase
+  const { data, count, error } = await supabase
     .from("nba_coach_challenge_events")
-    .select("id")
+    .select("id,expected_rows:source_payload->>expectedDocumentRows", { count: "exact" })
     .eq("season", CURRENT_SEASON)
     .eq("source", SOURCE)
-    .contains("source_payload", { pdfSha256: sha256 })
+    .contains("source_payload", { pdfSha256: sha256, importComplete: true, clockLinkVersion: 2 })
     .limit(1);
   if (error) throw new Error(`Failed checking imported challenge documents: ${error.message}`);
-  return Boolean(data?.length);
+  // A failed multi-batch import must not make a partial document look complete.
+  return Number(data?.[0]?.expected_rows) > 0 && count === Number(data[0].expected_rows);
 }
 
 function runImporter({ document, filePath, pageUrl, sha256 }) {
@@ -112,10 +122,10 @@ async function main() {
   await loadEnvFile(path.join(process.cwd(), ".env"));
   await loadEnvFile(path.join(process.cwd(), ".env.local"));
   if (!hasFlag("force") && !shouldRunWeeklyChallengeSync({ startDate: START_DATE })) {
-    console.log(`Skipping: weekly challenge sync begins ${START_DATE} and runs Sundays at 5 AM Eastern.`);
+    console.log(`Skipping: daily challenge sync begins ${START_DATE}.`);
     return;
   }
-  await assertOutsideWizardsGameWindow("weekly NBA challenge reconciliation");
+  await assertOutsideWizardsGameWindow("daily NBA challenge reconciliation");
 
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;

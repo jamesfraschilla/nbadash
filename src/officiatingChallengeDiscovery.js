@@ -62,6 +62,13 @@ export function discoverSeasonPageUrl(html, season, archiveUrl) {
   return "";
 }
 
+export function isChallengeSeasonPage(html, season) {
+  // NBA sometimes updates the heading without changing the previous season's
+  // slug. Validate the document's season, never infer it from the URL alone.
+  const headings = [...String(html || "").matchAll(/<h1\b[^>]*>([\s\S]*?)<\/h1>/gi)].map(match => plainText(match[1]));
+  return headings.some(heading => heading.includes(season) && /coach.?s challenge reviews/i.test(heading));
+}
+
 export function shouldRunWeeklyChallengeSync({
   now = new Date(),
   startDate = "2026-10-04",
@@ -80,5 +87,5 @@ export function shouldRunWeeklyChallengeSync({
     return result;
   }, {});
   const dateKey = `${parts.year}-${parts.month}-${parts.day}`;
-  return dateKey >= startDate && parts.weekday === "Sun";
+  return dateKey >= startDate;
 }

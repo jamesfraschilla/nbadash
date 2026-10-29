@@ -4,6 +4,7 @@ import {
   discoverChallengeReviewDocuments,
   discoverSeasonPageUrl,
   shouldRunWeeklyChallengeSync,
+  isChallengeSeasonPage,
 } from "./officiatingChallengeDiscovery.js";
 
 test("discovers regular-season and playoff reviews-by-day PDFs", () => {
@@ -36,10 +37,19 @@ test("discovers a season page from the official archive", () => {
   );
 });
 
-test("weekly sync starts Sunday October 4 during the 5 AM Eastern hour", () => {
+test("daily sync includes Wednesday releases and all other days after the start date", () => {
   assert.equal(shouldRunWeeklyChallengeSync({ now: new Date("2026-10-04T09:15:00Z") }), true);
   assert.equal(shouldRunWeeklyChallengeSync({ now: new Date("2026-10-04T08:15:00Z") }), true);
   assert.equal(shouldRunWeeklyChallengeSync({ now: new Date("2026-10-04T18:15:00Z") }), true);
   assert.equal(shouldRunWeeklyChallengeSync({ now: new Date("2026-09-27T09:15:00Z") }), false);
-  assert.equal(shouldRunWeeklyChallengeSync({ now: new Date("2026-10-05T09:15:00Z") }), false);
+  assert.equal(shouldRunWeeklyChallengeSync({ now: new Date("2026-10-05T09:15:00Z") }), true);
+  assert.equal(shouldRunWeeklyChallengeSync({ now: new Date("2026-10-28T09:15:00Z") }), true);
+  assert.equal(shouldRunWeeklyChallengeSync({ now: new Date("2026-10-29T09:15:00Z") }), true);
+});
+
+test("the page heading identifies the season even when NBA retains an old URL", () => {
+  assert.equal(isChallengeSeasonPage('<h1>2026-27 NBA Coach’s Challenge Reviews</h1>', "2026-27"), true);
+  assert.equal(isChallengeSeasonPage('<h1>NBA Official</h1><h1>2026-27 NBA Coach&#8217;s Challenge Reviews</h1>', "2026-27"), true);
+  assert.equal(isChallengeSeasonPage('<h1>2025-26 NBA Coach’s Challenge Reviews</h1>', "2026-27"), false);
+  assert.equal(isChallengeSeasonPage('<h1>2026-27 NBA Officiating Last Two Minute Reports</h1>', "2026-27"), false);
 });
