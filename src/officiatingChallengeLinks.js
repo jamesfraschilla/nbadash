@@ -1,10 +1,17 @@
 import { nbaClipsUrl } from "./nbaClipsTrial.js";
 
 export function verifiedChallengeVideoUrl(row) {
-  // Never synthesize a URL from the replay marker itself. video_url is populated
-  // either by the official weekly log or by the conservative play-by-play
-  // matcher when an immediately preceding reviewable action shares the clock.
-  return String(row?.video_url || row?.videoUrl || "").trim() || null;
+  // Video is exclusively the published PDF clip. PBP-derived and timestamp
+  // links belong to Clock, even while waiting for the next official PDF.
+  if (row?.source !== "nba_official_challenge_pdf") return null;
+  const value = String(row?.video_url || row?.videoUrl || "").trim();
+  try {
+    const url = new URL(value);
+    return ["https:", "http:"].includes(url.protocol) && url.hostname === "dmmx2.nba.com"
+      && !url.username && !url.password ? value : null;
+  } catch {
+    return null;
+  }
 }
 
 function clockSeconds(value) {
