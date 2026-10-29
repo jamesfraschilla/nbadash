@@ -122,11 +122,10 @@ async function main() {
     .limit(1);
   if (cacheError) throw new Error(`Failed checking cache status: ${cacheError.message}`);
   const cacheTime = cacheRows?.[0]?.status === "success" ? Date.parse(cacheRows[0].refreshed_at) : 0;
-  const sourceTimes = await Promise.all([
-    latestUpdatedAt(supabase, "nba_official_call_events"),
-    latestUpdatedAt(supabase, "nba_official_game_assignments"),
-    latestUpdatedAt(supabase, "nba_coach_challenge_events"),
-  ]);
+  const sourceTimes = [];
+  for (const table of ["nba_official_call_events", "nba_official_game_assignments", "nba_coach_challenge_events"]) {
+    sourceTimes.push(await latestUpdatedAt(supabase, table));
+  }
   const sourceTime = Math.max(...sourceTimes);
   let refreshed = false;
   if (sourceTime > cacheTime) {
@@ -152,24 +151,26 @@ async function main() {
     refreshed = true;
   }
 
-  const [missingCallOfficials, missingChallengeCrew, missingChallengeTeams, missingChallengeOutcomes, shootingFoulIntegrity, crewIssues] = await Promise.all([
-    exactCount(supabase, "nba_official_call_events", (query) => query
+  // Maintenance is not latency-sensitive. Avoid six simultaneous aggregates
+  // competing with user reads on the small production instance.
+  const [missingCallOfficials, missingChallengeCrew, missingChallengeTeams, missingChallengeOutcomes, shootingFoulIntegrity, crewIssues] = [
+    await exactCount(supabase, "nba_official_call_events", (query) => query
       .eq("season", CURRENT_SEASON)
       .is("official_id", null)
       .is("official_name", null)),
-    exactCount(supabase, "nba_coach_challenge_events", (query) => query
+    await exactCount(supabase, "nba_coach_challenge_events", (query) => query
       .eq("season", CURRENT_SEASON)
       .is("crew_chief_id", null)
       .is("crew_chief_name", null)),
-    exactCount(supabase, "nba_coach_challenge_events", (query) => query
+    await exactCount(supabase, "nba_coach_challenge_events", (query) => query
       .eq("season", CURRENT_SEASON)
       .or("challenging_team.is.null,challenging_team.eq.")),
-    exactCount(supabase, "nba_coach_challenge_events", (query) => query
+    await exactCount(supabase, "nba_coach_challenge_events", (query) => query
       .eq("season", CURRENT_SEASON)
       .or("challenge_outcome.is.null,challenge_outcome.eq.")),
-    shootingFoulIntegrityMismatch(supabase),
-    crewIntegrityIssues(supabase),
-  ]);
+    await shootingFoulIntegrityMismatch(supabase),
+    await crewIntegrityIssues(supabase),
+  ];
 
   const audit = { season: CURRENT_SEASON, refreshed, crewIssues, missingCallOfficials, missingChallengeCrew, missingChallengeTeams, missingChallengeOutcomes, shootingFoulIntegrity };
   console.log(JSON.stringify(audit, null, 2));

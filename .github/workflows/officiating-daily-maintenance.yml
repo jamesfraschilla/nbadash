@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: officiating-daily-maintenance
+  group: officiating-database-maintenance
   cancel-in-progress: false
 
 jobs:
@@ -41,7 +41,13 @@ jobs:
           else
             npm run officiating:sync:challenges
           fi
+      - name: Verify original challenged calls against official gamebooks
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/reconcile-gamebook-challenges.mjs --lookback-days=7 --apply
       - name: Refresh stale current-season rollups and audit integrity
+        if: ${{ !cancelled() }}
         env:
           SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -56,3 +62,10 @@ jobs:
         run: |
           echo "::error::Official challenge-log reconciliation failed; daily rollup maintenance and integrity checks still completed."
           exit 1
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: challenge-attribution-audit-daily
+          path: output/challenge-attribution-audit/*-report.json
+          retention-days: 14
+          if-no-files-found: ignore

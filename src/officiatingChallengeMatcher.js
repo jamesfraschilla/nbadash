@@ -48,6 +48,10 @@ function findCrewChief(assignments, gameId) {
 }
 
 function isCompatibleCall(challenge, call) {
+  const text = [call.primary_category, call.secondary_category, call.action_type,
+    call.sub_type, call.descriptor, call.description].filter(Boolean).join(" ").toLowerCase().replace(/[_-]+/g, " ");
+  // Jump-ball infractions are not the foul/OOB/goaltending call under review.
+  if (/jump\s*ball/.test(text)) return false;
   const category = challengeCategory(challenge);
   if (!category) return true;
 
@@ -60,7 +64,7 @@ function isCompatibleCall(challenge, call) {
     call.description,
   ].filter(Boolean).join(" "));
   if (category === "turnover") {
-    return callCategory === "turnover" || callCategory === "violation";
+    return /out\s*of\s*bounds|\boob\b|team\s*ball/.test(text);
   }
   return callCategory === category;
 }
@@ -70,6 +74,22 @@ function candidateScore(challenge, call, toleranceSeconds) {
   if (clockDelta === null) return null;
   if (clockDelta > toleranceSeconds) return null;
   if (!isCompatibleCall(challenge, call)) return null;
+
+  // A stopped game clock is not a possession/replay boundary. Never attach a
+  // later possession just because it is within the clock-tolerance window.
+  const review = challenge.source_payload || challenge.sourcePayload || {};
+  const payload = call.source_payload || call.sourcePayload || {};
+  const reviewClock = clockSeconds(challenge.game_clock || challenge.gameClock);
+  const callClock = clockSeconds(call.game_clock || call.gameClock);
+  if (callClock < reviewClock) return null;
+  const reviewOrder = Number(review.orderNumber);
+  const callOrder = Number(call.order_number || call.orderNumber || payload.orderNumber);
+  if (reviewOrder > 0 && callOrder > 0 && callOrder >= reviewOrder) return null;
+  const reviewTime = Date.parse(review.timeActual || "");
+  const callTime = Date.parse(payload.timeActual || "");
+  if (Number.isFinite(reviewTime) && Number.isFinite(callTime) && callTime > reviewTime) return null;
+  // With no original-call signal, proximity alone cannot justify a whistle.
+  if (!challengeCategory(challenge) && clockDelta > 0) return null;
 
   let score = 1 - (clockDelta / Math.max(toleranceSeconds, 1)) * 0.2;
   const category = challengeCategory(challenge);
@@ -135,7 +155,7 @@ function findMatchingCall(challenge, calls, toleranceSeconds, reasonSuffix = "at
     .sort((left, right) => right.score - left.score);
   if (!candidates.length) return { call: null, confidence: 0, reason: `no-compatible-call-${reasonSuffix}` };
   if (candidates.length > 1 && Math.abs(candidates[0].score - candidates[1].score) < 0.01) {
-    return { call: candidates[0].call, confidence: 0.62, reason: `ambiguous-compatible-call-${reasonSuffix}` };
+    return { call: null, confidence: 0, reason: `ambiguous-compatible-call-${reasonSuffix}` };
   }
   return { call: candidates[0].call, confidence: candidates[0].score, reason: `matched-compatible-call-${reasonSuffix}` };
 }
@@ -145,8 +165,13 @@ function findSecondPassMatchingCall(challenge, calls, toleranceSeconds) {
   if (!category) {
     return { call: null, confidence: 0, reason: "second-pass-skipped-low-whistle-signal-category" };
   }
+  const payload = challenge.source_payload || challenge.sourcePayload || {};
+  const linkedAction = Number(payload.challengedAction?.actionNumber);
+  if (!(linkedAction > 0)) {
+    return { call: null, confidence: 0, reason: "second-pass-skipped-no-explicit-challenged-action" };
+  }
   const adjustedTolerance = category === "turnover" ? Math.min(toleranceSeconds, 4) : toleranceSeconds;
-  return findMatchingCall(challenge, calls, adjustedTolerance, "second-pass-window");
+  return findMatchingCall(challenge, calls.filter(call => Number(call.action_number || call.actionNumber) === linkedAction), adjustedTolerance, "second-pass-window");
 }
 
 function mergeMatchReason(existingReason, nextReason) {
@@ -174,7 +199,13 @@ export function enrichChallengeEventsWithOfficials(challenges, calls, assignment
       : firstPass;
     const call = match.call;
     const nearbyLocationContext = call ? null : findNearbyLocationContext(challenge, contextActions, nearbyActionToleranceSeconds);
-    const existingWhistle = cleanText(challenge.whistling_official_id || challenge.whistling_official_name);
+    const payload = challenge.source_payload || challenge.sourcePayload || {};
+    const previouslyAutoMatched = Boolean(payload.officialMatcher);
+    const protectedAttribution = (payload.gamebookChallenge?.version === "gamebook-challenge-v1"
+      && Boolean(payload.gamebookChallenge.officialToken) && challenge.review_status !== "needs_review")
+      || ["manual", "verified"].includes(challenge.review_status);
+    const discardOldAutoMatch = previouslyAutoMatched && !protectedAttribution;
+    const existingWhistle = discardOldAutoMatch ? "" : cleanText(challenge.whistling_official_id || challenge.whistling_official_name);
     const existingStatus = cleanText(challenge.review_status || challenge.reviewStatus);
     const confidence = call
       ? Math.max(Number(challenge.match_confidence || challenge.matchConfidence || 0), match.confidence)
@@ -185,16 +216,17 @@ export function enrichChallengeEventsWithOfficials(challenges, calls, assignment
       challenging_team: cleanText(challenge.challenging_team || challenge.challengingTeam || call?.charged_team || call?.chargedTeam),
       crew_chief_id: cleanText(challenge.crew_chief_id || crewChief?.official_id || crewChief?.officialId),
       crew_chief_name: cleanText(challenge.crew_chief_name || crewChief?.official_name || crewChief?.officialName),
-      whistling_official_id: cleanText(challenge.whistling_official_id || call?.official_id || call?.officialId),
-      whistling_official_name: cleanText(challenge.whistling_official_name || call?.official_name || call?.officialName),
-      matched_action_number: challenge.matched_action_number ?? challenge.matchedActionNumber ?? call?.action_number ?? call?.actionNumber ?? null,
-      matched_call_event_id: challenge.matched_call_event_id || challenge.matchedCallEventId || call?.id || null,
-      challenge_sub_type: cleanText(challengeFoulSubtype(challenge, call || nearbyLocationContext) || challenge.challenge_sub_type || challenge.challengeSubType),
-      match_confidence: confidence,
+      whistling_official_id: protectedAttribution ? challenge.whistling_official_id : cleanText((!discardOldAutoMatch && challenge.whistling_official_id) || call?.official_id || call?.officialId),
+      whistling_official_name: protectedAttribution ? challenge.whistling_official_name : cleanText(existingWhistle && challenge.whistling_official_name || call?.official_name || call?.officialName),
+      matched_action_number: protectedAttribution ? challenge.matched_action_number : call?.action_number ?? call?.actionNumber ?? payload.actionNumber ?? null,
+      matched_call_event_id: protectedAttribution ? challenge.matched_call_event_id : call?.id || null,
+      challenge_type: challenge.challenge_type || (call ? ({ foul: "Foul", turnover: "OOB", violation: "Violation" }[normalizedCategory(`${call.primary_category || ""} ${call.action_type || ""} ${call.description || ""}`)] || "") : ""),
+      challenge_sub_type: protectedAttribution ? challenge.challenge_sub_type : cleanText(challengeFoulSubtype(challenge, call || nearbyLocationContext) || (!discardOldAutoMatch && (challenge.challenge_sub_type || challenge.challengeSubType))),
+      match_confidence: protectedAttribution ? challenge.match_confidence : call ? match.confidence : discardOldAutoMatch ? 0.55 : confidence,
       match_reason: call
         ? mergeMatchReason(challenge.match_reason || challenge.matchReason, match.reason)
         : cleanText(challenge.match_reason || challenge.matchReason || match.reason),
-      review_status: call
+      review_status: protectedAttribution ? challenge.review_status : call
         ? existingStatus && existingStatus !== "needs_review" ? existingStatus : "auto"
         : existingWhistle
           ? existingStatus || "auto"
@@ -202,7 +234,7 @@ export function enrichChallengeEventsWithOfficials(challenges, calls, assignment
       source_payload: {
         ...(challenge.source_payload || challenge.sourcePayload || {}),
         officialMatcher: {
-          version: "challenge-official-v1",
+          version: "challenge-official-v2",
           reason: match.reason,
           toleranceSeconds,
           matchedCall: call ? {

@@ -72,7 +72,7 @@ test("enrichChallengeEventsWithOfficials keeps unmatched official PDF rows revie
   assert.match(challenge.match_reason, /no-compatible-call-at-clock/);
 });
 
-test("enrichChallengeEventsWithOfficials uses a conservative second pass for foul challenges", () => {
+test("enrichChallengeEventsWithOfficials uses a conservative second pass for earlier foul calls", () => {
   const [challenge] = enrichChallengeEventsWithOfficials([
     {
       game_id: "0022500101",
@@ -83,13 +83,13 @@ test("enrichChallengeEventsWithOfficials uses a conservative second pass for fou
       initial_call: "Defensive Foul",
       match_confidence: 0.98,
       match_reason: "matched-official-pdf-video-game-id",
-      source_payload: {},
+      source_payload: { challengedAction: { actionNumber: 108 } },
     },
   ], [
     {
       game_id: "0022500101",
       period: 1,
-      game_clock: "03:35.0",
+      game_clock: "03:49.0",
       action_number: 108,
       primary_category: "foul",
       description: "J.Johnson S.FOUL (T.Ford)",
@@ -103,6 +103,45 @@ test("enrichChallengeEventsWithOfficials uses a conservative second pass for fou
   assert.equal(challenge.matched_action_number, 108);
   assert.equal(challenge.review_status, "auto");
   assert.match(challenge.match_reason, /matched-compatible-call-second-pass-window/);
+});
+
+test("a nearby earlier foul without an explicit challenged-action link is not proof", () => {
+  const [row] = enrichChallengeEventsWithOfficials([{ game_id: "g", period: 4, game_clock: "00:00.5", challenge_type: "Foul" }],
+    [{ game_id: "g", period: 4, game_clock: "00:07", action_type: "foul", official_name: "Brett Nansel" }], []);
+  assert.equal(row.whistling_official_name, "");
+  assert.equal(row.review_status, "needs_review");
+});
+
+test("never attributes a challenge to the next possession (IND-PHI 0022600135)", () => {
+  const challenge = { game_id: "0022600135", period: 2, game_clock: "PT11M51.00S",
+    challenge_type: null, whistling_official_name: "Aaron Smith", challenge_sub_type: "Jump Ball",
+    source_payload: { orderNumber: 111922351, timeActual: "2026-10-28T23:49:26Z",
+      officialMatcher: { version: "challenge-official-v1" } } };
+  const [row] = enrichChallengeEventsWithOfficials([challenge], [{ game_id: challenge.game_id,
+    period: 2, game_clock: "PT11M50.00S", action_number: 221, order_number: 125879653,
+    action_type: "violation", sub_type: "jumpball", official_name: "Aaron Smith" }], []);
+  assert.equal(row.whistling_official_name, "");
+  assert.equal(row.challenge_sub_type, "");
+  assert.equal(row.review_status, "needs_review");
+  assert.equal(row.match_confidence, 0.55);
+});
+
+test("same-clock calls after a replay and ambiguous calls cannot receive a whistle", () => {
+  const challenge = { game_id: "g", period: 1, game_clock: "05:00", challenge_type: "Foul",
+    source_payload: { orderNumber: 200 } };
+  const call = { game_id: "g", period: 1, game_clock: "05:00", action_type: "foul", official_name: "A" };
+  assert.equal(enrichChallengeEventsWithOfficials([challenge], [{ ...call, order_number: 201 }], [])[0].whistling_official_name, "");
+  const [ambiguous] = enrichChallengeEventsWithOfficials([challenge], [call, { ...call, official_name: "B" }], []);
+  assert.equal(ambiguous.whistling_official_name, "");
+  assert.equal(ambiguous.review_status, "needs_review");
+});
+
+test("jump-ball violations are not challengeable foul or OOB candidates even at the same clock", () => {
+  for (const challenge_type of [null, "OOB", "Foul"]) {
+    const [row] = enrichChallengeEventsWithOfficials([{ game_id: "g", period: 2, game_clock: "11:51", challenge_type }],
+      [{ game_id: "g", period: 2, game_clock: "11:51", action_type: "violation", sub_type: "jumpball", official_name: "Aaron Smith" }], []);
+    assert.equal(row.whistling_official_name, "");
+  }
 });
 
 test("enrichChallengeEventsWithOfficials does not second-pass OOB rows to a whistle", () => {

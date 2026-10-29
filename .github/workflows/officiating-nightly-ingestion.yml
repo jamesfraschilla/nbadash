@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: officiating-nightly-ingestion
+  group: officiating-database-maintenance
   cancel-in-progress: false
 
 jobs:
@@ -30,6 +30,10 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install pdfplumber
       - name: Reconcile recently completed games and challenges
         env:
           SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
@@ -41,7 +45,14 @@ jobs:
           else
             npm run officiating:ingest:nightly -- --lookback-days="${LOOKBACK_DAYS}"
           fi
+      - name: Verify original challenged calls against official gamebooks
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          LOOKBACK_DAYS: ${{ inputs.lookback_days || '3' }}
+        run: node scripts/reconcile-gamebook-challenges.mjs --lookback-days="${LOOKBACK_DAYS}" --apply
       - name: Refresh compact insight facts for recent games
+        if: ${{ !cancelled() }}
         env:
           SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -49,3 +60,10 @@ jobs:
         run: npm run officiating:backfill:insight-facts -- --season=2026-27 --lookback-days="${LOOKBACK_DAYS}" --concurrency=2 --replace --apply
       - name: Audit NBA feed schema contract
         run: npm run nba-feed:audit
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: challenge-attribution-audit-nightly
+          path: output/challenge-attribution-audit/*-report.json
+          retention-days: 14
+          if-no-files-found: ignore
