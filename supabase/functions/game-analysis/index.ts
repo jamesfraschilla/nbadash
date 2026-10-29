@@ -505,11 +505,15 @@ function isPersonalFoul(action: Record<string, unknown>) {
 }
 
 function normalizeQualifiers(value: unknown) {
+  const canonical = (entry: unknown) => {
+    const text = String(entry || "").trim().toLowerCase();
+    return text === "2ndchance" ? "secondchance" : text;
+  };
   if (Array.isArray(value)) {
-    return value.map((entry) => String(entry || "").toLowerCase());
+    return value.map(canonical);
   }
   if (typeof value === "string" && value) {
-    return value.split(/[\s,|]+/).map((entry) => entry.trim().toLowerCase()).filter(Boolean);
+    return value.split(/[\s,|]+/).map(canonical).filter(Boolean);
   }
   return [];
 }
@@ -794,6 +798,8 @@ function aggregateRangeStats(
         // same qualifier used on field goals. Include those points so analysis
         // totals match the dashboard's transition-point calculation.
         if (qualifiers.includes("fastbreak")) teamTotals.transitionPoints += points;
+        if (qualifiers.includes("secondchance")) teamTotals.secondChancePoints += points;
+        if (qualifiers.includes("fromturnover")) teamTotals.pointsOffTurnovers += points;
       }
     }
 

@@ -18,6 +18,7 @@ import {
 import { useGame, useMinutes } from "../queries.js";
 import { buildCustomPlaycallClipMeta, buildTimedNoteClipMeta } from "../noteClipLinks.js";
 import { washingtonEventClipUrl } from "../nbaClipsTrial.js";
+import { threePointOffensiveReboundPercent, reconcileShotZoneTotals } from "../customStatRates.js";
 import { useAuth } from "../auth/useAuth.js";
 import {
   buildDefaultNoteForm,
@@ -1948,7 +1949,7 @@ export default function Game({ variant = "full" }) {
       pickValue(computed?.secondChance3FGAttempted, base?.secondChance3FGAttempted)
     );
     return {
-      ...base,
+      ...reconcileShotZoneTotals(base, computed),
       pointsOffTurnovers,
       paintPoints,
       secondChance3FGMade,
@@ -2097,9 +2098,7 @@ export default function Game({ variant = "full" }) {
     secondChancePoints: teamTotals.secondChancePoints || 0,
     pointsOffTurnovers: teamTotals.pointsOffTurnovers || 0,
     paintPoints: teamTotals.paintPoints || 0,
-    threePointORebPercent: teamTotals.reboundsOffensive
-      ? ((teamTotals.threePointOReb || 0) / teamTotals.reboundsOffensive) * 100
-      : 0,
+    threePointORebPercent: threePointOffensiveReboundPercent(teamTotals),
   });
 
   const mergeTransitionSource = (snapshotTotals, computedTotals, fallbackTotals = {}) => {
@@ -2114,6 +2113,8 @@ export default function Game({ variant = "full" }) {
       pointsOffTurnovers: computedTotals.pointsOffTurnovers ?? base.pointsOffTurnovers ?? 0,
       paintPoints: computedTotals.paintPoints ?? base.paintPoints ?? 0,
       threePointOReb: computedTotals.threePointOReb ?? base.threePointOReb ?? 0,
+      threePointersMade: computedTotals.threePointersMade ?? base.threePointersMade ?? 0,
+      threePointersAttempted: computedTotals.threePointersAttempted ?? base.threePointersAttempted ?? 0,
       reboundsOffensive: computedTotals.reboundsOffensive ?? base.reboundsOffensive ?? 0,
     };
   };

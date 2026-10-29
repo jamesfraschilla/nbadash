@@ -512,6 +512,8 @@ export function aggregateSegmentStats({
         teamStats.freeThrowsMade += 1;
         teamStats.points += points;
         if (isFastBreak) teamStats.transitionPoints += points;
+        if (qualifiers.includes("2ndchance") || qualifiers.includes("secondchance")) teamStats.secondChancePoints += points;
+        if (qualifiers.includes("fromturnover")) teamStats.pointsOffTurnovers += points;
       }
     }
 
@@ -851,11 +853,16 @@ export function countPossessionsByTeam(actions, segment, homeTeamId, awayTeamId)
   let currentPossession = null;
   let homePossessions = 0;
   let awayPossessions = 0;
+  let currentPeriod = null;
 
   segmentActions.forEach((action) => {
+    if (action.period !== currentPeriod) {
+      currentPossession = null;
+      currentPeriod = action.period;
+    }
     if (action.possession == null) return;
     const possessionTeam = Number(action.possession);
-    if (!Number.isFinite(possessionTeam)) return;
+    if (possessionTeam !== homeId && possessionTeam !== awayId) return;
     if (possessionTeam === currentPossession) return;
     currentPossession = possessionTeam;
     if (possessionTeam === homeId) homePossessions += 1;

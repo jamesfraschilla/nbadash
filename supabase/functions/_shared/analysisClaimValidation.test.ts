@@ -1,6 +1,13 @@
 import { assertEquals, assert } from "jsr:@std/assert@1";
 import { invalidEndingMargins, invalidPlayerClaims, invalidScoringDirectionClaims } from "./analysisClaimValidation.ts";
 
+Deno.test("WAS–CLE halftime: 14 points cannot lead all scorers when Watson has 16", () => {
+  const features = { players: [{ name: "B. Coulibaly", points: 14 }, { name: "P. Watson", points: 16 }] };
+  assert(invalidPlayerClaims({ summary: "Washington's Coulibaly led all scorers with 14 Pts on perfect 7/7 shooting." }, features).length > 0);
+  assertEquals(invalidPlayerClaims({ summary: "Coulibaly led Washington with 14 Pts." }, features), []);
+  assertEquals(invalidPlayerClaims({ summary: "Watson led all scorers with 16 Pts." }, features), []);
+});
+
 Deno.test("WAS–CHA second-half scoring cannot reverse the winner with an accurate numeric pair", () => {
   assert(invalidScoringDirectionClaims({ summary: "They outscored Washington Wizards 56–59 in the 24-minute span but maintained a 7-point advantage." }).length > 0);
   assert(invalidScoringDirectionClaims({ summary: "Charlotte outscored Washington 56-56." }).length > 0);

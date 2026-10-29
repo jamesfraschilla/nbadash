@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { aggregateSegmentStats, computeKills } from "./segmentStats.js";
+import { aggregateSegmentStats, computeKills, countPossessionsByTeam } from "./segmentStats.js";
 
 const AWAY = {
   teamId: 1,
@@ -11,6 +11,31 @@ const HOME = {
   teamId: 2,
   teamTricode: "HME",
 };
+
+test("same team ending and starting adjacent quarters counts separate possessions; markers do not", () => {
+  const actions = [
+    { orderNumber: 1, period: 1, possession: HOME.teamId },
+    { orderNumber: 2, period: 1, possession: 0 },
+    { orderNumber: 3, period: 1, possession: HOME.teamId },
+    { orderNumber: 4, period: 2, possession: HOME.teamId },
+    { orderNumber: 5, period: 2, possession: AWAY.teamId },
+  ];
+  assert.deepEqual(countPossessionsByTeam(actions, "all", HOME.teamId, AWAY.teamId), { homePossessions: 2, awayPossessions: 1 });
+});
+
+test("qualified free throws count toward second-chance and turnover scoring without double-counting", () => {
+  const actions = ["Made", "Missed", "Made"].map((shotResult, index) => ({
+    actionNumber: index + 1, orderNumber: index + 1, period: 1, clock: "PT03M00.00S",
+    possession: AWAY.teamId, teamId: AWAY.teamId, actionType: "freethrow", shotResult,
+    personId: 101, qualifiers: ["fastbreak", "2ndchance", "fromturnover"],
+  }));
+  const stats = aggregateSegmentStats({ actions, segment: "all", homeTeam: HOME, awayTeam: AWAY,
+    basePlayers: [], minutesData: null, currentPeriod: 1, currentClock: "PT03M00.00S", isLive: true }).teamTotals[AWAY.teamId];
+  assert.equal(stats.points, 2);
+  assert.equal(stats.pointsOffTurnovers, 2);
+  assert.equal(stats.secondChancePoints, 2);
+  assert.equal(stats.transitionPoints, 2);
+});
 
 test("Kill totals normalize team IDs, ignore marker possessions, and treat missed free throws as scoreless", () => {
   const actions = [

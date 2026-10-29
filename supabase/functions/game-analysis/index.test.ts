@@ -478,6 +478,15 @@ Deno.test("range aggregation includes fast-break free throws in transition point
   assertEquals(totals[awayTeam.teamId].freeThrowsMade, 2);
 });
 
+Deno.test("range aggregation retains turnover and second-chance free-throw qualifiers", () => {
+  const totals = __test__.aggregateRangeStats([
+    { actionNumber: 1, actionType: "freethrow", shotResult: "Made", teamId: homeTeam.teamId, qualifiers: ["2ndchance", "fromturnover"] },
+    { actionNumber: 2, actionType: "freethrow", shotResult: "Missed", teamId: homeTeam.teamId, qualifiers: ["2ndchance", "fromturnover"] },
+  ], [{ actionNumber: 1, teamId: homeTeam.teamId, points: 1 }], homeTeam.teamId, awayTeam.teamId);
+  assertEquals(totals[homeTeam.teamId].secondChancePoints, 1);
+  assertEquals(totals[homeTeam.teamId].pointsOffTurnovers, 1);
+});
+
 Deno.test("quarter ranges exclude actions from the preceding period at the shared boundary", () => {
   const features = __test__.buildFeaturePayload({
     gameId: "0022600001",

@@ -91,6 +91,11 @@ export function invalidPlayerClaims(analysis: RecordValue, features: RecordValue
         let clause = sentence.slice(index + length, mentions[mentionIndex + 1]?.index);
         // A subsequent explicit team shooting statement starts a new subject.
         if (nextTeamSubject) clause = clause.split(nextTeamSubject)[0];
+        const leader = /^.{0,25}?\b(?:led|leads|leading)\s+all\s+scorers\b/.test(clause);
+        const highestPoints = Math.max(...players.map((entry) => Number(entry.points) || 0));
+        if (leader && Number(player.points) < highestPoints) {
+          reasons.push(`${player.name} cannot lead all scorers with ${player.points}; the scoring leader has ${highestPoints}`);
+        }
         const points = /^.{0,45}?\b(?:scored|had|contributed|with|led with)\s+(\d+)\s+(?:pts|points)\b/.exec(clause);
         if (points && Number(points[1]) !== Number(player.points)) reasons.push(`${player.name} scoring claim ${points[1]} does not match ${player.points}`);
         const fractions = [...clause.matchAll(/(\d+(?:\.\d+)?)%\s*\((\d+)\/(\d+)\)/g)];
