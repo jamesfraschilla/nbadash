@@ -29,6 +29,8 @@ import {
   drawCenteredText,
   drawContain,
   drawLogo,
+  drawNbaCupBorder,
+  loadNbaCupTrophy,
   ensureMatchupExportFonts,
   loadExportBackgroundImage,
   loadFirstImage,
@@ -227,6 +229,7 @@ export async function renderCoverageGraphicCanvas({
   columnCount = 3,
   logoTeamId = "",
   league = "nba",
+  nbaCup = false,
   outputWidth = EXPORT_WIDTH,
   outputHeight = EXPORT_HEIGHT,
   logoImage = null,
@@ -239,7 +242,7 @@ export async function renderCoverageGraphicCanvas({
   const hydratedColumnHeaders = hydrateCoverageColumnHeaders(columnHeaders);
   const resolvedColumnCount = getCoverageExportColumnCount(hydratedSlots, columnCount, hydratedColumnHeaders);
   const [resolvedLogo, resolvedIcons, backgroundImage] = await Promise.all([
-    logoImage || loadFirstImage(logoTeamId ? [teamLogoUrl(logoTeamId, league)] : []),
+    nbaCup ? loadNbaCupTrophy() : logoImage || loadFirstImage(logoTeamId ? [teamLogoUrl(logoTeamId, league)] : []),
     iconImages || loadCoverageIconImages(hydratedSlots),
     loadExportBackgroundImage(),
   ]);
@@ -253,6 +256,7 @@ export async function renderCoverageGraphicCanvas({
   drawBackdrop(context, backgroundImage);
   drawLogo(context, resolvedLogo);
   drawCoverageSlots(context, hydratedSlots, hydratedColumnHeaders, resolvedColumnCount, resolvedIcons);
+  if (nbaCup) drawNbaCupBorder(context);
   return canvas;
 }
 
@@ -262,10 +266,11 @@ export async function exportCoverageGraphic({
   columnCount,
   logoTeamId,
   league = "nba",
+  nbaCup = false,
   team = null,
   fileName = "",
 }) {
-  const canvas = await renderCoverageGraphicCanvas({ slots, columnHeaders, columnCount, logoTeamId, league });
+  const canvas = await renderCoverageGraphicCanvas({ slots, columnHeaders, columnCount, logoTeamId, league, nbaCup });
   downloadCanvas(canvas, fileName || buildFileName(team));
 }
 

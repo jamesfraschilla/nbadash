@@ -127,6 +127,7 @@ export function getCoverageExportColumnCount(slots, columnCount, columnHeaders =
 
 export function hydrateCoveragePayload(payload) {
   return {
+    nbaCup: payload?.nbaCup === true,
     league: String(payload?.league || "nba").trim() === "gleague" ? "gleague" : "nba",
     logoTeamId: String(payload?.logoTeamId || "").trim(),
     columnCount: normalizeCoverageColumnCount(payload?.columnCount),

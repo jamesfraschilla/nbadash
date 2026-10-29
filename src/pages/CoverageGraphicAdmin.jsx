@@ -94,6 +94,7 @@ export default function CoverageGraphicAdmin() {
   const previewCanvasRef = useRef(null);
   const previewRenderIdRef = useRef(0);
   const [league, setLeague] = useState("nba");
+  const [nbaCup, setNbaCup] = useState(false);
   const [logoTeamId, setLogoTeamId] = useState(WIZARDS_TEAM_ID);
   const [columnCount, setColumnCount] = useState(COVERAGE_MAX_COLUMNS);
   const [columnHeaders, setColumnHeaders] = useState(() => buildDefaultCoverageColumnHeaders());
@@ -118,7 +119,7 @@ export default function CoverageGraphicAdmin() {
       columnHeaders.slice(0, columnCount).some((header) => String(header || "").trim()),
     [activeSlots, columnCount, columnHeaders]
   );
-  const exportReady = Boolean(hasCoverageContent && logoTeamId);
+  const exportReady = Boolean(hasCoverageContent && (nbaCup || logoTeamId));
   const logoPreviewUrl = String(logoTeamId) === WIZARDS_TEAM_ID
     ? wizardsLogoUrl
     : logoTeamId
@@ -132,6 +133,7 @@ export default function CoverageGraphicAdmin() {
     previewRenderIdRef.current = renderId;
 
     renderCoverageGraphicCanvas({
+      nbaCup,
       slots,
       columnHeaders,
       columnCount,
@@ -159,7 +161,7 @@ export default function CoverageGraphicAdmin() {
     return () => {
       if (previewRenderIdRef.current === renderId) previewRenderIdRef.current += 1;
     };
-  }, [columnCount, columnHeaders, league, logoTeamId, slots]);
+  }, [columnCount, columnHeaders, league, logoTeamId, nbaCup, slots]);
 
   useEffect(() => {
     let cancelled = false;
@@ -191,6 +193,7 @@ export default function CoverageGraphicAdmin() {
       const hydrated = hydrateCoveragePayload(savedRecord.payload);
       setRecordId(savedRecord.id);
       setLeague(hydrated.league);
+      setNbaCup(hydrated.nbaCup);
       setLogoTeamId(hydrated.logoTeamId);
       setColumnCount(hydrated.columnCount);
       setColumnHeaders(hydrated.columnHeaders);
@@ -206,6 +209,7 @@ export default function CoverageGraphicAdmin() {
   }, [accountsEnabled, coverageParam, user?.id, vaultUserId]);
 
   const buildSavedPayload = (sourceSlots = slots) => ({
+    nbaCup,
     league,
     logoTeamId,
     columnCount,
@@ -261,6 +265,7 @@ export default function CoverageGraphicAdmin() {
   };
 
   const handleReset = () => {
+    setNbaCup(false);
     setLeague("nba");
     setLogoTeamId(WIZARDS_TEAM_ID);
     setColumnCount(COVERAGE_MAX_COLUMNS);
@@ -284,6 +289,7 @@ export default function CoverageGraphicAdmin() {
     setStatus("Rendering PNG...");
     try {
       await exportCoverageGraphic({
+        nbaCup,
         slots,
         columnHeaders,
         columnCount,
@@ -497,6 +503,10 @@ export default function CoverageGraphicAdmin() {
             >
               Reset
             </button>
+            <label className={styles.cupOption}>
+              <input type="checkbox" checked={nbaCup} onChange={(event) => setNbaCup(event.target.checked)} />
+              NBA Cup
+            </label>
             <button
               type="button"
               className={styles.primaryButton}

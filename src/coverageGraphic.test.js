@@ -24,8 +24,14 @@ test("coverage drafts default to three headers, six spaces, and the first column
   assert.equal(slots[5].id, "coverage-3-2");
   assert.deepEqual(buildDefaultCoverageColumnHeaders(), ["P/R", "DHO + C&S", "MISC"]);
   const hydrated = hydrateCoveragePayload({});
+  assert.equal(hydrated.nbaCup, false);
   assert.equal(hydrated.columnCount, COVERAGE_MAX_COLUMNS);
   assert.deepEqual(hydrated.columnHeaders, ["P/R", "DHO + C&S", "MISC"]);
+});
+
+test("coverage drafts retain NBA Cup mode when saved and hydrated", () => {
+  assert.equal(hydrateCoveragePayload({ nbaCup: true }).nbaCup, true);
+  assert.equal(hydrateCoveragePayload({ nbaCup: false }).nbaCup, false);
 });
 
 test("coverage export collapses to two columns when the third column is empty", () => {
