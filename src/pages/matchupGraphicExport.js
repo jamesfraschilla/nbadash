@@ -1,6 +1,7 @@
 import dinFontUrl from "../assets/fonts/DIN.ttf";
 import dinAltFontUrl from "../assets/fonts/DINalt.ttf";
 import slideBackgroundUrl from "../assets/graphics/slide-background.png";
+import cupTrophyUrl from "../assets/graphics/nba-cup-trophy.png";
 import { playerHeadshotUrls, teamLogoUrl } from "../api.js";
 import { preferLargeNbaHeadshots } from "../playerHeadshotPolicy.js";
 import {
@@ -13,6 +14,21 @@ export const EXPORT_WIDTH = 1920;
 export const EXPORT_HEIGHT = 1080;
 export const BLACK = "#000000";
 export const WHITE = "#ffffff";
+export const NBA_CUP_GOLD = "#e6c57c";
+
+export function drawNbaCupBorder(context) {
+  context.save();
+  context.strokeStyle = NBA_CUP_GOLD;
+  context.lineWidth = 11;
+  context.strokeRect(5.5, 5.5, EXPORT_WIDTH - 11, EXPORT_HEIGHT - 11);
+  context.restore();
+}
+
+export async function loadNbaCupTrophy() {
+  const image = await loadImage(cupTrophyUrl);
+  if (!image) throw new Error("Unable to load NBA Cup trophy. Please try again.");
+  return image;
+}
 const SHADOW = "rgba(0, 0, 0, 0.28)";
 export const EXPORT_FONT_FAMILIES = {
   header: "\"DIN\"",
@@ -369,6 +385,7 @@ export function ensureMatchupExportFonts() {
 
 export async function renderMatchupGraphicCanvas({
   league = "nba",
+  nbaCup = false,
   leftPlayers,
   rightPlayers,
   logoTeamId,
@@ -385,7 +402,7 @@ export async function renderMatchupGraphicCanvas({
   const [leftImages, rightImages, logoImage, backgroundImage] = await Promise.all([
     Promise.all(resolvedLeftPlayers.map((player) => loadFirstImage(buildPlayerHeadshotCandidates(player)))),
     Promise.all(resolvedRightPlayers.map((player) => loadFirstImage(buildPlayerHeadshotCandidates(player)))),
-    loadImage(logoTeamId ? buildProxyUrl(teamLogoUrl(logoTeamId, league)) : null),
+    nbaCup ? loadNbaCupTrophy() : loadImage(logoTeamId ? buildProxyUrl(teamLogoUrl(logoTeamId, league)) : null),
     loadExportBackgroundImage(),
   ]);
 
@@ -409,12 +426,14 @@ export async function renderMatchupGraphicCanvas({
     drawArrow(context, centerX, 566, 640);
   });
 
+  if (nbaCup) drawNbaCupBorder(context);
   return canvas;
 }
 
-export async function exportMatchupGraphic({ league = "nba", leftPlayers, rightPlayers, logoTeamId, leftTeam, rightTeam }) {
+export async function exportMatchupGraphic({ league = "nba", nbaCup = false, leftPlayers, rightPlayers, logoTeamId, leftTeam, rightTeam }) {
   const canvas = await renderMatchupGraphicCanvas({
     league,
+    nbaCup,
     leftPlayers,
     rightPlayers,
     logoTeamId,

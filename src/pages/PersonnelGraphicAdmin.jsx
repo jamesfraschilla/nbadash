@@ -582,7 +582,7 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
   const handleTeamChange = async (nextTeamId) => {
     await flushPendingAutoSave().catch(() => undefined);
     const nextRoster = Array.isArray(rosterMap?.[nextTeamId]) ? rosterMap[nextTeamId] : [];
-    const emptyDraft = createPersonnelDraft({ league, teamId: nextTeamId, season });
+    const emptyDraft = createPersonnelDraft({ league, teamId: nextTeamId, season, nbaCup: draftRef.current.nbaCup });
     const nextDraft = populatePersonnelDraftFromRoster(emptyDraft, nextRoster, { league, teamId: nextTeamId });
     draftRef.current = nextDraft;
     setDraft(nextDraft);
@@ -941,6 +941,7 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
         team: selectedTeam,
         teamId,
         league,
+        nbaCup: draft.nbaCup,
       });
       const zipSuffix = exportedCount > 1 ? " in one ZIP" : "";
       setStatus(`Exported ${exportedCount} personnel PNG${exportedCount === 1 ? "" : "s"}${zipSuffix}.`);
@@ -1013,6 +1014,10 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
           <button type="button" className={styles.secondaryButton} onClick={handleReset} disabled={Boolean(busyAction)}>
             Reset
           </button>
+          <label className={styles.cupOption}>
+            <input type="checkbox" checked={Boolean(draft.nbaCup)} onChange={(event) => setDraft((current) => ({ ...current, nbaCup: event.target.checked }))} />
+            NBA Cup
+          </label>
         </div>
         <div className={styles.sourceMeta}>
           <strong>{rosterSeason ? `Roster season ${rosterSeason}` : `${leagueLabel} roster`}</strong>

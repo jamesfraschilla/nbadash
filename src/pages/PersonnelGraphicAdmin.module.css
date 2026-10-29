@@ -73,9 +73,18 @@
 
 .setupFields {
   display: grid;
-  grid-template-columns: minmax(120px, 150px) minmax(240px, 360px) minmax(180px, 230px) auto;
+  grid-template-columns: minmax(120px, 150px) minmax(240px, 360px) minmax(180px, 230px) auto auto;
   gap: 14px;
   align-items: end;
+}
+
+.cupOption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  white-space: nowrap;
+  cursor: pointer;
 }
 
 .field {

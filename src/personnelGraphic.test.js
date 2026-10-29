@@ -140,7 +140,8 @@ test("Lefty is preserved as a personnel export tag", () => {
 test("createPersonnelDraft produces 25 independent rows with the exact draft shape", () => {
   const draft = createPersonnelDraft({ teamId: 1610612764, season: "2025-26" });
 
-  assert.deepEqual(Object.keys(draft), ["league", "teamId", "season", "statOrder", "rows"]);
+  assert.deepEqual(Object.keys(draft), ["league", "nbaCup", "teamId", "season", "statOrder", "rows"]);
+  assert.equal(draft.nbaCup, false);
   assert.equal(draft.teamId, "1610612764");
   assert.equal(draft.season, "2025-26");
   assert.deepEqual(draft.statOrder, DEFAULT_PERSONNEL_STAT_ORDER);
@@ -171,6 +172,11 @@ test("createPersonnelDraft produces 25 independent rows with the exact draft sha
   draft.rows[0].tags.push("fire");
   assert.equal(draft.rows[1].selectedStats.length, 4);
   assert.deepEqual(draft.rows[1].tags, []);
+});
+
+test("NBA Cup mode defaults off for old personnel drafts and survives hydration", () => {
+  assert.equal(hydratePersonnelDraft({ teamId: "team" }).nbaCup, false);
+  assert.equal(hydratePersonnelDraft(createPersonnelDraft({ nbaCup: true })).nbaCup, true);
 });
 
 test("personnel drafts preserve G League selection through hydration and roster population", () => {

@@ -28,6 +28,8 @@ import {
   drawContain,
   drawContainBottom,
   drawLogo,
+  drawNbaCupBorder,
+  loadNbaCupTrophy,
   ensureMatchupExportFonts,
   loadExportBackgroundImage,
   loadFirstImage,
@@ -285,6 +287,7 @@ export async function renderPersonnelGraphic({
   threePointColor,
   teamId,
   league = "nba",
+  nbaCup = false,
   logoImage = null,
   tagImages = null,
   headshotImage = null,
@@ -294,7 +297,7 @@ export async function renderPersonnelGraphic({
 
   const [resolvedHeadshot, resolvedLogo, resolvedTags, backgroundImage] = await Promise.all([
     headshotImage || loadFirstImage(buildPlayerHeadshotCandidates(player)),
-    logoImage || loadFirstImage(teamId ? [teamLogoUrl(teamId, league)] : []),
+    nbaCup ? loadNbaCupTrophy() : logoImage || loadFirstImage(teamId ? [teamLogoUrl(teamId, league)] : []),
     tagImages || loadTagImages(),
     loadExportBackgroundImage(),
   ]);
@@ -318,10 +321,11 @@ export async function renderPersonnelGraphic({
   drawStatsBox(context, stats, selectedStats);
   drawThreePointBar(context, stats, resolvePersonnelThreePointColorForTags(threePointColor, tags));
   drawTags(context, tags, resolvedTags);
+  if (nbaCup) drawNbaCupBorder(context);
   return canvas;
 }
 
-export async function exportPersonnelGraphics({ items, team, teamId, league = "nba" }) {
+export async function exportPersonnelGraphics({ items, team, teamId, league = "nba", nbaCup = false }) {
   const exportItems = Array.isArray(items) ? items.filter((item) => item?.player) : [];
   if (!exportItems.length) return 0;
 
@@ -329,7 +333,7 @@ export async function exportPersonnelGraphics({ items, team, teamId, league = "n
   const streamingZip = exportItems.length > 1 ? await createStreamingZipDownload(zipFileName) : null;
   await ensureMatchupExportFonts();
   const [logoImage, tagImages] = await Promise.all([
-    loadFirstImage(teamId ? [teamLogoUrl(teamId, league)] : []),
+    nbaCup ? loadNbaCupTrophy() : loadFirstImage(teamId ? [teamLogoUrl(teamId, league)] : []),
     loadTagImages(),
   ]);
 
@@ -342,6 +346,7 @@ export async function exportPersonnelGraphics({ items, team, teamId, league = "n
         ...item,
         teamId,
         league,
+        nbaCup,
         logoImage,
         tagImages,
       });

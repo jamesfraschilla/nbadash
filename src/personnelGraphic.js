@@ -344,6 +344,7 @@ export function createPersonnelDraft(options = {}) {
   const incomingRows = Array.isArray(safeOptions.rows) ? safeOptions.rows : [];
   return {
     league: normalizePersonnelLeague(safeOptions.league),
+    nbaCup: normalizeBoolean(safeOptions.nbaCup, false),
     teamId: normalizePlayerId(safeOptions.teamId),
     season: normalizePersonnelSeason(safeOptions.season),
     statOrder: normalizePersonnelStatOrder(firstPresentValue(safeOptions, [
@@ -365,6 +366,7 @@ export function hydratePersonnelDraft(payload) {
     : rawPayload;
   return createPersonnelDraft({
     league: source.league,
+    nbaCup: source.nbaCup,
     teamId: normalizePlayerId(source.teamId),
     season: source.season,
     statOrder: firstPresentValue(source, ["statOrder", "statColumns", "columnOrder"]),

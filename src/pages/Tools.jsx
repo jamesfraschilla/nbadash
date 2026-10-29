@@ -91,6 +91,7 @@ const PREVIOUS_GAME_OPTIONS = Array.from({ length: 20 }, (_, index) => index + 1
 function buildEmptyDraft() {
   return {
     league: "nba",
+    nbaCup: false,
     leftTeamId: "",
     rightTeamId: "",
     leftPlayerIds: [...EMPTY_PLAYER_IDS],
@@ -225,6 +226,7 @@ function hydrateDraftPayload(payload, fallbackDraft) {
   const normalizedLeague = String(payload?.league || fallbackDraft?.league || "nba").trim() === "gleague" ? "gleague" : "nba";
   return {
     league: normalizedLeague,
+    nbaCup: payload?.nbaCup === true,
     leftTeamId: String(payload?.leftTeamId || "").trim() || String(fallbackDraft?.leftTeamId || "").trim(),
     rightTeamId: String(payload?.rightTeamId || "").trim(),
     leftPlayerIds: [...EMPTY_PLAYER_IDS].map((_, index) => String(payload?.leftPlayerIds?.[index] || "").trim()),
@@ -776,7 +778,7 @@ export default function Tools({ section = "tools" }) {
   const exportReady = Boolean(
     leftTeam &&
     rightTeam &&
-    draft.logoTeamId &&
+    (draft.nbaCup || draft.logoTeamId) &&
     selectedLeftPlayers.every(Boolean) &&
     selectedRightPlayers.every(Boolean)
   );
@@ -793,6 +795,7 @@ export default function Tools({ section = "tools" }) {
 
     renderMatchupGraphicCanvas({
       league,
+      nbaCup: draft.nbaCup,
       leftPlayers: selectedLeftPlayers,
       rightPlayers: selectedRightPlayers,
       logoTeamId: draft.logoTeamId,
@@ -811,7 +814,7 @@ export default function Tools({ section = "tools" }) {
     return () => {
       cancelled = true;
     };
-  }, [activeGraphic, activeTab, draft.logoTeamId, league, selectedLeftPlayers, selectedRightPlayers]);
+  }, [activeGraphic, activeTab, draft.logoTeamId, draft.nbaCup, league, selectedLeftPlayers, selectedRightPlayers]);
 
   useEffect(() => {
     if (!lateGameAwayTeam?.teamId || !lateGameHomeTeam?.teamId) return;
@@ -1505,6 +1508,7 @@ export default function Tools({ section = "tools" }) {
     try {
       await exportMatchupGraphic({
         league,
+        nbaCup: draft.nbaCup,
         leftPlayers: selectedLeftPlayers,
         rightPlayers: selectedRightPlayers,
         logoTeamId: draft.logoTeamId,
@@ -1692,16 +1696,22 @@ export default function Tools({ section = "tools" }) {
 
           <div className={styles.matchupBuilder}>
             <div className={styles.matchupControls}>
-              <label className={`${styles.field} ${styles.leagueField}`}>
-                <select
-                  className={styles.select}
-                  value={league}
-                  onChange={(event) => handleLeagueChange(event.target.value)}
-                >
-                  <option value="nba">NBA</option>
-                  <option value="gleague">G League</option>
-                </select>
-              </label>
+              <div className={styles.leagueOptions}>
+                <label className={`${styles.field} ${styles.leagueField}`}>
+                  <select
+                    className={styles.select}
+                    value={league}
+                    onChange={(event) => handleLeagueChange(event.target.value)}
+                  >
+                    <option value="nba">NBA</option>
+                    <option value="gleague">G League</option>
+                  </select>
+                </label>
+                <label className={styles.cupOption}>
+                  <input type="checkbox" checked={Boolean(draft.nbaCup)} onChange={(event) => setDraft((current) => ({ ...current, nbaCup: event.target.checked }))} />
+                  NBA Cup
+                </label>
+              </div>
 
               <div className={styles.toolGrid}>
                 <ToolColumn

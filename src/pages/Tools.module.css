@@ -225,6 +225,24 @@
   max-width: 220px;
 }
 
+.leagueOptions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.leagueOptions .leagueField {
+  flex: 1;
+}
+
+.cupOption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
 .fieldLabel {
   font-size: 0.76rem;
   font-weight: 700;
