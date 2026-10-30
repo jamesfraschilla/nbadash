@@ -33,6 +33,11 @@ test("Rotations reopens the guest user's most recently saved Graphics draft", as
   await page.getByLabel("Opponent line").fill("VS PERSISTENCE TEST");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page).toHaveURL(/rotation=[0-9a-f-]+/);
+  // The redirect can happen before the async save handler finishes refreshing
+  // its queries. Wait for completion before unloading the document, rather
+  // than testing an interrupted save on a busy CI runner.
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
+  await expect(page.getByText(/Saved to My Vault as|Saved in this browser\.|Loaded WASHINGTON VS PERSISTENCE TEST Rotations\./).first()).toBeVisible();
 
   await page.goto(appUrl("/tools?tab=visual-drill"));
   await page.goto(appUrl("/graphics?graphic=rotations"));
