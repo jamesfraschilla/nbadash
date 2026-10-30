@@ -38,9 +38,17 @@ test("Rotations reopens the guest user's most recently saved Graphics draft", as
   // than testing an interrupted save on a busy CI runner.
   await expect(page.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
   await expect(page.getByText(/Saved to My Vault as|Saved in this browser\.|Loaded WASHINGTON VS PERSISTENCE TEST Rotations\./).first()).toBeVisible();
+  const savedId = new URLSearchParams(page.url().split("?")[1]).get("rotation");
+  const localDraft = () => page.evaluate(async (id) => {
+    const { getSavedToolRecord } = await import("/nbadash/src/toolVault.js");
+    return getSavedToolRecord("guest", id)?.payload?.opponentLine;
+  }, savedId);
+  await expect.poll(localDraft).toBe("VS PERSISTENCE TEST");
 
   await page.goto(appUrl("/tools?tab=visual-drill"));
+  await expect(page.getByRole("heading", { name: "Visual Drill", exact: true })).toBeVisible();
   await page.goto(appUrl("/graphics?graphic=rotations"));
+  await expect.poll(localDraft).toBe("VS PERSISTENCE TEST");
 
   await expect(page).toHaveURL(/rotation=[0-9a-f-]+/);
   await expect(page.getByLabel("Opponent line")).toHaveValue("VS PERSISTENCE TEST");
