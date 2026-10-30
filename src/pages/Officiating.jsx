@@ -1149,6 +1149,7 @@ function TonightOfficialsReport({ rows, crew, isLoading, assignmentError, onExpo
         <footer className={styles.officialsReportFooter}>
           <div>2024-Present regular season + playoffs · Percentiles: {MIN_OFFICIAL_GAMES_FOR_PERCENTILES}+ games; challenges also need 5 reviews · Team net: {MIN_TEAM_OFFICIAL_GAMES_FOR_PERCENTILES}+ games</div>
           <div>Limited samples unranked · Frequency: low blue / average grey / high red · Net calls: red negative / green positive</div>
+          <div>Overturn rate: entire crew · Individual whistle records: identified callers only; coverage shown in profiles</div>
         </footer>
       </div>
     </section>
@@ -1736,6 +1737,11 @@ function OfficialProfile({ profile, isLoading, loadError, season, onSeasonChange
         />
       </div>
       {isLoading ? <p className={styles.profileLoading}>Loading profile details...</p> : null}
+      {!isLoading && profile.challengeAttributionCoverage ? <p className={styles.notice}>
+        Caller identified for {profile.challengeAttributionCoverage.identified} of {profile.challengeAttributionCoverage.total} challenges in this official’s games.
+        {profile.challengeAttributionCoverage.unknown ? ` ${profile.challengeAttributionCoverage.unknown} have an unknown caller. The Whistle record is incomplete and includes identified calls only; unknown calls are not attributed to this official.` : " No unknown callers in this sample."}
+        {" "}Crew and Crew Chief records are separate from the individual Whistle record.
+      </p> : null}
       {loadError ? <p className={styles.notice}>{loadError}</p> : null}
       <div className={`${styles.detailGrid} ${styles.detailGridCategoryWide}`}>
         <SortableTopList

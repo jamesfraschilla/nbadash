@@ -1,5 +1,26 @@
 import { expect, test } from "@playwright/test";
 
+test("official profile reports unknown callers without adding them to the whistle record", async ({ page }) => {
+  await page.route("**/rest/v1/**", route => {
+    const table = new URL(route.request().url()).pathname.split("/").at(-1);
+    const common = { season: "2025-26", season_type: "Regular Season", game_id: "0022500247" };
+    const data = table === "nba_official_profiles_cache" ? [{ season: "2025-26", id: "1", official_id: "1", name: "Known Official", games: 30, whistle_challenges: 1 }]
+      : table === "nba_official_game_assignments" ? [{ ...common, official_id: "1", official_name: "Known Official", is_alternate: false }]
+        : table === "nba_authoritative_coach_challenge_events_cache" ? [
+          { ...common, id: "a", period: 1, game_clock: "01:00", challenging_team: "WAS", whistling_official_id: "1", whistling_official_name: "Known Official", source: "nba_official_challenge_pdf" },
+          { ...common, id: "b", period: 2, game_clock: "02:00", challenging_team: "WAS", source: "nba_official_challenge_pdf" },
+        ] : [];
+    return route.fulfill({ json: data });
+  });
+  await page.goto("visual-test.html");
+  const result = await page.evaluate(async () => {
+    const { fetchOfficialProfileDetails } = await import("/nbadash/src/officiatingData.js");
+    return fetchOfficialProfileDetails({ season: "2025-26", profile: { id: "1", name: "Known Official" } });
+  });
+  expect(result.challengeAttributionCoverage).toEqual({ total: 2, identified: 1, unknown: 1 });
+  expect(result.whistleChallenges).toBe(1);
+});
+
 test("report compares only 25-game peers while retaining limited-sample rates", async ({ page }) => {
   await page.route("**/rest/v1/**", (route) => {
     const table = new URL(route.request().url()).pathname.split("/").at(-1);

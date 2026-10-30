@@ -8,6 +8,34 @@ const pages = [{ page: 12, text: `NATIONAL BASKETBALL ASSOCIATION OFFICIAL PLAY-
 11:51 J.Slawson BLOCK MISS L.James FB Running Finger Roll Layup
 11:51 Pacers Coach's Challenge J.Slawson S.FOUL (P.Ransom): Call Overturned: No Foul on J. Slawson
 11:50 J.Slawson Violation: Jump Ball (A.Smith)` }];
+test("caller survives a direct No Foul ruling without the Call Overturned prefix", () => {
+  const rows = parseGamebookChallenges([{ page: 12, text: `OFFICIAL PLAY-BY-PLAY
+2nd QUARTER
+01:03 Thunder Coach's Challenge A.Mitchell S.FOUL (N.Sago): No Foul on A. Mitchell
+01:02 Jump Ball (J.Goble)` }]);
+  assert.equal(rows[0].officialToken, "N.Sago");
+  assert.equal(rows[0].subType, "Shooting Foul");
+});
+test("NBA gamebook OT headings retain the correct overtime period", () => {
+  for (const [heading, period] of [["1st OT", 5], ["2nd OT", 6], ["OVERTIME", 5]]) {
+    const [row] = parseGamebookChallenges([{ page: 1, text: `OFFICIAL PLAY-BY-PLAY\n${heading}\n01:00 Spurs Coach's Challenge A.Player P.FOUL (N.Sago): Call Stands` }]);
+    assert.equal(row.period, period);
+    assert.equal(row.officialToken, "N.Sago");
+  }
+});
+test("gamebooks support sub-minute clocks and interleaved wrapped clock columns", () => {
+  const rows = parseGamebookChallenges([{ page: 1, text: `OFFICIAL PLAY-BY-PLAY
+4th QUARTER
+:56.3 Nets Coach's Challenge C.Johnson P.FOUL (S.Corbin): Call Confirmed
+Thunder Coach's Challenge S.Gilgeous-Alexander S.FOUL (K.Scott): Call Overturned: No Foul on S. Gilgeous-04:24 Alexander` }]);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].gameClock, "00:56.3");
+  assert.equal(rows[0].challengingTeamName, "Nets");
+  assert.equal(rows[0].officialToken, "S.Corbin");
+  assert.equal(rows[1].gameClock, "04:24");
+  assert.equal(rows[1].challengingTeamName, "Thunder");
+  assert.equal(rows[1].officialToken, "K.Scott");
+});
 test("gamebook restores original overturned shooting foul, not subsequent jump ball", () => {
   const book = parseGamebookChallenges(pages);
   assert.equal(book.length, 1);

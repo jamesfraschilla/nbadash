@@ -155,6 +155,11 @@
       "order": 31,
       "path": "supabase/account_revision_columns.sql",
       "sha256": "925a54f37a6a8c19b2a80d3e607e1105bbf512909cef26e3b17354f0d15efa2f"
+    },
+    {
+      "order": 32,
+      "path": "supabase/officiating_challenge_only_profile_refresh.sql",
+      "sha256": "09a5e60cc11c0d8bd638b13129f91ffab5ee327d029371dd6200195554f8fbb7"
     }
   ],
   "edgeConfigSha256": "35c0e8985ac6eba567bb91fdd8b0ebffa74989d6f146b3c6fdba9aaf49c234f8",

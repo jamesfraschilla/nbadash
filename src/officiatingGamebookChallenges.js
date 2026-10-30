@@ -6,7 +6,7 @@ export function parseGamebookChallenges(pages = []) {
     const text = String(page.text || "");
     if (!text.includes("OFFICIAL PLAY-BY-PLAY")) continue;
     const quarter = text.match(/\b([1-4])(?:st|nd|rd|th) QUARTER\b/i);
-    const overtime = text.match(/\b(?:(\d+)(?:st|nd|rd|th) )?OVERTIME\b/i);
+    const overtime = text.match(/\b(?:(\d+)(?:st|nd|rd|th) )?(?:OVERTIME|OT)\b/i);
     const period = quarter ? Number(quarter[1]) : overtime ? 4 + Number(overtime[1] || 1) : 0;
     if (!period) continue;
     const lines = text.split(/\r?\n/);
@@ -14,14 +14,22 @@ export function parseGamebookChallenges(pages = []) {
       if (!/Coach['’]s Challenge/i.test(lines[i])) continue;
       let excerpt = lines[i].trim();
       // Wrapped rulings belong to this row, not the next clocked event.
-      for (let j = i + 1; j < lines.length && j <= i + 3 && !/^\d{1,2}:\d{2}/.test(lines[j]); j++) {
+      for (let j = i + 1; j < lines.length && j <= i + 3 && !/^\s*\d{0,2}:\d{2}/.test(lines[j]); j++) {
         if (/Copyright|End of|Coach['’]s Challenge/i.test(lines[j])) break;
         excerpt += ` ${lines[j].trim()}`;
       }
-      const clock = excerpt.match(/^(\d{1,2}:\d{2}(?:\.\d+)?)/)?.[1];
+      // NBA books omit the minute zero (:56.3), and PDF text extraction can
+      // interleave the left clock column into a wrapped player name mid-line.
+      const clockToken = excerpt.match(/(?<!\d)(\d{0,2}:\d{2}(?:\.\d+)?)/)?.[1];
+      const clock = clockToken?.startsWith(":") ? `00${clockToken}` : clockToken;
+      if (clockToken && (!excerpt.startsWith(clockToken) || clockToken.startsWith(":"))) {
+        excerpt = `${clock} ${excerpt.replace(clockToken, "").trim()}`;
+      }
       const body = excerpt.split(/Coach['’]s Challenge\s*/i)[1] || "";
       const original = body.split(/:\s*(?:Call |Ruling )?(?:Overturned|Stands|Upheld|Confirmed)/i)[0].trim();
-      const officialToken = original.match(/\(([A-Za-z][A-Za-z.' -]+)\)\s*$/)?.[1] || "";
+      // Some overturned calls use `(N.Sago): No Foul ...` rather than
+      // `: Call Overturned`. The caller still belongs to the original call.
+      const officialToken = original.match(/\(([A-Za-z][A-Za-z.' -]+)\)(?=\s*(?::|$))/)?.[1] || "";
       const challengeType = /FOUL|\bOffensive\b/i.test(original) ? "Foul"
         : /out of bounds|TURNOVER|team ball/i.test(original) ? "OOB"
           : /goaltend|basket interference/i.test(original) ? "Violation" : "";
@@ -32,6 +40,7 @@ export function parseGamebookChallenges(pages = []) {
               : /goaltend/i.test(original) ? "Goaltending"
                 : challengeType === "OOB" ? "Out Of Bounds" : "";
       if (clock) rows.push({ period, gameClock: clock, challengeType, subType, officialToken,
+        challengingTeamName: excerpt.replace(/^\d{1,2}:\d{2}(?:\.\d+)?\s*/, "").split(/Coach['’]s Challenge/i)[0].trim(),
         originalCall: original, outcome: /Call Overturned/i.test(body) ? "successful"
           : /Call (?:Stands|Upheld|Confirmed)/i.test(body) ? "unsuccessful" : "",
         page: page.page, excerpt });

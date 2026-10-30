@@ -936,6 +936,12 @@ function mergeTeamDetails(profiles, detailProfiles) {
   });
 }
 
+export function challengeAttributionCoverage(events = []) {
+  const rows = events.filter(isIncludedStatEvent);
+  const identified = rows.filter(row => String(row.whistling_official_id || row.whistling_official_name || "").trim()).length;
+  return { total: rows.length, identified, unknown: rows.length - identified };
+}
+
 function applyOfficialProfileDetails(profile, callEvents, challengeEvents, assignments, categoryRollups = []) {
   const [detail] = buildOfficialProfiles(callEvents, challengeEvents, assignments).filter((row) => (
     String(row.officialId || row.id || "").trim() === String(profile.officialId || profile.id || "").trim()
@@ -949,6 +955,7 @@ function applyOfficialProfileDetails(profile, callEvents, challengeEvents, assig
     schedule: detail.schedule,
     recentCalls: detail.recentCalls,
     challengeLog: detail.challengeLog,
+    challengeAttributionCoverage: challengeAttributionCoverage(detail.challengeLog),
   };
 }
 

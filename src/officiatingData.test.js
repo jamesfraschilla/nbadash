@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   attachDisplayCategoryMetrics,
+  challengeAttributionCoverage,
   buildOfficialProfiles,
   buildPreseasonValidationProfiles,
   buildTeamProfiles,
@@ -22,6 +23,16 @@ import {
   isRaChargeEvent,
   isViolationCallCategory,
 } from "./officiatingCategoryNormalization.js";
+
+test("caller coverage excludes preseason and counts unknown callers without imputing them", () => {
+  assert.deepEqual(challengeAttributionCoverage([
+    { season_type: "Regular Season", whistling_official_id: "1" },
+    { season_type: "Playoffs", whistling_official_name: "Known" },
+    { season_type: "Regular Season", whistling_official_name: "" },
+    { season_type: "Preseason" },
+  ]), { total: 3, identified: 2, unknown: 1 });
+  assert.deepEqual(challengeAttributionCoverage([]), { total: 0, identified: 0, unknown: 0 });
+});
 
 test("preseason validation profiles report ingestion without feeding career profiles", () => {
   const rows = buildPreseasonValidationProfiles([
