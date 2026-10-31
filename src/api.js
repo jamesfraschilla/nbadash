@@ -47,6 +47,10 @@ const SUPABASE_FUNCTIONS_BASE = SUPABASE_URL
 const APP_BASE_PATH = apiEnv.BASE_URL || "/nbadash/";
 const ROSTER_CACHE_PREFIX = "nba-dashboard:roster-feed:v1:";
 const LIVE_BOXSCORE_BASE = "https://cdn.nba.com/static/json/liveData/boxscore";
+const loadEmergencyPlayByPlay = id => requestJson(`${SUPABASE_FUNCTIONS_BASE}/game-metadata`, {
+  method: "POST", headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ playByPlayGameId: id }), timeoutMs: 12000,
+});
 const NBA_CUP_METADATA_BY_GAME_ID = new Map(
   (Array.isArray(nbaCupSchedule2026_27?.games) ? nbaCupSchedule2026_27.games : [])
     .map((game) => [String(game?.gameId || ""), game])
@@ -1836,13 +1840,12 @@ export async function fetchGame(gameId, segment = null, options = {}) {
   if (needsThreeQuarterFallback(segmentGame, segment)) {
     const fullGame = await recoverMissingLivePlayByPlay(
       await requestJson(`${API_BASE}/games/${gameId}`),
-      id => requestJson(`https://cdn.nba.com/static/json/liveData/playbyplay/playbyplay_${id}.json`, { timeoutMs: 10000 })
+      loadEmergencyPlayByPlay
     );
     assertNonEmptyLiveFeed(fullGame);
     game = rebuildThreeQuarterFeed(segmentGame, fullGame);
   }
-  game = await recoverMissingLivePlayByPlay(game,
-    id => requestJson(`https://cdn.nba.com/static/json/liveData/playbyplay/playbyplay_${id}.json`, { timeoutMs: 10000 }));
+  game = await recoverMissingLivePlayByPlay(game, loadEmergencyPlayByPlay);
   if (!segment || segment === "all") assertNonEmptyLiveFeed(game);
   const liveOfficials = Array.isArray(liveBoxscore?.game?.officials)
     ? liveBoxscore.game.officials

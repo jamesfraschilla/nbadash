@@ -37,6 +37,22 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return jsonResponse(405, { error: "Method not allowed" });
   try {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+    if (body.playByPlayGameId != null) {
+      const gameId = String(body.playByPlayGameId);
+      if (!/^\d{10}$/.test(gameId)) return jsonResponse(400, { error: "Invalid game ID" });
+      const response = await fetch(`https://cdn.nba.com/static/json/liveData/playbyplay/playbyplay_${gameId}.json`, {
+        headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0", Referer: "https://www.nba.com/" },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!response.ok) return jsonResponse(503, { error: "NBA play-by-play temporarily unavailable" });
+      const payload = await response.json();
+      if (String(payload?.game?.gameId) !== gameId || !Array.isArray(payload?.game?.actions) || !payload.game.actions.length) {
+        return jsonResponse(503, { error: "NBA play-by-play incomplete" });
+      }
+      return new Response(JSON.stringify(payload), { headers: {
+        ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "private, max-age=10",
+      } });
+    }
     const gameIds = [...new Set(
       (Array.isArray(body.gameIds) ? body.gameIds : [])
         .map((value) => String(value || "").trim())

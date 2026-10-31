@@ -244,7 +244,7 @@
     {
       "name": "game-metadata",
       "entrypoint": "supabase/functions/game-metadata/index.ts",
-      "sha256": "3cf008a6d5c38457a5bbf5ea0ddead8315f9e10fb63bdfa119bbecc1174a881b",
+      "sha256": "f22ffb07634112191606ac26b3772f0c27ab6a2480316b87a6daa77c59a61d1b",
       "sourceFiles": [
         "supabase/functions/_shared/analysisClaimValidation.ts",
         "supabase/functions/_shared/analysisFreshness.ts",
