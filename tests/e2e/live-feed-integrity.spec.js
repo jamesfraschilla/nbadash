@@ -7,6 +7,11 @@ test("an empty live refetch retains cached game data and the next valid response
     playByPlayActions: [{ period: 4, actionType: "2pt", scoreHome: "80", scoreAway: "68" }] };
   await page.route("**/api/games/0022600119", (route) => route.fulfill({ json: empty ? { ...game, playByPlayActions: [] } : game }));
   await page.route("**/boxscore_*.json", (route) => route.fulfill({ json: {} }));
+  // This case intentionally tests BOTH sources being empty. Never let the
+  // recovery endpoint read a real game while the primary feed is a fixture.
+  await page.route("**/game-metadata", (route) => route.fulfill({
+    json: { game: { gameId: game.gameId, actions: [] } },
+  }));
   await page.goto("visual-test.html");
   await page.evaluate(async () => {
     const { QueryClient } = await import("/nbadash/node_modules/.vite/deps/@tanstack_react-query.js");
