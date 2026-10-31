@@ -30,6 +30,7 @@ import { createTeamScheduleResultsLoader } from "./teamScheduleResults.js";
 import { needsThreeQuarterFallback, rebuildThreeQuarterFeed } from "./segmentFeedFallback.js";
 import { needsOpeningStintRepair, normalizeOpeningMinutesData } from "../supabase/functions/_shared/minutesNormalization.ts";
 import { assertNonEmptyLiveFeed } from "../supabase/functions/_shared/liveFeedIntegrity.ts";
+import { recoverMissingLivePlayByPlay } from "./livePlayByPlayFallback.js";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const ALL_ORIGINS_RAW_URL = "https://api.allorigins.win/raw?url=";
@@ -1833,10 +1834,15 @@ export async function fetchGame(gameId, segment = null, options = {}) {
   ]);
   let game = segmentGame;
   if (needsThreeQuarterFallback(segmentGame, segment)) {
-    const fullGame = await requestJson(`${API_BASE}/games/${gameId}`);
+    const fullGame = await recoverMissingLivePlayByPlay(
+      await requestJson(`${API_BASE}/games/${gameId}`),
+      id => requestJson(`https://cdn.nba.com/static/json/liveData/playbyplay/playbyplay_${id}.json`, { timeoutMs: 10000 })
+    );
     assertNonEmptyLiveFeed(fullGame);
     game = rebuildThreeQuarterFeed(segmentGame, fullGame);
   }
+  game = await recoverMissingLivePlayByPlay(game,
+    id => requestJson(`https://cdn.nba.com/static/json/liveData/playbyplay/playbyplay_${id}.json`, { timeoutMs: 10000 }));
   if (!segment || segment === "all") assertNonEmptyLiveFeed(game);
   const liveOfficials = Array.isArray(liveBoxscore?.game?.officials)
     ? liveBoxscore.game.officials
