@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { segmentFeedSignature } from "../_shared/analysisFreshness.ts";
+import { fetchRecoverableGame } from "../_shared/nbaLiveRecovery.ts";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const WIZARDS_TEAM_ID = "1610612764";
@@ -228,7 +229,7 @@ async function fetchGamesByDate(dateKey: string) {
 }
 
 async function fetchGame(gameId: string) {
-  return await requestJson(`${API_BASE}/games/${encodeURIComponent(gameId)}`) as JsonRecord;
+  return await fetchRecoverableGame(gameId) as JsonRecord;
 }
 
 async function fetchCandidateGameIds(body: JsonRecord, now = new Date()) {

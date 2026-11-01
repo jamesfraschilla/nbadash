@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import GameFeedStatus from "./components/GameFeedStatus.jsx";
 import Header from "./components/Header.jsx";
 import AuthGate from "./components/AuthGate.jsx";
 import LegacyNotesImportPrompt from "./components/LegacyNotesImportPrompt.jsx";
@@ -276,6 +277,7 @@ export default function App() {
         canUseTools={canUseTools}
         canUseGraphics={canUseGraphics}
       />
+      <GameFeedStatus />
       <main className={isOfficiatingRoute ? "officiating-shell" : undefined}>
         <Suspense fallback={<RouteLoadingFallback />}>
           <Routes>

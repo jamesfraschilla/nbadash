@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { buildCompletedPeriodSnapshots } from "../src/periodSnapshotTotals.js";
+import { fetchRecoverableGame } from "../supabase/functions/_shared/nbaLiveRecovery.ts";
 
 // Reconcile complete periods, including final games and delayed runs. Never
 // label a live box score as a historical quarter-end snapshot.
@@ -35,7 +36,7 @@ for (const gameId of ids) {
     verified += existing.length;
     continue;
   }
-  const game = await fetchJson("/games/" + gameId);
+  const game = await fetchRecoverableGame(String(gameId));
   const snapshots = buildCompletedPeriodSnapshots(game).map((row) => ({ ...row, totals: { ...row.totals, _gameStatus: game.gameStatus, _verifiedDate: verifiedDate } }));
   if (game.gameStatus === 3 && snapshots.length !== Number(game.period) * 2) throw new Error("Final game " + gameId + " is missing verified period endings.");
   const changed = snapshots.filter((row) => {

@@ -73,13 +73,11 @@ async function requestJson(url, options = {}) {
   const timeoutId = controller
     ? setTimeout(() => controller.abort(), timeoutMs)
     : null;
+  try {
   const res = await fetch(url, {
     ...fetchOptions,
     headers: { ...headers, ...(optionHeaders || {}) },
     signal: controller?.signal || parentSignal || undefined,
-  }).finally(() => {
-    if (timeoutId) clearTimeout(timeoutId);
-    parentSignal?.removeEventListener?.("abort", abortFromParent);
   });
   if (!res.ok) {
     const error = new Error(`Request failed: ${res.status}`);
@@ -87,7 +85,11 @@ async function requestJson(url, options = {}) {
     error.url = url;
     throw error;
   }
-  return res.json();
+  return await res.json();
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+    parentSignal?.removeEventListener?.("abort", abortFromParent);
+  }
 }
 
 function readRosterFeedCache(league) {
@@ -1832,14 +1834,37 @@ export async function fetchGame(gameId, segment = null, options = {}) {
   }
   const segmentParam = segment ? `?segment=${segment}` : "";
   const url = `${API_BASE}/games/${gameId}${segmentParam}`;
-  const [segmentGame, liveBoxscore] = await Promise.all([
-    requestJson(url),
-    requestJson(`${LIVE_BOXSCORE_BASE}/boxscore_${gameId}.json`).catch(() => null),
-  ]);
+  const backupGame = async () => {
+    const result = await requestJson(`${SUPABASE_FUNCTIONS_BASE}/game-metadata`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ liveGameId: String(gameId) }), timeoutMs: 12000,
+    });
+    if (String(result?.game?.gameId) !== String(gameId)) throw new Error("Backup game identity mismatch");
+    const full = result.game;
+    if (!segment || segment === "all") return full;
+    const mapping = { Q1: "q1", Q2: "q2", Q3: "q3", Q4: "q4", "1H": "first-half", "2H": "second-half", "Q1-Q3": "q1-q3" };
+    const selected = mapping[String(segment).toUpperCase()];
+    if (!selected) throw new Error("Unsupported backup segment");
+    const basePlayers = ["home", "away"].flatMap(side => full.boxScore[side].players.map(p => ({ ...p, teamId: full[`${side}Team`].teamId })));
+    const derived = aggregateSegmentStats({ gameId, actions: full.playByPlayActions, segment: selected,
+      homeTeam: full.homeTeam, awayTeam: full.awayTeam, basePlayers, minutesData: null,
+      currentPeriod: full.period, currentClock: full.gameClock, isLive: Number(full.gameStatus) === 2 });
+    return { ...full, boxScore: Object.fromEntries(["home", "away"].map(side => [side, {
+      totals: derived.teamTotals[full[`${side}Team`].teamId],
+      players: full.boxScore[side].players.map(p => ({ ...p, ...(derived.playerMap.get(p.personId) || {}) })),
+    }])) };
+  };
+  const segmentGame = await requestJson(url, { timeoutMs: 8000 }).then(game => {
+    if (String(game?.gameId) !== String(gameId) || !game?.homeTeam?.teamId || !game?.awayTeam?.teamId || !game?.boxScore) throw new Error("Primary game contract incomplete");
+    return game;
+  }).catch(backupGame);
+  // Optional officials enrichment must never hold up a usable game. Roles from
+  // the primary/backup remain available if this short request fails.
+  const liveBoxscore = await requestJson(`${LIVE_BOXSCORE_BASE}/boxscore_${gameId}.json`, { timeoutMs: 1500 }).catch(() => null);
   let game = segmentGame;
   if (needsThreeQuarterFallback(segmentGame, segment)) {
     const fullGame = await recoverMissingLivePlayByPlay(
-      await requestJson(`${API_BASE}/games/${gameId}`),
+      await requestJson(`${API_BASE}/games/${gameId}`, { timeoutMs: 8000 }),
       loadEmergencyPlayByPlay
     );
     assertNonEmptyLiveFeed(fullGame);

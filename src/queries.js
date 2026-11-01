@@ -5,6 +5,7 @@ import {
   fetchMinutes,
   fetchTeamSeasonGames,
 } from "./api.js";
+import { readGameSnapshot, saveGameSnapshot } from "./gameSnapshotCache.js";
 
 const normalizeKeyValue = (value, fallback = "all") => {
   const normalized = String(value ?? "").trim();
@@ -67,13 +68,27 @@ export function gameQueryOptions(gameId, options = {}) {
     dateStr = null,
     ...queryOptions
   } = options;
+  const snapshot = readGameSnapshot(gameId, segment);
 
   return {
     queryKey: queryKeys.game(gameId, segment),
-    queryFn: () => fetchGame(gameId, segment, { dateStr }),
+    queryFn: async () => {
+      const game = await fetchGame(gameId, segment, { dateStr });
+      saveGameSnapshot(game, segment);
+      return game;
+    },
+    initialData: snapshot ? { ...snapshot.game, _snapshotSavedAt: snapshot.savedAt } : undefined,
+    initialDataUpdatedAt: snapshot?.savedAt,
+    retry: 1,
+    refetchOnMount: "always",
     enabled: Boolean(gameId) && (queryOptions.enabled ?? true),
     staleTime: 30_000,
     ...queryOptions,
+    refetchInterval: query => {
+      if (query.state.error) return 30_000;
+      const interval = queryOptions.refetchInterval;
+      return typeof interval === "function" ? interval(query) : interval ?? false;
+    },
   };
 }
 

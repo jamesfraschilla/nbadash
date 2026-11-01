@@ -132,11 +132,12 @@ export default function BoxScoreTable({
   ratings = {},
   variant = "full",
   minuteCapsByPersonId = new Map(),
+  limitedFeed = false,
 }) {
   if (!boxScore) return null;
 
   const players = Array.isArray(boxScore.players) ? boxScore.players : [];
-  const columns = variant === "atc"
+  const columns = (variant === "atc"
     ? [
       "MIN",
       "PF",
@@ -152,7 +153,7 @@ export default function BoxScoreTable({
       "FT",
       "+/-",
     ]
-    : defaultColumns;
+    : defaultColumns).filter(col => !limitedFeed || !["RIM", "MID", "ORTG", "DRTG"].includes(col));
   const shadedColumns = new Set(["FG", "RIM", "MID", "3PT", "FT"]);
   const formatPlayerName = (player) => {
     const parts = [player.firstName, player.familyName].filter(Boolean);

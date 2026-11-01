@@ -4,6 +4,7 @@ import { normalizeOpeningMinutesData } from "../_shared/minutesNormalization.ts"
 import { segmentFeedSignature } from "../_shared/analysisFreshness.ts";
 import { invalidEndingMargins, invalidPlayerClaims, invalidScoringDirectionClaims } from "../_shared/analysisClaimValidation.ts";
 import { hasEmptyLivePlayByPlay } from "../_shared/liveFeedIntegrity.ts";
+import { fetchRecoverableGame } from "../_shared/nbaLiveRecovery.ts";
 
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
@@ -2671,7 +2672,10 @@ export async function handleRequest(req: Request) {
     }
 
     if (!game) {
-      game = await requestJson(`${API_BASE}/games/${gameId}`);
+      game = await fetchRecoverableGame(gameId);
+    }
+    if (game?._snapshotSavedAt || (game?.feedAvailability as Record<string, unknown>)?.limited) {
+      return jsonResponse(503, { error: "A complete current feed is required to generate analysis. Saved analysis remains available.", code: "LIMITED_GAME_FEED", retryable: true });
     }
     if (hasEmptyLivePlayByPlay(game)) {
       const response = jsonResponse(503, { error: "Live play-by-play is temporarily unavailable. Analysis will retry with a complete feed.",

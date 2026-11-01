@@ -167,12 +167,13 @@
     {
       "name": "admin-users",
       "entrypoint": "supabase/functions/admin-users/index.ts",
-      "sha256": "c9ddf205d31e745e109cfb538ecb4910a629f681e1b32469b524e49cfa6dfa79",
+      "sha256": "72e6c35b75a38b7d9f4c7466aa613eb0fb38a63c63c27f2182fa302fe8c38146",
       "sourceFiles": [
         "supabase/functions/_shared/analysisClaimValidation.ts",
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/liveFeedIntegrity.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
+        "supabase/functions/_shared/nbaLiveRecovery.ts",
         "supabase/functions/_shared/officiatingInsights.ts",
         "supabase/functions/_shared/requestSecurity.ts",
         "supabase/functions/_shared/rosterSnapshot.ts",
@@ -182,12 +183,13 @@
     {
       "name": "custom-requests",
       "entrypoint": "supabase/functions/custom-requests/index.ts",
-      "sha256": "2dbc872a829cf9204148f24d7eeaba11d8fe24cab7714a00ad1886f7a4a583a6",
+      "sha256": "122c394cb3332514d1513db2032d24ca97f409b1056754c4259b02f492311483",
       "sourceFiles": [
         "supabase/functions/_shared/analysisClaimValidation.ts",
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/liveFeedIntegrity.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
+        "supabase/functions/_shared/nbaLiveRecovery.ts",
         "supabase/functions/_shared/officiatingInsights.ts",
         "supabase/functions/_shared/requestSecurity.ts",
         "supabase/functions/_shared/rosterSnapshot.ts",
@@ -199,12 +201,13 @@
     {
       "name": "export-image",
       "entrypoint": "supabase/functions/export-image/index.ts",
-      "sha256": "3c13c5db31e50fe0c4076bed2a6fce174c98d23a36bb99f5d24e21c6d62d6001",
+      "sha256": "53f7f189abbc68921996535a82f21067eeed4daeeca51ec452b9e7a3add049f3",
       "sourceFiles": [
         "supabase/functions/_shared/analysisClaimValidation.ts",
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/liveFeedIntegrity.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
+        "supabase/functions/_shared/nbaLiveRecovery.ts",
         "supabase/functions/_shared/officiatingInsights.ts",
         "supabase/functions/_shared/requestSecurity.ts",
         "supabase/functions/_shared/rosterSnapshot.ts",
@@ -214,12 +217,13 @@
     {
       "name": "game-analysis",
       "entrypoint": "supabase/functions/game-analysis/index.ts",
-      "sha256": "13bb956c74beecb76bc8410b4479fee0dc610a751d126c445995e5de3aba3ea1",
+      "sha256": "668ac940f60cc5167c15c93e2055c855b7b02170a60f9dc13e4d5e7339749f8a",
       "sourceFiles": [
         "supabase/functions/_shared/analysisClaimValidation.ts",
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/liveFeedIntegrity.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
+        "supabase/functions/_shared/nbaLiveRecovery.ts",
         "supabase/functions/_shared/officiatingInsights.ts",
         "supabase/functions/_shared/requestSecurity.ts",
         "supabase/functions/_shared/rosterSnapshot.ts",
@@ -229,12 +233,13 @@
     {
       "name": "game-live-state",
       "entrypoint": "supabase/functions/game-live-state/index.ts",
-      "sha256": "2ff10a2f3ece56c74d734aadf4ccf9d5114d6d3c62db6e3374d264652b26d669",
+      "sha256": "319e18d0497922f7d8dc7587465c83c151a411f627584ffbc7b4bc2d48c1cd1c",
       "sourceFiles": [
         "supabase/functions/_shared/analysisClaimValidation.ts",
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/liveFeedIntegrity.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
+        "supabase/functions/_shared/nbaLiveRecovery.ts",
         "supabase/functions/_shared/officiatingInsights.ts",
         "supabase/functions/_shared/requestSecurity.ts",
         "supabase/functions/_shared/rosterSnapshot.ts",
@@ -244,12 +249,13 @@
     {
       "name": "game-metadata",
       "entrypoint": "supabase/functions/game-metadata/index.ts",
-      "sha256": "f22ffb07634112191606ac26b3772f0c27ab6a2480316b87a6daa77c59a61d1b",
+      "sha256": "cd146f950ded4a9efd08db93ec01cdbe224c49f307dd217de1983dd8eba65a16",
       "sourceFiles": [
         "supabase/functions/_shared/analysisClaimValidation.ts",
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/liveFeedIntegrity.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
+        "supabase/functions/_shared/nbaLiveRecovery.ts",
         "supabase/functions/_shared/officiatingInsights.ts",
         "supabase/functions/_shared/requestSecurity.ts",
         "supabase/functions/_shared/rosterSnapshot.ts",
@@ -259,12 +265,13 @@
     {
       "name": "gleague-rosters",
       "entrypoint": "supabase/functions/gleague-rosters/index.ts",
-      "sha256": "7a80702291425f2c7e79b05f2b891fe792db1cb6250346dca4a67fa3d65f5e19",
+      "sha256": "45a53cbd1c7c743880fa8d33e8eb3410aa216c5397cb02ab10948835fbaff19c",
       "sourceFiles": [
         "supabase/functions/_shared/analysisClaimValidation.ts",
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/liveFeedIntegrity.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
+        "supabase/functions/_shared/nbaLiveRecovery.ts",
         "supabase/functions/_shared/officiatingInsights.ts",
         "supabase/functions/_shared/requestSecurity.ts",
         "supabase/functions/_shared/rosterSnapshot.ts",
@@ -274,12 +281,13 @@
     {
       "name": "nba-analytics-report",
       "entrypoint": "supabase/functions/nba-analytics-report/index.ts",
-      "sha256": "54a4be129e4a2651239a5abe7c885652ae2486814af72772f8738bc861255029",
+      "sha256": "f204cc7c69b174a21cadc01cdaed1234b69530937e556fdc3639690ebc0ae674",
       "sourceFiles": [
         "supabase/functions/_shared/analysisClaimValidation.ts",
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/liveFeedIntegrity.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
+        "supabase/functions/_shared/nbaLiveRecovery.ts",
         "supabase/functions/_shared/officiatingInsights.ts",
         "supabase/functions/_shared/requestSecurity.ts",
         "supabase/functions/_shared/rosterSnapshot.ts",
@@ -289,12 +297,13 @@
     {
       "name": "nba-matchup-defaults",
       "entrypoint": "supabase/functions/nba-matchup-defaults/index.ts",
-      "sha256": "e75069e551a089076ce79fdb66bad91e573f3011acf1317fd10bd14a53677a3a",
+      "sha256": "cc3a649014c9e30fdf8acc06231d8f907ee087803b8dc2d69a881d9a070c323f",
       "sourceFiles": [
         "supabase/functions/_shared/analysisClaimValidation.ts",
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/liveFeedIntegrity.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
+        "supabase/functions/_shared/nbaLiveRecovery.ts",
         "supabase/functions/_shared/officiatingInsights.ts",
         "supabase/functions/_shared/requestSecurity.ts",
         "supabase/functions/_shared/rosterSnapshot.ts",
@@ -304,12 +313,13 @@
     {
       "name": "nba-player-stats",
       "entrypoint": "supabase/functions/nba-player-stats/index.ts",
-      "sha256": "7b9cd1ff06ba2f2ce536a23c9f3c6528c9122eb3f45c0c52038a360eb463d769",
+      "sha256": "846f7e7b8b21a3eeada31656338c9bbfaac1fdc959d97b13108191943089505a",
       "sourceFiles": [
         "supabase/functions/_shared/analysisClaimValidation.ts",
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/liveFeedIntegrity.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
+        "supabase/functions/_shared/nbaLiveRecovery.ts",
         "supabase/functions/_shared/officiatingInsights.ts",
         "supabase/functions/_shared/requestSecurity.ts",
         "supabase/functions/_shared/rosterSnapshot.ts",
@@ -320,12 +330,13 @@
     {
       "name": "nba-rosters",
       "entrypoint": "supabase/functions/nba-rosters/index.ts",
-      "sha256": "0142eefd987d9d9a748ccfd65513984d5c0772ab9c0894972056c5651a518e3f",
+      "sha256": "31e90a184bbc7bf10ea3acc4613af5ea552324d2a6f49dc8b23aa2ab01c47cf5",
       "sourceFiles": [
         "supabase/functions/_shared/analysisClaimValidation.ts",
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/liveFeedIntegrity.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
+        "supabase/functions/_shared/nbaLiveRecovery.ts",
         "supabase/functions/_shared/officiatingInsights.ts",
         "supabase/functions/_shared/requestSecurity.ts",
         "supabase/functions/_shared/rosterSnapshot.ts",
@@ -336,12 +347,13 @@
     {
       "name": "officiating-insights",
       "entrypoint": "supabase/functions/officiating-insights/index.ts",
-      "sha256": "2998cc22e90d576f3f79cd2a118318f19f6b61d9ac96f4540cf2025568d0c7a5",
+      "sha256": "d29de7c441f1d229c00849781e92f7c8b8fd16ae64a9dd7ae00f5369b9e16b10",
       "sourceFiles": [
         "supabase/functions/_shared/analysisClaimValidation.ts",
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/liveFeedIntegrity.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
+        "supabase/functions/_shared/nbaLiveRecovery.ts",
         "supabase/functions/_shared/officiatingInsights.ts",
         "supabase/functions/_shared/requestSecurity.ts",
         "supabase/functions/_shared/rosterSnapshot.ts",
@@ -351,12 +363,13 @@
     {
       "name": "player-headshot",
       "entrypoint": "supabase/functions/player-headshot/index.ts",
-      "sha256": "3ce838e57c375be06f2a74edb2b89618f055889ad051094f52f175d58e4cad63",
+      "sha256": "78bf45881bc1c72e48ada20913d048a338238539337083f142e8ce300e984a2b",
       "sourceFiles": [
         "supabase/functions/_shared/analysisClaimValidation.ts",
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/liveFeedIntegrity.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
+        "supabase/functions/_shared/nbaLiveRecovery.ts",
         "supabase/functions/_shared/officiatingInsights.ts",
         "supabase/functions/_shared/requestSecurity.ts",
         "supabase/functions/_shared/rosterSnapshot.ts",
@@ -366,12 +379,13 @@
     {
       "name": "pregame-scouting",
       "entrypoint": "supabase/functions/pregame-scouting/index.ts",
-      "sha256": "2116bf7a99450c5b39d396653f7d5c59c7fd209541d215b56b98fcd6910349ba",
+      "sha256": "4e2368fe159b77ee7717409e9cf16693fa74487352f48a9f7bbacd02907ef51b",
       "sourceFiles": [
         "supabase/functions/_shared/analysisClaimValidation.ts",
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/liveFeedIntegrity.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
+        "supabase/functions/_shared/nbaLiveRecovery.ts",
         "supabase/functions/_shared/officiatingInsights.ts",
         "supabase/functions/_shared/requestSecurity.ts",
         "supabase/functions/_shared/rosterSnapshot.ts",
@@ -381,12 +395,13 @@
     {
       "name": "referee-assignments",
       "entrypoint": "supabase/functions/referee-assignments/index.ts",
-      "sha256": "0217f58d9e55fa25b5b80547620ba6832bac6e52de0d6049107fc5a77cc0e90d",
+      "sha256": "ef1f93fd46888d72940f1443f46c8bf0aabd7e7609e2c4dcd18a80e00c8e8a41",
       "sourceFiles": [
         "supabase/functions/_shared/analysisClaimValidation.ts",
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/liveFeedIntegrity.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
+        "supabase/functions/_shared/nbaLiveRecovery.ts",
         "supabase/functions/_shared/officiatingInsights.ts",
         "supabase/functions/_shared/requestSecurity.ts",
         "supabase/functions/_shared/rosterSnapshot.ts",
@@ -397,12 +412,13 @@
     {
       "name": "team-games",
       "entrypoint": "supabase/functions/team-games/index.ts",
-      "sha256": "fd6c7a4a6d54c6ce894a19a7369b4e614a0948ff9206856e9d770c3a1b957bfa",
+      "sha256": "58c9fa9fb3e54a061af882b98ee72141c52721de029fc20a2d5dde60c57934db",
       "sourceFiles": [
         "supabase/functions/_shared/analysisClaimValidation.ts",
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/liveFeedIntegrity.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
+        "supabase/functions/_shared/nbaLiveRecovery.ts",
         "supabase/functions/_shared/officiatingInsights.ts",
         "supabase/functions/_shared/requestSecurity.ts",
         "supabase/functions/_shared/rosterSnapshot.ts",
@@ -413,12 +429,13 @@
     {
       "name": "wizards-analysis-prewarm",
       "entrypoint": "supabase/functions/wizards-analysis-prewarm/index.ts",
-      "sha256": "4e0f221aa6f271fe7e8c8a8326fbf9e79c4d20c375d14fcc02cb18bff92bb8f2",
+      "sha256": "6678435f52eed6d2ff3b5e772c238bbd4f0b31d8af21ea723fe134a6fb75f9a4",
       "sourceFiles": [
         "supabase/functions/_shared/analysisClaimValidation.ts",
         "supabase/functions/_shared/analysisFreshness.ts",
         "supabase/functions/_shared/liveFeedIntegrity.ts",
         "supabase/functions/_shared/minutesNormalization.ts",
+        "supabase/functions/_shared/nbaLiveRecovery.ts",
         "supabase/functions/_shared/officiatingInsights.ts",
         "supabase/functions/_shared/requestSecurity.ts",
         "supabase/functions/_shared/rosterSnapshot.ts",

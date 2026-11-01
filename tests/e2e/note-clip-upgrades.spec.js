@@ -7,6 +7,7 @@ test("visible legacy notes share one read-only feed lookup and never rewrite sto
     gameRequests++;
     return route.fulfill({ json: { gameId: "0022600119", gameStatus: 3, period: 4,
       homeTeam: { teamId: 1610612766 }, awayTeam: { teamId: 1610612764 },
+      boxScore: { home: { players: [] }, away: { players: [] } },
       playByPlayActions: [{ actionNumber: 19, period: 1, clock: "PT04M53.00S", actionType: "2pt", timeActual: "2026-10-26T23:30:10Z" }] } });
   });
   await page.route("**/boxscore_*.json", (route) => route.fulfill({ json: {} }));

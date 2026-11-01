@@ -97,6 +97,7 @@ export async function fetchProfile(userId) {
     .from("profiles")
     .select("*")
     .eq("id", userId)
+    .abortSignal(AbortSignal.timeout(8000))
     .maybeSingle();
   if (error) throw error;
   return data;

@@ -4,6 +4,7 @@ test("an empty live refetch retains cached game data and the next valid response
   let empty = false;
   const game = { gameId: "0022600119", gameStatus: 2, period: 4, gameClock: "PT10M00.00S",
     homeTeam: { teamId: 1, score: 80 }, awayTeam: { teamId: 2, score: 68 },
+    boxScore: { home: { players: [] }, away: { players: [] } },
     playByPlayActions: [{ period: 4, actionType: "2pt", scoreHome: "80", scoreAway: "68" }] };
   await page.route("**/api/games/0022600119", (route) => route.fulfill({ json: empty ? { ...game, playByPlayActions: [] } : game }));
   await page.route("**/boxscore_*.json", (route) => route.fulfill({ json: {} }));

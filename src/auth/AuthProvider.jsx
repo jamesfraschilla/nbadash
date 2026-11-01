@@ -2,6 +2,7 @@ import { createContext, useEffect, useMemo, useRef, useState } from "react";
 import { clearSupabaseAuthStorage, supabase } from "../supabaseClient.js";
 import { ACCOUNTS_ENABLED, buildAuthRedirectUrl, isAllowedAccountEmail, normalizeAccountEmail } from "../authConfig.js";
 import { fetchProfile, touchProfileLastLogin } from "../accountData.js";
+import { withDeadline } from "../requestDeadline.js";
 
 export const AuthContext = createContext(null);
 
@@ -103,8 +104,8 @@ export function AuthProvider({ children }) {
         if (typeof window !== "undefined" && window.location.search.includes("type=recovery")) {
           setRequiresPasswordReset(true);
         }
-        await exchangeUrlSession();
-        const { data } = await supabase.auth.getSession();
+        await withDeadline(exchangeUrlSession(), 12000, "Account sign-in verification timed out. Please retry.");
+        const { data } = await withDeadline(supabase.auth.getSession(), 12000, "Account session verification timed out. Please retry.");
         if (cancelled) return;
         setSession(data.session || null);
         setError("");

@@ -20,8 +20,27 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Capture snapshots
+        id: snapshots
+        continue-on-error: true
         env:
           SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SNAPSHOT_WINDOW_MINUTES: 3
         run: node scripts/capture-period-snapshots.js
+      - name: Check dashboard availability and reconcile recent tracked finals
+        if: ${{ !cancelled() }}
+        run: |
+          node scripts/check-dashboard-health.mjs
+          if [[ "$(TZ=America/New_York date +%H)" == "08" ]]; then
+            node scripts/check-dashboard-health.mjs --reconcile
+          fi
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: dashboard-health-${{ github.run_id }}
+          path: output/dashboard-health/
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Report failed snapshot reconciliation
+        if: steps.snapshots.outcome == 'failure'
+        run: exit 1

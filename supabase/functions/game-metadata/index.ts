@@ -1,3 +1,4 @@
+import { fetchNbaLiveRecovery } from "../_shared/nbaLiveRecovery.ts";
 const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const MAX_GAME_IDS = 200;
 const REQUEST_DEADLINE_MS = 15_000;
@@ -37,6 +38,13 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return jsonResponse(405, { error: "Method not allowed" });
   try {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+    if (body.liveGameId != null) {
+      const gameId = String(body.liveGameId);
+      if (!/^\d{10}$/.test(gameId)) return jsonResponse(400, { error: "Invalid game ID" });
+      const game = await fetchNbaLiveRecovery(gameId);
+      return new Response(JSON.stringify({ game }), { headers: { ...corsHeaders,
+        "Content-Type": "application/json", "Cache-Control": "private, max-age=10" } });
+    }
     if (body.playByPlayGameId != null) {
       const gameId = String(body.playByPlayGameId);
       if (!/^\d{10}$/.test(gameId)) return jsonResponse(400, { error: "Invalid game ID" });

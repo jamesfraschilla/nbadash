@@ -81,7 +81,8 @@ import TransitionStats from "../components/TransitionStats.jsx";
 import MiscStats from "../components/MiscStats.jsx";
 import CreatingDisruption from "../components/CreatingDisruption.jsx";
 import SegmentSelector from "../components/SegmentSelector.jsx";
-import GameAlerts from "../components/GameAlerts.jsx";
+import DashboardAlerts from "../components/DashboardAlerts.jsx";
+import SectionErrorBoundary from "../components/SectionErrorBoundary.jsx";
 import LateGameMatrixPanel from "../components/LateGameMatrixPanel.jsx";
 import {
   buildMarginRange,
@@ -90,7 +91,6 @@ import {
   getMarginOptionLabel,
   resolvePossessionDisplay,
 } from "../components/lateGamePanelHelpers.js";
-import { buildGameAlerts } from "../gameAlerts.js";
 import {
   fetchPublishedAssignmentForGame,
   fetchPublishedOrderForOfficials,
@@ -797,7 +797,7 @@ export default function Game({ variant = "full" }) {
   }, []);
 
   useEffect(() => {
-    if (!gameId || !game) return undefined;
+    if (!gameId || !game || game._snapshotSavedAt || game.feedAvailability?.limited) return undefined;
     const shadowKey = buildGameLiveStateShadowKey(game, minutesData);
     if (!shadowKey || gameLiveStateShadowRef.current.key === shadowKey) return undefined;
 
@@ -985,7 +985,7 @@ export default function Game({ variant = "full" }) {
   const analysisPrewarmAttemptRef = useRef(new Map());
 
   useEffect(() => {
-    if (!gameId || !user?.id || !isWashingtonGame || !hasAnalysisData || !shouldUseSharedAnalysisRecaps) return;
+    if (!gameId || !user?.id || !isWashingtonGame || !hasAnalysisData || !shouldUseSharedAnalysisRecaps || game?._snapshotSavedAt || game?.feedAvailability?.limited) return;
     const cachedKeys = new Set(cachedAnalysisSegments.map((record) => String(record?.segmentKey || "").trim()));
     const missingKeys = completedAnalysisSegments
       .map((record) => record.key)
@@ -1070,14 +1070,6 @@ export default function Game({ variant = "full" }) {
       ...identifyBoxScorePlayers(boxScore?.home?.players, homeTeam?.teamId),
     ];
   }, [awayTeam?.teamId, boxScore?.away?.players, boxScore?.home?.players, homeTeam?.teamId]);
-
-  const gameAlerts = useMemo(() => buildGameAlerts({
-    game,
-    awayTeam,
-    homeTeam,
-    basePlayers,
-    minutesData,
-  }), [awayTeam, basePlayers, game, homeTeam, minutesData]);
 
   const getRosterForTeam = (team, teamScope, remoteRoster, gameRosterPlayers) => {
     const teamId = String(team?.teamId || "").trim();
@@ -1644,6 +1636,10 @@ export default function Game({ variant = "full" }) {
 
   const generateAnalysis = async () => {
     if (!gameId || analysisLoading) return;
+    if (game?._snapshotSavedAt || game?.feedAvailability?.limited) {
+      setAnalysisError("Recap generation is paused until a complete current feed is available. Saved recaps remain accessible.");
+      return;
+    }
     if (analysisValidation.error) {
       setAnalysisError(analysisValidation.error);
       return;
@@ -2915,6 +2911,8 @@ export default function Game({ variant = "full" }) {
   return (
     <div className={styles.container}>
       {error && <p role="status">Live update delayed. Showing the last valid snapshot while the feed retries.</p>}
+      {game._snapshotSavedAt && <p role="status">Saved game snapshot from {new Date(game._snapshotSavedAt).toLocaleString()}. These are not live updates. Reconnecting automatically.</p>}
+      {game.feedAvailability?.limited && <p role="status">Backup NBA feed in use. Some advanced statistics may be unavailable; do not treat missing values as verified zeros.</p>}
       {game?.gameStatus === 3 && findIncompletePersonalFoulFeed(boxScore, null, game.playByPlayActions).map((warning) => (
         <p key={warning} role="status">Data note: {warning}</p>
       ))}
@@ -3036,18 +3034,18 @@ export default function Game({ variant = "full" }) {
                 </div>
                 <div className={styles.centerMetricDivider} />
                 <div className={styles.centerMetricRow}>
-                  <span className={styles.statValue}>{formatChancesValue(displayAwayChances)}</span>
+                  <span className={styles.statValue}>{game.feedAvailability?.limited ? "Unavailable" : formatChancesValue(displayAwayChances)}</span>
                   <span className={styles.statLabel}>CHANCES</span>
-                  <span className={styles.statValue}>{formatChancesValue(displayHomeChances)}</span>
+                  <span className={styles.statValue}>{game.feedAvailability?.limited ? "Unavailable" : formatChancesValue(displayHomeChances)}</span>
                 </div>
               </div>
             )}
             {showExtras && (
               <div className={styles.paceGroup}>
-                <div className={styles.paceRow}>PACE {displayPaceValue.toFixed(1)}</div>
+                <div className={styles.paceRow}>PACE {game.feedAvailability?.limited ? "Unavailable" : displayPaceValue.toFixed(1)}</div>
               </div>
             )}
-            {isAtc && <div className={styles.headerPossessionTable}>{possessionSummaryTable}</div>}
+            {isAtc && !game.feedAvailability?.limited && <div className={styles.headerPossessionTable}>{possessionSummaryTable}</div>}
 	            <div className={`${styles.status} ${isLive ? styles.statusLive : ""}`}>
 	              {status || game.gameStatusText}
 	            </div>
@@ -3245,13 +3243,17 @@ export default function Game({ variant = "full" }) {
             </div>
           ) : null}
 
-          <GameAlerts
-            alerts={gameAlerts}
+          <SectionErrorBoundary name="Alerts" key={`alerts:${gameId}`}>
+          {!game.feedAvailability?.limited ? <DashboardAlerts
+            game={game}
+            basePlayers={basePlayers}
+            minutesData={minutesData}
             awayTeam={awayTeam}
             homeTeam={homeTeam}
             collapsed={alertsPanelCollapsed}
             onToggleCollapsed={toggleAlertsPanel}
-          />
+          /> : <p role="status">Alerts paused while the primary feed is unavailable.</p>}
+          </SectionErrorBoundary>
 
           <div className={styles.pbpWheel} ref={pbpWheelRef} onScroll={clearHoldTimer}>
             <div className={styles.pbpWheelInner} ref={pbpWheelInnerRef}>
@@ -3334,7 +3336,7 @@ export default function Game({ variant = "full" }) {
             </div>
           </div>
 
-          <LateGameMatrixPanel
+          {!game.feedAvailability?.limited ? <SectionErrorBoundary name="Game situation matrix" key={`matrix:${gameId}`}><LateGameMatrixPanel
             title="Live Game Situation Matrix"
             collapsed={strategyPanelCollapsed}
             onToggleCollapsed={toggleStrategyPanel}
@@ -3374,7 +3376,7 @@ export default function Game({ variant = "full" }) {
                 </button>
               </>
             }
-          />
+          /></SectionErrorBoundary> : null}
 
           {canUseMatchUps ? (
             <MatchUps
@@ -3392,6 +3394,7 @@ export default function Game({ variant = "full" }) {
 
           {isWashingtonGame ? <GameKpiTables gameId={gameId} /> : null}
 
+          {!game.feedAvailability?.limited ? <SectionErrorBoundary name="Advanced statistics" key={`advanced:${gameId}`} render={() => (<>
           <StatBars
             title="Four Factors"
             awayTeam={awayTeam}
@@ -3441,6 +3444,7 @@ export default function Game({ variant = "full" }) {
               homeForcedTurnovers={homeForcedTurnovers}
             />
           </div>
+          </>)} /> : <p role="status">Advanced statistics are unavailable on the backup feed.</p>}
 
           <div className={styles.navRow} ref={boxScoreNavRef}>
             <SegmentSelector value={segment} onChange={handleSegmentChange} />
@@ -3469,7 +3473,7 @@ export default function Game({ variant = "full" }) {
           >
             <h3>Analysis</h3>
 
-            <div className={styles.analysisWorkspace}>
+            <SectionErrorBoundary name="Analysis" key={`analysis:${gameId}`} render={() => (<div className={styles.analysisWorkspace}>
               <section className={styles.analysisPane}>
                 <div className={styles.analysisPaneHeader}>
                   <div className={styles.analysisPaneTitle}>Game Analysis</div>
@@ -3758,7 +3762,7 @@ export default function Game({ variant = "full" }) {
                   </button>
                 </div>
               </section>
-            </div>
+            </div>)} />
 
             <div className={styles.noteActions}>
               <button type="button" className={styles.noteCancel} onClick={requestCancelAnalysis} disabled={analysisLoading || analysisSaving}>
@@ -3875,6 +3879,7 @@ export default function Game({ variant = "full" }) {
       )}
 
       <section className={styles.boxScoreSection}>
+        <SectionErrorBoundary name="Box score" key={`box:${gameId}`}>
         <BoxScoreTable
           teamLabel={awayTeam.teamTricode}
           teamLogo={teamLogoUrl(awayTeam.teamId)}
@@ -3885,6 +3890,7 @@ export default function Game({ variant = "full" }) {
           currentPeriod={game.period}
           variant={variant}
           minuteCapsByPersonId={awayMinuteCapsByPersonId}
+          limitedFeed={Boolean(game.feedAvailability?.limited)}
         />
         <BoxScoreTable
           teamLabel={homeTeam.teamTricode}
@@ -3896,13 +3902,16 @@ export default function Game({ variant = "full" }) {
           currentPeriod={game.period}
           variant={variant}
           minuteCapsByPersonId={homeMinuteCapsByPersonId}
+          limitedFeed={Boolean(game.feedAvailability?.limited)}
         />
+        </SectionErrorBoundary>
       </section>
-      {!isAtc && (
+      {!isAtc && !game.feedAvailability?.limited && (
         <section className={styles.possessionSummarySection}>
           {possessionSummaryTable}
         </section>
       )}
+      <SectionErrorBoundary name="Officials" key={`officials:${gameId}`}>
       <OfficialsExportPanel
         officials={displayedOfficials}
         gameId={gameId}
@@ -3918,6 +3927,7 @@ export default function Game({ variant = "full" }) {
         awayTeam={awayTeam}
         publishedOrder={publishedOfficialOrder}
       />
+      </SectionErrorBoundary>
       </div>
     </div>
   );
