@@ -26,6 +26,7 @@ import {
   TOOL_RECORD_TYPES,
 } from "../toolVault.js";
 import { createSerialTaskQueue } from "../serialTaskQueue.js";
+import { copyQuarterMinutes, quarterHasMinutes } from "../rotationQuarterCopy.js";
 import styles from "./Rotations.module.css";
 
 const GAME_STORAGE_PREFIX = "rotations:game:v1:";
@@ -1695,6 +1696,7 @@ export default function Rotations({ standalone = false }) {
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [confirmResetTarget, setConfirmResetTarget] = useState(null);
+  const [copyMinutesTarget, setCopyMinutesTarget] = useState(null);
   const [versionMenuOpen, setVersionMenuOpen] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [createVersionOpen, setCreateVersionOpen] = useState(false);
@@ -3109,6 +3111,31 @@ export default function Rotations({ standalone = false }) {
     });
   };
 
+  const copyMinutesToQuarter = (destination, overwrite = false) => {
+    if (!copyMinutesTarget || destination === copyMinutesTarget.quarter) return;
+    const { quarter: source, versionId } = copyMinutesTarget;
+    if (!overwrite && quarterHasMinutes(lineups[destination])) {
+      setCopyMinutesTarget(current => ({ ...current, destination }));
+      return;
+    }
+    updateActiveVersion(currentVersion => {
+      if (currentVersion.id !== versionId) return currentVersion;
+      // Recheck the latest state: a concurrent update must not bypass consent.
+      if (!overwrite && quarterHasMinutes(currentVersion.lineups[destination])) {
+        setCopyMinutesTarget({ quarter: source, versionId, destination });
+        return currentVersion;
+      }
+      const next = copyQuarterMinutes(currentVersion.lineups, source, destination);
+      if (next === currentVersion.lineups) return currentVersion;
+      if (lineupHistoryRef.current.at(-1) !== currentVersion.lineups) {
+        lineupHistoryRef.current = [...lineupHistoryRef.current, currentVersion.lineups].slice(-MAX_LINEUP_HISTORY);
+        setUndoDepth(lineupHistoryRef.current.length);
+      }
+      setCopyMinutesTarget(null);
+      return { ...currentVersion, lineups: next };
+    });
+  };
+
   const openResetConfirmation = (target) => {
     setConfirmResetTarget(target);
   };
@@ -3746,6 +3773,29 @@ export default function Rotations({ standalone = false }) {
         </div>
       )}
 
+      {copyMinutesTarget && (
+        <div className={styles.modalOverlay} onClick={() => setCopyMinutesTarget(null)}>
+          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-labelledby="copy-quarter-title"
+            onClick={event => event.stopPropagation()} onKeyDown={event => { if (event.key === "Escape") setCopyMinutesTarget(null); }}>
+            <h3 id="copy-quarter-title" className={styles.modalTitle}>
+              {copyMinutesTarget.destination ? `Replace Q${copyMinutesTarget.destination} Minutes?` : `Copy Q${copyMinutesTarget.quarter} Minutes`}
+            </h3>
+            {copyMinutesTarget.destination ? (<>
+              <p>Q{copyMinutesTarget.destination} already has minutes selected. Are you sure you want to replace them with Q{copyMinutesTarget.quarter}’s minute pattern?</p>
+              <button type="button" className={styles.modalPrimary} onClick={() => copyMinutesToQuarter(copyMinutesTarget.destination, true)}>Yes, Replace Minutes</button>
+              <button type="button" className={styles.modalSecondary} autoFocus onClick={() => setCopyMinutesTarget(current => ({ ...current, destination: null }))}>Cancel</button>
+            </>) : (<>
+              <p>Copy this minute pattern to:</p>
+              {QUARTERS.map(quarter => <button key={quarter} type="button" className={styles.modalPrimary}
+                disabled={quarter === copyMinutesTarget.quarter} onClick={() => copyMinutesToQuarter(quarter)}>
+                {quarterLabel(quarter)} Quarter
+              </button>)}
+              <button type="button" className={styles.modalSecondary} autoFocus onClick={() => setCopyMinutesTarget(null)}>Cancel</button>
+            </>)}
+          </div>
+        </div>
+      )}
+
       {confirmResetTarget && (
         <div className={styles.modalOverlay} onClick={closeResetConfirmation}>
           <div className={styles.modalCard} onClick={(event) => event.stopPropagation()}>
@@ -4244,9 +4294,13 @@ export default function Rotations({ standalone = false }) {
               <button type="button" className={styles.sectionHeaderButton} onClick={() => toggleSection(sectionKey)}>
                 {quarterLabel(quarter)} Quarter
               </button>
+              <button type="button" className={`${styles.sectionHeaderAction} ${styles.copyMinutesButton}`}
+                onClick={() => setCopyMinutesTarget({ quarter, versionId: activeVersionId, destination: null })}>
+                Copy Minutes
+              </button>
               <button
                 type="button"
-                className={styles.sectionHeaderAction}
+                className={`${styles.sectionHeaderAction} ${styles.resetMinutesButton}`}
                 onClick={() => openResetConfirmation({ type: "quarter", quarter })}
               >
                 {`Reset Q${quarter} Minutes`}
