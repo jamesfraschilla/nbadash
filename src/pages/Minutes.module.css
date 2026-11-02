@@ -43,19 +43,25 @@
 .timelineAxis { position: relative; height: 28px; color: var(--muted); font-size: 12px; }
 .timelineAxis span { position: absolute; transform: translateX(-50%); top: 8px; }
 .playerChoices { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0; }
-.playerChoice { padding: 8px 12px; border-radius: 18px; border: 1px solid var(--border); background: var(--bg); color: var(--text); cursor: pointer; font: inherit; font-size: 14px; }
+.playerChoice { display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px 4px 4px; border-radius: 22px; border: 1px solid var(--border); background: var(--bg); color: var(--text); cursor: pointer; font: inherit; font-size: 14px; }
 .playerChoice:disabled { opacity: .4; cursor: not-allowed; }
+.comboHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.comboHeading h2 { margin-bottom: 0; }
+.comboHeading button:disabled { opacity: .4; cursor: default; }
+.comboHeadshot, .comboHeadshotFallback { width: 34px; height: 34px; flex-shrink: 0; border-radius: 50%; background: var(--panel-strong); }
+.comboHeadshot { object-fit: cover; }
+.comboHeadshotFallback { display: inline-flex; align-items: center; justify-content: center; }
 .comboTable { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
 .comboTable caption { color: var(--muted); text-align: left; padding: 10px 0 18px; }
 .comboTable th, .comboTable td { text-align: right; padding: 14px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
 .comboTable th:first-child { text-align: left; }
 .comboTable thead th { color: var(--muted); font-size: 12px; }
 .comboNames { display: flex; flex-wrap: wrap; gap: 6px; min-width: 200px; }
-.playerOn, .playerOff { padding: 4px 7px; border-radius: 4px; font-weight: 400; }
+.playerOn, .playerOff { display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px; border-radius: 4px; font-weight: 400; }
 .playerOn { background: var(--highlight-bg); color: var(--text); border: 1px solid var(--highlight-text); }
 .playerOff { color: var(--muted); border: 1px dashed var(--border); }
+.playerOff .comboHeadshot { filter: grayscale(1); opacity: .4; }
 .comboNames small { font-size: 10px; margin-left: 3px; }
-.smallSample { display: block; color: var(--muted); margin-top: 6px; font-weight: 400; }
 .dataWarning { padding: 16px; border: 1px solid #bf8b2a; border-radius: 6px; line-height: 1.5; }
 .formulas { color: var(--muted); font-size: 13px; line-height: 1.6; margin-top: 20px; }
 

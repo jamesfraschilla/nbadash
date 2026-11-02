@@ -8,6 +8,7 @@ async function openMinutes(page, { incompletePbp = false } = {}) {
   await page.route("**/api/games/0022600015/minutes", (route) => route.fulfill({ json: minutes }));
   await page.route("**/boxscore_*.json", (route) => route.fulfill({ json: {} }));
   await page.route("**/functions/v1/**", (route) => route.fulfill({ status: 503, json: {} }));
+  await page.route("**/headshots/**", (route) => route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><circle cx="20" cy="20" r="18" fill="#777"/></svg>' }));
   await page.goto("#/m/0022600015");
   await expect(page.getByRole("button", { name: "Table", exact: true })).toBeVisible();
 }
@@ -40,6 +41,8 @@ test("combos updates instantly, shows all masks, caps selection at four, keeps t
   await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(16);
   await page.getByRole("button", { name: "WAS", exact: true }).click();
   await expect(page.getByText("Select players above to calculate their combinations.")).toBeVisible();
+  await page.getByRole("button", { name: "CHA", exact: true }).click();
+  await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(16);
 });
 test("mobile timeline scrolls within its panel without widening the page", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -53,5 +56,45 @@ test("incomplete play-by-play blocks unverified combination ratings", async ({ p
   await page.getByRole("button", { name: "Combos", exact: true }).click();
   await page.getByRole("button", { name: "P. Player1", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Combination statistics unavailable");
+  await expect(page.getByRole("table")).toHaveCount(0);
+});
+
+test("headshots appear in selectors and rows, selections survive view switches, Reset clears only the current team", async ({ page }) => {
+  await openMinutes(page);
+  await page.getByRole("button", { name: "Combos", exact: true }).click();
+  const first = page.getByRole("button", { name: "P. Player1", exact: true });
+  await expect(first.locator("img")).toBeVisible();
+  await first.click();
+  await page.getByRole("button", { name: "P. Player6", exact: true }).click();
+  await expect(page.getByRole("table").locator("tbody img")).toHaveCount(8);
+  await expect(page.getByText("Small sample", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("No elapsed minutes", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Timeline", exact: true }).click();
+  await page.getByRole("button", { name: "Table", exact: true }).click();
+  await page.getByRole("button", { name: "Combos", exact: true }).click();
+  await expect(first).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "P. Player6", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(4);
+  await page.getByRole("button", { name: "WAS", exact: true }).click();
+  await page.getByRole("button", { name: "P. Player11", exact: true }).click();
+  await page.getByRole("button", { name: "Reset", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Reset", exact: true })).toBeDisabled();
+  await expect(page.getByRole("table")).toHaveCount(0);
+  await page.getByRole("button", { name: "CHA", exact: true }).click();
+  await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(4);
+  await page.screenshot({ path: "output/minutes-combos-headshots.png", fullPage: true });
+  await page.getByRole("button", { name: "Reset", exact: true }).click();
+  await expect(first).toHaveAttribute("aria-pressed", "false");
+});
+
+test("leaving Minutes for the dashboard clears the previous player selections", async ({ page }) => {
+  await openMinutes(page);
+  await page.getByRole("button", { name: "Combos", exact: true }).click();
+  await page.getByRole("button", { name: "P. Player1", exact: true }).click();
+  await page.getByRole("link", { name: "Back", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Combos", exact: true })).toHaveCount(0);
+  await page.goto("#/m/0022600015");
+  await page.getByRole("button", { name: "Combos", exact: true }).click();
+  await expect(page.getByRole("button", { name: "P. Player1", exact: true })).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByRole("table")).toHaveCount(0);
 });

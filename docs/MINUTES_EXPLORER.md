@@ -12,7 +12,10 @@ Rotations charts, scope keys, payloads, and hydration are untouched.
 - Combos supports up to four selected players and all 2^N on/off combinations.
   Minutes and counting events are aggregated first; rates are calculated from
   the combined counts. Zero denominators display a dash, not a fabricated zero.
-  Samples under three minutes are marked. Neutral provides a separate team
+  Player headshots appear in selectors and comparison rows; off players are
+  faded/grayscale. Selections are held separately per team in page-local state,
+  survive switching between views, and reset on leaving Minutes. Reset clears
+  the current team's selection. Neutral provides a separate team
   selector because combination rates always require a team perspective.
 
 ## Calculation contract

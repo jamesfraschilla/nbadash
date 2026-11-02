@@ -99,6 +99,8 @@ export default function Minutes() {
   const [view, setView] = useState("away");
   const [format, setFormat] = useState("table");
   const [comboSide, setComboSide] = useState("away");
+  // Page-local only: survive view/team changes, but not leaving Minutes.
+  const [comboSelections, setComboSelections] = useState({ gameId, away: [], home: [] });
   const routeShouldTrackPolling = isGameDayPollingGame(gameId);
   const { data: game, isLoading: isGameLoading } = useGame(gameId, {
     dateStr: dateParam,
@@ -172,7 +174,12 @@ export default function Minutes() {
       {format === "timeline" && <MinutesTimeline model={explorer} data={data} vantage={view} />}
       {format === "combos" && <>
         {view === "neutral" && <div className={styles.viewToggle}><span>Combos team</span>{["away", "home"].map((side) => <button key={side} type="button" className={`${styles.viewButton} ${comboSide === side ? styles.viewButtonActive : ""}`} aria-pressed={comboSide === side} onClick={() => setComboSide(side)}>{data[`${side}Team`].teamTricode || data[`${side}Team`].teamName}</button>)}</div>}
-        <MinutesCombos key={`${gameId}-${comboSide}`} model={explorer} data={data} side={comboSide} />
+        <MinutesCombos model={explorer} data={data} side={comboSide}
+          selected={comboSelections.gameId === gameId ? comboSelections[comboSide] : []}
+          onSelectedChange={(selected) => setComboSelections((previous) => ({
+            ...(previous.gameId === gameId ? previous : { gameId, away: [], home: [] }),
+            [comboSide]: selected,
+          }))} />
       </>}
       {format === "table" && <section className={styles.periods}>
         {(data.periodStintRepairs || []).filter((repair) => repair.status === "unresolved").map((repair) => (
