@@ -8,6 +8,8 @@ import {
   getSubstitutionAnnotation,
 } from "../substitutionUtils.js";
 import styles from "./Minutes.module.css";
+import { buildMinutesExplorer } from "../minutesExplorer.js";
+import { MinutesTimeline, MinutesCombos } from "../components/MinutesExplorer.jsx";
 
 function StintCell({
   stint,
@@ -95,6 +97,8 @@ export default function Minutes() {
   const [params] = useSearchParams();
   const dateParam = params.get("d");
   const [view, setView] = useState("away");
+  const [format, setFormat] = useState("table");
+  const [comboSide, setComboSide] = useState("away");
   const routeShouldTrackPolling = isGameDayPollingGame(gameId);
   const { data: game, isLoading: isGameLoading } = useGame(gameId, {
     dateStr: dateParam,
@@ -110,6 +114,7 @@ export default function Minutes() {
     () => buildSubstitutionAnnotationLookup(game?.playByPlayActions || []),
     [game?.playByPlayActions],
   );
+  const explorer = useMemo(() => format === "table" ? null : buildMinutesExplorer(data, game), [data, game, format]);
 
   if (isLoading || (!game && isGameLoading)) {
     return <div className={styles.stateMessage}>Loading minutes data...</div>;
@@ -129,15 +134,22 @@ export default function Minutes() {
         </Link>
       </div>
       <div className={styles.viewToggle}>
-        <span>View:</span>
+        <span>View</span>
+        {["table", "timeline", "combos"].map((option) => <button key={option} type="button"
+          aria-pressed={format === option} className={`${styles.viewButton} ${format === option ? styles.viewButtonActive : ""}`}
+          onClick={() => setFormat(option)}>{option[0].toUpperCase() + option.slice(1)}</button>)}
+      </div>
+      <div className={styles.viewToggle}>
+        <span>Vantage</span>
         {["away", "neutral", "home"].map((option) => (
           <button
             key={option}
             type="button"
+            aria-pressed={view === option}
             className={`${styles.viewButton} ${view === option ? styles.viewButtonActive : ""}`}
-            onClick={() => setView(option)}
+            onClick={() => { setView(option); if (option !== "neutral") setComboSide(option); }}
           >
-            {option[0].toUpperCase() + option.slice(1)}
+            {option === "neutral" ? "Neutral" : (data[`${option}Team`].teamTricode || data[`${option}Team`].teamName)}
           </button>
         ))}
       </div>
@@ -157,7 +169,12 @@ export default function Minutes() {
         </div>
       </section>
 
-      <section className={styles.periods}>
+      {format === "timeline" && <MinutesTimeline model={explorer} data={data} vantage={view} />}
+      {format === "combos" && <>
+        {view === "neutral" && <div className={styles.viewToggle}><span>Combos team</span>{["away", "home"].map((side) => <button key={side} type="button" className={`${styles.viewButton} ${comboSide === side ? styles.viewButtonActive : ""}`} aria-pressed={comboSide === side} onClick={() => setComboSide(side)}>{data[`${side}Team`].teamTricode || data[`${side}Team`].teamName}</button>)}</div>}
+        <MinutesCombos key={`${gameId}-${comboSide}`} model={explorer} data={data} side={comboSide} />
+      </>}
+      {format === "table" && <section className={styles.periods}>
         {(data.periodStintRepairs || []).filter((repair) => repair.status === "unresolved").map((repair) => (
           <div key={repair.period} className={styles.stateMessage}>Period {repair.period} has incomplete lineup data. {repair.reason}</div>
         ))}
@@ -204,7 +221,7 @@ export default function Minutes() {
             </div>
           </div>
         ))}
-      </section>
+      </section>}
     </div>
   );
 }
