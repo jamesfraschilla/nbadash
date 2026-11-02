@@ -8,7 +8,7 @@ import {
   getSubstitutionAnnotation,
 } from "../substitutionUtils.js";
 import styles from "./Minutes.module.css";
-import { buildMinutesExplorer } from "../minutesExplorer.js";
+import { buildMinutesExplorer, defaultMinutesVantage } from "../minutesExplorer.js";
 import { MinutesTimeline, MinutesCombos } from "../components/MinutesExplorer.jsx";
 
 function StintCell({
@@ -96,9 +96,9 @@ export default function Minutes() {
   const { gameId } = useParams();
   const [params] = useSearchParams();
   const dateParam = params.get("d");
-  const [view, setView] = useState("away");
+  const [viewSelection, setView] = useState(null);
   const [format, setFormat] = useState("table");
-  const [comboSide, setComboSide] = useState("away");
+  const [comboSideSelection, setComboSide] = useState(null);
   // Page-local only: survive view/team changes, but not leaving Minutes.
   const [comboSelections, setComboSelections] = useState({ gameId, away: [], home: [] });
   const routeShouldTrackPolling = isGameDayPollingGame(gameId);
@@ -112,6 +112,9 @@ export default function Minutes() {
     refetchInterval: () => getGamePollingInterval(game, { gameId }),
     refetchIntervalInBackground: shouldTrackPolling,
   });
+  const defaultVantage = defaultMinutesVantage(data || game);
+  const view = viewSelection?.gameId === gameId ? viewSelection.value : defaultVantage;
+  const comboSide = comboSideSelection?.gameId === gameId ? comboSideSelection.value : defaultVantage;
   const substitutionLookup = useMemo(
     () => buildSubstitutionAnnotationLookup(game?.playByPlayActions || []),
     [game?.playByPlayActions],
@@ -149,7 +152,7 @@ export default function Minutes() {
             type="button"
             aria-pressed={view === option}
             className={`${styles.viewButton} ${view === option ? styles.viewButtonActive : ""}`}
-            onClick={() => { setView(option); if (option !== "neutral") setComboSide(option); }}
+            onClick={() => { setView({ gameId, value: option }); if (option !== "neutral") setComboSide({ gameId, value: option }); }}
           >
             {option === "neutral" ? "Neutral" : (data[`${option}Team`].teamTricode || data[`${option}Team`].teamName)}
           </button>
@@ -173,7 +176,7 @@ export default function Minutes() {
 
       {format === "timeline" && <MinutesTimeline model={explorer} data={data} vantage={view} />}
       {format === "combos" && <>
-        {view === "neutral" && <div className={styles.viewToggle}><span>Combos team</span>{["away", "home"].map((side) => <button key={side} type="button" className={`${styles.viewButton} ${comboSide === side ? styles.viewButtonActive : ""}`} aria-pressed={comboSide === side} onClick={() => setComboSide(side)}>{data[`${side}Team`].teamTricode || data[`${side}Team`].teamName}</button>)}</div>}
+        {view === "neutral" && <div className={styles.viewToggle}><span>Combos team</span>{["away", "home"].map((side) => <button key={side} type="button" className={`${styles.viewButton} ${comboSide === side ? styles.viewButtonActive : ""}`} aria-pressed={comboSide === side} onClick={() => setComboSide({ gameId, value: side })}>{data[`${side}Team`].teamTricode || data[`${side}Team`].teamName}</button>)}</div>}
         <MinutesCombos model={explorer} data={data} side={comboSide}
           selected={comboSelections.gameId === gameId ? comboSelections[comboSide] : []}
           onSelectedChange={(selected) => setComboSelections((previous) => ({

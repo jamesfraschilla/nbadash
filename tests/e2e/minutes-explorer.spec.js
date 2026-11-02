@@ -1,8 +1,10 @@
 import { expect, test } from "@playwright/test";
 import { minutesFixture } from "../fixtures/minutesExplorer.js";
 
-async function openMinutes(page, { incompletePbp = false } = {}) {
+async function openMinutes(page, { incompletePbp = false, useDefaultVantage = false, washingtonSide = "home" } = {}) {
   const { minutes, game } = minutesFixture();
+  minutes.awayTeam.teamTricode = washingtonSide === "away" ? "WAS" : "CHA";
+  minutes.homeTeam.teamTricode = washingtonSide === "home" ? "WAS" : "NOP";
   if (incompletePbp) game.playByPlayActions = game.playByPlayActions.filter((action) => action.actionType !== "freethrow");
   await page.route("**/api/games/0022600015", (route) => route.fulfill({ json: game }));
   await page.route("**/api/games/0022600015/minutes", (route) => route.fulfill({ json: minutes }));
@@ -11,7 +13,19 @@ async function openMinutes(page, { incompletePbp = false } = {}) {
   await page.route("**/headshots/**", (route) => route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><circle cx="20" cy="20" r="18" fill="#777"/></svg>' }));
   await page.goto("#/m/0022600015");
   await expect(page.getByRole("button", { name: "Table", exact: true })).toBeVisible();
+  if (!useDefaultVantage) await page.getByRole("button", { name: "CHA", exact: true }).click();
 }
+
+for (const washingtonSide of ["home", "away", "neither"]) test(`default vantage: Washington ${washingtonSide}`, async ({ page }) => {
+  await openMinutes(page, { useDefaultVantage: true, washingtonSide });
+  const expected = washingtonSide === "neither" ? "CHA" : "WAS";
+  await expect(page.getByRole("button", { name: expected, exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Combos", exact: true }).click();
+  await expect(page.getByRole("heading", { name: `${expected} Player Combos` })).toBeVisible();
+  await page.getByRole("button", { name: "Neutral", exact: true }).click();
+  await page.getByRole("button", { name: "Timeline", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Neutral", exact: true })).toHaveAttribute("aria-pressed", "true");
+});
 
 test("table is default, team vantages replace home/away, timeline and neutral render appearances", async ({ page }) => {
   await openMinutes(page);
@@ -94,6 +108,7 @@ test("leaving Minutes for the dashboard clears the previous player selections", 
   await page.getByRole("link", { name: "Back", exact: true }).click();
   await expect(page.getByRole("button", { name: "Combos", exact: true })).toHaveCount(0);
   await page.goto("#/m/0022600015");
+  await page.getByRole("button", { name: "CHA", exact: true }).click();
   await page.getByRole("button", { name: "Combos", exact: true }).click();
   await expect(page.getByRole("button", { name: "P. Player1", exact: true })).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByRole("table")).toHaveCount(0);

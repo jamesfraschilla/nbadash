@@ -1,7 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildMinutesExplorer, buildCombos, comboMetrics, playerTimeline, clockSeconds, durationLabel } from "./minutesExplorer.js";
+import { buildMinutesExplorer, buildCombos, comboMetrics, playerTimeline, clockSeconds, durationLabel, defaultMinutesVantage } from "./minutesExplorer.js";
 import { minutesFixture } from "../tests/fixtures/minutesExplorer.js";
+
+test("Washington is the default vantage at home or away; other games retain away default", () => {
+  assert.equal(defaultMinutesVantage({ homeTeam: { teamTricode: "WAS" } }), "home");
+  assert.equal(defaultMinutesVantage({ awayTeam: { teamTricode: "WAS" } }), "away");
+  assert.equal(defaultMinutesVantage({ homeTeam: { teamId: 1610612764 } }), "home");
+  assert.equal(defaultMinutesVantage({ homeTeam: { teamTricode: "NOP" }, awayTeam: { teamTricode: "CHA" } }), "away");
+  assert.equal(defaultMinutesVantage(null), "away");
+});
 
 test("clock parser handles ISO fractional seconds and invalid clocks", () => {
   assert.equal(clockSeconds("PT05M03.50S"), 303.5);

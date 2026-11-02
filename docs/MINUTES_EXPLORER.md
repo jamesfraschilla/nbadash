@@ -5,6 +5,8 @@ polling, database tables, writes, or persistent storage are introduced. Saved
 Rotations charts, scope keys, payloads, and hydration are untouched.
 
 - Table remains the default. Vantage uses team tricodes, with Neutral between.
+  Washington games default to WAS whether home or away; other games default to
+  the away team. A manually selected vantage stays selected during that visit.
 - Timeline shows individual player appearances by elapsed game time, red for
   negative margin, gray for zero, green for positive. Neutral shows both teams;
   each team's margin is always from its own perspective. Appearances are split

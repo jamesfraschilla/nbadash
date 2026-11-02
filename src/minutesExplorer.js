@@ -1,4 +1,12 @@
 // Read-only derived views. Never persist or mutate the upstream minutes data.
+export function defaultMinutesVantage(data) {
+  for (const side of ["away", "home"]) {
+    const team = data?.[`${side}Team`];
+    if (String(team?.teamId) === "1610612764" || String(team?.teamTricode).toUpperCase() === "WAS") return side;
+  }
+  return "away";
+}
+
 export function clockSeconds(value) {
   const match = /^(?:PT)?(\d+)(?::|M)([\d.]+)S?$/.exec(String(value || ""));
   return match ? Number(match[1]) * 60 + Number(match[2]) : null;
