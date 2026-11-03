@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: officiating-database-maintenance
@@ -59,7 +60,20 @@ jobs:
           LOOKBACK_DAYS: ${{ inputs.lookback_days || '3' }}
         run: npm run officiating:backfill:insight-facts -- --season=2026-27 --lookback-days="${LOOKBACK_DAYS}" --concurrency=2 --replace --apply
       - name: Audit NBA feed schema contract
+        id: feed-contract
         run: npm run nba-feed:audit
+      - name: Publish NBA feed degradation and schema findings
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/publish-operations-incident.mjs --feed-contract
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: nba-feed-contract-nightly
+          path: output/nba-feed-contract/latest.json
+          retention-days: 14
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:

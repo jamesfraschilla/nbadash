@@ -15,7 +15,9 @@ async function api(path,method="GET",body) {
 }
 let key="health",title="[Operations] Dashboard health needs attention",report;
 const postgame=process.argv.includes("--postgame");
+const feedContract=process.argv.includes("--feed-contract");
 if(postgame){key="postgame";title="[Operations] Postgame accuracy review";}
+if(feedContract){key="feed-contract";title="[Operations] NBA feed degradation and schema review";}
 if(process.argv.includes("--workflow-event")) {
   const event=JSON.parse(await readFile(process.env.GITHUB_EVENT_PATH,"utf8"));
   const run=event.workflow_run;
@@ -26,7 +28,7 @@ if(process.argv.includes("--workflow-event")) {
   key=`workflow:${workflow.file}`;title=`[Operations] ${workflow.name}`;
   report={checkedAt:new Date().toISOString(),findings:workflowHealthIssues({...workflow,maxAgeHours:undefined},current.workflow_runs || [])};
 } else {
-  try { report=JSON.parse(await readFile(`output/operations-health/${postgame?"postgame":"latest"}.json`,"utf8")); }
+  try { report=JSON.parse(await readFile(feedContract?"output/nba-feed-contract/latest.json":`output/operations-health/${postgame?"postgame":"latest"}.json`,"utf8")); }
   catch { report={checkedAt:new Date().toISOString(),findings:[{key:"monitor-did-not-complete",severity:"error",message:"Operations monitor did not produce its report. Inspect the monitoring workflow."}]}; }
 }
 const marker=`<!-- nbadash-operations:${key} -->`;

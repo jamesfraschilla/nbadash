@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 import { detectCoachChallengeActions } from "../src/officiatingParser.js";
 import { aggregateSegmentStats } from "../src/segmentStats.js";
+import { fetchRecoverableGame } from "../supabase/functions/_shared/nbaLiveRecovery.ts";
+import { pathToFileURL } from "node:url";
+import { mkdir,writeFile } from "node:fs/promises";
 
 const SCHEDULE_URL = "https://cdn.nba.com/static/json/staticData/scheduleLeagueV2_1.json";
-const GAME_API = "https://d1rjt2wyntx8o7.cloudfront.net/api/games";
 const LIVE_BOXSCORE = "https://cdn.nba.com/static/json/liveData/boxscore";
 const KNOWN_ACTION_TYPES = new Set([
   "2pt", "3pt", "block", "ejection", "foul", "freethrow", "game", "heave",
@@ -27,7 +29,7 @@ function readArg(name) {
 }
 
 async function json(url) {
-  const response = await fetch(url, { headers: REQUEST_HEADERS });
+  const response = await fetch(url, { headers: REQUEST_HEADERS, signal: AbortSignal.timeout(15000) });
   if (!response.ok) throw new Error(`${url} failed (${response.status})`);
   return response.json();
 }
@@ -56,11 +58,12 @@ function hasMidrangeContract(line = {}) {
   );
 }
 
-function auditGame(game, liveGame) {
+export function auditGame(game, liveGame) {
   const gameId = String(game?.gameId || "unknown");
   const errors = [];
   const warnings = [];
   const actions = Array.isArray(game?.playByPlayActions) ? game.playByPlayActions : [];
+  if (game?.feedAvailability) warnings.push(`Primary feed is degraded; audit uses ${game.feedAvailability.source}. This does not confirm primary-source repair.`);
   if (!actions.length) errors.push("play-by-play is empty");
   const unexpectedActionTypes = [...new Set(actions
     .map((action) => String(action?.actionType || "").toLowerCase())
@@ -92,7 +95,7 @@ function auditGame(game, liveGame) {
 
   const challenges = detectCoachChallengeActions(game);
   if (challenges.some((challenge) => !challenge.challengingTeam)) errors.push("challenge missing team attribution");
-  if (challenges.some((challenge) => !challenge.challengeOutcome)) errors.push("challenge missing outcome attribution");
+  if (challenges.some((challenge) => !challenge.challengeOutcome)) warnings.push("PBP omits challenge outcomes; gamebook/PDF reconciliation is required. Stored missing outcomes are checked separately by the operations monitor.");
   if (actions.some((action) => String(action?.actionType || "").toLowerCase() === "heave")) {
     warnings.push("heave action type present; possession logic must retain explicit heave handling");
   }
@@ -142,23 +145,30 @@ async function main() {
   const results = [];
   for (const gameId of gameIds) {
     const [game, liveBoxscore] = await Promise.all([
-      json(`${GAME_API}/${gameId}`),
+      fetchRecoverableGame(gameId),
       json(`${LIVE_BOXSCORE}/boxscore_${gameId}.json`),
     ]);
     results.push(auditGame(game, liveBoxscore?.game));
   }
   const report = {
+    checkedAt: new Date().toISOString(),
     games: results.length,
     actions: results.reduce((sum, result) => sum + result.actions, 0),
     challenges: results.reduce((sum, result) => sum + result.challenges, 0),
     failures: results.filter((result) => result.errors.length),
     warnings: results.filter((result) => result.warnings.length),
   };
+  report.findings=results.flatMap(result=>[
+    ...result.errors.map((message,index)=>({key:`feed:${result.gameId}:error:${index}`,severity:"error",message:`${result.gameId}: ${message}`})),
+    ...result.warnings.filter(message=>!message.startsWith("heave action type present;")).map((message,index)=>({key:`feed:${result.gameId}:warning:${index}`,severity:"warning",message:`${result.gameId}: ${message}`})),
+  ]);
+  await mkdir("output/nba-feed-contract",{recursive:true});
+  await writeFile("output/nba-feed-contract/latest.json",JSON.stringify(report,null,2));
   console.log(JSON.stringify(report, null, 2));
   if (report.failures.length) process.exitCode = 1;
 }
 
-main().catch((error) => {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 });
