@@ -151,7 +151,7 @@ async function main() {
       const response = await fetchResponse(document.url);
       const bytes = Buffer.from(await response.arrayBuffer());
       const sha256 = createHash("sha256").update(bytes).digest("hex");
-      if (await alreadyImported(supabase, sha256)) {
+      if (!hasFlag("reimport") && await alreadyImported(supabase, sha256)) {
         console.log(`Unchanged ${document.kind} challenge PDF: ${document.url}`);
         continue;
       }

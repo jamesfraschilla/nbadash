@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { threePointOffensiveReboundPercent, reconcileShotZoneTotals } from "./customStatRates.js";
+import { threePointOffensiveReboundPercent, reconcileShotZoneTotals, mergeSegmentSnapshotTotals } from "./customStatRates.js";
 
 test("WAS–CLE halftime 3P-OR% uses 4 of 9 missed threes, not 4 of 4 OReb", () => {
   assert.equal(threePointOffensiveReboundPercent({ threePointOReb: 4, reboundsOffensive: 4,
@@ -19,4 +19,14 @@ test("team zones agree with segment/player zones only when shot coverage is comp
   assert.equal(reconcileShotZoneTotals(base, derived).points, 69);
   assert.equal(reconcileShotZoneTotals(base, { ...derived, fieldGoalsAttempted: 44 }), base);
   assert.equal(reconcileShotZoneTotals(base, { ...derived, rimFieldGoalsAttempted: 19 }), base);
+});
+test("legacy segment snapshots cannot overwrite complete current shot-zone calculations",()=>{
+  const computed={fieldGoalsMade:13,fieldGoalsAttempted:20,rimFieldGoalsMade:4,rimFieldGoalsAttempted:4,
+    midFieldGoalsMade:3,midFieldGoalsAttempted:5,threePointersMade:6,threePointersAttempted:11};
+  const old={...computed,rimFieldGoalsMade:3,rimFieldGoalsAttempted:3,midFieldGoalsMade:4,midFieldGoalsAttempted:6,points:33};
+  const merged=mergeSegmentSnapshotTotals(computed,old);
+  assert.equal(merged.rimFieldGoalsMade,4);
+  assert.equal(merged.midFieldGoalsMade,3);
+  assert.equal(merged.points,33);
+  assert.equal(mergeSegmentSnapshotTotals({...computed,fieldGoalsAttempted:19},old).rimFieldGoalsMade,3);
 });

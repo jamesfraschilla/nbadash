@@ -4,13 +4,15 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import readXlsxFile from "read-excel-file/node";
 import { createClient } from "@supabase/supabase-js";
+import { gzipSync } from "node:zlib";
+import { prepareChallengeImportWrites } from "./lib/challenge-import-writes.mjs";
+import { fetchRecoverableGame } from "../supabase/functions/_shared/nbaLiveRecovery.ts";
 import { assertOutsideWizardsGameWindow } from "./lib/game-window-guard.mjs";
 import { canonicalOfficialIdentity } from "../src/officiatingIdentity.js";
 import { enrichChallengeEventsWithOfficials } from "../src/officiatingChallengeMatcher.js";
 import { extractOfficialCallEvents } from "../src/officiatingParser.js";
 import { buildChallengeClockClip, CHALLENGE_CLOCK_LINK_VERSION, challengeLinkIdentity } from "../src/officiatingChallengeLinks.js";
 
-const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const OFFICIAL_PAGE_URL = "https://official.nba.com/2025-26-nba-coachs-challenge-reviews/";
 const REGULAR_SEASON_PDF_URL = "https://ak-static.cms.nba.com/wp-content/uploads/sites/4/2026/07/2025-26-NBA-Coachs-Challenges-04-13-26.pdf";
 const PLAYOFFS_PDF_URL = "https://ak-static.cms.nba.com/wp-content/uploads/sites/4/2026/06/2025-26-NBA-Coachs-Challenges-06-15-26.pdf";
@@ -66,9 +68,8 @@ function readListArg(name, fallback = []) {
 }
 
 async function fetchGame(gameId) {
-  try {
     const [game, liveBoxscore] = await Promise.all([
-      fetchJson(`${API_BASE}/games/${encodeURIComponent(gameId)}`),
+      fetchRecoverableGame(gameId),
       fetchJson(`https://cdn.nba.com/static/json/liveData/boxscore/boxscore_${encodeURIComponent(gameId)}.json`, {
         headers: NBA_REQUEST_HEADERS,
       }).catch(() => null),
@@ -79,28 +80,6 @@ async function fetchGame(gameId) {
       officials: liveOfficials.length ? liveOfficials : game.officials,
       playByPlayActions: game.playByPlayActions,
     };
-  } catch (cloudfrontError) {
-    try {
-      const [boxscorePayload, livePlayByPlayPayload] = await Promise.all([
-        fetchJson(`https://cdn.nba.com/static/json/liveData/boxscore/boxscore_${encodeURIComponent(gameId)}.json`, {
-          headers: NBA_REQUEST_HEADERS,
-        }),
-        fetchJson(`https://cdn.nba.com/static/json/liveData/playbyplay/playbyplay_${encodeURIComponent(gameId)}.json`, {
-          headers: NBA_REQUEST_HEADERS,
-        }),
-      ]);
-      return {
-        ...(boxscorePayload.game || {}),
-        gameId,
-        playByPlayActions: livePlayByPlayPayload.game?.actions || [],
-        source: "nba_live_data",
-      };
-    } catch (liveDataError) {
-      const firstMessage = cloudfrontError instanceof Error ? cloudfrontError.message : "CloudFront fetch failed";
-      const secondMessage = liveDataError instanceof Error ? liveDataError.message : "NBA live-data fetch failed";
-      throw new Error(`${firstMessage}; fallback failed: ${secondMessage}`);
-    }
-  }
 }
 
 async function mapWithConcurrency(items, concurrency, mapper) {
@@ -470,16 +449,6 @@ function buildIngestSql(rows) {
   ].join("\n\n");
 }
 
-function challengeNaturalKey(row) {
-  return [
-    row.game_id,
-    row.challenging_team,
-    row.period ?? -1,
-    row.game_clock,
-    row.source,
-  ].map((value) => String(value ?? "")).join("|");
-}
-
 function chunkArray(items, chunkSize = 250) {
   const chunks = [];
   for (let index = 0; index < items.length; index += chunkSize) {
@@ -494,7 +463,7 @@ async function loadExistingOfficialRows(supabase, season) {
   for (let start = 0; ; start += pageSize) {
     const { data, error } = await supabase
       .from("nba_coach_challenge_events")
-      .select("id,game_id,challenging_team,period,game_clock,source")
+      .select("*")
       .eq("season", season)
       .range(start, start + pageSize - 1);
     if (error) throw new Error(`Failed loading existing challenge rows: ${error.message}`);
@@ -510,11 +479,10 @@ async function applyChallengeRows(rows, season) {
   if (!url || !key) throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for --apply.");
   const supabase = createClient(url, key, { auth: { persistSession: false } });
   const existingRows = await loadExistingOfficialRows(supabase, season);
-  const existingIds = new Map(existingRows.filter(row => row.source === SOURCE).map((row) => [challengeNaturalKey(row), row.id]));
-  const writes = rows.map((row) => {
-    const id = existingIds.get(challengeNaturalKey(row));
-    return id ? { ...row, id } : row;
-  });
+  const { writes, inserted, updated } = prepareChallengeImportWrites(rows, existingRows);
+  const backupDir = "output/challenge-import-backups";
+  await mkdir(backupDir, { recursive: true });
+  await writeFile(`${backupDir}/${season}-${new Date().toISOString().replace(/[:.]/g,"-")}-before.json.gz`, gzipSync(JSON.stringify(existingRows)));
   const savedRows = [];
   for (const chunk of chunkArray(writes)) {
     const { data, error } = await supabase
@@ -553,8 +521,8 @@ async function applyChallengeRows(rows, season) {
     if (error) throw new Error(`Failed finalizing challenge document: ${error.message}`);
   }
   return {
-    inserted: writes.filter((row) => !row.id).length,
-    updated: writes.filter((row) => row.id).length,
+    inserted,
+    updated,
     preservedTags,
   };
 }
@@ -638,12 +606,23 @@ async function enrichOfficialRows(challengeRows, { season, concurrency }) {
     }
   });
   const games = loadedGames.filter(Boolean);
-  const assignmentRows = games.flatMap(({ game, gameId }) => buildAssignmentRows(game, {
+  let assignmentRows = games.flatMap(({ game, gameId }) => buildAssignmentRows(game, {
     season,
     gameId,
     seasonType: challengeRows.find((row) => row.game_id === gameId)?.season_type,
     gameDate: challengeRows.find((row) => row.game_id === gameId)?.game_date,
   }));
+  // A score/PBP inconsistency must block call enrichment, not erase a crew
+  // independently verified and already stored for that game.
+  const dbUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const dbKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (dbUrl && dbKey) {
+    const client = createClient(dbUrl,dbKey,{auth:{persistSession:false}});
+    const {data:stored,error} = await client.from("nba_official_game_assignments").select("*").eq("season",season).in("game_id",gameIds);
+    if(error)throw new Error(`Failed verifying stored crews: ${error.message}`);
+    const loadedIds = new Set(assignmentRows.filter(row=>row.role_key==="crewChief").map(row=>row.game_id));
+    assignmentRows = [...assignmentRows, ...stored.filter(row=>!loadedIds.has(row.game_id))];
+  }
   const callRows = games.flatMap(({ game, gameId }) => extractOfficialCallEvents(game, {
     season,
     seasonType: challengeRows.find((row) => row.game_id === gameId)?.season_type,

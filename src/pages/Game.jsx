@@ -18,7 +18,8 @@ import {
 import { useGame, useMinutes } from "../queries.js";
 import { buildCustomPlaycallClipMeta, buildTimedNoteClipMeta } from "../noteClipLinks.js";
 import { washingtonEventClipUrl } from "../nbaClipsTrial.js";
-import { threePointOffensiveReboundPercent, reconcileShotZoneTotals } from "../customStatRates.js";
+import { threePointOffensiveReboundPercent, reconcileShotZoneTotals, mergeSegmentSnapshotTotals as mergeSegmentTotals } from "../customStatRates.js";
+import { PERIOD_SNAPSHOT_CAPTURE_VERSION } from "../periodSnapshotTotals.js";
 import { useAuth } from "../auth/useAuth.js";
 import {
   buildDefaultNoteForm,
@@ -1314,7 +1315,7 @@ export default function Game({ variant = "full" }) {
     if (!periodSnapshots.length) return null;
     const map = new Map();
     periodSnapshots.forEach((row) => {
-      if (row.totals?._captureVersion !== 2) return;
+      if (![2, PERIOD_SNAPSHOT_CAPTURE_VERSION].includes(row.totals?._captureVersion)) return;
       const period = Number(row.period);
       const teamId = String(row.team_id);
       if (!map.has(period)) map.set(period, new Map());
@@ -1952,8 +1953,6 @@ export default function Game({ variant = "full" }) {
       secondChance3FGAttempted,
     };
   };
-  const mergeSegmentTotals = (computed, snapshot) =>
-    snapshot ? { ...computed, ...snapshot } : computed;
   const computedAwayTotals = segmentStats.teamTotals[awayTeamId] || {};
   const computedHomeTotals = segmentStats.teamTotals[homeTeamId] || {};
   const baseAwayTotals = awayTeamId

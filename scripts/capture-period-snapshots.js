@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { buildCompletedPeriodSnapshots } from "../src/periodSnapshotTotals.js";
+import { buildCompletedPeriodSnapshots, PERIOD_SNAPSHOT_CAPTURE_VERSION } from "../src/periodSnapshotTotals.js";
 import { fetchRecoverableGame } from "../supabase/functions/_shared/nbaLiveRecovery.ts";
 
 // Reconcile complete periods, including final games and delayed runs. Never
@@ -15,8 +15,11 @@ async function fetchJson(path) {
   return response.json();
 }
 const ids = new Set();
+const targets=String(process.env.CAPTURE_GAME_IDS || "").split(",").filter(Boolean);
+if(targets.some(id=>!/^\d{10}$/.test(id)) || targets.length>50)throw Error("Invalid targeted snapshot game IDs");
+for(const id of targets)ids.add(id);
 const lookbackDays = Math.max(1, Math.min(14, Number(process.env.CAPTURE_LOOKBACK_DAYS || 3)));
-for (let offset = 0; offset < lookbackDays; offset++) {
+for (let offset = 0; !targets.length && offset < lookbackDays; offset++) {
   const date = new Date(Date.now() - offset * 86400000).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
   for (const game of await fetchJson("/games/byDate?date=" + date)) {
     if ([2, 3].includes(game.gameStatus)) ids.add(game.gameId);
@@ -32,7 +35,7 @@ for (const gameId of ids) {
   if (readError) throw readError;
   // Finished games are reconciled at most once per Eastern day. In-progress
   // snapshots are always reconsidered so a final game gets its own checkpoint.
-  if (existing?.length && existing.every((row) => row.totals?._captureVersion === 2 && row.totals?._gameStatus === 3 && row.totals?._verifiedDate === verifiedDate)) {
+  if (existing?.length && existing.every((row) => row.totals?._captureVersion === PERIOD_SNAPSHOT_CAPTURE_VERSION && row.totals?._gameStatus === 3 && row.totals?._verifiedDate === verifiedDate)) {
     verified += existing.length;
     continue;
   }

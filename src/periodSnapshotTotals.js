@@ -1,4 +1,5 @@
 import { aggregateSegmentStats } from "./segmentStats.js";
+export const PERIOD_SNAPSHOT_CAPTURE_VERSION = 3;
 
 export function buildCompletedPeriodSnapshots(game) {
   const actions = game?.playByPlayActions || [];
@@ -15,7 +16,7 @@ export function buildCompletedPeriodSnapshots(game) {
       if (!teamId || rawScore == null || rawScore === "" || !Number.isFinite(score) || totals[teamId]?.points !== score) {
         throw new Error(`Cannot verify ${game.gameId} ${side} cumulative score through period ${period}.`);
       }
-      snapshots.push({ game_id: game.gameId, period, team_id: teamId, totals: { ...totals[teamId], _captureVersion: 2 } });
+      snapshots.push({ game_id: game.gameId, period, team_id: teamId, totals: { ...totals[teamId], _captureVersion: PERIOD_SNAPSHOT_CAPTURE_VERSION } });
     }
   }
   return snapshots;

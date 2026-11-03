@@ -43,7 +43,7 @@ for (let offset = 0; ; offset += 1000) {
 }
 const groups = Map.groupBy(rows, row => row.game_id);
 const report = { season, mode: apply ? "apply" : "dry-run", challenges: rows.length, games: groups.size,
-  gamebooks: 0, bookChallengeRows: 0, changed: [], unchanged: 0, failures: [], needsReview: [], newlyUnresolved: [] };
+  gamebooks: 0, bookChallengeRows: 0, changed: [], unchanged: 0, failures: [], feedWarnings: [], needsReview: [], newlyUnresolved: [] };
 const reportDir = path.resolve(arg("output", "output/challenge-attribution-audit"));
 await mkdir(reportDir, { recursive: true });
 // Recovery copy must exist before any writes. No user notes/tags are touched.
@@ -73,16 +73,23 @@ try {
       report.gamebooks++; report.bookChallengeRows += bookRows.length;
       const { data: assignments, error } = await db.from("nba_official_game_assignments").select("*").eq("game_id", gameId).eq("season", season);
       if (error) throw error;
-      const game = await fetchRecoverableGame(gameId);
-      if (String(game.gameId) !== gameId || !game.playByPlayActions?.length) throw new Error("Invalid/empty game feed");
-      const calls = extractOfficialCallEvents(game).map(event => ({
+      let game = null;
+      try {
+        game = await fetchRecoverableGame(gameId);
+        if (String(game.gameId) !== gameId || !game.playByPlayActions?.length) throw new Error("Invalid/empty game feed");
+      } catch (error) {
+        game = null;
+        report.feedWarnings.push({gameId,error:error.message});
+        console.warn(`::warning::${gameId}: ${error.message}; applying only independently supported gamebook evidence, preserving existing clock clips.`);
+      }
+      const calls = (game ? extractOfficialCallEvents(game) : []).map(event => ({
         game_id: gameId, period: event.period, game_clock: event.gameClock, action_number: event.actionNumber,
         order_number: event.orderNumber, action_type: event.actionType, primary_category: event.primaryCategory,
         secondary_category: event.secondaryCategory, sub_type: event.subType, descriptor: event.descriptor,
         description: event.description, official_id: event.officialId, official_name: event.officialName,
         charged_team: event.chargedTeam, source_payload: event.sourcePayload,
       }));
-      const enriched = enrichChallengeEventsWithOfficials(challenges, calls, assignments);
+      const enriched = game ? enrichChallengeEventsWithOfficials(challenges, calls, assignments) : challenges;
       for (let index = 0; index < challenges.length; index++) {
         const before = challenges[index];
         const officialSource = challenges.find(row => row.source === "nba_official_challenge_pdf"
@@ -95,10 +102,12 @@ try {
             sourceId: officialSource.id,
           } } } : enriched[index];
         const after = reconcileGamebookChallenge(candidate, bookRows, assignments, url);
-        const clip = buildChallengeClockClip(after, game);
-        after.source_payload = { ...after.source_payload, clockClipUrl: clip.url,
-          clockLinkReason: clip.reason, clockLinkActionNumber: clip.actionNumber,
-          clockLinkVersion: CHALLENGE_CLOCK_LINK_VERSION };
+        if (game) {
+          const clip = buildChallengeClockClip(after, game);
+          after.source_payload = { ...after.source_payload, clockClipUrl: clip.url,
+            clockLinkReason: clip.reason, clockLinkActionNumber: clip.actionNumber,
+            clockLinkVersion: CHALLENGE_CLOCK_LINK_VERSION };
+        }
         const changedFields = fields.filter(key => (before[key] ?? "") !== (after[key] ?? ""));
         // jsonb key ordering differs from JavaScript insertion order. Compare
         // values structurally so unchanged books never cause daily rewrites.
@@ -137,7 +146,7 @@ await writeFile(path.join(reportDir, `${stamp}-report.json`), JSON.stringify(rep
 console.log(JSON.stringify({ ...report, changed: report.changed.length, needsReview: report.needsReview.length, reportDir }, null, 2));
 if (process.env.GITHUB_STEP_SUMMARY) {
   const lines = ["## Challenge attribution review", "",
-    `${report.challenges} challenge rows in ${report.games} games checked; ${report.changed.length} corrections; ${report.failures.length} fetch/processing failures; ${report.needsReview.length} unresolved entries.`, "",
+    `${report.challenges} challenge rows in ${report.games} games checked; ${report.changed.length} corrections; ${report.failures.length} fetch/processing failures; ${report.feedWarnings.length} limited-feed warnings; ${report.needsReview.length} unresolved entries.`, "",
     "The daily job retries unresolved current-season entries as well as recent games. Missing source information is not guessed and is not assigned to a human automatically.", "",
     "| Game | Period | Clock | Unresolved reason |", "| --- | --- | --- | --- |",
     ...report.needsReview.map(row => `| ${row.gameId} | ${row.period} | ${row.clock} | ${String(row.reason).replaceAll("|", "/")} |`), ""];

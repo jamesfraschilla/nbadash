@@ -16,3 +16,7 @@ export function reconcileShotZoneTotals(base = {}, derived = {}) {
     || derived.rimFieldGoalsMade + derived.midFieldGoalsMade + Number(derived.threePointersMade || 0) !== derived.fieldGoalsMade) return base;
   return { ...base, ...Object.fromEntries(zones.map((key) => [key, derived[key]])) };
 }
+
+export function mergeSegmentSnapshotTotals(computed = {}, snapshot) {
+  return snapshot ? reconcileShotZoneTotals({ ...computed, ...snapshot }, computed) : computed;
+}

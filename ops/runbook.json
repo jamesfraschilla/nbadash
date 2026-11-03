@@ -1,0 +1,18 @@
+{
+  "purpose": "Durable operating context for dashboard maintenance; load this and current monitor issues before investigating. Chat memory is not the source of truth.",
+  "owner": "jamesfraschilla",
+  "season": "2026-27",
+  "monitor": {"workflow":"operations-health.yml","cadence":"Health checks hourly at minute 17 UTC; daily postgame accuracy sample at 6:00 AM America/New_York; critical workflow completion events","notifications":"Assigned persistent GitHub issues; delivery depends on the owner's GitHub notification settings","limitations":"GitHub schedules are best-effort. This is not continuous agent supervision, independent external uptime monitoring, or a proof of every statistic."},
+  "sources": {
+    "challengeVideo":"Only official reviews-by-day PDF dmmx2 links; never substitute clock clips into Video.",
+    "challengeClock":"Validated timeActual-based clips, separate from the PDF Video column.",
+    "challengeInventory":"Check both 2026-27 and legacy 2025-26 official.nba.com URLs. Verify PDF fingerprint, expected document row count, and completion markers, not only workflow exit status.",
+    "originalCall":"Weekly PDF initial call plus gamebook original-call evidence, not the corrected event or following possession.",
+    "officialIdentity":"Permanent NBA official identity, never jersey number alone.",
+    "recordScope":"Preseason visible in log; regular-season and playoff challenges count toward official competitive records."
+  },
+  "repairOrder":["Read current GitHub monitor issues and recent workflow logs", "Preserve full affected records and annotations before writes", "Fix cause and add regression tests", "Verify updated PDF import completion", "Reconcile original calls against gamebooks", "Refresh current-season statistics caches serially", "Verify individual referee and team records against authoritative challenge rows", "Verify deployments and saved-analysis factual checks", "Close only resolved incidents; document source omissions separately"],
+  "safety":["Never change Washington/Capital City Rotations state or storage scope for maintenance", "Do not guess missing whistle attribution or resolve conflicts merely to clear flags", "Do not reinsert an overturned foul into counted foul events", "Protect manual decisions, context tags and stable challenge IDs during reimports", "Avoid heavy aggregates and broad writes during Wizards game windows", "No automatic code deployment or data repair by the monitor; investigate, test and obtain authority when needed"],
+  "knownFollowups":["Review-source conflicts require actual adjudication, not just automated retries", "AI fallback frequency is a quality issue distinct from fact validation", "Local direct analysis-repair credential was rejected; normal server-side prewarm worked on November 3", "Complete the six-stage calculation audit; monitoring coverage is not equivalent to completed accuracy certification"],
+  "tests":"npm run lint; npm test; npm run test:edge; npm run typecheck; browser tests for UI changes; production manifest and workflow verification after deployment"
+}

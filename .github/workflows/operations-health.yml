@@ -1,0 +1,107 @@
+name: Dashboard Operations Monitor
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+    - cron: "0 6 * * *"
+      timezone: "America/New_York"
+  workflow_dispatch:
+    inputs:
+      postgame_audit:
+        description: Also run the read-only postgame accuracy sample
+        type: boolean
+        default: false
+  workflow_run:
+    workflows: ["Officiating Daily Maintenance", "Officiating Nightly Ingestion", "Scan Referee Assignments", "Update Rosters", "Capture Period Snapshots", "Deploy Supabase", "Deploy to GitHub Pages"]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+concurrency:
+  group: operations-monitor-${{ github.event_name == 'workflow_run' && github.event.workflow_run.name || 'health' }}
+  cancel-in-progress: false
+
+jobs:
+  postgame:
+    if: github.event.schedule == '0 6 * * *' || inputs.postgame_audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: npm ci
+      - name: Verify recent Wizards finals and three other NBA games
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/check-postgame-accuracy.mjs
+      - name: Publish persistent accuracy findings
+        if: ${{ always() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/publish-operations-incident.mjs --postgame
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: postgame-accuracy-${{ github.run_id }}
+          path: output/operations-health/postgame.json
+          retention-days: 14
+  workflow-notification:
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Open or resolve persistent workflow incident
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/publish-operations-incident.mjs --workflow-event
+
+  health:
+    if: github.event_name != 'workflow_run'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Read-only dashboard availability check
+        continue-on-error: true
+        run: node scripts/check-dashboard-health.mjs
+      - name: Verify imports, cache freshness, job heartbeats, and review queue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/check-operations-health.mjs
+      - name: Open, update, or resolve persistent operations issue
+        if: ${{ always() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/publish-operations-incident.mjs
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: operations-health-${{ github.run_id }}
+          path: |
+            output/operations-health/
+            output/dashboard-health/
+          retention-days: 14
+          if-no-files-found: warn
