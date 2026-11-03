@@ -99,6 +99,8 @@ try {
           ...enriched[index].source_payload, officialOriginalCall: {
             initial_call: officialSource.source_payload.pdfRow.initial_call,
             trigger: officialSource.source_payload.pdfRow.trigger,
+            challenge_outcome: officialSource.source_payload.pdfRow.challenge_outcome,
+            ruling_description: officialSource.source_payload.pdfRow.ruling_description,
             sourceId: officialSource.id,
           } } } : enriched[index];
         const after = reconcileGamebookChallenge(candidate, bookRows, assignments, url);

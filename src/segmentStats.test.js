@@ -12,6 +12,22 @@ const HOME = {
   teamTricode: "HME",
 };
 
+test("late-numbered corrections retain game chronology for points, possessions and Kills", () => {
+  const actions = [
+    { period: 1, clock: "11:00", orderNumber: 900, possession: 1, teamId: 1, actionType: "2pt", shotResult: "Made", scoreHome: "0", scoreAway: "2" },
+    { period: 1, clock: "10:00", orderNumber: 20, possession: 2, teamId: 2, actionType: "2pt", shotResult: "Made", scoreHome: "2", scoreAway: "2" },
+    { period: 1, clock: "9:00", orderNumber: 30, possession: 1, teamId: 1, actionType: "2pt", shotResult: "Made", scoreHome: "2", scoreAway: "4" },
+    { period: 2, clock: "11:00", orderNumber: 40, possession: 2, teamId: 2, actionType: "2pt", shotResult: "Made", scoreHome: "4", scoreAway: "4" },
+  ];
+  const normal = actions.map((a, i) => ({ ...a, orderNumber: i + 1 }));
+  const aggregate = input => aggregateSegmentStats({ actions: input, segment: "all", homeTeam: HOME, awayTeam: AWAY,
+    basePlayers: [], minutesData: null, currentPeriod: 2, currentClock: "0:00", isLive: false });
+  assert.deepEqual(aggregate(actions).teamTotals, aggregate(normal).teamTotals);
+  assert.deepEqual(countPossessionsByTeam(actions, "all", 2, 1), countPossessionsByTeam(normal, "all", 2, 1));
+  assert.deepEqual(computeKills(actions, "all", 2, 1), computeKills(normal, "all", 2, 1));
+  assert.equal(aggregate(actions).teamTotals[1].points, 4);
+});
+
 test("same team ending and starting adjacent quarters counts separate possessions; markers do not", () => {
   const actions = [
     { orderNumber: 1, period: 1, possession: HOME.teamId },

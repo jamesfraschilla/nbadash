@@ -220,7 +220,7 @@
     {
       "name": "game-analysis",
       "entrypoint": "supabase/functions/game-analysis/index.ts",
-      "sha256": "44f755fca60bbfc9cb53c7aa5b9575750b433fe3175a424145e96b0df0b36fa5",
+      "sha256": "f3f5a30ad07a5ad80cad78c2d313efa9ad4ff66d86bdc291592c5358b0f4644c",
       "sourceFiles": [
         "supabase/functions/_shared/analysisClaimValidation.ts",
         "supabase/functions/_shared/analysisFreshness.ts",

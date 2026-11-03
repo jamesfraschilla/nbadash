@@ -9,6 +9,22 @@ const pages = [{ page: 12, text: `NATIONAL BASKETBALL ASSOCIATION OFFICIAL PLAY-
 11:51 Pacers Coach's Challenge J.Slawson S.FOUL (P.Ransom): Call Overturned: No Foul on J. Slawson
 11:50 J.Slawson Violation: Jump Ball (A.Smith)` }];
 
+test("manual attribution remains protected even when it already has gamebook evidence", () => {
+  const before = { period: 2, game_clock: "11:51", review_status: "manual", source_payload: { gamebookChallenge: { version: "older" } } };
+  assert.equal(reconcileGamebookChallenge(before, parseGamebookChallenges(pages), [], "url"), before);
+});
+
+test("a replacement event label explains the reversal but does not certify original whistle attribution", () => {
+  const rows = parseGamebookChallenges([{ page: 1, text: "OFFICIAL PLAY-BY-PLAY\n2nd QUARTER\n05:27 76ers Coach's Challenge C.Johnson Offensive (J.Goble): Call Overturned: Corrected to Offensive Foul on C. Johnson" }]);
+  const result = reconcileGamebookChallenge({ period: 2, game_clock: "05:27", source_payload: {
+    pdfRow: { initial_call: "Defensive Foul", trigger: "Challenge of Called Foul", challenge_outcome: "Successful", ruling_description: "Offensive Foul" } } }, rows,
+  [{ official_id: "1", official_name: "John Goble" }], "url");
+  assert.equal(result.source_payload.gamebookSourceConflict.kind, "replacement-event-label");
+  assert.equal(result.source_payload.gamebookSourceConflict.originalWhistleVerified, false);
+  assert.equal(result.review_status, "needs_review");
+  assert.equal(result.challenge_sub_type, "Defensive Foul");
+});
+
 test("WAS ORL original OOB is retained without inventing a whistle; P.FOUL resolves the named compound-surname official", () => {
   const book = parseGamebookChallenges([
     { page: 14, text: "OFFICIAL PLAY-BY-PLAY\n3rd QUARTER\n:04.4 Wizards Coach's Challenge Stoppage - Out of Bounds: Call Overturned: Out-of-Bounds on N. Vučević" },
@@ -87,7 +103,7 @@ test("do not label the replacement offensive foul as the original defensive foul
   assert.equal(result.challenge_sub_type, "Defensive Foul");
   assert.equal(result.initial_call, "Defensive Foul");
   assert.equal(result.review_status, "needs_review");
-  assert.equal(result.whistling_official_name, "John Goble");
+  assert.equal(result.whistling_official_name, null);
 });
 
 test("compact gamebook official tokens resolve compound surnames", () => {

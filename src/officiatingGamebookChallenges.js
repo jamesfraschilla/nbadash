@@ -57,7 +57,7 @@ export function challengeClockSeconds(clock) {
 }
 
 export function reconcileGamebookChallenge(challenge, bookRows, assignments, url) {
-  if (["manual", "verified"].includes(challenge.review_status) && !challenge.source_payload?.gamebookChallenge) return challenge;
+  if (["manual", "verified"].includes(challenge.review_status)) return challenge;
   const matches = bookRows.filter(row => row.period === Number(challenge.period)
     && Math.abs(challengeClockSeconds(row.gameClock) - challengeClockSeconds(challenge.game_clock)) < 0.11);
   if (matches.length !== 1) return challenge;
@@ -85,6 +85,22 @@ export function reconcileGamebookChallenge(challenge, bookRows, assignments, url
     || /offensive foul/i.test(originalCall) && row.challengeType === "Foul" && row.subType && row.subType !== "Offensive Foul";
   const typeConflict = originalType && row.challengeType && originalType !== row.challengeType;
   const conflict = Boolean(directionConflict || typeConflict);
+  // A final corrected event label is not evidence of the original foul's
+  // subtype or of who blew the original whistle. Preserve both source claims
+  // and keep attribution review open even when the label reversal is explained.
+  const replacementLabel = Boolean(directionConflict
+    && /^successful$/i.test(String(original.challenge_outcome || challenge.challenge_outcome || ""))
+    && (/^Offensive Foul$/i.test(String(original.ruling_description || "")) && row.subType === "Offensive Foul"
+      || /^Defensive Foul$/i.test(String(original.ruling_description || "")) && row.challengeType === "Foul" && row.subType !== "Offensive Foul"));
+  if (conflict) corrected.source_payload.gamebookSourceConflict = {
+    version: "original-vs-corrected-v1",
+    kind: replacementLabel ? "replacement-event-label" : "unexplained-source-disagreement",
+    pdfInitialCall: originalCall,
+    pdfFinalCall: original.ruling_description || "",
+    bookEventLabel: row.originalCall,
+    originalWhistleVerified: false,
+  };
+  else delete corrected.source_payload.gamebookSourceConflict;
   const fallbackSubtype = /offensive foul/i.test(originalCall) ? "Offensive Foul"
     : /defensive foul/i.test(originalCall) ? "Defensive Foul" : originalType === "OOB" ? "Out Of Bounds" : "";
   const type = originalType || row.challengeType || challenge.challenge_type;
@@ -93,8 +109,8 @@ export function reconcileGamebookChallenge(challenge, bookRows, assignments, url
   const needsReview = !type || !subtype || unresolvedNamedOfficial || missingWhistle || conflict;
   return { ...corrected, challenge_type: type, challenge_sub_type: subtype,
     initial_call: originalCall || (row.challengeType ? row.originalCall : challenge.initial_call),
-    whistling_official_id: resolvedOfficial ? String(official.official.personId) : unresolvedNamedOfficial ? null : challenge.whistling_official_id,
-    whistling_official_name: resolvedOfficial ? official.official.fullName : unresolvedNamedOfficial ? null : challenge.whistling_official_name,
+    whistling_official_id: conflict ? null : resolvedOfficial ? String(official.official.personId) : unresolvedNamedOfficial ? null : challenge.whistling_official_id,
+    whistling_official_name: conflict ? null : resolvedOfficial ? official.official.fullName : unresolvedNamedOfficial ? null : challenge.whistling_official_name,
     // Overturned calls may disappear from corrected PBP. Do not invent a
     // call-event ID or insert a counted foul into nba_official_call_events.
     matched_call_event_id: null,

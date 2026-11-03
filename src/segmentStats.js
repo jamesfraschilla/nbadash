@@ -19,7 +19,7 @@ function parseClockValue(clock) {
     const seconds = Number(match[2] || 0);
     return minutes * 60 + seconds;
   }
-  if (!/^\d+:\d+$/.test(value)) return null;
+  if (!/^\d+:\d+(?:\.\d+)?$/.test(value)) return null;
   return parseClock(value);
 }
 
@@ -30,6 +30,13 @@ function parseScoreValue(value) {
 
 function orderActions(actions) {
   return [...actions].sort((a, b) => {
+    const periodDifference = Number(a.period || 0) - Number(b.period || 0);
+    if (periodDifference) return periodDifference;
+    const aClock = parseClockValue(a.clock);
+    const bClock = parseClockValue(b.clock);
+    // Corrected early events can receive late orderNumbers. Game time is the
+    // primary chronology; source order still resolves events at the same clock.
+    if (aClock != null && bClock != null && aClock !== bClock) return bClock - aClock;
     const aOrder = a.orderNumber ?? a.actionNumber ?? 0;
     const bOrder = b.orderNumber ?? b.actionNumber ?? 0;
     return aOrder - bOrder;
@@ -753,9 +760,7 @@ export function computeKills(actions, segment, homeTeamId, awayTeamId) {
   const predicate = segmentPeriods(segment);
   const homeId = String(homeTeamId ?? "").trim();
   const awayId = String(awayTeamId ?? "").trim();
-  const segmentActions = actions
-    .filter((action) => predicate(action.period))
-    .sort((a, b) => a.orderNumber - b.orderNumber);
+  const segmentActions = orderActions(actions.filter((action) => predicate(action.period)));
 
   const streaks = {
     [homeId]: 0,
@@ -837,13 +842,7 @@ export function countPossessionsByTeam(actions, segment, homeTeamId, awayTeamId)
   const predicate = segmentPeriods(segment);
   const homeId = Number(homeTeamId);
   const awayId = Number(awayTeamId);
-  const segmentActions = actions
-    .filter((action) => predicate(action.period))
-    .sort((a, b) => {
-      const aOrder = a.orderNumber ?? a.actionNumber ?? 0;
-      const bOrder = b.orderNumber ?? b.actionNumber ?? 0;
-      return aOrder - bOrder;
-    });
+  const segmentActions = orderActions(actions.filter((action) => predicate(action.period)));
 
   let currentPossession = null;
   let homePossessions = 0;

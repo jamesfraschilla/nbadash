@@ -2068,7 +2068,7 @@ function buildTemplateAnalysis(features: ReturnType<typeof buildFeaturePayload>)
 
 function buildAnalysisDataSignatureInput(features: ReturnType<typeof buildFeaturePayload>) {
   return {
-    analysisVersion: 8,
+    analysisVersion: 9,
     range: features.range,
     score: features.score,
     teams: features.teams,
@@ -2285,12 +2285,15 @@ function findInvalidSpanScoreClaims(analysis: Record<string, unknown>, features:
       }
     }
 
-    const spanScorePattern = /\b(?:outscored|outscoring|won|winning|took|taking|claimed|controlled|dominated|finished)\b[^.?!]{0,90}?\b(\d{1,3})\s*[-–]\s*(\d{1,3})\b/gi;
+    const spanScorePattern = /\b(?:outscored|outscoring|won|winning|took|taking|claimed|controlled|dominated|finished)\b[^.?!;]{0,90}?\b(\d{1,3})\s*[-–]\s*(\d{1,3})\b/gi;
     let spanMatch: RegExpExecArray | null;
     while ((spanMatch = spanScorePattern.exec(text))) {
       const first = safeNumber(spanMatch[1], -1);
       const second = safeNumber(spanMatch[2], -1);
       if (isExpectedRangePointPair(first, second, features)) continue;
+      // "Finished the quarter with a 9-0 run" does not claim a 9-0
+      // quarter score. The independent run validator still checks that run.
+      if (/^\s+(?:run|push|burst)\b/i.test(text.slice(spanMatch.index + spanMatch[0].length))) continue;
 
       const contextStart = Math.max(0, spanMatch.index - 100);
       const contextEnd = Math.min(text.length, spanMatch.index + spanMatch[0].length + 100);
@@ -2501,6 +2504,19 @@ function sanitizeAiHeadline(headline: string, features: ReturnType<typeof buildF
   });
 }
 
+function formatTeamMarginAndRunFacts(features: ReturnType<typeof buildFeaturePayload>) {
+  return (["home", "away"] as const).map((side) => {
+    const other = side === "home" ? "away" : "home";
+    const team = features.teams[side];
+    const margin = (state: typeof features.score.start) => {
+      const signed = state[side] - state[other];
+      return signed === 0 ? "tied" : `${Math.abs(signed)}-point ${signed > 0 ? "lead" : "deficit"}`;
+    };
+    const run = team.largestRun;
+    return `${team.tricode}: opened selected range with ${margin(features.score.start)}; ended selected range with ${margin(features.score.end)}. Largest unanswered run for ${team.tricode} in this range: ${run?.points || 0}-0${run?.startLabel && run?.endLabel ? ` (${run.startLabel} to ${run.endLabel})` : ""}.`;
+  }).join(" ");
+}
+
 async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayload>, previousRejectReasons: string[] = []) {
   const apiKey = Deno.env.get("OPENAI_API_KEY") || "";
   if (!apiKey) return null;
@@ -2511,6 +2527,7 @@ async function generateAiAnalysis(features: ReturnType<typeof buildFeaturePayloa
     `End score: ${formatScoreState(features.score.end, features)}.`,
     `Selected range scoring: ${formatRangeScoringFacts(features)}.`,
     `Actual game margin at the selected endpoint: home ${features.score.end.home - features.score.end.away}, away ${features.score.end.away - features.score.end.home}. This is NOT the selected range's scoring margin.`,
+    formatTeamMarginAndRunFacts(features),
     "Player shooting fractions must come from that exact player's row in players, never from team totals. Omit a claim if no exact player statistic supports it.",
     "If you describe the selected quarter, half, game, or span score, it must match the selected range scoring exactly.",
     `Allowed run/push/burst scoring pairs only: ${[
@@ -2810,6 +2827,7 @@ export const __test__ = {
   buildInsightSignals,
   buildLateSwingInsight,
   buildTemplateAnalysis,
+  formatTeamMarginAndRunFacts,
   formatPercentage,
   formatPercentageWithAttempts,
   findAiAnalysisRejectReasons,

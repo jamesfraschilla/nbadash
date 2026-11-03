@@ -1,6 +1,20 @@
 import { assert, assertEquals, assertStringIncludes, assertThrows, assertRejects } from "jsr:@std/assert@1";
 import { __test__ } from "./index.ts";
 
+Deno.test("analysis facts explicitly distinguish each team's opening and ending margin and largest run", () => {
+  const facts = __test__.formatTeamMarginAndRunFacts({ score: { start: {home:59,away:60}, end: {home:68,away:79} },
+    teams: {home:{tricode:"ORL",largestRun:{points:13}},away:{tricode:"WAS",largestRun:{points:8}}} } as any);
+  assertStringIncludes(facts, "ORL: opened selected range with 1-point deficit; ended selected range with 11-point deficit");
+  assertStringIncludes(facts, "WAS: opened selected range with 1-point lead; ended selected range with 11-point lead");
+  assertStringIncludes(facts, "Largest unanswered run for ORL in this range: 13-0");
+});
+
+Deno.test("a closing run is not misread as the selected quarter's full score", () => {
+  const features = {score:{rangePoints:{home:33,away:28}}, range:{endLabel:"Q1 0:00"},teams:{home:{tricode:"WAS"},away:{tricode:"ORL"}}} as any;
+  assertEquals(__test__.findInvalidSpanScoreClaims({summary:"WAS finished the quarter with a 9-0 run."}, features), []);
+  assert(__test__.findInvalidSpanScoreClaims({summary:"WAS won the quarter 9-0."}, features).length > 0);
+});
+
 Deno.test("unchanged analysis facts acknowledge a corrected feed without regenerating the recap", async () => {
   const originalFetch = globalThis.fetch;
   const oldUrl = Deno.env.get("SUPABASE_URL");

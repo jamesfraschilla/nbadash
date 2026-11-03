@@ -1,0 +1,23 @@
+{
+  "updatedAt": "2026-11-03",
+  "status": "in_progress_not_certified",
+  "principle": "A passing replay is evidence only for its stated fields, games and source versions. Do not equate workflow success with accuracy certification.",
+  "stages": [
+    {"stage":1,"scope":"Source identity, completeness and correction chronology","status":"partial","verified":"NBA recovery validates identity and final score; primary PBP degradation remains explicit. Correction regression now orders period and countdown clock before source sequence.","remaining":"Expand source-contract replay across live corrections and overtime; upstream primary PBP omission remains open."},
+    {"stage":2,"scope":"Core team/player, quarter and selected-segment totals","status":"partial","verified":"Prior November 2 replay: 15 games, 8941 actions, no core full-game box reconciliation mismatch. November 3 correction-order replay: 0022600162 and 0022600101, eight segments each; no before/after total, possession or Kill differences.","remaining":"Independently validate all selected/custom time ranges, not only full-game and prepared segments."},
+    {"stage":3,"scope":"Possession ledger and custom stats","status":"partial","verified":"Regression coverage includes offensive rebounds preserving possessions, period boundaries, free-throw qualifiers, heaves, six non-overlapping Kills from streaks 7/5/3/5/3, and late-numbered corrections.","remaining":"Source-backed event-by-event reconciliation of all rebound-rate denominators, Kill opportunities, transition and second-chance attribution."},
+    {"stage":4,"scope":"Advanced stats, lineups and combinations","status":"pending_full_reconciliation","verified":"Existing Minutes/Combos integrity checks and browser regressions remain in place.","remaining":"Independent possession/rating/lineup plus-minus checks across substitutions, free throws, overtime and corrections."},
+    {"stage":5,"scope":"Alerts and generated analysis","status":"partial","verified":"Saved November 2 Washington recaps passed factual replay; six template fallbacks remain a quality issue. Analysis v9 adds team-owned opening/ending margins and largest runs; a verified closing run no longer gets misread as a full-quarter score.","remaining":"Deploy and evaluate bounded regeneration; audit every alert family against traceable events. Prompt tests alone do not prove improved production recap quality."},
+    {"stage":6,"scope":"Live replay, repair, monitoring and release acceptance","status":"partial","verified":"Hourly health monitoring, 6 AM Eastern postgame sample, persistent assigned incidents and next-day source recovery are active.","remaining":"Replay outage/recovery and corrections end-to-end with independently checked expected outputs; close incidents only after same-game verification."}
+  ],
+  "officiating": {
+    "reviewInventoryAtStart":82,
+    "sourceConflicts":19,
+    "replacementLabelExplanations":17,
+    "unexplainedTypeConflicts":2,
+    "rawAffectedRecordsIncludingDuplicateSources":35,
+    "policy":"Retain original weekly-PDF call type. Do not credit a corrected-event official with the original whistle when sources conflict. Preserve candidate and source evidence, protect manual decisions, retain review flags, and leave team outcomes and crew-chief assignments unchanged.",
+    "otherFlags":{"gamebookWhistleNotPublished":27,"pdfVideoMatchedButWhistleUnresolved":33,"replayDetectionNeedsSourceEvidence":2,"namedGamebookOfficialUnresolved":1},
+    "resolution":"Review the original call/video or independently identified original-whistle evidence. A new weekly PDF can confirm inventory/outcome/video but does not automatically supply a missing whistle. No flags were cleared solely to make the monitor green."
+  }
+}

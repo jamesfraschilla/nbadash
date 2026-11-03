@@ -36,6 +36,7 @@ import {
 } from "../officiatingSeasons.js";
 import styles from "./Officiating.module.css";
 import { challengeNeedsReview, challengeReviewLabel } from "../challengeReview.js";
+import { challengeSuccessStyle } from "../challengeSuccessStyle.js";
 
 const TABS = [
   { key: "tonight", label: "Tonight's Officials" },
@@ -1370,7 +1371,7 @@ function TeamsTable({ rows, sort, onSort, onSelect }) {
                   </button>
                 </div>
               </td>
-              <td><span className={styles.successPill} style={successRateStyle(row.challengeRateRank)}>{formatRate(row.challengeRate)}</span></td>
+              <td><span className={styles.successPill} style={challengeSuccessStyle(row.challengeRate, row.challenges)} title={`${row.successfulChallenges} successful / ${row.challenges} challenges; color represents observed success percentage, not percentile rank.`}>{formatRate(row.challengeRate)}</span></td>
               <td>{row.challenges}</td>
               <td>{row.successfulChallenges}</td>
               <td><span className={`${styles.netPill} ${valueTone(row.netCallsFor)}`}>{formatSignedDecimal(row.netCallsFor)}</span></td>
@@ -1832,7 +1833,7 @@ function TeamProfile({ profile, isLoading, loadError, season, onSeasonChange, on
           label="Success Rate"
           value={formatRate(profile.challengeRate)}
           detail={`Rank ${profile.challengeRateRank || "-"}`}
-          style={profile.challengeRateRank ? successRateStyle(profile.challengeRateRank) : undefined}
+          style={challengeSuccessStyle(profile.challengeRate, profile.challenges)}
         />
       </div>
       {isLoading ? <p className={styles.profileLoading}>Loading profile details...</p> : null}
