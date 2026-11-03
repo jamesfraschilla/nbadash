@@ -2356,7 +2356,10 @@ function findInvalidTeamScoreAttributionClaims(
         const second = safeNumber(match[2], -1);
         const context = text.slice(Math.max(0, match.index - 30), match.index + match[0].length + 40);
         const verified = (features.momentumBursts || []).flatMap((burst) => [burst, ...((burst as Record<string, any>).verifiedBursts || [])]);
-        if (/\b(?:run|push|burst)\b/i.test(context) && verified.some((burst) => burst.team === team.tricode && burst.points === first && burst.opponentPoints === second)) continue;
+        const supportedRun = verified.some((burst) => burst.team === team.tricode && burst.points === first && burst.opponentPoints === second)
+          || second === 0 && first > 0 && Number(team.largestRun?.points) === first;
+        if (/\b(?:run|push|burst)\b/i.test(context) && supportedRun
+          && !/\b(?:full game|entire (?:quarter|half|game)|won the (?:quarter|half|game))\b/i.test(context)) continue;
         if (first !== expectedTeamPoints || second !== expectedOpponentPoints) {
           reasons.push(`${team.tricode} scoring attribution ${first}-${second} should be ${expectedTeamPoints}-${expectedOpponentPoints}`);
         }

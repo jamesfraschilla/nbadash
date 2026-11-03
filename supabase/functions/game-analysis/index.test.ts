@@ -15,6 +15,14 @@ Deno.test("a closing run is not misread as the selected quarter's full score", (
   assert(__test__.findInvalidSpanScoreClaims({summary:"WAS won the quarter 9-0."}, features).length > 0);
 });
 
+Deno.test("team score attribution accepts that team's verified largest run, not the opponent's", () => {
+  const features = {score:{rangePoints:{home:33,away:28}}, range:{endLabel:"Q1 0:00"},
+    teams:{home:{tricode:"ORL",name:"Magic",largestRun:{points:9}},away:{tricode:"WAS",name:"Wizards",largestRun:{points:8}}},momentumBursts:[]} as any;
+  assertEquals(__test__.findInvalidTeamScoreAttributionClaims({summary:"ORL outscored WAS 9-0 during its closing run."},features),[]);
+  assert(__test__.findInvalidTeamScoreAttributionClaims({summary:"WAS outscored ORL 9-0 during its closing run."},features).length>0);
+  assert(__test__.findInvalidTeamScoreAttributionClaims({summary:"ORL outscored WAS 9-0 in the full game; it had a run."},features).length>0);
+});
+
 Deno.test("unchanged analysis facts acknowledge a corrected feed without regenerating the recap", async () => {
   const originalFetch = globalThis.fetch;
   const oldUrl = Deno.env.get("SUPABASE_URL");
