@@ -124,7 +124,7 @@ jobs:
           node -e 'for (const row of require("./supabase/deployment-manifest.json").edgeFunctions) console.log(row.name)' |
           while read -r fn; do
             for attempt in 1 2 3; do
-              if npx -y supabase functions deploy "$fn" --project-ref "$SUPABASE_PROJECT_REF" --use-api; then
+            if npx -y supabase functions deploy "$fn" --project-ref "$SUPABASE_PROJECT_REF" --use-api --yes; then
                 break
               fi
               if [ "$attempt" = 3 ]; then exit 1; fi
