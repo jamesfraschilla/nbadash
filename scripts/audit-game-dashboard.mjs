@@ -5,25 +5,29 @@ import { buildGameAlerts } from "../src/gameAlerts.js";
 import { normalizeGameMidrangeStats } from "../src/boxScoreNormalization.js";
 import { normalizeOpeningMinutesData } from "../supabase/functions/_shared/minutesNormalization.ts";
 import { buildCompletedPeriodSnapshots } from "../src/periodSnapshotTotals.js";
+import { fetchRecoverableGame } from "../supabase/functions/_shared/nbaLiveRecovery.ts";
+import { buildMinutesExplorer } from "../src/minutesExplorer.js";
+import { threePointOffensiveReboundPercent } from "../src/customStatRates.js";
 
 const gameId = process.argv.find((arg) => arg.startsWith("--game-id="))?.split("=")[1] || "0022600108";
 const output = process.argv.find((arg) => arg.startsWith("--output="))?.split("=")[1] || `/tmp/audit-${gameId}.json`;
 const api = `https://d1rjt2wyntx8o7.cloudfront.net/api/games/${gameId}`;
 async function json(url) {
-  const r = await fetch(url, { signal: AbortSignal.timeout(15000) });
+  const r = await fetch(url, { headers: { Accept:"application/json", "User-Agent":"Mozilla/5.0", Referer:"https://www.nba.com/" }, signal: AbortSignal.timeout(15000) });
   if (!r.ok) throw new Error(`${url}: ${r.status}`);
   return r.json();
 }
 const segments = ["all", "q1", "q2", "q3", "q4", "first-half", "second-half", "q1-q3"];
 const apiSegments = { q1: "Q1", q2: "Q2", q3: "Q3", q4: "Q4", "first-half": "1H", "second-half": "2H", "q1-q3": "Q1-Q3" };
-const [rawGame, rawMinutes, ...rawSegments] = await Promise.all([json(api), json(`${api}/minutes`), ...segments.slice(1).map((s) => json(`${api}?segment=${apiSegments[s]}`))]);
+const [rawGame, rawMinutes, ...rawSegments] = await Promise.all([fetchRecoverableGame(gameId), json(`${api}/minutes`), ...segments.slice(1).map((s) => json(`${api}?segment=${apiSegments[s]}`))]);
+if (String(rawGame.gameId) !== gameId || !rawGame.playByPlayActions?.length
+  || rawSegments.some(g => String(g.gameId) !== gameId)) throw new Error("Invalid or incomplete game/segment identity");
 const game = normalizeGameMidrangeStats(rawGame);
 const minutes = normalizeOpeningMinutesData(rawMinutes, game);
 const basePlayers = ["away", "home"].flatMap((side) => game.boxScore[side].players.map((p) => ({ ...p, teamId: game[`${side}Team`].teamId })));
-const officialUrl = `https://www.nba.com/game/${game.awayTeam.teamTricode.toLowerCase()}-vs-${game.homeTeam.teamTricode.toLowerCase()}-${gameId}/box-score`;
-const officialHtml = await fetch(officialUrl, { signal: AbortSignal.timeout(15000) }).then((r) => r.text());
-const next = officialHtml.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
-const official = next ? JSON.parse(next[1]).props.pageProps : null;
+const officialUrl = `https://cdn.nba.com/static/json/liveData/boxscore/boxscore_${gameId}.json`;
+const official = await json(officialUrl);
+if (String(official.game?.gameId) !== gameId) throw new Error("Official box-score identity mismatch");
 const fields = ["points", "reboundsTotal", "reboundsOffensive", "assists", "blocks", "steals", "turnovers", "foulsPersonal", "fieldGoalsMade", "fieldGoalsAttempted", "threePointersMade", "threePointersAttempted", "freeThrowsMade", "freeThrowsAttempted", "rimFieldGoalsMade", "rimFieldGoalsAttempted", "midFieldGoalsMade", "midFieldGoalsAttempted"];
 function diffs(a, b, keys = fields) {
   return keys.filter((k) => a?.[k] !== undefined && b?.[k] !== undefined && Number(a[k]) !== Number(b[k])).map((k) => ({ field: k, actual: a[k], reference: b[k] }));
@@ -45,7 +49,12 @@ for (const [index, segment] of segments.entries()) {
         const d = derived.playerMap.get(p.personId) || derived.playerMap.get(Number(p.personId)) || {};
         return diffs(d, p).map((issue) => ({ name: `${p.firstName} ${p.familyName}`, id: p.personId, ...issue }));
       }),
-      sourceVsOfficial: segment === "all" ? diffs(source.boxScore[side].totals, official?.game?.[`${side}Team`]?.statistics) : null,
+      sourceVsOfficial: segment === "all" ? diffs(source.boxScore[side].totals, {
+        ...official.game[`${side}Team`].statistics,
+        // NBA team reboundsTotal includes team/dead-ball rebounds; our visible
+        // box total is the sum of personal rebounds, as in the player rows.
+        reboundsTotal: official.game[`${side}Team`].statistics.reboundsPersonal,
+      }) : null,
       officialPlayerMismatches: segment === "all" ? players.flatMap((p) => {
         const officialPlayer = officialPlayers.find((o) => String(o.personId) === String(p.personId));
         return diffs(p, officialPlayer?.statistics, [...fields, "plusMinusPoints"]).map((issue) => ({ name: `${p.firstName} ${p.familyName}`, ...issue }));
@@ -53,7 +62,11 @@ for (const [index, segment] of segments.entries()) {
       minuteSum: [...derived.playerMap.values()].filter((p) => players.some((s) => String(s.personId) === String(p.personId))).reduce((n, p) => n + p.minutes, 0),
     };
   }
-  bySegment[segment] = { teams, teamStats: source.teamStats, pbpLength: source.playByPlayActions.length, kills: computeKills(game.playByPlayActions, segment, game.homeTeam.teamId, game.awayTeam.teamId), possessions: countPossessionsByTeam(game.playByPlayActions, segment, game.homeTeam.teamId, game.awayTeam.teamId) };
+  const reboundRates = Object.fromEntries(["away", "home"].map(side => {
+    const totals = derived.teamTotals[game[`${side}Team`].teamId];
+    return [side, {threePointOReb:totals.threePointOReb || 0, missedThrees:totals.threePointersAttempted-totals.threePointersMade, percent:threePointOffensiveReboundPercent(totals)}];
+  }));
+  bySegment[segment] = { teams, reboundRates, teamStats: source.teamStats, pbpLength: source.playByPlayActions?.length || 0, kills: computeKills(game.playByPlayActions, segment, game.homeTeam.teamId, game.awayTeam.teamId), possessions: countPossessionsByTeam(game.playByPlayActions, segment, game.homeTeam.teamId, game.awayTeam.teamId) };
 }
 for (const file of [".env", ".env.local"]) {
   try {
@@ -78,6 +91,21 @@ const recomputedSnapshots = buildCompletedPeriodSnapshots(game);
 const snapshotDiffs = Array.isArray(snapshots) ? snapshots.map((s) => ({ period: s.period, team: s.team_id, version: s.totals?._captureVersion, diffs: diffs(s.totals, recomputedSnapshots.find((r) => Number(r.period) === Number(s.period) && String(r.team_id) === String(s.team_id))?.totals, Object.keys(s.totals || {})) })) : snapshots;
 const alerts = buildGameAlerts({ game, basePlayers, minutesData: minutes });
 const allAlerts = buildGameAlerts({ game, basePlayers, minutesData: minutes, maxAlerts: 10000 });
-const report = { gameId, auditedAt: new Date().toISOString(), officialUrl, rawGame, game, rawMinutes, minutes, official, bySegment, analysis, snapshots, snapshotDiffs, liveState, alerts, allAlerts };
+const minutesIssues = buildMinutesExplorer(minutes, game).issues;
+const quarterAdditivity = ["away", "home"].flatMap(side => fields.flatMap(field => {
+  const full = game.boxScore[side].totals[field];
+  const quarters = ["q1", "q2", "q3", "q4"].map(key => bySegment[key].teams[side].source[field]);
+  if (Number(game.period) > 4 || full == null || quarters.some(v => v == null)) return [];
+  const sum = quarters.reduce((a,b)=>a+Number(b),0);
+  return sum === Number(full) ? [] : [{side,field,full,sum}];
+}));
+const sourceWarnings = Object.entries(bySegment).flatMap(([segment,row]) => Object.entries(row.teams).flatMap(([side,team]) =>
+  Number(team.source.points) === 0 && Number(team.derived.points) > 0 && !sourceHasPlayers(segment, side)
+    ? [`${segment} ${side}: primary segment endpoint returned an empty box; compare derived totals with supported quarter sums, not fabricated zeroes.`] : []));
+function sourceHasPlayers(segment, side) {
+  const index = segments.indexOf(segment);
+  return Boolean((index ? rawSegments[index-1] : rawGame).boxScore?.[side]?.players?.length);
+}
+const report = { gameId, auditedAt: new Date().toISOString(), scope:"Read-only segment/core/zone/3P-OR/Minutes and alert inventory replay; alert prose and every custom statistic are not automatically certified. Rim/mid differences are definition differences and require separate adjudication, not automatic core-stat errors.", sourceWarnings, sourceAvailability:game.feedAvailability || {source:"primary"}, quarterAdditivity, minutesIssues, officialUrl, rawGame, game, rawMinutes, minutes, official, bySegment, analysis, snapshots, snapshotDiffs, liveState, alerts, allAlerts };
 await writeFile(output, JSON.stringify(report, null, 2));
 console.log(JSON.stringify({ output, teams: [game.awayTeam, game.homeTeam].map((t) => ({ code: t.teamTricode, score: t.score })), bySegment: Object.fromEntries(Object.entries(bySegment).map(([s, r]) => [s, { teams: Object.fromEntries(Object.entries(r.teams).map(([side, t]) => [side, { score: t.derived.points, sourceVsDerived: t.sourceVsDerived, playerMismatchCount: t.playerMismatches.length, sourceVsOfficial: t.sourceVsOfficial, officialPlayerMismatches: t.officialPlayerMismatches, minuteSum: t.minuteSum }])), kills: r.kills, possessions: r.possessions }])), analysis: Array.isArray(analysis) ? analysis.map((a) => ({ key: a.segment_key, generated: a.generated_at, source: a.source, resultKeys: Object.keys(a.result || {}) })) : analysis, snapshotDiffs, alerts: alerts.length, allAlerts: allAlerts.length, officialActionExample: official?.playByPlay?.actions?.slice(0, 2) }, null, 2));

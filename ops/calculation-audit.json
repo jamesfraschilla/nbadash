@@ -1,6 +1,16 @@
 {
   "updatedAt": "2026-11-03",
   "status": "in_progress_not_certified",
+  "latestRound": {
+    "gameId":"0022600162",
+    "deployment":"85e3ad4 Pages and Supabase succeeded; production manifest verified",
+    "expandedReplay":"Core quarter/half/full-game team and player totals matched primary segment boxes; full-game totals and players matched NBA live box. Quarter sums, eight stored snapshots and Minutes/lineup checks had no differences. Raw primary rim/mid fields differ from our documented shot-distance zones and are not interchangeable definitions.",
+    "sourceLimitation":"Primary Q1-Q3 segment endpoint returned an empty box. Dashboard derives this view from PBP/snapshots; independently compare against Q1+Q2+Q3 sums, never the endpoint's zero placeholders.",
+    "threePointOffensiveReboundRate":{"WAS":{"recoveries":5,"missedThrees":15,"percent":33.33333333333333},"ORL":{"recoveries":8,"missedThrees":28,"percent":28.57142857142857}},
+    "alertArithmetic":{"checked":20,"inventory":71,"failures":0,"families":["Run","Player Impact","Quarter","Halftime","Final"],"uncheckedFamilies":["First Score","Kill","Timeout","Bonus Pressure","Team Trend","Player Scoring","Second Chance","Defense","Foul Trouble"]},
+    "analysisAfterBoundedRegeneration":{"savedRecaps":8,"factualReplayFailures":0,"ai":4,"templates":4,"previousTemplates":6,"stillFallback":["q1","q4","first-half","all"],"status":"Quality improved in this replay but remains unresolved. Do not retry indefinitely or relax factual checks."},
+    "officiatingVerification":"19 distinct source conflicts have no credited uncertain original whistle, all retain crew chiefs; 81 named referee whistle records reconcile. Team challenge outcomes unchanged. Review inventory remains 82, not zero."
+  },
   "principle": "A passing replay is evidence only for its stated fields, games and source versions. Do not equate workflow success with accuracy certification.",
   "stages": [
     {"stage":1,"scope":"Source identity, completeness and correction chronology","status":"partial","verified":"NBA recovery validates identity and final score; primary PBP degradation remains explicit. Correction regression now orders period and countdown clock before source sequence.","remaining":"Expand source-contract replay across live corrections and overtime; upstream primary PBP omission remains open."},
