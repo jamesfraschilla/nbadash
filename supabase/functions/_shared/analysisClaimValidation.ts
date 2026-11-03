@@ -29,7 +29,7 @@ export function invalidEndingMargins(analysis: RecordValue, features: RecordValu
   const endPeriod = Number(/^Q(\d+)/.exec(features.range?.endLabel || "")?.[1] || 0);
   const reasons: string[] = [];
   const patterns = [
-    /\b(?:finish(?:ed|ing)?|end(?:ed|ing)?|enter(?:ed|ing)?|head(?:ed|ing)?)\s+(?:(?:the|this|that)\s+)?(?:(?:selected\s+)?(?:quarter|half|period|game|span|stretch)\s+)?(?:ahead|up|down|behind|trailing|leading)\s+(?:by\s+)?(?:(?:just|only)\s+)?(\d+)\b/gi,
+    /\b(?:finish(?:ed|ing)?|end(?:ed|ing)?)\s+(?:(?:the|this|that)\s+)?(?:(?:selected\s+)?(?:quarter|half|period|game|span|stretch)\s+)?(?:ahead|up|down|behind|trailing|leading)\s+(?:by\s+)?(?:(?:just|only)\s+)?(\d+)(?!\d|\.\d|\s*[-:]\s*\d)\b/gi,
     /\b(\d+)[- ]point\s+(?:lead|deficit|advantage|cushion)\s+(?:by|at|entering|heading into)\s+(?:the\s+)?(?:half(?:time)?|quarter's end|end of (?:the )?(?:quarter|half|game|span|stretch))\b/gi,
     /\b(?:ahead|up|down|behind|trailing|leading|led)\s+(?:by\s+)?(\d+)\s*(?:pts|points)?\s+(?:at|by)\s+(?:the\s+)?(?:half(?:time)?|quarter's end|end of (?:the )?(?:quarter|half|game|span|stretch))\b/gi,
     /\b(\d+)[- ]point\s+(?:lead|deficit|advantage|cushion)\s+(?:entering|heading into)\s+(?:the\s+)?(?:fourth|third|second|next|final)\s+quarter\b/gi,
@@ -46,11 +46,68 @@ export function invalidEndingMargins(analysis: RecordValue, features: RecordValu
       const aliases = [team.name, team.city, team.tricode].filter(Boolean)
         .map((name) => normalize(name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
       if (!aliases.length) continue;
-      const pattern = new RegExp(`\\b(?:${aliases.join("|")})\\s+(?:finished|ended|finish|end)\\s+(?:the\\s+)?(?:(?:selected\\s+)?(?:quarter|half|game|span|stretch)\\s+)?(ahead|up|down|behind|trailing|leading)\\s+(?:by\\s+)?(\\d+)\\b`, "g");
+      const pattern = new RegExp(`\\b(?:${aliases.join("|")})\\s+(?:finished|ended|finish|end)\\s+(?:the\\s+)?(?:(?:selected\\s+)?(?:quarter|half|game|span|stretch)\\s+)?(ahead|up|down|behind|trailing|leading)\\s+(?:by\\s+)?(\\d+)(?!\\d|\\.\\d|\\s*[-:]\\s*\\d)\\b`, "g");
       const signedMargin = Number(features.score.end[side]) - Number(features.score.end[other]);
       for (const match of normalize(text).matchAll(pattern)) {
         const claimed = Number(match[2]) * (/down|behind|trailing/.test(match[1]) ? -1 : 1);
         if (claimed !== signedMargin) reasons.push(`${team.tricode || team.name} ending lead/deficit does not match signed game margin ${signedMargin}`);
+      }
+    }
+  }
+  return [...new Set(reasons)];
+}
+
+// Starting and ending margins are different facts. Restrict this guard to
+// explicit opening language or an opening-sized lead/deficit reversal in the
+// subject's span description; a separately described mid-span run is excluded.
+export function invalidOpeningMargins(analysis: RecordValue, features: RecordValue): string[] {
+  if (!features.score?.start || !features.teams) return [];
+  const reasons: string[] = [];
+  const numbers: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12 };
+  for (const text of strings({headline:analysis.headline,summary:analysis.summary,sections:analysis.sections})) {
+    for (const sentence of normalize(text).split(/(?<=[.!?])\s+/)) {
+      const mentions = ["home","away"].map(side => {
+        const team = features.teams[side] || {};
+        const indices = [team.name,team.city,team.tricode].filter(Boolean).flatMap(alias => {
+          const expression = new RegExp(`\\b${normalize(alias).replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}\\b`);
+          const match = expression.exec(sentence); return match ? [match.index] : [];
+        });
+        return {side, index:Math.min(Infinity,...indices)};
+      }).sort((a,b)=>a.index-b.index);
+      if (!Number.isFinite(mentions[0]?.index) || mentions[0].index === mentions[1]?.index) continue;
+      const side = mentions[0].side, other = side === "home" ? "away" : "home";
+      const expected = Number(features.score.start[side]) - Number(features.score.start[other]);
+      const pattern = /\b(turning|erasing|overcoming|starting with|began with|entering[^,.!?]{0,25}?with)\s+(?:a|an|the|its)?\s*(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)[- ]point\s+(lead|deficit)\b/g;
+      for (const match of sentence.matchAll(pattern)) {
+        if (/\b(?:run|push|burst)\b/.test(sentence.slice(0,match.index))) continue;
+        const magnitude = numbers[match[2]] ?? Number(match[2]);
+        const claimed = magnitude * (match[3] === "deficit" ? -1 : 1);
+        if ((/starting|began|entering/.test(match[1]) || magnitude === Math.abs(expected)) && claimed !== expected) {
+          reasons.push(`${features.teams[side].tricode} opening lead/deficit ${claimed} does not match ${expected}`);
+        }
+      }
+    }
+  }
+  return [...new Set(reasons)];
+}
+
+export function invalidLargestRunClaims(analysis: RecordValue, features: RecordValue): string[] {
+  const reasons: string[] = [];
+  for (const side of ["home", "away"]) {
+    const team = features.teams?.[side] || {};
+    const expected = Number(team.largestRun?.points);
+    if (!Number.isFinite(expected)) continue;
+    const aliases = [team.name, team.city, team.tricode].filter(Boolean)
+      .map(name => normalize(name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    if (!aliases.length) continue;
+    const owner = `\\b(?:${aliases.join("|")})(?:'s)?`;
+    const patterns = [
+      new RegExp(`${owner}[^.!?]{0,35}?\\b(?:largest|biggest|longest)\\s+(?:unanswered\\s+)?run\\s+(?:(?:was|of|at|a|an|the)\\s+)*(\\d+)\\s*-\\s*0\\b`,"g"),
+      new RegExp(`${owner}[^.!?;]{0,15}?\\b(\\d+)\\s*-\\s*0\\s+run[^.!?;]{0,100}\\b(?:their|its|the)\\s+(?:largest|biggest|longest)\\s+run\\b`,"g"),
+    ];
+    for (const text of strings({headline:analysis.headline,summary:analysis.summary,sections:analysis.sections})) {
+      for (const pattern of patterns) for (const match of normalize(text).matchAll(pattern)) {
+        if (Number(match[1]) !== expected) reasons.push(`${team.tricode} largest run ${match[1]}-0 should be ${expected}-0`);
       }
     }
   }

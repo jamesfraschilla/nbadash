@@ -1,5 +1,20 @@
 import { assertEquals, assert } from "jsr:@std/assert@1";
-import { invalidEndingMargins, invalidPlayerClaims, invalidScoringDirectionClaims } from "./analysisClaimValidation.ts";
+import { invalidEndingMargins, invalidOpeningMargins, invalidLargestRunClaims, invalidPlayerClaims, invalidScoringDirectionClaims } from "./analysisClaimValidation.ts";
+
+Deno.test("WAS ORL Q3 cannot turn a one-point lead into an opening deficit", () => {
+  const features = {score:{start:{home:59,away:60},end:{home:68,away:79}},teams:{home:{name:"Magic",city:"Orlando",tricode:"ORL"},away:{name:"Wizards",city:"Washington",tricode:"WAS"}}};
+  assert(invalidOpeningMargins({summary:"Washington outscored Orlando 19-9 in the third quarter, turning a one-point deficit into an 11-point lead."},features).length > 0);
+  assertEquals(invalidOpeningMargins({summary:"Washington outscored Orlando 19-9, turning a one-point lead into an 11-point lead."},features),[]);
+  assertEquals(invalidOpeningMargins({summary:"Washington had an 8-0 run, turning a one-point deficit into a seven-point lead."},features),[]);
+  assertEquals(invalidEndingMargins({summary:"Washington finished ahead 103-94."},features),[]);
+});
+Deno.test("the largest unanswered run is team-specific; a valid shorter burst is not the largest run", () => {
+  const features = {teams:{home:{name:"Magic",city:"Orlando",tricode:"ORL",largestRun:{points:13}},away:{name:"Wizards",city:"Washington",tricode:"WAS",largestRun:{points:8}}}};
+  assert(invalidLargestRunClaims({summary:"Orlando's largest run was an 11-0 run."},features).length > 0);
+  assert(invalidLargestRunClaims({summary:"Orlando's 11-0 run across Q1 and Q2 marked their largest run."},features).length > 0);
+  assertEquals(invalidLargestRunClaims({summary:"Orlando had an 11-0 run; its largest run was 13-0."},features),[]);
+  assertEquals(invalidLargestRunClaims({summary:"Washington's largest run was 8-0."},features),[]);
+});
 
 Deno.test("WAS–CLE halftime: 14 points cannot lead all scorers when Watson has 16", () => {
   const features = { players: [{ name: "B. Coulibaly", points: 14 }, { name: "P. Watson", points: 16 }] };

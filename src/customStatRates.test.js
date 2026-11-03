@@ -14,8 +14,9 @@ test("WAS–CLE halftime 3P-OR% uses 4 of 9 missed threes, not 4 of 4 OReb", () 
 test("team zones agree with segment/player zones only when shot coverage is complete", () => {
   const base = { fieldGoalsMade: 28, fieldGoalsAttempted: 45, points: 69, rimFieldGoalsMade: 17 };
   const derived = { fieldGoalsMade: 28, fieldGoalsAttempted: 45, points: 0, rimFieldGoalsMade: 18,
-    rimFieldGoalsAttempted: 20, midFieldGoalsMade: 7, midFieldGoalsAttempted: 13 };
+    rimFieldGoalsAttempted: 20, midFieldGoalsMade: 7, midFieldGoalsAttempted: 13, threePointersMade: 3, threePointersAttempted: 12 };
   assert.equal(reconcileShotZoneTotals(base, derived).rimFieldGoalsMade, 18);
   assert.equal(reconcileShotZoneTotals(base, derived).points, 69);
   assert.equal(reconcileShotZoneTotals(base, { ...derived, fieldGoalsAttempted: 44 }), base);
+  assert.equal(reconcileShotZoneTotals(base, { ...derived, rimFieldGoalsAttempted: 19 }), base);
 });

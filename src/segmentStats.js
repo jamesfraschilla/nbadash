@@ -1,3 +1,5 @@
+import { classifyShotZone as classifyShot } from "../supabase/functions/_shared/shotZone.ts";
+
 function parseClock(clock) {
   if (!clock) return 0;
   const parts = clock.split(":");
@@ -168,13 +170,6 @@ function addPlusMinus(player, value) {
 function addRebound(player, isOffensive) {
   player.reboundsTotal += 1;
   if (isOffensive) player.reboundsOffensive += 1;
-}
-
-function classifyShot(action) {
-  if (action.actionType === "3pt") return "three";
-  const distance = Number(action.shotDistance || 0);
-  if (distance <= 4.9) return "rim";
-  return "mid";
 }
 
 export function aggregateSegmentStats({

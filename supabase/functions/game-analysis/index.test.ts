@@ -335,6 +335,12 @@ Deno.test("analysis repair adds made-attempt context without discarding an other
   assertEquals(__test__.shouldRejectAiAnalysis(repaired, features as any), false);
 });
 
+Deno.test("decimal shooting percentages do not split repair context at the decimal point", () => {
+  const features = {teams:{home:{tricode:"WAS",name:"Wizards",shooting:{fgPct:85.7},totals:{fieldGoalsMade:6,fieldGoalsAttempted:7}},away:{tricode:"ORL",name:"Magic",shooting:{fgPct:50},totals:{fieldGoalsMade:3,fieldGoalsAttempted:6}}}} as any;
+  const repaired = __test__.repairBareShootingPercentages({summary:"WAS shot 85.7% overall."},features) as any;
+  assertEquals(repaired.summary,"WAS shot 85.7% (6/7) overall.");
+});
+
 Deno.test("analysis language guard rejects zero lead or zero advantage wording", () => {
   assertEquals(__test__.hasZeroMarginLanguage("WAS never led, with its largest advantage being 0."), true);
   assertEquals(__test__.hasZeroMarginLanguage("WAS never led during the span."), false);

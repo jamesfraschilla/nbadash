@@ -31,6 +31,17 @@ test("server reconciler recovers omitted PBP but preserves primary statistics", 
   primary.homeTeam.score = 20;
   await assert.rejects(fetchRecoverableGame(id, fetcher), /scores/);
 });
+test("final score verification ignores appended corrections to earlier quarters", () => {
+  const { box, pbp } = sources();
+  pbp.game.actions = [
+    { period: 4, clock: "PT00M00.00S", orderNumber: 20, scoreHome: "2", scoreAway: "2" },
+    { period: 1, clock: "PT00M00.00S", orderNumber: 30, scoreHome: "1", scoreAway: "0" },
+    { period: 4, clock: "PT01M00.00S", orderNumber: 40, scoreHome: "1", scoreAway: "2" },
+  ];
+  assert.equal(normalizeNbaLiveRecovery(id, box, pbp).homeTeam.score, 2);
+  pbp.game.actions[0].scoreHome = "3";
+  assert.throws(() => normalizeNbaLiveRecovery(id, box, pbp), /scores/);
+});
 test("server reconciler survives primary HTTP failure and validates alternate identity", async () => {
   const { box, pbp } = sources();
   const fetcher = async url => url.includes("cloudfront") ? new Response("down", { status: 503 }) : Response.json(url.includes("/boxscore/") ? box : pbp);

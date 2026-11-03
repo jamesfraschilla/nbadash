@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { gzipSync } from "node:zlib";
+import { fetchRecoverableGame } from "../supabase/functions/_shared/nbaLiveRecovery.ts";
 
 const url = process.env.SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -34,11 +35,10 @@ if (process.env.APPLY !== "true") {
   // generate a recap for an unfinished live quarter or touch another game.
   let repairs = [["0022600112", "q2", 2, 2], ["0022600112", "q4", 4, 4], ["0022600118", "q2", 2, 2], ["0022600118", "q3", 3, 3]];
   if (targetGameId) {
-    const response = await fetch(`https://d1rjt2wyntx8o7.cloudfront.net/api/games/${targetGameId}`, { signal: AbortSignal.timeout(20_000) });
-    if (!response.ok) throw new Error("Unable to verify completed periods.");
-    const game = await response.json();
+    const game = await fetchRecoverableGame(targetGameId);
     const completed = new Set((game.playByPlayActions || []).filter(a => a.actionType === "period" && a.subType === "end").map(a => Number(a.period)));
-    const ranges = { q1: [1, 1], q2: [2, 2], q3: [3, 3], q4: [4, 4], "first-half": [1, 2], "second-half": [3, 4], "q1-q3": [1, 3] };
+    const ranges = { q1: [1, 1], q2: [2, 2], q3: [3, 3], q4: [4, 4], "first-half": [1, 2], "second-half": [3, 4], "q1-q3": [1, 3],
+      ...(Number(game.gameStatus) === 3 ? { all: [1, Number(game.period)] } : {}) };
     repairs = existing.flatMap(row => {
       const bounds = ranges[row.segment_key];
       if (!bounds || !Array.from({ length: bounds[1] - bounds[0] + 1 }, (_, i) => bounds[0] + i).every(p => completed.has(p))) return [];

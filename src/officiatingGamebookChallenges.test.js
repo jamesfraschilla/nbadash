@@ -8,6 +8,25 @@ const pages = [{ page: 12, text: `NATIONAL BASKETBALL ASSOCIATION OFFICIAL PLAY-
 11:51 J.Slawson BLOCK MISS L.James FB Running Finger Roll Layup
 11:51 Pacers Coach's Challenge J.Slawson S.FOUL (P.Ransom): Call Overturned: No Foul on J. Slawson
 11:50 J.Slawson Violation: Jump Ball (A.Smith)` }];
+
+test("WAS ORL original OOB is retained without inventing a whistle; P.FOUL resolves the named compound-surname official", () => {
+  const book = parseGamebookChallenges([
+    { page: 14, text: "OFFICIAL PLAY-BY-PLAY\n3rd QUARTER\n:04.4 Wizards Coach's Challenge Stoppage - Out of Bounds: Call Overturned: Out-of-Bounds on N. Vučević" },
+    { page: 16, text: "OFFICIAL PLAY-BY-PLAY\n4th QUARTER\n03:59 Wizards Coach's Challenge A.Davis P.FOUL (A.Moyer-Gleich): Call Overturned: No Foul on Player\n03:59 JUMP BALL W.CarterJr. VS. A.Davis" },
+  ]);
+  const assignments = [{ official_id: "1628953", official_name: "Ashley Moyer-Gleich" }];
+  const oob = reconcileGamebookChallenge({ period: 3, game_clock: "PT00M04.40S", review_status: "needs_review", source_payload: {} }, book, assignments, "book-url");
+  assert.equal(oob.challenge_type, "OOB");
+  assert.equal(oob.challenge_sub_type, "Out Of Bounds");
+  assert.equal(oob.whistling_official_name, undefined);
+  assert.equal(oob.match_reason, "gamebook-whistle-not-published");
+  assert.equal(oob.review_status, "needs_review");
+  const foul = reconcileGamebookChallenge({ period: 4, game_clock: "PT03M59.00S", source_payload: {} }, book, assignments, "book-url");
+  assert.equal(foul.challenge_type, "Foul");
+  assert.equal(foul.challenge_sub_type, "Foul on Floor");
+  assert.equal(foul.whistling_official_name, "Ashley Moyer-Gleich");
+  assert.equal(foul.review_status, "auto");
+});
 test("caller survives a direct No Foul ruling without the Call Overturned prefix", () => {
   const rows = parseGamebookChallenges([{ page: 12, text: `OFFICIAL PLAY-BY-PLAY
 2nd QUARTER

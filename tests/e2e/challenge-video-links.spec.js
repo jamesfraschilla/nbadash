@@ -9,7 +9,8 @@ test("Challenge Log keeps official Video and timestamp Clock links separate", as
     challenge_outcome: "successful", video_url: video, clock_clip_url: clock, source: "nba_official_challenge_pdf" };
   const unpublished = { ...row, id: "unpublished", game_id: "0022600133", game_date: "2026-10-28",
     game_clock: "05:01.0", clock_clip_url: "https://clips.nba.com/?gameNo=0022600133&inTime=20000000&outTime=20002000&source=grs",
-    video_url: "https://www.nba.com/stats/events?GameID=0022600133&GameEventID=100", source: "play_by_play" };
+    video_url: "https://www.nba.com/stats/events?GameID=0022600133&GameEventID=100", source: "play_by_play",
+    review_status:"needs_review",match_reason:"gamebook-whistle-not-published" };
   const toronto = { ...row, id: "toronto-clock-regression", game_id: "0022600097", game_date: "2026-10-23",
     game_clock: "00:54.2", period: 2, away_team: "TOR", home_team: "WAS", challenging_team: "TOR",
     challenge_type: "OOB", initial_call: "Home Team Ball", clock_clip_url: null, clock_link_version: "3",
@@ -31,4 +32,8 @@ test("Challenge Log keeps official Video and timestamp Clock links separate", as
   await expect(torontoRow).toBeVisible();
   await expect(torontoRow.getByRole("link", { name: "00:54", exact: true })).toHaveCount(0);
   await expect(torontoRow.getByRole("link", { name: "Watch", exact: true })).toHaveAttribute("href", toronto.video_url);
+  await expect(unpublishedRow.getByText("Whistle not published",{exact:true})).toBeVisible();
+  await page.getByLabel("Review",{exact:true}).selectOption("needs_review");
+  await expect(unpublishedRow).toBeVisible();
+  await expect(publishedRow).toHaveCount(0);
 });

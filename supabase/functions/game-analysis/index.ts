@@ -2,7 +2,8 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { requestBodyTooLarge, requireActiveRateLimitedUser } from "../_shared/requestSecurity.ts";
 import { normalizeOpeningMinutesData } from "../_shared/minutesNormalization.ts";
 import { segmentFeedSignature } from "../_shared/analysisFreshness.ts";
-import { invalidEndingMargins, invalidPlayerClaims, invalidScoringDirectionClaims } from "../_shared/analysisClaimValidation.ts";
+import { invalidEndingMargins, invalidOpeningMargins, invalidLargestRunClaims, invalidPlayerClaims, invalidScoringDirectionClaims } from "../_shared/analysisClaimValidation.ts";
+import { classifyShotZone as classifyShot } from "../_shared/shotZone.ts";
 import { hasEmptyLivePlayByPlay } from "../_shared/liveFeedIntegrity.ts";
 import { fetchRecoverableGame } from "../_shared/nbaLiveRecovery.ts";
 
@@ -491,13 +492,6 @@ function findScoreAtOrBefore(actions: Array<Record<string, unknown>>, elapsed: n
     away = numericScore(action, "away");
   }
   return { home, away };
-}
-
-function classifyShot(action: Record<string, unknown>) {
-  const actionType = String(action.actionType || "").toLowerCase();
-  if (actionType === "3pt") return "three";
-  const distance = safeNumber(action.shotDistance, 0);
-  return distance <= 4.9 ? "rim" : "mid";
 }
 
 function isPersonalFoul(action: Record<string, unknown>) {
@@ -2074,7 +2068,7 @@ function buildTemplateAnalysis(features: ReturnType<typeof buildFeaturePayload>)
 
 function buildAnalysisDataSignatureInput(features: ReturnType<typeof buildFeaturePayload>) {
   return {
-    analysisVersion: 7,
+    analysisVersion: 8,
     range: features.range,
     score: features.score,
     teams: features.teams,
@@ -2160,14 +2154,15 @@ function repairBarePercentageInText(text: string, features: ReturnType<typeof bu
         continue;
       }
       const sentenceStart = Math.max(
-        repaired.lastIndexOf(".", index),
+        ...[...repaired.slice(0, index).matchAll(/\.(?=\s|$)/g)].map((match) => match.index),
+        -1,
         repaired.lastIndexOf("!", index),
         repaired.lastIndexOf("?", index),
         repaired.lastIndexOf(",", index),
         repaired.lastIndexOf(";", index),
       ) + 1;
       const endingCandidates = [
-        repaired.indexOf(".", index),
+        ...[...repaired.slice(index).matchAll(/\.(?=\s|$)/g)].map((match) => index + match.index),
         repaired.indexOf("!", index),
         repaired.indexOf("?", index),
         repaired.indexOf(",", index),
@@ -2471,6 +2466,8 @@ function findAiAnalysisRejectReasons(analysis: Record<string, unknown>, features
   reasons.push(...findInvalidRunClaims(analysis, features));
   reasons.push(...findInvalidWinnerAttributionClaims(analysis, features));
   reasons.push(...invalidEndingMargins(analysis, features));
+  reasons.push(...invalidOpeningMargins(analysis, features));
+  reasons.push(...invalidLargestRunClaims(analysis, features));
   reasons.push(...invalidPlayerClaims(analysis, features));
   reasons.push(...invalidScoringDirectionClaims(analysis));
 

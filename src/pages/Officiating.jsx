@@ -35,6 +35,7 @@ import {
   officiatingSeasonForDateKey,
 } from "../officiatingSeasons.js";
 import styles from "./Officiating.module.css";
+import { challengeNeedsReview, challengeReviewLabel } from "../challengeReview.js";
 
 const TABS = [
   { key: "tonight", label: "Tonight's Officials" },
@@ -1385,7 +1386,7 @@ function ChallengeFilter({ label, value, options, onChange, allLabel }) {
   return (
     <label className={styles.filterControl}>
       <span>{label}</span>
-      <select value={value} onChange={(event) => onChange(event.target.value)}>
+      <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}>
         <option value="">{allLabel}</option>
         {options.map((option) => (
           <option key={option.value} value={option.value}>{option.label}</option>
@@ -1512,9 +1513,10 @@ function ChallengeLog({ rows, filteredRows, filters, filterOptions, onFilterChan
         <ChallengeFilter label="Outcome" value={filters.outcome} options={filterOptions.outcomes} allLabel="All outcomes" onChange={(value) => onFilterChange("outcome", value)} />
         <ChallengeFilter label="Whistle" value={filters.whistle} options={filterOptions.whistles} allLabel="All whistles" onChange={(value) => onFilterChange("whistle", value)} />
         <ChallengeFilter label="Crew Chief" value={filters.crewChief} options={filterOptions.crewChiefs} allLabel="All crew chiefs" onChange={(value) => onFilterChange("crewChief", value)} />
+        <ChallengeFilter label="Review" value={filters.review} options={[{ value: "needs_review", label: "Needs review" }, { value: "resolved", label: "Not flagged" }]} allLabel="All review statuses" onChange={(value) => onFilterChange("review", value)} />
       </div>
       <div className={styles.tableMeta}>
-        Showing {filteredRows.length} of {rows.length} challenges
+        Showing {filteredRows.length} of {rows.length} challenges · {rows.filter(challengeNeedsReview).length} need source-backed review
       </div>
       <div className={styles.tableWrap}>
         <table className={styles.table}>
@@ -1532,6 +1534,7 @@ function ChallengeLog({ rows, filteredRows, filters, filterOptions, onFilterChan
               <th><SortButton label="Whistle" sortKey="whistling_official_name" sort={sort} onSort={onSort} /></th>
               <th><SortButton label="Crew Chief" sortKey="crew_chief_name" sort={sort} onSort={onSort} /></th>
               <th>Video</th>
+              <th>Review</th>
             </tr>
           </thead>
           <tbody>
@@ -1586,6 +1589,11 @@ function ChallengeLog({ rows, filteredRows, filters, filterOptions, onFilterChan
                   {verifiedChallengeVideoUrl(row) ? (
                     <a href={verifiedChallengeVideoUrl(row)} target="_blank" rel="noreferrer">Watch</a>
                   ) : "-"}
+                </td>
+                <td title={challengeNeedsReview(row) ? (row.match_reason === "gamebook-whistle-not-published"
+                  ? "The gamebook confirms the call but does not name the whistling official. Daily reconciliation retries source updates; no official is guessed."
+                  : "Attribution is incomplete or conflicting. Daily reconciliation retries updated sources; this is not assigned to a human automatically.") : "No unresolved attribution flag"}>
+                  {challengeReviewLabel(row)}
                 </td>
               </tr>
             ))}
@@ -1873,6 +1881,7 @@ export default function Officiating() {
     outcome: "",
     whistle: "",
     crewChief: "",
+    review: "",
   });
   const [selectedOfficial, setSelectedOfficial] = useState(null);
   const [selectedTeam, setSelectedTeam] = useState(null);
@@ -2087,6 +2096,7 @@ export default function Officiating() {
       if (challengeFilters.outcome && optionValue(row.challenge_outcome || row.call_ruling) !== challengeFilters.outcome) return false;
       if (challengeFilters.whistle && optionValue(row.whistling_official_name) !== challengeFilters.whistle) return false;
       if (challengeFilters.crewChief && optionValue(row.crew_chief_name) !== challengeFilters.crewChief) return false;
+      if (challengeFilters.review && (challengeNeedsReview(row) ? "needs_review" : "resolved") !== challengeFilters.review) return false;
       return true;
     }),
     [challengeLogRows, challengeFilters]

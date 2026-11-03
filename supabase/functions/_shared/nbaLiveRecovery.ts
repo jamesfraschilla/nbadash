@@ -1,7 +1,15 @@
 type RecordValue = Record<string, any>;
 function verifyFinalScore(game: RecordValue, actions: RecordValue[]) {
   if (Number(game.gameStatus) !== 3) return;
-  const scored = [...actions].sort((a, b) => Number(b.orderNumber ?? b.actionNumber ?? 0) - Number(a.orderNumber ?? a.actionNumber ?? 0))
+  // Corrections to earlier quarters can be appended with larger order numbers
+  // after Game End. Period and countdown clock define game chronology first.
+  const remaining = (action: RecordValue) => {
+    const match = String(action.clock || "").match(/^PT(?:(\d+)M)?([\d.]+)S$/);
+    return match ? Number(match[1] || 0) * 60 + Number(match[2]) : 0;
+  };
+  const scored = [...actions].sort((a, b) => Number(b.period || 0) - Number(a.period || 0)
+    || remaining(a) - remaining(b)
+    || Number(b.orderNumber ?? b.actionNumber ?? 0) - Number(a.orderNumber ?? a.actionNumber ?? 0))
     .find(a => [a.scoreHome, a.scoreAway].every(v => v !== null && v !== undefined && v !== "" && Number.isFinite(Number(v))));
   if (!scored || Number(scored.scoreHome) !== Number(game.homeTeam.score) || Number(scored.scoreAway) !== Number(game.awayTeam.score)) throw new Error("Final scores do not reconcile");
 }

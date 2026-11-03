@@ -89,7 +89,8 @@ export function reconcileGamebookChallenge(challenge, bookRows, assignments, url
     : /defensive foul/i.test(originalCall) ? "Defensive Foul" : originalType === "OOB" ? "Out Of Bounds" : "";
   const type = originalType || row.challengeType || challenge.challenge_type;
   const subtype = conflict ? fallbackSubtype : row.subType || fallbackSubtype || challenge.challenge_sub_type;
-  const needsReview = !type || !subtype || unresolvedNamedOfficial || conflict;
+  const missingWhistle = !resolvedOfficial && !String(challenge.whistling_official_id || challenge.whistling_official_name || "").trim();
+  const needsReview = !type || !subtype || unresolvedNamedOfficial || missingWhistle || conflict;
   return { ...corrected, challenge_type: type, challenge_sub_type: subtype,
     initial_call: originalCall || (row.challengeType ? row.originalCall : challenge.initial_call),
     whistling_official_id: resolvedOfficial ? String(official.official.personId) : unresolvedNamedOfficial ? null : challenge.whistling_official_id,
@@ -100,6 +101,8 @@ export function reconcileGamebookChallenge(challenge, bookRows, assignments, url
     matched_action_number: challenge.source_payload?.actionNumber ?? null,
     challenge_outcome: challenge.challenge_outcome || row.outcome,
     match_confidence: needsReview ? 0.55 : 0.99,
-    match_reason: conflict ? "gamebook-vs-official-initial-call-conflict" : needsReview ? "gamebook-original-call-needs-review" : "verified-gamebook-original-challenged-call",
+    match_reason: conflict ? "gamebook-vs-official-initial-call-conflict"
+      : missingWhistle && !row.officialToken && type && subtype ? "gamebook-whistle-not-published"
+        : needsReview ? "gamebook-original-call-needs-review" : "verified-gamebook-original-challenged-call",
     review_status: needsReview ? "needs_review" : "auto" };
 }

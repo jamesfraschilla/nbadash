@@ -10,6 +10,7 @@ import { enrichChallengeEventsWithOfficials } from "../src/officiatingChallengeM
 import { extractOfficialCallEvents } from "../src/officiatingParser.js";
 import { assertOutsideWizardsGameWindow } from "./lib/game-window-guard.mjs";
 import { buildChallengeClockClip, CHALLENGE_CLOCK_LINK_VERSION } from "../src/officiatingChallengeLinks.js";
+import { fetchRecoverableGame } from "../supabase/functions/_shared/nbaLiveRecovery.ts";
 
 const runFile = promisify(execFile);
 const arg = (name, fallback = "") => process.argv.find(v => v.startsWith(`--${name}=`))?.split("=").slice(1).join("=") || fallback;
@@ -29,7 +30,12 @@ const rows = [];
 for (let offset = 0; ; offset += 1000) {
   let query = db.from("nba_coach_challenge_events").select("*").eq("season", season).order("id").range(offset, offset + 999);
   if (arg("game-ids")) query = query.in("game_id", arg("game-ids").split(","));
-  if (arg("lookback-days")) query = query.gte("game_date", new Date(Date.now() - Number(arg("lookback-days")) * 86400000).toISOString().slice(0, 10));
+  if (arg("lookback-days")) {
+    const cutoff = new Date(Date.now() - Number(arg("lookback-days")) * 86400000).toISOString().slice(0, 10);
+    query = process.argv.includes("--retry-unresolved")
+      ? query.or(`game_date.gte.${cutoff},review_status.eq.needs_review`)
+      : query.gte("game_date", cutoff);
+  }
   const { data, error } = await query;
   if (error) throw error;
   rows.push(...data);
@@ -59,7 +65,7 @@ try {
     const url = `https://statsdmz.nba.com/pdfs/${day}/${day}_${teams}_book.pdf`;
     const pdfPath = path.join(work, `${gameId}.pdf`);
     try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
+      const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0", Referer: "https://www.nba.com/" }, signal: AbortSignal.timeout(20000) });
       if (!response.ok) throw new Error(`Gamebook HTTP ${response.status}`);
       await writeFile(pdfPath, Buffer.from(await response.arrayBuffer()));
       const { stdout } = await runFile("python3", ["scripts/extract-nba-gamebook-pages.py", pdfPath], { maxBuffer: 2 * 1024 * 1024, timeout: 45000 });
@@ -67,9 +73,7 @@ try {
       report.gamebooks++; report.bookChallengeRows += bookRows.length;
       const { data: assignments, error } = await db.from("nba_official_game_assignments").select("*").eq("game_id", gameId).eq("season", season);
       if (error) throw error;
-      const gameResponse = await fetch(`https://d1rjt2wyntx8o7.cloudfront.net/api/games/${gameId}`, { signal: AbortSignal.timeout(15000) });
-      if (!gameResponse.ok) throw new Error(`Game feed HTTP ${gameResponse.status}`);
-      const game = await gameResponse.json();
+      const game = await fetchRecoverableGame(gameId);
       if (String(game.gameId) !== gameId || !game.playByPlayActions?.length) throw new Error("Invalid/empty game feed");
       const calls = extractOfficialCallEvents(game).map(event => ({
         game_id: gameId, period: event.period, game_clock: event.gameClock, action_number: event.actionNumber,
@@ -131,6 +135,15 @@ try {
 } finally { await rm(work, { recursive: true, force: true }); }
 await writeFile(path.join(reportDir, `${stamp}-report.json`), JSON.stringify(report, null, 2));
 console.log(JSON.stringify({ ...report, changed: report.changed.length, needsReview: report.needsReview.length, reportDir }, null, 2));
+if (process.env.GITHUB_STEP_SUMMARY) {
+  const lines = ["## Challenge attribution review", "",
+    `${report.challenges} challenge rows in ${report.games} games checked; ${report.changed.length} corrections; ${report.failures.length} fetch/processing failures; ${report.needsReview.length} unresolved entries.`, "",
+    "The daily job retries unresolved current-season entries as well as recent games. Missing source information is not guessed and is not assigned to a human automatically.", "",
+    "| Game | Period | Clock | Unresolved reason |", "| --- | --- | --- | --- |",
+    ...report.needsReview.map(row => `| ${row.gameId} | ${row.period} | ${row.clock} | ${String(row.reason).replaceAll("|", "/")} |`), ""];
+  await writeFile(process.env.GITHUB_STEP_SUMMARY, lines.join("\n"), { flag: "a" });
+}
+if (report.needsReview.length) console.log(`::warning::${report.needsReview.length} challenges still lack complete source-backed attribution. See the review summary and Challenge Log review filter.`);
 // Previously flagged missing source information is retained in the report;
 // fail the scheduled job for new attribution regressions or fetch failures.
-if (report.failures.length || report.newlyUnresolved.length) process.exitCode = 1;
+if (report.failures.length || report.newlyUnresolved.some(row => row.reason !== "gamebook-whistle-not-published")) process.exitCode = 1;
