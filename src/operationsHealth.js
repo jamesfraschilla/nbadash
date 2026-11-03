@@ -34,3 +34,12 @@ export function cacheIsStale(sourceTime, cacheTime, now=Date.now(), graceMs=30*6
 export function incidentFingerprint(findings) {
   return JSON.stringify(findings.map(({key,severity,message})=>({key,severity,message})).sort((a,b)=>a.key.localeCompare(b.key)));
 }
+
+export function retainUnverifiedPostgameFindings(previous, report) {
+  const verified = new Set((report.games || []).filter(game=>game.complete).map(game=>game.gameId));
+  const retained = previous.filter(finding=>{
+    const gameId=/^postgame:(\d{10}):/.exec(finding.key)?.[1];
+    return gameId && !verified.has(gameId);
+  });
+  return [...new Map([...retained,...(report.findings || [])].map(finding=>[`${finding.key}|${finding.message}`,finding])).values()];
+}

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {workflowHealthIssues,pdfImportComplete,cacheIsStale,incidentFingerprint} from "./operationsHealth.js";
+import {workflowHealthIssues,pdfImportComplete,cacheIsStale,incidentFingerprint,retainUnverifiedPostgameFindings} from "./operationsHealth.js";
 const now=Date.parse("2026-11-03T15:00:00Z");
 const run=(date,conclusion="success")=>({head_branch:"main",status:"completed",event:"schedule",created_at:date,updated_at:date,conclusion});
 test("workflow failure and missing successful heartbeat are independently visible",()=>{
@@ -28,4 +28,10 @@ test("cache lag has a grace period but never treats missing cache metadata as he
 test("incident comparison ignores changing check times and finding order",()=>{
   const a={key:"a",severity:"error",message:"test"},b={key:"b",severity:"warning",message:"test"};
   assert.equal(incidentFingerprint([a,b]),incidentFingerprint([b,a]));
+});
+test("a finding cannot disappear merely because its game leaves the recent-game sample",()=>{
+  const prior=[{key:"postgame:0022600162:analysis-quality",message:"6 fallbacks",severity:"warning"}];
+  assert.equal(retainUnverifiedPostgameFindings(prior,{games:[],findings:[]}).length,1);
+  assert.equal(retainUnverifiedPostgameFindings(prior,{games:[{gameId:"0022600162",complete:false}],findings:[]}).length,1);
+  assert.equal(retainUnverifiedPostgameFindings(prior,{games:[{gameId:"0022600162",complete:true}],findings:[]}).length,0);
 });

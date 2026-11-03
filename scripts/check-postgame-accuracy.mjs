@@ -26,7 +26,7 @@ try {
 } catch(error){report.findings.push({key:"postgame-scoreboard",severity:"error",message:`Cannot enumerate recent completed games: ${error.message}`});}
 const selected=[...games].filter(([,g])=>isWas(g)).concat([...games].filter(([,g])=>!isWas(g)).slice(0,3));
 for(const [gameId,listed] of selected) {
-  const check={gameId,wizards:isWas(listed),checks:[]};report.games.push(check);
+  const check={gameId,wizards:isWas(listed),checks:[],complete:false};report.games.push(check);
   const finding=(suffix,message,severity="error")=>report.findings.push({key:`postgame:${gameId}:${suffix}`,severity,message:`${gameId}: ${message}`,
     url:`https://jamesfraschilla.github.io/nbadash/#/g/${gameId}`});
   try {
@@ -71,6 +71,7 @@ for(const [gameId,listed] of selected) {
       }
       check.checks.push("saved analysis factual guards replayed without model calls");
     }
+    check.complete=true;
   } catch(error){finding("incomplete",`Audit could not complete: ${error.message}`);}
 }
 await mkdir("output/operations-health",{recursive:true});

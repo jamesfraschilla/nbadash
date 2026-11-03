@@ -1,7 +1,7 @@
 // Only GitHub issue writes. Never mutates NBA data, user notes, or deployments.
 import {createHash} from "node:crypto";
 import {readFile} from "node:fs/promises";
-import {MONITORED_WORKFLOWS,workflowHealthIssues,incidentFingerprint} from "../src/operationsHealth.js";
+import {MONITORED_WORKFLOWS,workflowHealthIssues,incidentFingerprint,retainUnverifiedPostgameFindings} from "../src/operationsHealth.js";
 const repo=process.env.GITHUB_REPOSITORY || "jamesfraschilla/nbadash";
 const token=process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
 if(!token)throw Error("GitHub issue credential missing");
@@ -38,7 +38,16 @@ for(let page=1;page<=5&&!existing;page++) {
   existing=issues.find(issue=>!issue.pull_request && issue.body?.includes(marker));
   if(issues.length<100)break;
 }
-const findings=report.findings || [];
+let findings=report.findings || [];
+if(postgame && existing) {
+  const encoded=/<!-- stored-findings:([A-Za-z0-9+/=]+) -->/.exec(existing.body || "")?.[1];
+  if(encoded) {
+    findings=retainUnverifiedPostgameFindings(JSON.parse(Buffer.from(encoded,"base64").toString("utf8")),report);
+  } else if(!findings.length && existing.state==="open") {
+    console.log(`Keeping legacy postgame issue #${existing.number} open: no stored evidence to verify its resolution.`);
+    process.exit(0);
+  }
+}
 const hash=createHash("sha256").update(incidentFingerprint(findings)).digest("hex");
 const fingerprint=`<!-- findings:${hash} -->`;
 const runUrl=process.env.GITHUB_RUN_ID?`https://github.com/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`:"";
@@ -49,8 +58,10 @@ if(!findings.length) {
     console.log(`Closed resolved operations issue #${existing.number}`);
   } else console.log("No operations incident to open.");
 } else {
-  const body=[marker,fingerprint,`Last material change verified: ${report.checkedAt}`,"",
-    ...findings.map(f=>`- **${f.severity.toUpperCase()}** ${f.message}${f.url?` [Details](${f.url})`:""}`),"",
+  const metadata=postgame?`<!-- stored-findings:${Buffer.from(JSON.stringify(findings)).toString("base64")} -->`:"";
+  const body=[marker,fingerprint,metadata,`Last material change verified: ${report.checkedAt}`,"",
+    ...findings.slice(0,40).map(f=>`- **${f.severity.toUpperCase()}** ${f.message}${f.url?` [Details](${f.url})`:""}`),"",
+    ...(findings.length>40?[`${findings.length-40} further findings retained in the issue's machine-readable checklist.`]:[]),
     "This issue is persistent until checks clear. Automated retry is not a human review. Do not infer whistling officials or overwrite manual decisions to make checks green.",
     runUrl?`[Monitor report and artifacts](${runUrl})`:"", "",
     "Owner: repository maintainer. Statistical source conflicts require source-backed investigation; code fixes and production data repairs require verification before deployment.",
@@ -59,7 +70,7 @@ if(!findings.length) {
     const owner=repo.split("/")[0];
     const issue=await api("issues","POST",{title,body,assignees:[owner]});
     console.log(`Opened assigned operations issue #${issue.number}: ${issue.html_url}`);
-  } else if(existing.state!=="open" || !existing.body.includes(fingerprint)) {
+  } else if(existing.state!=="open" || !existing.body.includes(fingerprint) || (postgame && !existing.body.includes("<!-- stored-findings:"))) {
     await api(`issues/${existing.number}`,"PATCH",{title,body,state:"open"});
     await api(`issues/${existing.number}/comments`,"POST",{body:`Findings changed; see the updated checklist above. ${runUrl?`[Verification run](${runUrl})`:""}`});
     console.log(`Updated operations issue #${existing.number}`);
