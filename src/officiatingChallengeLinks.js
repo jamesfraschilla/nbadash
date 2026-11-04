@@ -29,6 +29,7 @@ function verifiedIncidentClip(row, game, actions, clock) {
   const pdf = payload.pdfRow || {};
   const book = payload.gamebookChallenge || {};
   const gameCode=String(game.gameCode || "");
+  const challengingTeam=[game.homeTeam,game.awayTeam].find(t=>t?.teamTricode===row.challenging_team);
   const sameClock = value => Math.abs(clockSeconds(value) - clock) < 0.11;
   const pdfVerified = row.source === "nba_official_challenge_pdf"
     && String(pdf.game_id) === String(row.game_id) && Number(pdf.period) === Number(row.period)
@@ -37,6 +38,7 @@ function verifiedIncidentClip(row, game, actions, clock) {
     && /^https:\/\/statsdmz\.nba\.com\/pdfs\//.test(book.url || "")
     && /^\d{8}\/[A-Z]{6}$/.test(gameCode) && book.url.endsWith(`${gameCode.replace("/","_")}_book.pdf`)
     && Number(book.period) === Number(row.period) && sameClock(book.gameClock)
+    && !!challengingTeam && book.challengingTeamName === challengingTeam.teamName
     && /Coach['’]s Challenge/i.test(book.excerpt || "");
   if (!pdfVerified && !bookVerified) return null;
   const type = a => String(a.actionType || "").toLowerCase();
@@ -74,6 +76,34 @@ function verifiedIncidentClip(row, game, actions, clock) {
   const stopTimes = new Set(stops.map(a => Date.parse(a.timeActual)));
   if (stopTimes.size !== 1) return null;
   const stop = stops[0], stopTime = Date.parse(stop.timeActual);
+  // A successful no-foul reversal may leave only the named defender's block
+  // in the corrected feed. Require that player in the gamebook ruling, a
+  // unique nearby block, and no intervening possession or review boundary.
+  const normalizeName=value=>String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .toLowerCase().replace(/[^a-z]/g,"");
+  const clearedPlayer=bookVerified && /Call Overturned/i.test(book.excerpt || "")
+    ? /No (?:Personal )?Foul on ([A-Z]\.\s*[^:]+)$/i.exec(book.excerpt || "")?.[1] : null;
+  const blocks=clearedPlayer ? timed.filter(a=>type(a)==="block"
+    && normalizeName(String(a.description||"").split(/\s+BLOCK/i)[0])===normalizeName(clearedPlayer)
+    && Math.abs(clockSeconds(a.clock)-clock)<=2
+    && Date.parse(a.timeActual)<=stopTime+100 && Date.parse(a.timeActual)>=stopTime-120000) : [];
+  if (blocks.length===1) {
+    const block=blocks[0], blockTime=Date.parse(block.timeActual);
+    const intervening=timed.some(a=>Date.parse(a.timeActual)>blockTime+100 && Date.parse(a.timeActual)<stopTime
+      && ["2pt","3pt","foul","turnover","violation","freethrow","jumpball","timeout","instantreplay","replay"].includes(type(a)));
+    if (!intervening) return {url:nbaClipsUrl(game.gameId,block),reason:"gamebook-verified-cleared-defender-block",
+      actionNumber:block.actionNumber ?? null};
+  }
+  // Corrected calls can be inserted 10–30 ms AFTER their timeout. Treat only
+  // an exact-clock, sub-100 ms live cluster as atomic, never a later review
+  // correction (which can be minutes after the original incident).
+  const atomic = exact.filter(a => ["2pt","3pt","foul","turnover","violation","block"].includes(type(a))
+    && Date.parse(a.timeActual) >= stopTime && Date.parse(a.timeActual) <= stopTime + 100);
+  if (atomic.length && !exact.some(a => ["freethrow","jumpball"].includes(type(a))
+    && Math.abs(Date.parse(a.timeActual) - stopTime) <= 100)) {
+    return {url:nbaClipsUrl(game.gameId, stop),reason:"verified-atomic-challenge-incident",
+      actionNumber:stop.actionNumber ?? null};
+  }
   const liveTypes = ["2pt","3pt","foul","turnover","violation","block","rebound","freethrow","jumpball","heave"];
   const before = timed.filter(a => liveTypes.includes(type(a)) && Date.parse(a.timeActual) <= stopTime)
     .sort((a,b)=>Date.parse(b.timeActual)-Date.parse(a.timeActual));
@@ -157,8 +187,46 @@ export function buildChallengeClockClip(row, game) {
   // two free throws, a rebound and a different possession (TOR-WAS Q2 0:54).
   const exact = candidates.filter(a => Math.abs(clockSeconds(a.clock) - clock) < 0.11);
   const timestamps = new Set(exact.map(a => Date.parse(a.timeActual)));
-  if (timestamps.size !== 1) return (!exact.length && verifiedIncidentClip(row, game, actions, clock))
-    || unavailable(exact.length ? "ambiguous-original-play" : "original-play-not-identifiable");
+  if (timestamps.size !== 1) {
+    if (exact.length) return unavailable("ambiguous-original-play");
+    const incident=verifiedIncidentClip(row,game,actions,clock);
+    if (incident) return incident;
+    // A corrected game clock is not a nearest-event search. Require a unique
+    // same-team timeout AND a compatible live call in its sub-100 ms cluster,
+    // backed by this exact challenge's official PDF entry. Never use a later
+    // corrected event or cross free throws to manufacture the missing play.
+    const pdf=payload.pdfRow || {};
+    const verified=row.source==="nba_official_challenge_pdf" && String(pdf.game_id)===gameId
+      && Number(pdf.period)===Number(row.period) && pdf.team_challenged===row.challenging_team
+      && Math.abs(clockSeconds(pdf.game_clock)-clock)<0.11;
+    const stops=actions.filter(a=>type(a)==="timeout" && a.teamTricode===row.challenging_team
+      && Math.abs(clockSeconds(a.clock)-clock)<=2 && nbaClipsUrl(gameId,a));
+    if (verified && stops.length===1 && Math.abs(clockSeconds(stops[0].clock)-clock)>0.11) {
+      const stop=stops[0], time=Date.parse(stop.timeActual);
+      const cluster=actions.filter(a=>Math.abs(clockSeconds(a.clock)-clockSeconds(stop.clock))<0.11
+        && Math.abs(Date.parse(a.timeActual)-time)<=100);
+      const final=String(pdf.ruling_description || "");
+      const live=cluster.filter(a=>compatible(a) || /^successful$/i.test(pdf.challenge_outcome || "")
+        && type(a)==="foul" && (
+          /^offensive foul$/i.test(final) && /offensive|charge/i.test(`${a.subType} ${a.description}`)
+          || /^defensive foul$/i.test(final) && /personal|shooting/i.test(`${a.subType} ${a.description}`)
+            && !/offensive|technical/i.test(`${a.subType} ${a.description}`)));
+      if (new Set(live.map(a=>Date.parse(a.timeActual))).size===1
+        && !cluster.some(a=>["freethrow","jumpball"].includes(type(a))))
+        return {url:nbaClipsUrl(gameId,live[0]),reason:"pdf-verified-clock-corrected-atomic-incident",
+          actionNumber:live[0].actionNumber ?? null};
+    }
+    const nearby=actions.filter(a=>Math.abs(clockSeconds(a.clock)-clock)<=2);
+    const exactStops=stops.filter(a=>Math.abs(clockSeconds(a.clock)-clock)<0.11);
+    const reason=!nearby.length?"no-nearby-play-at-challenge-clock"
+      : exactStops.length>1?"multiple-challenge-clock-stoppages"
+      : exactStops.length===1 && nearby.some(a=>["foul","2pt","3pt","turnover"].includes(type(a))
+        && Date.parse(a.timeActual)>Date.parse(exactStops[0].timeActual)+5000)?"corrected-event-timestamp-after-timeout"
+      : exactStops.length===1?"original-incident-timestamp-not-verifiable"
+      : stops.length?"clock-correction-without-unique-compatible-incident"
+      : "no-source-matched-challenge-stoppage";
+    return unavailable(reason);
+  }
   return { url: nbaClipsUrl(gameId, exact[0]), reason: "compatible-original-play-at-exact-clock", actionNumber: exact[0].actionNumber ?? null };
 }
 

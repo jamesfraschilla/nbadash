@@ -5,6 +5,41 @@ import { verifiedChallengeVideoUrl, buildChallengeClockClip, buildChallengeClock
 const incidentRow = {game_id:"0022600015",source:"nba_official_challenge_pdf",challenging_team:"WAS",period:3,
   game_clock:"09:06.0",challenge_type:"Foul",initial_call:"Defensive Foul",source_payload:{pdfRow:{
     game_id:"0022600015",period:"3",game_clock:"09:06.0",team_challenged:"WAS",challenge_outcome:"Successful",ruling_description:"Offensive Foul"}}};
+test("a corrected atomic event just after a challenge timeout is safe, not a later review insertion",()=>{
+  const row={...incidentRow,challenge_type:"OOB",initial_call:"Home Team Ball",
+    source_payload:{pdfRow:{...incidentRow.source_payload.pdfRow,ruling_description:"Home Team Ball"}}};
+  const stop={period:3,clock:"PT09M06.00S",actionType:"timeout",teamTricode:"WAS",timeActual:"2026-10-31T00:33:03.100Z"};
+  const foul={...stop,actionType:"foul",teamTricode:"CHA",subType:"personal",timeActual:"2026-10-31T00:33:03.120Z"};
+  const game={gameId:row.game_id,playByPlayActions:[stop,foul]};
+  assert.equal(buildChallengeClockClip(row,game).reason,"verified-atomic-challenge-incident");
+  assert.equal(buildChallengeClockClipUrl(row,{...game,playByPlayActions:[stop,{...foul,timeActual:"2026-10-31T00:34:03Z"}]}),null);
+  assert.equal(buildChallengeClockClipUrl(row,{...game,playByPlayActions:[stop,foul,{...foul,actionType:"freethrow"}]}),null);
+});
+test("removed foul uses only the gamebook's named cleared defender, without crossing intervening play",()=>{
+  const row={...incidentRow,source_payload:{gamebookChallenge:{version:"gamebook-challenge-v1",period:3,
+    gameClock:"09:06",challengingTeamName:"Wizards",url:"https://statsdmz.nba.com/pdfs/20261030/20261030_CHAWAS_book.pdf",
+    excerpt:"09:06 Wizards Coach's Challenge K.George P.FOUL: Call Overturned: No Personal Foul on K. George"}}};
+  const block={period:3,clock:"PT09M07.00S",actionType:"block",description:"K. George BLOCK (1 BLK)",timeActual:"2026-10-31T00:33:03Z"};
+  const stop={period:3,clock:"PT09M06.00S",actionType:"timeout",teamTricode:"WAS",timeActual:"2026-10-31T00:33:51Z"};
+  const game={gameId:row.game_id,gameCode:"20261030/CHAWAS",homeTeam:{teamTricode:"WAS",teamName:"Wizards"},playByPlayActions:[block,stop]};
+  assert.equal(buildChallengeClockClip(row,game).reason,"gamebook-verified-cleared-defender-block");
+  assert.equal(buildChallengeClockClipUrl(row,{...game,playByPlayActions:[{...block,description:"A. Sarr BLOCK"},stop]}),null);
+  assert.equal(buildChallengeClockClipUrl(row,{...game,playByPlayActions:[block,{...stop,actionType:"freethrow",timeActual:"2026-10-31T00:33:30Z"},stop]}),null);
+  assert.equal(buildChallengeClockClipUrl({...row,source_payload:{gamebookChallenge:{...row.source_payload.gamebookChallenge,challengingTeamName:"Hornets"}}},game),null);
+});
+test("official clock correction requires a unique compatible call atomic with the team's timeout",()=>{
+  const row={...incidentRow,source_payload:{pdfRow:{...incidentRow.source_payload.pdfRow,
+    challenge_outcome:"Unsuccessful",ruling_description:"Defensive Foul"}}};
+  const foul={period:3,clock:"PT09M05.00S",actionType:"foul",subType:"personal",timeActual:"2026-10-31T00:33:03Z"};
+  const stop={...foul,actionType:"timeout",teamTricode:"WAS",timeActual:"2026-10-31T00:33:03.010Z"};
+  const game={gameId:row.game_id,playByPlayActions:[foul,stop]};
+  assert.equal(buildChallengeClockClip(row,game).reason,"pdf-verified-clock-corrected-atomic-incident");
+  for (const bad of [{...stop,teamTricode:"CHA"},{...stop,timeActual:"2026-10-31T00:34:03Z"}])
+    assert.equal(buildChallengeClockClipUrl(row,{...game,playByPlayActions:[foul,bad]}),null);
+  assert.equal(buildChallengeClockClipUrl({...row,source_payload:{}},game),null);
+  assert.equal(buildChallengeClockClipUrl(row,{...game,playByPlayActions:[foul,stop,{...stop,actionType:"freethrow"}]}),null);
+  assert.equal(buildChallengeClockClipUrl(row,{...game,playByPlayActions:[foul,stop,{...stop,timeActual:"2026-10-31T00:35:03Z"}]}),null);
+});
 test("CHA WAS corrected offensive foul timestamps the incident without changing original-call attribution",()=>{
   const game={gameId:incidentRow.game_id,playByPlayActions:[{actionNumber:401,period:3,clock:"PT09M06.00S",actionType:"foul",subType:"offensive",timeActual:"2026-10-31T00:33:03.093Z"}]};
   assert.equal(buildChallengeClockClip(incidentRow,game).reason,"verified-corrected-incident-timestamp");

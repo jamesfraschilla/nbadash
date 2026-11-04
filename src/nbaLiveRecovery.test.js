@@ -42,6 +42,18 @@ test("final score verification ignores appended corrections to earlier quarters"
   pbp.game.actions[0].scoreHome = "3";
   assert.throws(() => normalizeNbaLiveRecovery(id, box, pbp), /scores/);
 });
+test("final primary and PBP can agree despite a stale CDN box, without weakening validation", async()=>{
+  const {box,pbp}=sources();
+  const primary={...structuredClone(box.game),boxScore:{home:{},away:{}}};
+  box.game.homeTeam.score=1;
+  const fetcher=async url=>Response.json(url.includes("cloudfront")?primary:url.includes("/boxscore/")?box:pbp);
+  assert.equal((await fetchRecoverableGame(id,fetcher)).homeTeam.score,2);
+  pbp.game.actions[0].scoreHome="3";
+  await assert.rejects(fetchRecoverableGame(id,fetcher),/scores/);
+  pbp.game.actions[0].scoreHome="2";
+  box.game.homeTeam.teamId=99;
+  await assert.rejects(fetchRecoverableGame(id,fetcher),/identity/);
+});
 test("server reconciler survives primary HTTP failure and validates alternate identity", async () => {
   const { box, pbp } = sources();
   const fetcher = async url => url.includes("cloudfront") ? new Response("down", { status: 503 }) : Response.json(url.includes("/boxscore/") ? box : pbp);

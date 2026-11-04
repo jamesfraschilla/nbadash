@@ -35,7 +35,7 @@ export function normalizeNbaLiveRecovery(gameId: string, box: RecordValue, pbp: 
   return result;
 }
 
-export async function fetchNbaLiveRecovery(gameId: string, fetcher: typeof fetch = fetch) {
+async function fetchNbaLiveSources(gameId: string, fetcher: typeof fetch = fetch) {
   if (!/^\d{10}$/.test(gameId)) throw new Error("Invalid game ID");
   const load = async (kind: string) => {
     const response = await fetcher(`https://cdn.nba.com/static/json/liveData/${kind}/${kind}_${gameId}.json`, {
@@ -45,6 +45,11 @@ export async function fetchNbaLiveRecovery(gameId: string, fetcher: typeof fetch
     return response.json();
   };
   const [box, pbp] = await Promise.all([load("boxscore"), load("playbyplay")]);
+  return {box,pbp};
+}
+
+export async function fetchNbaLiveRecovery(gameId: string, fetcher: typeof fetch = fetch) {
+  const {box,pbp}=await fetchNbaLiveSources(gameId,fetcher);
   return normalizeNbaLiveRecovery(gameId, box, pbp);
 }
 
@@ -65,9 +70,19 @@ export async function fetchRecoverableGame(gameId: string, fetcher: typeof fetch
       return primary;
     }
   } catch { primary = null; }
-  const backup = await fetchNbaLiveRecovery(gameId, fetcher);
-  if (!primary) return backup;
-  if (Number(primary.homeTeam.score) !== Number(backup.homeTeam.score) || Number(primary.awayTeam.score) !== Number(backup.awayTeam.score)) throw new Error("Primary and backup scores do not reconcile");
-  return { ...primary, playByPlayActions: backup.playByPlayActions,
+  const {box,pbp}=await fetchNbaLiveSources(gameId,fetcher);
+  if (!primary) return normalizeNbaLiveRecovery(gameId,box,pbp);
+  // CDN box snapshots can lag a final score correction while primary box and
+  // CDN PBP agree. Validate PBP against the primary we will actually preserve;
+  // never relax the backup-only final-score guard or mix different teams.
+  if (String(box?.game?.gameId)!==gameId || String(pbp?.game?.gameId)!==gameId
+    || ["homeTeam","awayTeam"].some(side=>String(primary![side].teamId)!==String(box?.game?.[side]?.teamId)))
+    throw new Error("Backup game identity mismatch");
+  const actions=pbp.game.actions;
+  if (!Array.isArray(actions) || !actions.length) throw new Error("Backup game incomplete");
+  if (Number(primary.gameStatus)!==3 && (Number(primary.homeTeam.score)!==Number(box.game.homeTeam.score)
+    || Number(primary.awayTeam.score)!==Number(box.game.awayTeam.score))) throw new Error("Primary and backup scores do not reconcile");
+  verifyFinalScore(primary,actions);
+  return { ...primary, playByPlayActions: actions,
     feedAvailability: { source: "nba-pbp-backup", limited: false } };
 }
