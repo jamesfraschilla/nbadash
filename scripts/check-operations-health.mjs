@@ -6,6 +6,7 @@ import {createClient} from "@supabase/supabase-js";
 import {discoverChallengeReviewDocuments,isChallengeSeasonPage} from "../src/officiatingChallengeDiscovery.js";
 import {MONITORED_WORKFLOWS,workflowHealthIssues,pdfImportComplete,cacheIsStale} from "../src/operationsHealth.js";
 import {challengeClockCoverage} from "../src/challengeClockCoverage.js";
+import {challengeNeedsReview,challengeReviewState} from "../src/challengeReview.js";
 
 const report={checkedAt:new Date().toISOString(),findings:[],checks:[],reviewQueue:[]};
 const season="2026-27", repo=process.env.GITHUB_REPOSITORY || "jamesfraschilla/nbadash";
@@ -70,9 +71,12 @@ await check("officiating-cache-freshness",async()=>{
 await check("challenge-review-queue",async()=>{
   if(!db)throw Error("Database read credential missing");
   report.reviewQueue=data(await db.from("nba_authoritative_coach_challenge_events_cache")
-    .select("id,game_id,period,game_clock,match_reason").eq("season",season).eq("review_status","needs_review").limit(1000));
-  if(report.reviewQueue.length)report.findings.push({key:"challenge-review-queue",severity:"warning",
-    message:`${report.reviewQueue.length} authoritative challenges need source-backed review; automated retry is not a human adjudication.`,
+    .select("id,game_id,period,game_clock,match_reason,review_status,gamebook_conflict_kind:source_payload->gamebookSourceConflict->>kind").eq("season",season).eq("review_status","needs_review").limit(1000));
+  report.reviewSummary=Object.fromEntries([...Map.groupBy(report.reviewQueue,challengeReviewState)].map(([kind,rows])=>[kind,rows.length]));
+  const actionable=report.reviewQueue.filter(challengeNeedsReview);
+  const omissions=report.reviewSummary.whistle_unavailable||0;
+  if(actionable.length)report.findings.push({key:"challenge-review-queue",severity:"warning",
+    message:`${actionable.length} authoritative challenges need source-backed investigation; ${omissions} additional gamebook-confirmed calls have no published whistle and are tracked separately. Automated retry is not adjudication.`,
     url:"https://jamesfraschilla.github.io/nbadash/#/officiating?tab=challenge-log&season=2026-27"});
 });
 await check("challenge-required-fields",async()=>{

@@ -32,8 +32,10 @@ test("Challenge Log keeps official Video and timestamp Clock links separate", as
   await expect(torontoRow).toBeVisible();
   await expect(torontoRow.getByRole("link", { name: "00:54", exact: true })).toHaveCount(0);
   await expect(torontoRow.getByRole("link", { name: "Watch", exact: true })).toHaveAttribute("href", toronto.video_url);
-  await expect(unpublishedRow.getByText("Whistle not published",{exact:true})).toBeVisible();
+  await expect(unpublishedRow.getByText("Whistle unavailable",{exact:true})).toBeVisible();
   await page.getByLabel("Review",{exact:true}).selectOption("needs_review");
+  await expect(unpublishedRow).toHaveCount(0);
+  await page.getByLabel("Review",{exact:true}).selectOption("whistle_unavailable");
   await expect(unpublishedRow).toBeVisible();
   await expect(publishedRow).toHaveCount(0);
 });

@@ -1,4 +1,5 @@
 import { matchOfficialToken } from "./officiatingParser.js";
+import {gamebookTeamMatches} from "./officiatingTeamNames.js";
 
 export function parseGamebookChallenges(pages = []) {
   const rows = [];
@@ -56,18 +57,48 @@ export function challengeClockSeconds(clock) {
   return mmss ? Number(mmss[1]) * 60 + Number(mmss[2]) : NaN;
 }
 
-export function reconcileGamebookChallenge(challenge, bookRows, assignments, url) {
+export function matchGamebookChallenge(challenge, bookRows, peers=[challenge]) {
+  const delta=row=>Math.abs(challengeClockSeconds(row.gameClock)-challengeClockSeconds(challenge.game_clock));
+  const sameTeam=row=>!challenge.challenging_team || gamebookTeamMatches(challenge,row);
+  const exact=bookRows.filter(row=>row.period===Number(challenge.period) && delta(row)<0.11 && sameTeam(row));
+  if(exact.length===1)return {row:exact[0],reason:"exact-team-period-clock",clockDeltaSeconds:delta(exact[0])};
+  if(exact.length>1)return null;
+  const pdf=challenge.source_payload?.pdfRow;
+  // Clock adjustments need an explicit official ledger identity, not a generic
+  // nearest-clock match. Keep the PDF clock and stable record identity intact.
+  if(!pdf || String(pdf.game_id)!==String(challenge.game_id) || pdf.team_challenged!==challenge.challenging_team
+    || Number(pdf.period)!==Number(challenge.period)
+    || Math.abs(challengeClockSeconds(pdf.game_clock)-challengeClockSeconds(challenge.game_clock))>=0.11)return null;
+  const compatible=(log,row)=>gamebookTeamMatches(log,row)
+    && (!row.outcome || row.outcome===String(log.challenge_outcome||"").toLowerCase())
+    && (!row.challengeType || !log.challenge_type || row.challengeType===log.challenge_type);
+  const near=bookRows.filter(row=>row.period===Number(challenge.period) && delta(row)<=2 && compatible(challenge,row));
+  if(near.length!==1)return null;
+  // The corrected-clock PBP sibling is not a second official challenge. Count
+  // only ledger-backed competitors; still reject two distinct PDF entries.
+  const competing=new Set(peers.filter(log=>!!log.source_payload?.pdfRow
+    && String(log.game_id)===String(challenge.game_id)
+    && Number(log.period)===near[0].period && compatible(log,near[0])
+    && Math.abs(challengeClockSeconds(log.game_clock)-challengeClockSeconds(near[0].gameClock))<=2)
+    .map(log=>[log.challenging_team,log.period,challengeClockSeconds(log.game_clock)].join("|")));
+  if(competing.size!==1)return null;
+  return {row:near[0],reason:"pdf-verified-exclusive-team-type-outcome-clock-adjustment",clockDeltaSeconds:delta(near[0])};
+}
+
+export function reconcileGamebookChallenge(challenge, bookRows, assignments, url, options={}) {
   if (["manual", "verified"].includes(challenge.review_status)) return challenge;
-  const matches = bookRows.filter(row => row.period === Number(challenge.period)
-    && Math.abs(challengeClockSeconds(row.gameClock) - challengeClockSeconds(challenge.game_clock)) < 0.11);
-  if (matches.length !== 1) return challenge;
-  const row = matches[0];
+  const match=matchGamebookChallenge(challenge,bookRows,options.peerChallenges);
+  if(!match)return challenge;
+  const row=match.row;
   const officials = assignments.map(a => ({ personId: a.official_id, fullName: a.official_name,
     firstName: String(a.official_name || "").split(/\s+/)[0],
     familyName: String(a.official_name || "").split(/\s+/).slice(1).join(" ") }));
   const official = matchOfficialToken(row.officialToken, officials);
-  const evidence = { version: "gamebook-challenge-v1", url, ...row };
+  const evidence = { version: "gamebook-challenge-v1", url, ...row,
+    ...(options.gamebookSha256?{sha256:options.gamebookSha256}:{}) };
   const corrected = { ...challenge, source_payload: { ...challenge.source_payload, gamebookChallenge: evidence } };
+  corrected.source_payload.gamebookMatch={version:"gamebook-match-v2",reason:match.reason,
+    clockDeltaSeconds:match.clockDeltaSeconds,ledgerClock:challenge.game_clock,bookClock:row.gameClock};
   // SHOT/TIMEOUT are occasionally used as original-call placeholders. Keep
   // independently supported fields; do not infer a foul subtype from the
   // corrected outcome or erase a valid whistle just because a book omits it.
@@ -84,11 +115,13 @@ export function reconcileGamebookChallenge(challenge, bookRows, assignments, url
   const directionConflict = /defensive foul/i.test(originalCall) && row.subType === "Offensive Foul"
     || /offensive foul/i.test(originalCall) && row.challengeType === "Foul" && row.subType && row.subType !== "Offensive Foul";
   const typeConflict = originalType && row.challengeType && originalType !== row.challengeType;
-  const conflict = Boolean(directionConflict || typeConflict);
+  const sourceOutcome=String(original.challenge_outcome || challenge.challenge_outcome || "").toLowerCase();
+  const outcomeConflict=Boolean(sourceOutcome && row.outcome && sourceOutcome!==row.outcome);
+  const conflict = Boolean(directionConflict || typeConflict || outcomeConflict);
   // A final corrected event label is not evidence of the original foul's
   // subtype or of who blew the original whistle. Preserve both source claims
   // and keep attribution review open even when the label reversal is explained.
-  const replacementLabel = Boolean(directionConflict
+  const replacementLabel = Boolean(directionConflict && !outcomeConflict
     && /^successful$/i.test(String(original.challenge_outcome || challenge.challenge_outcome || ""))
     && (/^Offensive Foul$/i.test(String(original.ruling_description || "")) && row.subType === "Offensive Foul"
       || /^Defensive Foul$/i.test(String(original.ruling_description || "")) && row.challengeType === "Foul" && row.subType !== "Offensive Foul"));
@@ -99,6 +132,7 @@ export function reconcileGamebookChallenge(challenge, bookRows, assignments, url
     pdfFinalCall: original.ruling_description || "",
     bookEventLabel: row.originalCall,
     originalWhistleVerified: false,
+    ...(outcomeConflict?{pdfOutcome:sourceOutcome,bookOutcome:row.outcome}:{}),
   };
   else delete corrected.source_payload.gamebookSourceConflict;
   const fallbackSubtype = /offensive foul/i.test(originalCall) ? "Offensive Foul"

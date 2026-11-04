@@ -1,13 +1,7 @@
 import { challengeClockSeconds } from "./officiatingGamebookChallenges.js";
-
-const TEAM_NAMES = { ATL: "Hawks", BOS: "Celtics", BKN: "Nets", CHA: "Hornets", CHI: "Bulls", CLE: "Cavaliers", DAL: "Mavericks", DEN: "Nuggets", DET: "Pistons", GSW: "Warriors", HOU: "Rockets", IND: "Pacers", LAC: "Clippers", LAL: "Lakers", MEM: "Grizzlies", MIA: "Heat", MIL: "Bucks", MIN: "Timberwolves", NOP: "Pelicans", NYK: "Knicks", OKC: "Thunder", ORL: "Magic", PHI: "76ers", PHX: "Suns", POR: "Trail Blazers", SAC: "Kings", SAS: "Spurs", TOR: "Raptors", UTA: "Jazz", WAS: "Wizards", NZB: "Breakers" };
-const norm = v => String(v || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+import {gamebookTeamMatches as teamMatches} from "./officiatingTeamNames.js";
 const seconds = row => challengeClockSeconds(row.gameClock ?? row.game_clock);
 const period = row => Number(row.period);
-function teamMatches(log, book) {
-  const name = TEAM_NAMES[log.challenging_team];
-  return Boolean(name && norm(book.challengingTeamName) === norm(name));
-}
 function compatible(log, book) {
   if (!teamMatches(log, book)) return false;
   if (book.outcome && book.outcome !== log.challenge_outcome) return false;

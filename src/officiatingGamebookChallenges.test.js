@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseGamebookChallenges, reconcileGamebookChallenge } from "./officiatingGamebookChallenges.js";
+import { parseGamebookChallenges, reconcileGamebookChallenge,matchGamebookChallenge } from "./officiatingGamebookChallenges.js";
 import { enrichChallengeEventsWithOfficials } from "./officiatingChallengeMatcher.js";
 
 const pages = [{ page: 12, text: `NATIONAL BASKETBALL ASSOCIATION OFFICIAL PLAY-BY-PLAY
@@ -8,6 +8,44 @@ const pages = [{ page: 12, text: `NATIONAL BASKETBALL ASSOCIATION OFFICIAL PLAY-
 11:51 J.Slawson BLOCK MISS L.James FB Running Finger Roll Layup
 11:51 Pacers Coach's Challenge J.Slawson S.FOUL (P.Ransom): Call Overturned: No Foul on J. Slawson
 11:50 J.Slawson Violation: Jump Ball (A.Smith)` }];
+
+test("October 30 official clocks safely reconcile to uniquely matching gamebook clocks without moving the ledger",()=>{
+  for(const [team,name,clock,bookClock,original,outcome,official,fullName] of [
+    ["PHI","76ers","00:31.7",":30.8","V.Edgecombe P.FOUL","unsuccessful","K.Scott","Kevin Scott"],
+    ["IND","Pacers","03:28.0","03:26","K.Brown Offensive","successful","B.Barnaky","Brent Barnaky"],
+    ["LAL","Lakers","00:33.1",":32.8","B.Williams SHOT","successful","T.Brothers","Tony Brothers"],
+  ]){
+    const row={game_id:"0022600018",challenging_team:team,period:4,game_clock:clock,challenge_type:team==="LAL"?"OOB":"Foul",
+      challenge_outcome:outcome,source_payload:{pdfRow:{game_id:"0022600018",team_challenged:team,period:4,game_clock:clock,
+        initial_call:team==="IND"?"Offensive Foul":team==="LAL"?"Home Team Ball":"Defensive Foul",
+        trigger:team==="LAL"?"Challenge OOB":"Challenge of Called Foul"}}};
+    const books=parseGamebookChallenges([{page:1,text:`OFFICIAL PLAY-BY-PLAY\n4th QUARTER\n${bookClock} ${name} Coach's Challenge ${original} (${official}): Call ${outcome==="successful"?"Overturned":"Confirmed"}`}]);
+    const after=reconcileGamebookChallenge(row,books,[{official_id:"1",official_name:fullName}],"book");
+    assert.equal(after.whistling_official_name,fullName);
+    assert.equal(after.review_status,"auto");
+    assert.equal(after.game_clock,clock);
+    assert.equal(after.source_payload.gamebookMatch.reason,"pdf-verified-exclusive-team-type-outcome-clock-adjustment");
+    assert.equal(matchGamebookChallenge({...row,source_payload:{}},books),null);
+    assert.equal(matchGamebookChallenge({...row,challenging_team:"WAS"},books),null);
+    assert.equal(matchGamebookChallenge({...row,challenge_outcome:outcome==="successful"?"unsuccessful":"successful"},books),null);
+    assert.equal(matchGamebookChallenge(row,[...books,...books]),null);
+    assert.equal(matchGamebookChallenge(row,books,[row,{...row,game_clock:team==="IND"?"03:27":team==="PHI"?"00:31.0":"00:33.0"}]),null);
+  }
+});
+test("even exact-clock gamebooks must belong to the challenging team",()=>{
+  const books=parseGamebookChallenges(pages);
+  assert.equal(matchGamebookChallenge({challenging_team:"LAL",period:2,game_clock:"11:51"},books),null);
+});
+test("a book outcome contradicting the ledger cannot silently certify the whistle",()=>{
+  const books=parseGamebookChallenges(pages);
+  const row={period:2,game_clock:"11:51",challenge_outcome:"unsuccessful",source_payload:{pdfRow:{
+    trigger:"Challenge of Called Foul",initial_call:"Defensive Foul",challenge_outcome:"Unsuccessful"}}};
+  const after=reconcileGamebookChallenge(row,books,[{official_id:"1",official_name:"Phenizee Ransom"}],"book");
+  assert.equal(after.challenge_outcome,"unsuccessful");
+  assert.equal(after.review_status,"needs_review");
+  assert.equal(after.whistling_official_name,null);
+  assert.equal(after.source_payload.gamebookSourceConflict.kind,"unexplained-source-disagreement");
+});
 
 test("manual attribution remains protected even when it already has gamebook evidence", () => {
   const before = { period: 2, game_clock: "11:51", review_status: "manual", source_payload: { gamebookChallenge: { version: "older" } } };
