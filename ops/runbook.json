@@ -5,7 +5,7 @@
   "monitor": {"workflow":"operations-health.yml","cadence":"Health checks hourly at minute 17 UTC; daily postgame accuracy sample at 6:00 AM America/New_York; critical workflow completion events","notifications":"Assigned persistent GitHub issues; delivery depends on the owner's GitHub notification settings","limitations":"GitHub schedules are best-effort. This is not continuous agent supervision, independent external uptime monitoring, or a proof of every statistic."},
   "sources": {
     "challengeVideo":"Only official reviews-by-day PDF dmmx2 links; never substitute clock clips into Video.",
-    "challengeClock":"Validated timeActual-based clips, separate from the PDF Video column.",
+    "challengeClock":"Validated timeActual-based clips, separate from PDF Video and whistle attribution. Version 4 accepts source-backed corrected incidents and immediate/continuously clocked challenge stoppages, never delayed reviews or intervening free throws. Daily maintenance retries missing links; hourly health records coverage. November 3 backfill: 192/246 linked (was 86/246), 54 retained unavailable, including one game with invalid source scores. All eight regular-season WAS challenges have Clock links; four preseason WAS entries remain unavailable. Presence does not certify NBA playback availability.",
     "challengeInventory":"Check both 2026-27 and legacy 2025-26 official.nba.com URLs. Verify PDF fingerprint, expected document row count, and completion markers, not only workflow exit status.",
     "originalCall":"Weekly PDF initial call plus gamebook original-call evidence, not the corrected event or following possession.",
     "officialIdentity":"Permanent NBA official identity, never jersey number alone.",
