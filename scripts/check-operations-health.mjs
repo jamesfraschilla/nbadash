@@ -5,6 +5,7 @@ import {mkdir,readFile,writeFile} from "node:fs/promises";
 import {createClient} from "@supabase/supabase-js";
 import {discoverChallengeReviewDocuments,isChallengeSeasonPage} from "../src/officiatingChallengeDiscovery.js";
 import {MONITORED_WORKFLOWS,workflowHealthIssues,pdfImportComplete,cacheIsStale} from "../src/operationsHealth.js";
+import {challengeClockCoverage} from "../src/challengeClockCoverage.js";
 
 const report={checkedAt:new Date().toISOString(),findings:[],checks:[],reviewQueue:[]};
 const season="2026-27", repo=process.env.GITHUB_REPOSITORY || "jamesfraschilla/nbadash";
@@ -82,6 +83,20 @@ await check("challenge-required-fields",async()=>{
     data(result);
     if(result.count)report.findings.push({key:`challenge-missing:${field}`,severity:"error",message:`${result.count} authoritative challenge records are missing a ${field}.`});
   }
+});
+await check("challenge-clock-coverage",async()=>{
+  if(!db)throw Error("Database read credential missing");
+  const rows=[];
+  for(let offset=0;;offset+=1000){
+    const page=data(await db.from("nba_authoritative_coach_challenge_events_cache")
+      .select("id,game_id,clock_clip_url:source_payload->>clockClipUrl,clock_link_version:source_payload->>clockLinkVersion,clock_link_reason:source_payload->>clockLinkReason")
+      .eq("season",season).order("id").range(offset,offset+999));
+    rows.push(...page);if(page.length<1000)break;
+  }
+  report.clockCoverage=challengeClockCoverage(rows);
+  if(report.clockCoverage.missing||report.clockCoverage.outdated)report.findings.push({key:"challenge-clock-coverage",severity:"warning",
+    message:`Challenge Clock links: ${report.clockCoverage.linked}/${report.clockCoverage.total} present; ${report.clockCoverage.missing} unavailable; ${report.clockCoverage.outdated} await the current matcher. Missing links need timing evidence, not guessed timestamps. Link presence does not verify NBA playback availability.`,
+    url:"https://jamesfraschilla.github.io/nbadash/#/officiating?tab=challenge-log&season=2026-27"});
 });
 await check("dashboard-availability",async()=>{
   const file=JSON.parse(await readFile("output/dashboard-health/availability.json","utf8"));

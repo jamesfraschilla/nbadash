@@ -1,6 +1,35 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { verifiedChallengeVideoUrl, buildChallengeClockClipUrl, challengeClockClipUrl, challengeLinkIdentity } from "./officiatingChallengeLinks.js";
+import { verifiedChallengeVideoUrl, buildChallengeClockClip, buildChallengeClockClipUrl, challengeClockClipUrl, challengeLinkIdentity } from "./officiatingChallengeLinks.js";
+
+const incidentRow = {game_id:"0022600015",source:"nba_official_challenge_pdf",challenging_team:"WAS",period:3,
+  game_clock:"09:06.0",challenge_type:"Foul",initial_call:"Defensive Foul",source_payload:{pdfRow:{
+    game_id:"0022600015",period:"3",game_clock:"09:06.0",team_challenged:"WAS",challenge_outcome:"Successful",ruling_description:"Offensive Foul"}}};
+test("CHA WAS corrected offensive foul timestamps the incident without changing original-call attribution",()=>{
+  const game={gameId:incidentRow.game_id,playByPlayActions:[{actionNumber:401,period:3,clock:"PT09M06.00S",actionType:"foul",subType:"offensive",timeActual:"2026-10-31T00:33:03.093Z"}]};
+  assert.equal(buildChallengeClockClip(incidentRow,game).reason,"verified-corrected-incident-timestamp");
+  assert.equal(incidentRow.initial_call,"Defensive Foul");
+  assert.equal(buildChallengeClockClipUrl({...incidentRow,source_payload:{}},game),null);
+  assert.equal(buildChallengeClockClipUrl(incidentRow,{...game,playByPlayActions:[...game.playByPlayActions,
+    {period:3,clock:"PT09M06.00S",actionType:"freethrow",timeActual:"2026-10-31T00:33:30Z"},
+    {period:3,clock:"PT09M06.00S",actionType:"timeout",teamTricode:"WAS",timeActual:"2026-10-31T00:34:03Z"}]}),null);
+});
+test("removed original call can use a source-confirmed immediate challenge timeout, not a later review",()=>{
+  const row={...incidentRow,challenge_type:"OOB",initial_call:"Home Team Ball",source_payload:{pdfRow:{...incidentRow.source_payload.pdfRow,ruling_description:"Away Team Ball"}}};
+  const shot={actionNumber:1,period:3,clock:"PT09M07.70S",actionType:"rebound",subType:"defensive",timeActual:"2026-10-31T00:33:01.4Z"};
+  const stop={actionNumber:2,period:3,clock:"PT09M06.00S",actionType:"timeout",teamTricode:"WAS",timeActual:"2026-10-31T00:33:03.1Z"};
+  const game={gameId:row.game_id,playByPlayActions:[shot,stop]};
+  assert.equal(buildChallengeClockClip(row,game).reason,"verified-immediate-challenge-stoppage");
+  for(const badStop of [{...stop,timeActual:"2026-10-31T00:36:03Z"},{...stop,teamTricode:"CHA"},{...stop,actionType:"instantreplay"}])
+    assert.equal(buildChallengeClockClipUrl(row,{...game,playByPlayActions:[shot,badStop]}),null);
+  assert.equal(buildChallengeClockClipUrl(row,{...game,playByPlayActions:[shot,stop,{...stop,timeActual:"2026-10-31T00:33:04Z"}]}),null);
+  assert.equal(buildChallengeClockClipUrl(row,{...game,playByPlayActions:[{...shot,actionType:"freethrow"},stop]}),null);
+  assert.equal(buildChallengeClockClipUrl(row,{...game,playByPlayActions:[{...shot,actionType:"jumpball"},stop]}),null);
+  assert.equal(buildChallengeClockClipUrl({...row,source_payload:{pdfRow:{...row.source_payload.pdfRow,game_id:"different"}}},game),null);
+  const earlierBasket={...shot,clock:"PT09M19.00S",actionType:"2pt",timeActual:"2026-10-31T00:32:50.5Z"};
+  assert.equal(buildChallengeClockClip(row,{...game,playByPlayActions:[earlierBasket,stop]}).reason,"verified-immediate-challenge-stoppage");
+  assert.equal(buildChallengeClockClipUrl(row,{...game,playByPlayActions:[{...earlierBasket,timeActual:"2026-10-31T00:31:50Z"},stop]}),null);
+});
 
 test("Video is withheld until that challenge has a published PDF clip", () => {
   assert.equal(verifiedChallengeVideoUrl({
