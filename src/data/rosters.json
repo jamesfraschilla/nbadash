@@ -3373,9 +3373,25 @@
       "fullName": "Isaiah Hartenstein",
       "jerseyNum": "55",
       "position": "C-F"
+    },
+    {
+      "personId": "1631207",
+      "firstName": "Dalen",
+      "familyName": "Terry",
+      "fullName": "Dalen Terry",
+      "jerseyNum": "77",
+      "position": "F"
     }
   ],
   "1610612761": [
+    {
+      "personId": "1642347",
+      "firstName": "Jamal",
+      "familyName": "Shead",
+      "fullName": "Jamal Shead",
+      "jerseyNum": "1",
+      "position": "G"
+    },
     {
       "personId": "202695",
       "firstName": "Kawhi",
@@ -3409,19 +3425,19 @@
       "position": "G"
     },
     {
+      "personId": "1641755",
+      "firstName": "Kevin",
+      "familyName": "McCullar Jr.",
+      "fullName": "Kevin McCullar Jr.",
+      "jerseyNum": "9",
+      "position": "G"
+    },
+    {
       "personId": "1629628",
       "firstName": "RJ",
       "familyName": "Barrett",
       "fullName": "RJ Barrett",
       "jerseyNum": "9",
-      "position": "F-G"
-    },
-    {
-      "personId": "203937",
-      "firstName": "Kyle",
-      "familyName": "Anderson",
-      "fullName": "Kyle Anderson",
-      "jerseyNum": "12",
       "position": "F-G"
     },
     {
@@ -3431,6 +3447,14 @@
       "fullName": "Nate Bittle",
       "jerseyNum": "12",
       "position": "C"
+    },
+    {
+      "personId": "203937",
+      "firstName": "Kyle",
+      "familyName": "Anderson",
+      "fullName": "Kyle Anderson",
+      "jerseyNum": "13",
+      "position": "F-G"
     },
     {
       "personId": "1642266",
@@ -3463,14 +3487,6 @@
       "fullName": "Allen Graves",
       "jerseyNum": "22",
       "position": "F"
-    },
-    {
-      "personId": "1642347",
-      "firstName": "Jamal",
-      "familyName": "Shead",
-      "fullName": "Jamal Shead",
-      "jerseyNum": "23",
-      "position": "G"
     },
     {
       "personId": "1642867",
@@ -3775,8 +3791,8 @@
     {
       "personId": "1643510",
       "firstName": "Karim",
-      "familyName": "López",
-      "fullName": "Karim López",
+      "familyName": "Lopez",
+      "fullName": "Karim Lopez",
       "jerseyNum": "35",
       "position": "F"
     },
