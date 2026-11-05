@@ -148,7 +148,7 @@ test("createPersonnelDraft produces 25 independent rows with the exact draft sha
   assert.equal(draft.rows.length, 25);
   assert.deepEqual(Object.keys(draft.rows[0]), [
     "id", "enabled", "personId", "teamId", "fullName", "firstName", "familyName", "jerseyNum",
-    "selectedStats", "statOverrides", "attemptOverrides", "customStatLabel", "tags", "threePointColor", "threePointColorEdited",
+    "graphicOverrides", "selectedStats", "statOverrides", "attemptOverrides", "customStatLabel", "tags", "threePointColor", "threePointColorEdited",
   ]);
   assert.deepEqual(draft.rows[0], {
     id: "personnel-slot-1",
@@ -159,6 +159,7 @@ test("createPersonnelDraft produces 25 independent rows with the exact draft sha
     firstName: "",
     familyName: "",
     jerseyNum: "",
+    graphicOverrides: {jerseyNum:null,headshotUrl:"",headshotStoragePath:"",hideHeadshot:false},
     selectedStats: ["ppg", "threePointPercentage", "rpg", "apg"],
     statOverrides: {},
     attemptOverrides: { threePointAttempts: "", fieldGoalAttempts: "" },
@@ -231,6 +232,7 @@ test("createPersonnelRow and hydration sanitize aliases while preserving 0 throu
     firstName: "",
     familyName: "",
     jerseyNum: "",
+    graphicOverrides: {jerseyNum:null,headshotUrl:"",headshotStoragePath:"",hideHeadshot:false},
     selectedStats: ["ppg", "rpg", "threePointPercentage", "apg", "bpg", "spg", "fta", "custom"],
     statOverrides: { ppg: "12.25", threePointPercentage: "41.8", custom: "11/22" },
     attemptOverrides: { threePointAttempts: "", fieldGoalAttempts: "" },

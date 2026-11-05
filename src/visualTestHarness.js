@@ -1,4 +1,18 @@
 import { fetchNbaPlayerStats } from "./api.js";
+import React, {useState} from "react";
+import {createRoot} from "react-dom/client";
+import GraphicPlayerEditor from "./components/GraphicPlayerEditor.jsx";
+
+window.renderGraphicPlayerEditorFixture = () => {
+  const node=document.createElement("div");node.id="player-editor-test";document.body.append(node);
+  function Fixture(){
+    const [value,setValue]=useState({});
+    window.graphicPlayerOverride=value;
+    return React.createElement(GraphicPlayerEditor,{player:{personId:"999999",teamId:"1612700000",fullName:"Missing Player",jerseyNum:""},
+      value,onChange:setValue,userId:"test-user",toolType:"personnel",slotKey:"999999"});
+  }
+  createRoot(node).render(React.createElement(Fixture));
+};
 import { buildEmptyCoverageSlots } from "./coverageGraphic.js";
 import { renderCoverageGraphicCanvas } from "./pages/coverageGraphicExport.js";
 import { renderMatchupGraphicCanvas } from "./pages/matchupGraphicExport.js";

@@ -9,6 +9,8 @@ import leftyTagUrl from "../assets/personnel/lefty.png";
 import { fetchNbaPlayerStats } from "../api.js";
 import { useAuth } from "../auth/useAuth.js";
 import Dialog from "../components/ui/Dialog.jsx";
+import GraphicPlayerEditor from "../components/GraphicPlayerEditor.jsx";
+import {applyGraphicPlayerOverride} from "../graphicPlayerOverrides.js";
 import { GLEAGUE_TEAMS, NBA_TEAMS, getLeagueTeam } from "../data/nbaTeams.js";
 import {
   DEFAULT_PERSONNEL_STAT_KEYS,
@@ -199,7 +201,7 @@ function formatSupabaseSaveError(error) {
 
 function buildExportItems(rows, rosterById, statsById, statOrder) {
   return rows.map((row) => ({
-    player: rosterById[row.personId] || row,
+    player: applyGraphicPlayerOverride(rosterById[row.personId] || row, row.graphicOverrides),
     stats: {
       ...mergePersonnelAttemptOverrides(
         mergePersonnelStatOverrides(statsById[row.personId] || {}, row.statOverrides), row.attemptOverrides
@@ -1103,11 +1105,22 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
                           value={player.personId}
                           disabled={usedPersonIds.has(player.personId) && row.personId !== player.personId}
                         >
-                          {formatPlayerOption(player)}
+                          {formatPlayerOption(player.personId === row.personId ? applyGraphicPlayerOverride(player, row.graphicOverrides) : player)}
                         </option>
                       ))}
                     </select>
                     {missingStats ? <span className={styles.missingStats}>No {season} stats available</span> : null}
+                    {row.personId ? <GraphicPlayerEditor
+                      key={`${league}-${teamId}-${row.personId}`}
+                      player={rosterById[row.personId] || row}
+                      value={row.graphicOverrides}
+                      onChange={graphicOverrides => updateRow(index, current => (
+                        current.personId === row.personId ? {...current, graphicOverrides} : current
+                      ))}
+                      userId={user?.id}
+                      toolType="personnel"
+                      slotKey={`${league}-${teamId}-${row.personId}`}
+                    /> : null}
                   </div>
                 </div>
                 {orderedStatOptions.map((option) => {

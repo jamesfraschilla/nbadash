@@ -6,7 +6,7 @@ import { playerHeadshotUrls, teamLogoUrl } from "../api.js";
 import { preferLargeNbaHeadshots } from "../playerHeadshotPolicy.js";
 import {
   buildNbaFallbackHeadshotUrl,
-  pixelBuffersMatch,
+  headshotFingerprintsMatch,
 } from "../nbaHeadshotFallback.js";
 import { resolvePersonnelFamilyName } from "../personnelGraphic.js";
 
@@ -146,6 +146,7 @@ function getPlayerExportLabel(player) {
 }
 
 export function buildPlayerHeadshotCandidates(player) {
+  if (player?.headshotHidden) return [];
   const customUrl = String(player?.headshotDataUrl || player?.headshotUrl || "").trim();
   if (customUrl) return [customUrl];
   const personId = String(player?.headshotPersonId || player?.personId || "").trim();
@@ -201,15 +202,21 @@ export function clearExportImageCache() {
   loadedImageCache.clear();
 }
 
-export async function loadFirstImage(urls) {
+export async function loadFirstImage(urls, { headshot = false } = {}) {
   for (const url of urls) {
+    if (headshot && /\/fallback\.png(?:\?|$)/i.test(url)) continue;
     const image = await loadImage(buildProxyUrl(url));
     if (!image) continue;
-    const fallbackUrl = buildNbaFallbackHeadshotUrl(url);
-    if (fallbackUrl) {
+    const fallbackUrls = [...new Set([buildNbaFallbackHeadshotUrl(url), ...(headshot ? [
+      "https://cdn.nba.com/headshots/nba/latest/1040x760/fallback.png",
+      "https://cdn.nba.com/headshots/nba/latest/260x190/fallback.png",
+    ] : [])].filter(Boolean))];
+    let placeholder = false;
+    for (const fallbackUrl of fallbackUrls) {
       const fallbackImage = await loadImage(buildProxyUrl(fallbackUrl));
-      if (fallbackImage && imagesMatch(image, fallbackImage)) continue;
+      if (fallbackImage && imagesMatch(image, fallbackImage)) { placeholder = true; break; }
     }
+    if (placeholder) continue;
     return image;
   }
   return null;
@@ -233,12 +240,9 @@ function imageFingerprint(image) {
 
 function imagesMatch(left, right) {
   try {
-    const leftWidth = left.naturalWidth || left.width;
-    const leftHeight = left.naturalHeight || left.height;
-    const rightWidth = right.naturalWidth || right.width;
-    const rightHeight = right.naturalHeight || right.height;
-    if (leftWidth !== rightWidth || leftHeight !== rightHeight) return false;
-    return pixelBuffersMatch(imageFingerprint(left), imageFingerprint(right));
+    // The G League resolver can serve the same NBA silhouette at a different
+    // size. Compare normalized pixels, not the source image dimensions.
+    return headshotFingerprintsMatch(imageFingerprint(left), imageFingerprint(right));
   } catch {
     return false;
   }
@@ -400,8 +404,8 @@ export async function renderMatchupGraphicCanvas({
   const resolvedRightPlayers = Array.isArray(rightPlayers) ? rightPlayers : [];
 
   const [leftImages, rightImages, logoImage, backgroundImage] = await Promise.all([
-    Promise.all(resolvedLeftPlayers.map((player) => loadFirstImage(buildPlayerHeadshotCandidates(player)))),
-    Promise.all(resolvedRightPlayers.map((player) => loadFirstImage(buildPlayerHeadshotCandidates(player)))),
+    Promise.all(resolvedLeftPlayers.map((player) => loadFirstImage(buildPlayerHeadshotCandidates(player), {headshot:true}))),
+    Promise.all(resolvedRightPlayers.map((player) => loadFirstImage(buildPlayerHeadshotCandidates(player), {headshot:true}))),
     nbaCup ? loadNbaCupTrophy() : loadImage(logoTeamId ? buildProxyUrl(teamLogoUrl(logoTeamId, league)) : null),
     loadExportBackgroundImage(),
   ]);

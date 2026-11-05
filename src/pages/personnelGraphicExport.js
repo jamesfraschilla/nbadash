@@ -296,7 +296,7 @@ export async function renderPersonnelGraphic({
   if (document.fonts?.ready) await document.fonts.ready;
 
   const [resolvedHeadshot, resolvedLogo, resolvedTags, backgroundImage] = await Promise.all([
-    headshotImage || loadFirstImage(buildPlayerHeadshotCandidates(player)),
+    player?.headshotHidden ? null : headshotImage || loadFirstImage(buildPlayerHeadshotCandidates(player), {headshot:true}),
     nbaCup ? loadNbaCupTrophy() : logoImage || loadFirstImage(teamId ? [teamLogoUrl(teamId, league)] : []),
     tagImages || loadTagImages(),
     loadExportBackgroundImage(),

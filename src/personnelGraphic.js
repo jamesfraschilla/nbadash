@@ -1,3 +1,5 @@
+import { normalizeGraphicPlayerOverride } from "./graphicPlayerOverrides.js";
+
 export const PERSONNEL_SLOT_COUNT = 25;
 
 export const PERSONNEL_CUSTOM_STAT_KEY = "custom";
@@ -326,6 +328,7 @@ export function createPersonnelRow(index = 0, overrides = {}) {
     firstName: normalizeString(firstPresentValue(source, ["firstName", "FIRST_NAME"])),
     familyName,
     jerseyNum: normalizeString(firstPresentValue(source, ["jerseyNum", "jerseyNumber", "number", "NUM"])),
+    graphicOverrides: normalizeGraphicPlayerOverride(source.graphicOverrides),
     selectedStats: normalizeSelectedStats(selectedStats, selectedStats === undefined),
     statOverrides: normalizeStatOverrides(statOverrides),
     attemptOverrides: {
@@ -410,6 +413,7 @@ export function populatePersonnelDraftFromRoster(draft, roster, options = {}) {
         tags: row.tags,
         threePointColor: row.threePointColor,
         threePointColorEdited: row.threePointColorEdited,
+        graphicOverrides: row.graphicOverrides,
       });
     }
   });

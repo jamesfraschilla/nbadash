@@ -19,3 +19,18 @@ export function pixelBuffersMatch(left, right) {
   }
   return true;
 }
+
+// Small interpolation differences are expected when the resolver resizes the
+// stock silhouette. This is intentionally a near-exact reference comparison,
+// not a grayscale/face heuristic that could reject a real monochrome portrait.
+export function headshotFingerprintsMatch(left, right) {
+  if (!left?.length || left.length !== right?.length) return false;
+  if (pixelBuffersMatch(left, right)) return true;
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 4) {
+    difference += Math.abs(left[index + 3] - right[index + 3]);
+    if (!left[index + 3] && !right[index + 3]) continue;
+    for (let channel = 0; channel < 3; channel++) difference += Math.abs(left[index + channel] - right[index + channel]);
+  }
+  return difference / left.length <= 1.5;
+}

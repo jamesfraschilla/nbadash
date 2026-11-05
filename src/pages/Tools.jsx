@@ -43,6 +43,8 @@ import {
   getMarginOptionLabel,
 } from "../components/lateGamePanelHelpers.js";
 import { exportMatchupGraphic, renderMatchupGraphicCanvas } from "./matchupGraphicExport.js";
+import GraphicPlayerEditor from "../components/GraphicPlayerEditor.jsx";
+import {applyGraphicPlayerOverride,graphicPlayerOverrideKey,normalizeGraphicPlayerOverrideMap} from "../graphicPlayerOverrides.js";
 import { requestCustomDashboardRequest } from "../customRequestsData.js";
 import {
   GRAPHIC_TOOL_TABS,
@@ -98,6 +100,7 @@ function buildEmptyDraft() {
     rightPlayerIds: [...EMPTY_PLAYER_IDS],
     leftCustomPlayers: buildEmptyCustomPlayers(),
     rightCustomPlayers: buildEmptyCustomPlayers(),
+    playerGraphicOverrides: {},
     logoTeamId: "",
   };
 }
@@ -233,6 +236,7 @@ function hydrateDraftPayload(payload, fallbackDraft) {
     rightPlayerIds: [...EMPTY_PLAYER_IDS].map((_, index) => String(payload?.rightPlayerIds?.[index] || "").trim()),
     leftCustomPlayers: hydrateCustomPlayers(payload?.leftCustomPlayers),
     rightCustomPlayers: hydrateCustomPlayers(payload?.rightCustomPlayers),
+    playerGraphicOverrides: normalizeGraphicPlayerOverrideMap(payload?.playerGraphicOverrides),
     logoTeamId: String(payload?.logoTeamId || "").trim() || String(fallbackDraft?.logoTeamId || "").trim(),
   };
 }
@@ -375,14 +379,15 @@ function buildCustomMatchupPlayer(customPlayer, index, teamId) {
   };
 }
 
-function resolveSelectedPlayers(playerIds, roster, customPlayers, teamId) {
+function resolveSelectedPlayers(playerIds, roster, customPlayers, teamId, league, overrides) {
   const playersById = new Map((roster || []).map((player) => [player.personId, player]));
   return [...EMPTY_PLAYER_IDS].map((_, index) => {
     const playerId = String(playerIds?.[index] || "").trim();
     if (playerId === CUSTOM_PLAYER_VALUE) {
       return buildCustomMatchupPlayer(customPlayers?.[index], index, teamId);
     }
-    return playersById.get(playerId) || null;
+    return applyGraphicPlayerOverride(playersById.get(playerId) || null,
+      overrides?.[graphicPlayerOverrideKey(league,teamId,playerId)]);
   });
 }
 
@@ -473,13 +478,17 @@ function ToolColumn({
   onPlayerChange,
   onCustomPlayerChange,
   onCustomHeadshotChange,
+  league,
+  playerGraphicOverrides,
+  onGraphicPlayerChange,
+  userId,
 }) {
   const roster = useMemo(() => rosterMap[String(teamId || "")] || [], [rosterMap, teamId]);
 
   return (
     <section className={styles.toolColumn}>
       <label className={styles.field}>
-        <select className={styles.select} value={teamId} onChange={(event) => onTeamChange(event.target.value)}>
+        <select aria-label={`${columnId} team`} className={styles.select} value={teamId} onChange={(event) => onTeamChange(event.target.value)}>
           <option value="">Team</option>
           {teams.map((team) => (
             <option key={team.teamId} value={team.teamId}>{team.fullName}</option>
@@ -498,6 +507,7 @@ function ToolColumn({
                 <select
                   className={styles.select}
                   value={currentId}
+                  aria-label={`${columnId} player slot ${index + 1}`}
                   onChange={(event) => onPlayerChange(index, event.target.value)}
                   disabled={!teamId}
                 >
@@ -507,7 +517,7 @@ function ToolColumn({
                       key={player.personId}
                       value={player.personId}
                     >
-                      {formatPlayerOption(player)}
+                      {formatPlayerOption(applyGraphicPlayerOverride(player, playerGraphicOverrides?.[graphicPlayerOverrideKey(league,teamId,player.personId)]))}
                     </option>
                   ))}
                   <option value={CUSTOM_PLAYER_VALUE}>Custom</option>
@@ -515,6 +525,7 @@ function ToolColumn({
               </label>
               {isCustom ? (
                 <div className={styles.matchupCustomFields}>
+                  {!customPlayer.headshotDataUrl && !customPlayer.headshotUrl ? <span role="status">Headshot missing — exports blank</span> : null}
                   <label className={styles.field}>
                     <span className={styles.fieldLabel}>Number</span>
                     <input
@@ -542,6 +553,16 @@ function ToolColumn({
                     />
                   </label>
                 </div>
+              ) : currentId && roster.find(player=>player.personId===currentId) ? (
+                <GraphicPlayerEditor
+                  key={graphicPlayerOverrideKey(league,teamId,currentId)}
+                  player={roster.find(player=>player.personId===currentId)}
+                  value={playerGraphicOverrides?.[graphicPlayerOverrideKey(league,teamId,currentId)]}
+                  onChange={value=>onGraphicPlayerChange(graphicPlayerOverrideKey(league,teamId,currentId),value)}
+                  userId={userId}
+                  toolType="matchup"
+                  slotKey={graphicPlayerOverrideKey(league,teamId,currentId)}
+                />
               ) : null}
             </div>
           );
@@ -768,12 +789,12 @@ export default function Tools({ section = "tools" }) {
     [lateGameLeague, lateGameSetup.homeTeamId]
   );
   const selectedLeftPlayers = useMemo(
-    () => resolveSelectedPlayers(draft.leftPlayerIds, leftRoster, draft.leftCustomPlayers, draft.leftTeamId),
-    [draft.leftCustomPlayers, draft.leftPlayerIds, draft.leftTeamId, leftRoster]
+    () => resolveSelectedPlayers(draft.leftPlayerIds, leftRoster, draft.leftCustomPlayers, draft.leftTeamId, draft.league, draft.playerGraphicOverrides),
+    [draft.leftCustomPlayers, draft.leftPlayerIds, draft.leftTeamId, leftRoster, draft.league, draft.playerGraphicOverrides]
   );
   const selectedRightPlayers = useMemo(
-    () => resolveSelectedPlayers(draft.rightPlayerIds, rightRoster, draft.rightCustomPlayers, draft.rightTeamId),
-    [draft.rightCustomPlayers, draft.rightPlayerIds, draft.rightTeamId, rightRoster]
+    () => resolveSelectedPlayers(draft.rightPlayerIds, rightRoster, draft.rightCustomPlayers, draft.rightTeamId, draft.league, draft.playerGraphicOverrides),
+    [draft.rightCustomPlayers, draft.rightPlayerIds, draft.rightTeamId, rightRoster, draft.league, draft.playerGraphicOverrides]
   );
   const exportReady = Boolean(
     leftTeam &&
@@ -1091,6 +1112,13 @@ export default function Tools({ section = "tools" }) {
         [key]: nextIds,
       };
     });
+    setSaveStatus("");
+  };
+
+  const handleGraphicPlayerChange = (key, value) => {
+    setDraft(current => ({...current, playerGraphicOverrides: {
+      ...normalizeGraphicPlayerOverrideMap(current.playerGraphicOverrides), [key]: value,
+    }}));
     setSaveStatus("");
   };
 
@@ -1721,6 +1749,10 @@ export default function Tools({ section = "tools" }) {
                   playerIds={draft.leftPlayerIds}
                   rosterMap={rosterMap}
                   customPlayers={draft.leftCustomPlayers}
+                  league={league}
+                  userId={user?.id}
+                  playerGraphicOverrides={draft.playerGraphicOverrides}
+                  onGraphicPlayerChange={handleGraphicPlayerChange}
                   onTeamChange={(nextTeamId) => handleTeamChange("left", nextTeamId)}
                   onPlayerChange={(index, nextPlayerId) => handlePlayerChange("left", index, nextPlayerId)}
                   onCustomPlayerChange={(index, patch) => handleCustomPlayerChange("left", index, patch)}
@@ -1734,6 +1766,10 @@ export default function Tools({ section = "tools" }) {
                   playerIds={draft.rightPlayerIds}
                   rosterMap={rosterMap}
                   customPlayers={draft.rightCustomPlayers}
+                  league={league}
+                  userId={user?.id}
+                  playerGraphicOverrides={draft.playerGraphicOverrides}
+                  onGraphicPlayerChange={handleGraphicPlayerChange}
                   onTeamChange={(nextTeamId) => handleTeamChange("right", nextTeamId)}
                   onPlayerChange={(index, nextPlayerId) => handlePlayerChange("right", index, nextPlayerId)}
                   onCustomPlayerChange={(index, patch) => handleCustomPlayerChange("right", index, patch)}

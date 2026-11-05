@@ -145,6 +145,7 @@
 
 .matchupBuilder .toolGrid {
   gap: 16px;
+  align-items: start;
 }
 
 .matchupBuilder .select {
@@ -204,6 +205,7 @@
 .matchupPlayerSlot {
   display: grid;
   gap: 10px;
+  align-content: start;
 }
 
 .matchupCustomFields {
