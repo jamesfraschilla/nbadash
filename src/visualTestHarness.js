@@ -2,6 +2,14 @@ import { fetchNbaPlayerStats } from "./api.js";
 import React, {useState} from "react";
 import {createRoot} from "react-dom/client";
 import GraphicPlayerEditor from "./components/GraphicPlayerEditor.jsx";
+import PlayerHeadshotsAdmin from "./pages/PlayerHeadshotsAdmin.jsx";
+import { AuthContext } from "./auth/AuthProvider.jsx";
+
+window.renderPlayerHeadshotsAdminFixture = () => {
+  const node = document.createElement("div");
+  document.body.append(node);
+  createRoot(node).render(React.createElement(AuthContext.Provider, { value: { user: null } }, React.createElement(PlayerHeadshotsAdmin)));
+};
 
 window.renderGraphicPlayerEditorFixture = () => {
   const node=document.createElement("div");node.id="player-editor-test";document.body.append(node);

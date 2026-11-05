@@ -21,8 +21,11 @@ import {
 import { buildManualRosterPlayerKey } from "../rosterPools.js";
 import styles from "./Admin.module.css";
 
-const WIZARDS_TEAM_ID = "1610612764";
-const WASHINGTON_SUMMER_SCOPE = "washington_summer";
+const ROSTERS = [
+  { scope: "washington", label: "Washington Wizards", teamId: "1610612764" },
+  { scope: "capital_city", label: "Capital City Go-Go", teamId: "1612709928" },
+  { scope: "washington_summer", label: "Summer League", teamId: "1610612764" },
+];
 
 async function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -98,7 +101,11 @@ export default function PlayerHeadshotsAdmin() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
-  const [summerRosterPlayers, setSummerRosterPlayers] = useState([]);
+  const [rosterScope, setRosterScope] = useState("washington_summer");
+  const [rosterPlayers, setRosterPlayers] = useState([]);
+  const [rosterLoading, setRosterLoading] = useState(false);
+  const [rosterError, setRosterError] = useState("");
+  const selectedRoster = ROSTERS.find(roster => roster.scope === rosterScope);
 
   useEffect(() => {
     let cancelled = false;
@@ -129,20 +136,26 @@ export default function PlayerHeadshotsAdmin() {
 
   useEffect(() => {
     let cancelled = false;
-    fetchRemotePregamePlayers(WASHINGTON_SUMMER_SCOPE)
+    const localRoster = loadPregamePlayersPayload(rosterScope);
+    setRosterPlayers(localRoster?.players || []);
+    setRosterLoading(true);
+    setRosterError("");
+    fetchRemotePregamePlayers(rosterScope)
       .then((remoteRoster) => {
         if (cancelled) return;
-        const localRoster = loadPregamePlayersPayload(WASHINGTON_SUMMER_SCOPE);
         const players = resolveSharedPregamePlayersPayload(localRoster, remoteRoster).players;
-        setSummerRosterPlayers(players);
+        setRosterPlayers(players);
       })
       .catch(() => {
-        if (!cancelled) setSummerRosterPlayers([]);
+        if (!cancelled) setRosterError("Unable to refresh roster. Showing any saved roster players.");
+      })
+      .finally(() => {
+        if (!cancelled) setRosterLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [rosterScope]);
 
   const sortedRecords = useMemo(() => (
     Object.values(records)
@@ -156,11 +169,11 @@ export default function PlayerHeadshotsAdmin() {
 
   const selectedPersonId = normalizePersonId(personId);
   const selectedRecord = selectedPersonId ? records[selectedPersonId] || null : null;
-  const summerRosterOptions = useMemo(() => (
-    summerRosterPlayers
+  const rosterOptions = useMemo(() => (
+    rosterPlayers
       .map((player) => {
         const officialKey = normalizePlayerHeadshotKey(player.personId);
-        const manualKey = buildManualRosterPlayerKey(player, WIZARDS_TEAM_ID);
+        const manualKey = buildManualRosterPlayerKey(player, selectedRoster.teamId);
         const key = officialKey || manualKey;
         if (!key) return null;
         return {
@@ -172,7 +185,7 @@ export default function PlayerHeadshotsAdmin() {
       })
       .filter(Boolean)
       .sort((left, right) => String(left.label).localeCompare(String(right.label)))
-  ), [summerRosterPlayers]);
+  ), [rosterPlayers, selectedRoster.teamId]);
 
   const persistRecords = async (nextRecords) => {
     const sanitized = sanitizePlayerHeadshotState(nextRecords);
@@ -283,23 +296,42 @@ export default function PlayerHeadshotsAdmin() {
 
         <div className={styles.playerHeadshotForm}>
           <label className={styles.field}>
-            <span>Summer League roster</span>
+            <span>Roster</span>
+            <select aria-label="Roster" value={rosterScope} disabled={loading} onChange={event => {
+              setRosterScope(event.target.value);
+              setRosterPlayers([]);
+              setPersonId("");
+              setLabel("");
+              setSelectedFile(null);
+              setStatus("");
+              if (fileInputRef.current) fileInputRef.current.value = "";
+            }}>
+              {ROSTERS.map(roster => <option key={roster.scope} value={roster.scope}>{roster.label}</option>)}
+            </select>
+          </label>
+          <label className={styles.field}>
+            <span>Roster player</span>
             <select
-              value={summerRosterOptions.some((option) => option.key === selectedPersonId) ? selectedPersonId : ""}
+              aria-label="Roster player"
+              disabled={rosterLoading || loading}
+              value={rosterOptions.some((option) => option.key === selectedPersonId) ? selectedPersonId : ""}
               onChange={(event) => {
-                const option = summerRosterOptions.find((candidate) => candidate.key === event.target.value);
+                const option = rosterOptions.find((candidate) => candidate.key === event.target.value);
                 setPersonId(option?.key || "");
                 setLabel(option?.label || "");
+                setSelectedFile(null);
+                if (fileInputRef.current) fileInputRef.current.value = "";
               }}
             >
-              <option value="">Select roster player</option>
-              {summerRosterOptions.map((option) => (
+              <option value="">{rosterLoading ? "Loading roster…" : rosterOptions.length ? "Select roster player" : "No saved roster players"}</option>
+              {rosterOptions.map((option) => (
                 <option key={option.key} value={option.key}>
                   {`${option.label}${option.hasOfficialId ? "" : " (manual)"}`}
                 </option>
               ))}
             </select>
           </label>
+          {rosterError ? <div role="status" className={styles.noticeCard}>{rosterError}</div> : null}
           <label className={styles.field}>
             <span>Player ID / Headshot key</span>
             <input
