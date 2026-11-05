@@ -88,12 +88,21 @@ test("constants expose the requested slots, stats, tags, and 3P colors", () => {
   ]);
   assert.deepEqual(DEFAULT_PERSONNEL_STAT_KEYS, ["ppg", "threePointPercentage", "rpg", "apg"]);
   assert.deepEqual(PERSONNEL_TAG_OPTIONS.map(({ key }) => key), [
-    "fire", "cold", "drives_right", "drives_left", "lefty",
+    "fire", "cold", "drives_right", "drives_left", "lefty", "hide_three_point_bar",
   ]);
   assert.deepEqual(PERSONNEL_THREE_POINT_COLOR_OPTIONS.map(({ key }) => key), [
     "bright_green", "dark_green", "yellow", "orange", "red",
   ]);
   assert.equal(DEFAULT_PERSONNEL_THREE_POINT_COLOR, "bright_green");
+});
+
+test("hiding the 3P bar survives draft hydration and roster refresh without changing stats or other tags", () => {
+  const draft = createPersonnelDraft({ rows: [{ personId: "1", tags: ["fire", "hide_three_point_bar"], threePointColor: "red" }] });
+  const restored = hydratePersonnelDraft(JSON.parse(JSON.stringify(draft)));
+  const refreshed = populatePersonnelDraftFromRoster(restored, [{ personId: "1", fullName: "Test Player" }]);
+  assert.deepEqual(refreshed.rows[0].tags, ["fire", "hide_three_point_bar"]);
+  assert.equal(refreshed.rows[0].threePointColor, "red");
+  assert.deepEqual(refreshed.rows[0].selectedStats, [...DEFAULT_PERSONNEL_STAT_KEYS]);
 });
 
 test("personnel seasons roll over on July 1 and validate saved values", () => {

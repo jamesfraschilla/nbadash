@@ -399,11 +399,15 @@
 
 .playerSelection {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: 4px;
   min-width: 0;
 }
 
 .missingStats {
+  grid-column: 1 / -1;
+  grid-row: 2;
   color: var(--muted);
   font-size: 0.7rem;
   line-height: 1.2;

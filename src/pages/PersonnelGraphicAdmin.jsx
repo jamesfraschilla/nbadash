@@ -1260,7 +1260,7 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
       >
         {dialog?.type === "tags" ? (
           <>
-            <p className={styles.dialogHint}>Select any tags to place below this player&apos;s 3P bar.</p>
+            <p className={styles.dialogHint}>Choose player tags or hide the 3P color bar.</p>
             <div className={styles.dialogGrid}>
               {PERSONNEL_TAG_OPTIONS.map((option) => (
                 <label key={option.key} className={styles.dialogOption}>
@@ -1269,7 +1269,7 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
                     checked={activeDialogRow?.tags.includes(option.key) || false}
                     onChange={() => handleToggleTag(dialog.rowIndex, option.key)}
                   />
-                  <img className={styles.tagPreview} src={TAG_IMAGE_URLS[option.key]} alt="" />
+                  {TAG_IMAGE_URLS[option.key] ? <img className={styles.tagPreview} src={TAG_IMAGE_URLS[option.key]} alt="" /> : null}
                   <span>{option.label}</span>
                 </label>
               ))}

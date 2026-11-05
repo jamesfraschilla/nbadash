@@ -319,7 +319,9 @@ export async function renderPersonnelGraphic({
 
   drawPlayerName(context, player);
   drawStatsBox(context, stats, selectedStats);
-  drawThreePointBar(context, stats, resolvePersonnelThreePointColorForTags(threePointColor, tags));
+  if (!tags?.includes("hide_three_point_bar")) {
+    drawThreePointBar(context, stats, resolvePersonnelThreePointColorForTags(threePointColor, tags));
+  }
   drawTags(context, tags, resolvedTags);
   if (nbaCup) drawNbaCupBorder(context);
   return canvas;

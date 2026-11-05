@@ -29,6 +29,7 @@ export const PERSONNEL_TAG_OPTIONS = Object.freeze([
   Object.freeze({ key: "drives_right", label: "Drives Right" }),
   Object.freeze({ key: "drives_left", label: "Drives Left" }),
   Object.freeze({ key: "lefty", label: "Lefty" }),
+  Object.freeze({ key: "hide_three_point_bar", label: "Hide 3P color bar" }),
 ]);
 
 export const PERSONNEL_THREE_POINT_COLOR_OPTIONS = Object.freeze([

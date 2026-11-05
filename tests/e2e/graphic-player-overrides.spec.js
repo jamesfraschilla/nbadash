@@ -17,20 +17,30 @@ test("player editor reports missing images, accepts numbers and uploads a replac
   });
   await page.goto("visual-test.html");
   await page.evaluate(()=>window.renderGraphicPlayerEditorFixture());
-  const editor=page.locator("#player-editor-test");
-  await expect(editor.getByText("Headshot missing/unavailable — exports blank")).toBeVisible();
-  await editor.getByText("Number & headshot").click();
+  const trigger=page.getByRole("button",{name:"Edit Missing Player number and headshot"});
+  await expect(page.locator("#player-editor-test").getByText("No photo",{exact:true})).toBeVisible();
+  await expect(page.getByText("Headshot available",{exact:true})).toHaveCount(0);
+  await trigger.click();
+  const editor=page.getByRole("dialog");
   await editor.getByLabel("Jersey number for Missing Player").fill("00");
   expect(await page.evaluate(()=>window.graphicPlayerOverride.jerseyNum)).toBe("00");
   await editor.getByRole("button",{name:"Use roster number"}).click();
   await expect(editor.getByLabel("Jersey number for Missing Player")).toHaveValue("");
   const png=await page.evaluate(()=>{const c=document.createElement("canvas");c.width=4;c.height=4;c.getContext("2d").fillRect(0,0,4,4);return c.toDataURL("image/png").split(",")[1];});
   await editor.getByLabel("Upload headshot for Missing Player").setInputFiles({name:"headshot.png",mimeType:"image/png",buffer:Buffer.from(png,"base64")});
-  await expect(editor.getByText("Headshot available",{exact:true})).toBeVisible();
+  await expect(editor.getByAltText("Missing Player headshot preview")).toBeVisible();
+  await expect(page.locator("#player-editor-test").getByText("No photo",{exact:true})).toHaveCount(0);
   expect(uploads).toBe(1);
   expect(await page.evaluate(()=>window.graphicPlayerOverride.headshotStoragePath)).toContain("test-user/personnel/");
   await editor.getByLabel("Leave headshot blank for Missing Player").check();
   await expect(editor.getByText("Headshot hidden — exports blank")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(editor).not.toBeVisible();
+  await expect(trigger).toBeFocused();
+  await trigger.click();
+  await expect(editor.getByLabel("Leave headshot blank for Missing Player")).toBeChecked();
+  await editor.getByRole("button",{name:"Done"}).click();
+  await expect(editor).not.toBeVisible();
 });
 
 test("both exported graphics leave stock silhouette areas blank, including resolver images",async({page})=>{
@@ -71,20 +81,23 @@ test("matchup number overrides follow the player through a slot swap and personn
   await expect(page.getByLabel("left player slot 1")).toContainText("Alpha Player");
   await page.getByLabel("left player slot 1").selectOption("80001");
   await page.getByLabel("left player slot 2").selectOption("80002");
-  await page.getByText("Number & headshot",{exact:true}).first().click();
+  await page.getByRole("button",{name:"Edit Alpha Player number and headshot"}).click();
   await page.getByLabel("Jersey number for Alpha Player").fill("77");
+  await page.getByRole("button",{name:"Done",exact:true}).click();
   await page.getByLabel("left player slot 2").selectOption("80001");
   await expect(page.getByLabel("left player slot 1")).toHaveValue("80002");
   await expect(page.getByLabel("left player slot 2")).toHaveValue("80001");
   await expect(page.getByLabel("left player slot 2")).toContainText("#77 Alpha Player");
-  await page.getByText("Number & headshot",{exact:true}).nth(1).click();
+  await page.getByRole("button",{name:"Edit Alpha Player number and headshot"}).click();
   await expect(page.getByLabel("Jersey number for Alpha Player")).toHaveValue("77");
+  await page.getByRole("button",{name:"Done",exact:true}).click();
   await page.screenshot({path:"output/graphic-player-overrides/matchup.png",fullPage:true});
 
   await page.goto("#/graphics?graphic=personnel");
   await page.getByLabel("NBA Team").selectOption("1610612764");
-  await page.getByText("Number & headshot",{exact:true}).first().click();
+  await page.getByRole("button",{name:"Edit Alpha Player number and headshot"}).click();
   await page.getByLabel("Jersey number for Alpha Player").fill("00");
+  await page.getByRole("button",{name:"Done",exact:true}).click();
   await expect(page.getByLabel("Player slot 1",{exact:true})).toContainText("#00 Alpha Player");
   await page.screenshot({path:"output/graphic-player-overrides/personnel.png",fullPage:true});
   await page.evaluate(()=>{

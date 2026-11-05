@@ -113,6 +113,14 @@ test("personnel stat columns default, bulk-toggle, and drag in export order", as
 
   await page.getByLabel("NBA Team").selectOption("1610612764");
   await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
+  await page.getByRole("button", { name: "Tags", exact: true }).first().click();
+  const tagsDialog = page.getByRole("dialog");
+  await tagsDialog.getByLabel("Hide 3P color bar", { exact: true }).check();
+  await tagsDialog.getByRole("button", { name: "Close", exact: true }).click();
+  await page.getByRole("button", { name: "Tags (1)", exact: true }).click();
+  await expect(tagsDialog.getByLabel("Hide 3P color bar", { exact: true })).toBeChecked();
+  await tagsDialog.getByLabel("Hide 3P color bar", { exact: true }).uncheck();
+  await tagsDialog.getByRole("button", { name: "Close", exact: true }).click();
   await page.getByRole("button", { name: /^3P color:/ }).first().click();
   const colorDialog = page.getByRole("dialog");
   await expect(colorDialog.getByText("Bar volume: 0.0%", { exact: true })).toBeVisible();
@@ -186,6 +194,31 @@ test("fire personnel tag forces the exported 3P bar to bright green", async ({ p
     b: 0,
     a: 255,
   });
+});
+
+test("hide 3P bar removes its label and fill even with Fire while retaining stats and tags", async ({ page }) => {
+  const result = await page.evaluate(async () => {
+    const { renderPersonnelGraphic } = await import("/nbadash/src/pages/personnelGraphicExport.js");
+    const { PERSONNEL_LAYOUT } = await import("/nbadash/src/personnelGraphicLayout.js");
+    const image = document.createElement("canvas"); image.width = 10; image.height = 10;
+    image.getContext("2d").fillRect(0, 0, 10, 10);
+    const options = { player: { fullName: "Test Player", headshotHidden: true },
+      stats: { ppg: 10, threePointPercentage: 35, rpg: 4, apg: 2, threePointAttempts: 4, fieldGoalAttempts: 10 },
+      selectedStats: ["ppg", "threePointPercentage", "rpg", "apg"], logoImage: image, tagImages: { fire: image } };
+    const normal = await renderPersonnelGraphic({ ...options, tags: ["fire"] });
+    const labels = [];
+    const original = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function (text, ...args) { labels.push(text); return original.call(this, text, ...args); };
+    let hidden;
+    try { hidden = await renderPersonnelGraphic({ ...options, tags: ["fire", "hide_three_point_bar"] }); }
+    finally { CanvasRenderingContext2D.prototype.fillText = original; }
+    const pixels = (canvas, y, height) => [...canvas.getContext("2d").getImageData(0, y, canvas.width, height).data];
+    return { labelHidden: !labels.includes("3P"), statsRetained: labels.includes("3P%"),
+      statsUnchanged: JSON.stringify(pixels(normal, 620, 190)) === JSON.stringify(pixels(hidden, 620, 190)),
+      tagsUnchanged: JSON.stringify(pixels(normal, PERSONNEL_LAYOUT.tags.y, 78)) === JSON.stringify(pixels(hidden, PERSONNEL_LAYOUT.tags.y, 78)),
+      barRemoved: JSON.stringify(pixels(normal, 830, 42)) !== JSON.stringify(pixels(hidden, 830, 42)) };
+  });
+  expect(result).toEqual({ labelHidden: true, statsRetained: true, statsUnchanged: true, tagsUnchanged: true, barRemoved: true });
 });
 
 test("complete Edge stats skip every browser-scraping fallback", async ({ page }) => {
