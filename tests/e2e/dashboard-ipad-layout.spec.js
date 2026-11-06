@@ -38,13 +38,20 @@ for (const width of [768, 820, 1024, 1366, 1920]) {
         return { deltas: labels.map((label, i) => Math.abs(center(label) - center(rows[i + 2]))),
           width: element.querySelector('[class*="possessionRow"]').getBoundingClientRect().width };
       });
+      // Cover the same rehydration that raced the original measurements on CI.
+      await page.evaluate(() => window.dispatchEvent(new Event("referee-headshots-updated")));
       const frames = page.getByRole("region", { name: "Tonight's officials" }).locator('[class*="avatarFrame"]');
-      const sizes = await frames.evaluateAll(elements => elements.map(frame => {
-        const outer = frame.getBoundingClientRect(); const image = frame.querySelector("canvas").getBoundingClientRect();
+      // Hydration/assignment refresh can briefly replace a canvas with its
+      // fallback. Measure only a complete rendered set, including on slow CI.
+      const readSizes = () => frames.evaluateAll(elements => elements.map(frame => {
+        const canvas = frame.querySelector("canvas");
+        if (!canvas) return null;
+        const outer = frame.getBoundingClientRect(); const image = canvas.getBoundingClientRect();
         return { frame: [outer.width, outer.height], canvas: [image.width, image.height], bottomGap: outer.bottom - image.bottom };
       }));
-      await summary.screenshot({ path: test.info().outputPath("quarter-table.png") });
-      await frames.first().screenshot({ path: test.info().outputPath("referee.png") });
+      let sizes;
+      await expect.poll(async () => { sizes = await readSizes(); return sizes; })
+        .toEqual(Array.from({ length: 3 }, () => ({ frame: [84, 84], canvas: [84, 84], bottomGap: 0 })));
       expect(geometry.deltas.every(delta => delta < 1), JSON.stringify({ geometry, sizes })).toBe(true);
       expect(geometry.width).toBe(width <= 900 ? 180 : 220);
       for (const size of sizes) {
@@ -54,12 +61,16 @@ for (const width of [768, 820, 1024, 1366, 1920]) {
       }
       // The saved crop reaches the bottom; the frame must not expose an extra
       // white strip below its canvas, regardless of Retina scale or browser.
-      for (const canvas of await frames.locator("canvas").all()) {
-        await expect.poll(() => canvas.evaluate(node => {
+      for (let index = 0; index < 3; index++) {
+        await expect.poll(() => frames.nth(index).evaluate(frame => {
+          const node = frame.querySelector("canvas");
+          if (!node) return false;
           const pixel = node.getContext("2d").getImageData(42, 82, 1, 1).data;
           return pixel[0] < 200 && pixel[1] < 200 && pixel[2] < 200;
         })).toBe(true);
       }
+      await summary.screenshot({ path: test.info().outputPath("quarter-table.png") });
+      await frames.first().screenshot({ path: test.info().outputPath("referee.png") });
     });
   }
 }
