@@ -1,0 +1,17 @@
+.workspace { display: grid; gap: 18px; margin: 24px auto 0; width: min(100%, 1100px); }
+.section { padding: clamp(14px, 2vw, 24px); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--panel); min-width: 0; }
+.heading, .actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.heading h2 { margin: 0; font-size: 22px; }
+.hint { margin: 8px 0 14px; color: var(--muted); font-size: 14px; }
+.text { display: block; box-sizing: border-box; width: 100%; resize: vertical; min-height: 180px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; font: inherit; line-height: 1.5; color: var(--text); background: var(--bg); }
+.text:read-only { border-color: transparent; }
+.text:focus-visible { outline: 2px solid var(--accent, #60a5fa); }
+.toolbar { margin: 0 0 12px; padding: 0; border: 0; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.toolbar label { display: flex; align-items: center; gap: 6px; }
+.toolbar input[type="range"] { width: 100px; }
+.toolbar input[type="color"] { width: 38px; height: 32px; padding: 2px; }
+.toolbar [aria-pressed="true"] { outline: 2px solid var(--accent, #60a5fa); outline-offset: 1px; }
+.canvas { display: block; box-sizing: border-box; width: 100%; aspect-ratio: 2 / 1; min-height: 260px; max-height: 520px; background: #fff; border: 1px solid var(--border); border-radius: 8px; touch-action: pan-y; }
+.canvasEditing { touch-action: none; cursor: crosshair; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+.error { color: var(--danger-text, #dc2626); }
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

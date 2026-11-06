@@ -1,6 +1,39 @@
 export const TEAM_FOUL_DISPLAY_LIMIT = 5;
 export const TEAM_FOUL_WARNING_DISPLAY = 4;
 
+export function buildChallengeCircles(challenges, independent = false) {
+  const total = challenges?.challengesTotal ?? 0;
+  const won = challenges?.challengesWon ?? 0;
+  if (independent) {
+    return Array.from({ length: 2 }, (_, index) => ({
+      state: index >= total ? "available" : index < won ? "won" : "lost",
+    }));
+  }
+  if (total === 0) return [{ state: "available" }];
+  const circles = [{ state: won >= 1 ? "won" : "lost" }];
+  if (won >= 1) circles.push({ state: total >= 2 ? (won >= 2 ? "won" : "lost") : "available" });
+  return circles;
+}
+
+// G League challenges and Reset timeouts never consume a regular timeout.
+export function getGLeagueTimeoutDisplay({ actions = [], teamId, period, isPregame = false }) {
+  const currentPeriod = Number(period) || 1;
+  const teamTimeouts = isPregame || !teamId ? [] : (Array.isArray(actions) ? actions : []).filter(action => (
+    String(action?.actionType || "").toLowerCase() === "timeout"
+    && String(action.teamId || "") === String(teamId)
+    && Number(action.period) > 0 && Number(action.period) <= currentPeriod
+  ));
+  const isReset = action => String(action.subType || "").toLowerCase() === "reset";
+  const used = teamTimeouts.filter(action => {
+    if (isReset(action)) return false;
+    const type = String(action.subType || "").toLowerCase();
+    if (/official|media/.test(type)) return false;
+    const text = [type, action.description, action.descriptor, ...(action.qualifiers || [])].join(" ");
+    return !/challenge/i.test(text);
+  }).length;
+  return { total: 5, remaining: Math.max(0, 5 - used), resetUsed: teamTimeouts.some(isReset) };
+}
+
 export function parseTeamFoulMarker(description) {
   if (!description) return null;
   const text = String(description);

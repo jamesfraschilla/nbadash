@@ -17,7 +17,6 @@ import {
 } from "../api.js";
 import { useGame, useMinutes } from "../queries.js";
 import { buildCustomPlaycallClipMeta, buildTimedNoteClipMeta } from "../noteClipLinks.js";
-import { washingtonEventClipUrl } from "../nbaClipsTrial.js";
 import { threePointOffensiveReboundPercent, reconcileShotZoneTotals, mergeSegmentSnapshotTotals as mergeSegmentTotals } from "../customStatRates.js";
 import { PERIOD_SNAPSHOT_CAPTURE_VERSION } from "../periodSnapshotTotals.js";
 import { useAuth } from "../auth/useAuth.js";
@@ -53,6 +52,8 @@ import {
   TEAM_FOUL_WARNING_DISPLAY,
   buildTeamFoulInfo,
   getSummerLeagueTimeoutDisplay,
+  getGLeagueTimeoutDisplay,
+  buildChallengeCircles,
 } from "../gameRules.js";
 import { buildFreshnessSummary } from "../dataFreshness.js";
 import { recordClientError } from "../errorDiagnostics.js";
@@ -74,6 +75,7 @@ import {
 import BoxScoreTable from "../components/BoxScoreTable.jsx";
 import StatBars from "../components/StatBars.jsx";
 import Officials from "../components/Officials.jsx";
+import CapitalCityAtcWorkspace from "../components/CapitalCityAtcWorkspace.jsx";
 import OfficialsExportPanel from "../components/OfficialsExportPanel.jsx";
 import MatchUps from "../components/MatchUps.jsx";
 import { GameKpiTables } from "../components/KpiTables.jsx";
@@ -404,29 +406,6 @@ function hasUsedResetTimeout(actions, teamId, currentPeriod) {
     return actionPeriod > 0 && actionPeriod <= 4;
   });
 }
-
-const buildChallengeCircles = (challenges) => {
-  const total = challenges?.challengesTotal ?? 0;
-  const won = challenges?.challengesWon ?? 0;
-
-  const circles = [];
-  if (total === 0) {
-    circles.push({ state: "available" });
-    return circles;
-  }
-
-  circles.push({ state: won >= 1 ? "won" : "lost" });
-
-  if (won >= 1) {
-    if (total >= 2) {
-      circles.push({ state: won >= 2 ? "won" : "lost" });
-    } else {
-      circles.push({ state: "available" });
-    }
-  }
-
-  return circles;
-};
 
 const getSegmentSnapshotBounds = (segment, snapshots, currentSnapshot, currentPeriod) => {
   const snapshotEntries = snapshots || [];
@@ -1758,7 +1737,6 @@ export default function Game({ variant = "full" }) {
   };
 
   useLayoutEffect(() => {
-    if (!showExtras) return;
     const wheel = pbpWheelRef.current;
     const wheelInner = pbpWheelInnerRef.current;
     if (!wheel || !wheelInner) return;
@@ -1791,10 +1769,9 @@ export default function Game({ variant = "full" }) {
       clearTimeout(timeout);
       clearTimeout(timeoutLate);
     };
-  }, [pbpWheelItems, showExtras]);
+  }, [pbpWheelItems, isAtc]);
 
   useEffect(() => {
-    if (!showExtras) return;
     const wheel = pbpWheelRef.current;
     if (!wheel) return;
     const scrollToRight = () => {
@@ -1809,7 +1786,7 @@ export default function Game({ variant = "full" }) {
       cancelAnimationFrame(raf1);
       clearTimeout(timeout);
     };
-  }, [showExtras]);
+  }, [isAtc]);
 
   const finalSnapshotTotals = useMemo(() => {
     if (!periodSnapshotMap || !homeTeamId || !awayTeamId) return null;
@@ -2454,17 +2431,22 @@ export default function Game({ variant = "full" }) {
       isPregame,
     })
     : null;
-  const awayTimeoutsRemaining = isSummerLeagueMatch
+  const isGLeagueGame = awayLeague === "gleague" || homeLeague === "gleague";
+  const useGLeagueResources = isGLeagueGame && !isSummerLeagueMatch;
+  const awayGLeagueTimeoutDisplay = useGLeagueResources
+    ? getGLeagueTimeoutDisplay({ actions: playByPlayActions, teamId: awayTeamId, period: currentPeriod, isPregame }) : null;
+  const homeGLeagueTimeoutDisplay = useGLeagueResources
+    ? getGLeagueTimeoutDisplay({ actions: playByPlayActions, teamId: homeTeamId, period: currentPeriod, isPregame }) : null;
+  const awayTimeoutsRemaining = useGLeagueResources ? awayGLeagueTimeoutDisplay.remaining : isSummerLeagueMatch
     ? awaySummerLeagueTimeoutDisplay.remaining
     : (isPregame ? 7 : timeouts?.away);
-  const homeTimeoutsRemaining = isSummerLeagueMatch
+  const homeTimeoutsRemaining = useGLeagueResources ? homeGLeagueTimeoutDisplay.remaining : isSummerLeagueMatch
     ? homeSummerLeagueTimeoutDisplay.remaining
     : (isPregame ? 7 : timeouts?.home);
-  const awayTimeoutDisplayTotal = isSummerLeagueMatch ? awaySummerLeagueTimeoutDisplay.total : 7;
-  const homeTimeoutDisplayTotal = isSummerLeagueMatch ? homeSummerLeagueTimeoutDisplay.total : 7;
-  const isGLeagueGame = awayLeague === "gleague" || homeLeague === "gleague";
-  const awayResetUsed = isSummerLeagueMatch ? false : hasUsedResetTimeout(game?.playByPlayActions || [], awayTeamId, game?.period);
-  const homeResetUsed = isSummerLeagueMatch ? false : hasUsedResetTimeout(game?.playByPlayActions || [], homeTeamId, game?.period);
+  const awayTimeoutDisplayTotal = useGLeagueResources ? 5 : isSummerLeagueMatch ? awaySummerLeagueTimeoutDisplay.total : 7;
+  const homeTimeoutDisplayTotal = useGLeagueResources ? 5 : isSummerLeagueMatch ? homeSummerLeagueTimeoutDisplay.total : 7;
+  const awayResetUsed = useGLeagueResources ? awayGLeagueTimeoutDisplay.resetUsed : isSummerLeagueMatch ? false : hasUsedResetTimeout(game?.playByPlayActions || [], awayTeamId, game?.period);
+  const homeResetUsed = useGLeagueResources ? homeGLeagueTimeoutDisplay.resetUsed : isSummerLeagueMatch ? false : hasUsedResetTimeout(game?.playByPlayActions || [], homeTeamId, game?.period);
   const strategyResult = useMemo(() => {
     try {
       const nextState = buildLateGameStrategyState({
@@ -2784,9 +2766,10 @@ export default function Game({ variant = "full" }) {
     <div className={styles.metaBlock}>
       <div className={styles.metaLabel}>Challenge</div>
       <div className={styles.metaValueRow}>
-        {buildChallengeCircles(teamChallenges).map((circle, index) => (
+        {buildChallengeCircles(teamChallenges, useGLeagueResources).map((circle, index) => (
           <span
             key={`${circle.state}-${index}`}
+            aria-label={`Challenge ${index + 1}: ${circle.state}`}
             className={`${styles.challengeDot} ${styles[`challenge${circle.state[0].toUpperCase()}${circle.state.slice(1)}`]}`}
           />
         ))}
@@ -2993,7 +2976,7 @@ export default function Game({ variant = "full" }) {
                 <div className={styles.teamScore}>{displayAwayScore}</div>
                 <div className={styles.mobileTeamScore}>{displayAwayScore}</div>
                 <div className={styles.teamMetaStack}>
-                  {(timeouts || isPregame) && (
+                  {(timeouts || isPregame || useGLeagueResources) && (
 	                  <div className={styles.teamMetaRow}>
 	                    {renderTimeouts(
 	                      awayTimeoutsRemaining,
@@ -3007,7 +2990,7 @@ export default function Game({ variant = "full" }) {
                   <div className={styles.teamMetaRow}>
                     {renderFouls(awayFoulsDisplay)}
                   </div>
-                  {(challenges || isPregame) && (
+                  {(challenges || isPregame || useGLeagueResources) && (
                     <div className={styles.teamMetaRow}>
                       {renderChallenges(awayChallenges)}
                     </div>
@@ -3057,7 +3040,7 @@ export default function Game({ variant = "full" }) {
                 <div className={styles.teamScore}>{displayHomeScore}</div>
                 <div className={styles.mobileTeamScore}>{displayHomeScore}</div>
                 <div className={styles.teamMetaStack}>
-                  {(timeouts || isPregame) && (
+                  {(timeouts || isPregame || useGLeagueResources) && (
 	                  <div className={styles.teamMetaRow}>
 	                    {renderTimeouts(
 	                      homeTimeoutsRemaining,
@@ -3071,7 +3054,7 @@ export default function Game({ variant = "full" }) {
                   <div className={styles.teamMetaRow}>
                     {renderFouls(homeFoulsDisplay)}
                   </div>
-                  {(challenges || isPregame) && (
+                  {(challenges || isPregame || useGLeagueResources) && (
                     <div className={styles.teamMetaRow}>
                       {renderChallenges(homeChallenges)}
                     </div>
@@ -3254,7 +3237,10 @@ export default function Game({ variant = "full" }) {
           /> : <p role="status">Alerts paused while the primary feed is unavailable.</p>}
           </SectionErrorBoundary>
 
-          <div className={styles.pbpWheel} ref={pbpWheelRef} onScroll={clearHoldTimer}>
+        </>
+      )}
+
+          <div className={styles.pbpWheel} ref={pbpWheelRef} onScroll={clearHoldTimer} role="region" aria-label="Play-by-play wheel">
             <div className={styles.pbpWheelInner} ref={pbpWheelInnerRef}>
               {pbpWheelItems.length ? pbpWheelItems.map((action) => {
                 const teamTricode = action.teamTricode || "";
@@ -3275,7 +3261,6 @@ export default function Game({ variant = "full" }) {
                 const scoreText = action.scoreHome && action.scoreAway
                   ? `${action.scoreAway}-${action.scoreHome}`
                   : "";
-                const clipUrl = washingtonEventClipUrl(game, action);
                 return (
                   <div
                     key={action.actionNumber || `${action.period}-${action.clock}-${descriptor}`}
@@ -3322,9 +3307,6 @@ export default function Game({ variant = "full" }) {
                     </div>
                     <div className={styles.pbpFooter}>
                       <span>{periodText}</span>
-                      {clipUrl && <a href={clipUrl} target="_blank" rel="noreferrer" aria-label="Open play clip"
-                        title="NBA Clips" onMouseDown={(event) => event.stopPropagation()}
-                        onTouchStart={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>▶ Clip</a>}
                       <span className={styles.pbpScore}>{scoreText}</span>
                     </div>
                   </div>
@@ -3335,6 +3317,8 @@ export default function Game({ variant = "full" }) {
             </div>
           </div>
 
+      {showExtras && (
+        <>
           {!game.feedAvailability?.limited ? <SectionErrorBoundary name="Game situation matrix" key={`matrix:${gameId}`}><LateGameMatrixPanel
             title="Live Game Situation Matrix"
             collapsed={strategyPanelCollapsed}
@@ -3927,6 +3911,11 @@ export default function Game({ variant = "full" }) {
         publishedOrder={publishedOfficialOrder}
       />
       </SectionErrorBoundary>
+      {isAtc && (isCapitalCityTeam(homeTeam) || isCapitalCityTeam(awayTeam)) ? (
+        <SectionErrorBoundary name="Capital City ATC workspace" key={`atc-workspace:${gameId}`}>
+          <CapitalCityAtcWorkspace gameId={gameId} />
+        </SectionErrorBoundary>
+      ) : null}
       </div>
     </div>
   );

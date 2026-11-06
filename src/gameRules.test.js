@@ -1,11 +1,41 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildChallengeCircles,
+  getGLeagueTimeoutDisplay,
   buildTeamFoulInfo,
   getSummerLeagueTimeoutDisplay,
 } from "./gameRules.js";
 
 const TEAM_ID = "1610612764";
+
+test("G League always has two independent challenges, even after a loss or with no timeouts", () => {
+  const states = (total, won) => buildChallengeCircles({ challengesTotal: total, challengesWon: won }, true).map(circle => circle.state);
+  assert.deepEqual(states(0, 0), ["available", "available"]);
+  assert.deepEqual(states(1, 0), ["lost", "available"]);
+  assert.deepEqual(states(1, 1), ["won", "available"]);
+  assert.deepEqual(states(2, 0), ["lost", "lost"]);
+  assert.deepEqual(states(2, 1), ["won", "lost"]);
+  assert.deepEqual(states(2, 2), ["won", "won"]);
+  assert.deepEqual(buildChallengeCircles(undefined, true), [{ state: "available" }, { state: "available" }]);
+  assert.deepEqual(buildChallengeCircles({ challengesTotal: 1, challengesWon: 0 }), [{ state: "lost" }]);
+  assert.deepEqual(buildChallengeCircles({ challengesTotal: 1, challengesWon: 1 }), [{ state: "won" }, { state: "available" }]);
+  assert.deepEqual(buildChallengeCircles(), [{ state: "available" }]);
+});
+
+test("G League counts five regular timeouts and a single separate Reset without charging challenges", () => {
+  const timeout = (subType, extra = {}) => ({ actionType: "timeout", subType, teamId: TEAM_ID, period: 1, ...extra });
+  const actions = [timeout("regular"), timeout("reset"), timeout("challenge"),
+    timeout("regular", { description: "Coach's Challenge" }), timeout("officials"),
+    timeout("regular", { teamId: "other" }), timeout("regular", { period: 4 }), timeout("mandatory")];
+  const options = { actions, teamId: TEAM_ID, period: 2 };
+  assert.deepEqual(getGLeagueTimeoutDisplay(options), { total: 5, remaining: 3, resetUsed: true });
+  assert.deepEqual(getGLeagueTimeoutDisplay({ ...options, isPregame: true }), { total: 5, remaining: 5, resetUsed: false });
+  assert.deepEqual(getGLeagueTimeoutDisplay({ ...options, actions: [] }), { total: 5, remaining: 5, resetUsed: false });
+  assert.deepEqual(getGLeagueTimeoutDisplay({ ...options, actions: Array.from({ length: 7 }, () => timeout("regular")) }), { total: 5, remaining: 0, resetUsed: false });
+  // A Reset already used is not replenished just by entering overtime.
+  assert.equal(getGLeagueTimeoutDisplay({ ...options, period: 5 }).resetUsed, true);
+});
 
 const foul = (overrides = {}) => ({
   actionType: "foul",

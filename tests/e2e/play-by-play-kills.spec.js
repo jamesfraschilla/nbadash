@@ -27,8 +27,10 @@ async function openGame(page, washington = true, wheel = false) {
   if (!wheel) await expect(page.getByRole("heading", { name: "Play-by-Play Events" })).toBeVisible();
 }
 
-test("dashboard scroll wheel shares single Kill markers and white timeouts in both themes", async ({ page }) => {
+for (const variant of ["regular", "atc"]) {
+test(`${variant} dashboard scroll wheel shares single Kill markers and white timeouts in both themes`, async ({ page }) => {
   await openGame(page, true, true);
+  if (variant === "atc") await page.goto("#/g/0022600108/atc");
   const wheel = page.locator('[class*="pbpWheelInner"]');
   await expect(wheel).toBeVisible();
   const completed = wheel.locator('[data-kill-highlight="completed"]');
@@ -46,6 +48,7 @@ test("dashboard scroll wheel shares single Kill markers and white timeouts in bo
     await expect(missed).toHaveCSS("background-color", "rgb(255, 244, 163)");
   }
 });
+}
 
 test("Wizards possessions use red/yellow, while timeouts stay white including hover", async ({ page }) => {
   await openGame(page);
