@@ -70,6 +70,9 @@ test("Washington ATC does not include the Capital City workspace", async ({ page
 });
 
 test("drawing locks after Save, persists through resize/reload, and uses separate storage from text", async ({ page, context }) => {
+  // Exercise scrolling explicitly: CI fonts/layout can put the canvas below
+  // the viewport after clicking Edit in its header.
+  await page.setViewportSize({ width: 1280, height: 600 });
   const { saved, writes } = await setup(context);
   await page.goto("#/g/2022600001/atc");
   const section = page.getByRole("region", { name: "ATC Drawing", exact: true });
@@ -77,6 +80,7 @@ test("drawing locks after Save, persists through resize/reload, and uses separat
   await section.getByRole("button", { name: "Edit", exact: true }).click();
   await expect(board).toHaveCSS("touch-action", "none");
   await expect(section.getByLabel("Drawing thickness")).toHaveValue("4");
+  await board.scrollIntoViewIfNeeded();
   const box = await board.boundingBox();
   await page.mouse.move(box.x + 40, box.y + 40);
   await page.mouse.down();
