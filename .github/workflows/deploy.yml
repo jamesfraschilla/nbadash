@@ -12,7 +12,8 @@ permissions:
 
 concurrency:
   group: "pages"
-  cancel-in-progress: true
+  # Do not interrupt an active production publish when another commit arrives.
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -61,6 +62,8 @@ jobs:
         run: npm run build
       - name: Enforce build performance budget
         run: npm run build:budget
+      - name: Stamp release for live verification
+        run: node scripts/pages-release.mjs stamp
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5
         with:
@@ -71,8 +74,25 @@ jobs:
     needs: build
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: https://jamesfraschilla.github.io/nbadash/
     steps:
+      - name: Checkout verification script
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
       - name: Deploy to GitHub Pages
         id: deployment
+        continue-on-error: true
         uses: actions/deploy-pages@v5
+      - name: Back off after failed Pages publish
+        if: ${{ !cancelled() && steps.deployment.outcome == 'failure' }}
+        run: |
+          echo "::warning::Pages publishing failed after a successful build. Retrying the same artifact once in 30 seconds."
+          sleep 30
+      - name: Retry GitHub Pages once
+        if: ${{ !cancelled() && steps.deployment.outcome == 'failure' }}
+        uses: actions/deploy-pages@v5
+      - name: Verify published release
+        run: node scripts/pages-release.mjs verify
