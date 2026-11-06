@@ -41,6 +41,8 @@ test("release verification never treats a different commit as success", async ()
 test("Pages workflow retains verification and one bounded same-artifact retry", async () => {
   const workflow = await readFile(new URL("../.github/workflows/deploy.yml", import.meta.url), "utf8");
   assert.match(workflow, /cancel-in-progress: false/);
+  assert.equal((workflow.match(/runs-on: ubuntu-24\.04/g) || []).length, 2);
+  assert.match(workflow, /name: Install browser\s+timeout-minutes: 5/);
   assert.equal((workflow.match(/uses: actions\/deploy-pages@v5/g) || []).length, 2);
   assert.match(workflow, /steps\.deployment\.outcome == 'failure'/);
   assert.match(workflow, /node scripts\/pages-release\.mjs stamp/);

@@ -17,7 +17,9 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Keep browser dependencies stable across ubuntu-latest image rollouts.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -45,6 +47,7 @@ jobs:
       - name: Lint
         run: npm run lint
       - name: Install browser
+        timeout-minutes: 5
         run: npx playwright install --with-deps chromium
       - name: Browser tests
         env:
@@ -70,7 +73,8 @@ jobs:
           path: dist
 
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
     needs: build
     environment:
       name: github-pages
