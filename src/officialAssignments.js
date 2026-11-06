@@ -261,9 +261,11 @@ function parseAssignmentTables(html) {
   const doc = parser.parseFromString(html, "text/html");
   const tables = Array.from(doc.querySelectorAll("table"));
 
-  for (const table of tables) {
+  // NBA and G League crews are published in separate tables on the same page.
+  // Do not stop at the first (NBA) table when the proxy is unavailable.
+  return tables.flatMap((table) => {
     const rows = Array.from(table.querySelectorAll("tr"));
-    const assignments = rows
+    return rows
       .map((row) => Array.from(row.querySelectorAll("td")).map((cell) => cell.textContent?.trim() || ""))
       .filter((cells) => cells.length >= 4)
       .map((cells) => ({
@@ -277,14 +279,8 @@ function parseAssignmentTables(html) {
         alternate: stripNumberSuffix(cells[4] || ""),
         alternateNumber: readNumberSuffix(cells[4] || ""),
       }))
-      .filter((row) => row.crewChief && row.referee && row.umpire);
-
-    if (assignments.length) {
-      return assignments;
-    }
-  }
-
-  return [];
+      .filter((row) => row.game.includes("@") && row.crewChief && row.referee && row.umpire);
+  });
 }
 
 function normalizeAssignmentsPayload(payload) {

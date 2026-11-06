@@ -2056,8 +2056,8 @@ export default function Game({ variant = "full" }) {
     if (!Number.isFinite(value)) return "0";
     return Number.isInteger(value) ? String(value) : value.toFixed(1);
   };
-  const awayChances = awayPossessions + (advancedAwayTotals.reboundsOffensive || 0);
-  const homeChances = homePossessions + (advancedHomeTotals.reboundsOffensive || 0);
+  const awayChances = awayPossessions + (advancedAwayTotals.reboundsOffensive || 0) - (advancedAwayTotals.turnovers || 0);
+  const homeChances = homePossessions + (advancedHomeTotals.reboundsOffensive || 0) - (advancedHomeTotals.turnovers || 0);
   const displayAwayChances = isPregame ? 0 : awayChances;
   const displayHomeChances = isPregame ? 0 : homeChances;
   const transitionStatsDerived = (teamTotals, possessionsCount) => ({
@@ -3017,7 +3017,7 @@ export default function Game({ variant = "full" }) {
                 <div className={styles.centerMetricDivider} />
                 <div className={styles.centerMetricRow}>
                   <span className={styles.statValue}>{game.feedAvailability?.limited ? "Unavailable" : formatChancesValue(displayAwayChances)}</span>
-                  <span className={styles.statLabel}>CHANCES</span>
+                  <span className={styles.statLabel}>Possesion Game</span>
                   <span className={styles.statValue}>{game.feedAvailability?.limited ? "Unavailable" : formatChancesValue(displayHomeChances)}</span>
                 </div>
               </div>
