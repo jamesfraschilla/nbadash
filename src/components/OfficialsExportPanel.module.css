@@ -36,6 +36,7 @@
 }
 
 .avatarFrame {
+  flex: none;
   width: 84px;
   height: 84px;
   border-radius: 14px;

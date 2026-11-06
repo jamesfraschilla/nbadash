@@ -22,5 +22,7 @@ export default function RefereeHeadshotPreview({ src, name, override, size = 84 
     image.src = src;
     return () => { active = false; };
   }, [src, override, size]);
-  return <canvas ref={canvasRef} width={size} height={size} role="img" aria-label={name} style={{ display: "block", width: "100%", height: "100%" }} />;
+  // Keep the CSS square tied to the intrinsic square, not a percentage height
+  // inside a flex item (which older iPad Safari can resolve inconsistently).
+  return <canvas ref={canvasRef} width={size} height={size} role="img" aria-label={name} style={{ display: "block", width: "100%", height: "auto", aspectRatio: "1 / 1" }} />;
 }
