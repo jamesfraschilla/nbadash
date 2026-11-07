@@ -47,10 +47,21 @@ const SUPABASE_FUNCTIONS_BASE = SUPABASE_URL
 const APP_BASE_PATH = apiEnv.BASE_URL || "/nbadash/";
 const ROSTER_CACHE_PREFIX = "nba-dashboard:roster-feed:v1:";
 const LIVE_BOXSCORE_BASE = "https://cdn.nba.com/static/json/liveData/boxscore";
-const loadEmergencyPlayByPlay = id => requestJson(`${SUPABASE_FUNCTIONS_BASE}/game-metadata`, {
-  method: "POST", headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ playByPlayGameId: id }), timeoutMs: 12000,
-});
+const loadEmergencyPlayByPlay = async id => {
+  // The primary API serves G League PBP separately from its box score. Try
+  // that league-aware endpoint before the NBA-only emergency source.
+  try {
+    const payload = await requestJson(`${API_BASE}/games/${id}/playbyplay`, { timeoutMs: 8000 });
+    if (String(payload?.gameId) !== String(id)) throw new Error("Primary play-by-play identity mismatch");
+    assertNonEmptyLiveFeed({ gameStatus: 2, playByPlayActions: payload.playByPlayActions });
+    return { game: { gameId: id, actions: payload.playByPlayActions } };
+  } catch {
+    return requestJson(`${SUPABASE_FUNCTIONS_BASE}/game-metadata`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playByPlayGameId: id }), timeoutMs: 12000,
+    });
+  }
+};
 const NBA_CUP_METADATA_BY_GAME_ID = new Map(
   (Array.isArray(nbaCupSchedule2026_27?.games) ? nbaCupSchedule2026_27.games : [])
     .map((game) => [String(game?.gameId || ""), game])
