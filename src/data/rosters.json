@@ -333,6 +333,14 @@
       "position": "G"
     },
     {
+      "personId": "1642434",
+      "firstName": "Riley",
+      "familyName": "Minix",
+      "fullName": "Riley Minix",
+      "jerseyNum": "12",
+      "position": "F"
+    },
+    {
       "personId": "1643509",
       "firstName": "Meleek",
       "familyName": "Thomas",
@@ -1369,14 +1377,6 @@
       "fullName": "Baba Miller",
       "jerseyNum": "18",
       "position": "F"
-    },
-    {
-      "personId": "1631104",
-      "firstName": "Blake",
-      "familyName": "Wesley",
-      "fullName": "Blake Wesley",
-      "jerseyNum": "20",
-      "position": "G"
     },
     {
       "personId": "1629618",
@@ -3699,6 +3699,14 @@
       "fullName": "Jerami Grant",
       "jerseyNum": "3",
       "position": "F"
+    },
+    {
+      "personId": "1643563",
+      "firstName": "Richie",
+      "familyName": "Saunders",
+      "fullName": "Richie Saunders",
+      "jerseyNum": "5",
+      "position": "G"
     },
     {
       "personId": "1642914",
