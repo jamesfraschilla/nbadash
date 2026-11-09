@@ -373,14 +373,6 @@
       "position": "G-F"
     },
     {
-      "personId": "1642400",
-      "firstName": "Tristan",
-      "familyName": "Enaruna",
-      "fullName": "Tristan Enaruna",
-      "jerseyNum": "21",
-      "position": "F"
-    },
-    {
       "personId": "1642878",
       "firstName": "Tyrese",
       "familyName": "Proctor",
@@ -3003,14 +2995,6 @@
       "position": "F"
     },
     {
-      "personId": "1642363",
-      "firstName": "Nique",
-      "familyName": "Clifford",
-      "fullName": "Nique Clifford",
-      "jerseyNum": "10",
-      "position": "G"
-    },
-    {
       "personId": "1627734",
       "firstName": "Domantas",
       "familyName": "Sabonis",
@@ -3319,6 +3303,14 @@
       "position": "G-F"
     },
     {
+      "personId": "1642363",
+      "firstName": "Nique",
+      "familyName": "Clifford",
+      "fullName": "Nique Clifford",
+      "jerseyNum": "18",
+      "position": "G"
+    },
+    {
       "personId": "1643717",
       "firstName": "Josh",
       "familyName": "Dix",
@@ -3373,14 +3365,6 @@
       "fullName": "Isaiah Hartenstein",
       "jerseyNum": "55",
       "position": "C-F"
-    },
-    {
-      "personId": "1631207",
-      "firstName": "Dalen",
-      "familyName": "Terry",
-      "fullName": "Dalen Terry",
-      "jerseyNum": "77",
-      "position": "F"
     }
   ],
   "1610612761": [
@@ -3738,14 +3722,6 @@
       "familyName": "Prosper",
       "fullName": "Olivier-Maxence Prosper",
       "jerseyNum": "18",
-      "position": "F"
-    },
-    {
-      "personId": "1643721",
-      "firstName": "Carson",
-      "familyName": "Cooper",
-      "fullName": "Carson Cooper",
-      "jerseyNum": "20",
       "position": "F"
     },
     {
