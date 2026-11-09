@@ -37,6 +37,7 @@ export function buildFreshnessSummary({
   actions = [],
   now = Date.now(),
   isFetching = false,
+  refreshFailed = false,
 } = {}) {
   const updatedAt = Number(dataUpdatedAt || 0);
   const updatedAgeMs = updatedAt > 0 ? Math.max(0, now - updatedAt) : null;
@@ -57,11 +58,12 @@ export function buildFreshnessSummary({
   if (isFetching) {
     parts.push("Syncing");
   }
+  if (refreshFailed) parts.push("Update failed · retrying");
 
   return {
     label: parts.join(" · "),
     updatedAgeMs,
     playAgeMs,
-    level: parts.length ? freshnessLevel(maxAgeMs) : "unknown",
+    level: refreshFailed ? "stale" : parts.length ? freshnessLevel(maxAgeMs) : "unknown",
   };
 }

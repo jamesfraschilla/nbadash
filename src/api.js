@@ -1872,16 +1872,15 @@ export async function fetchGame(gameId, segment = null, options = {}) {
   // Optional officials enrichment must never hold up a usable game. Roles from
   // the primary/backup remain available if this short request fails.
   const liveBoxscore = await requestJson(`${LIVE_BOXSCORE_BASE}/boxscore_${gameId}.json`, { timeoutMs: 1500 }).catch(() => null);
-  let game = segmentGame;
-  if (needsThreeQuarterFallback(segmentGame, segment)) {
+  let game = await recoverMissingLivePlayByPlay(segmentGame, loadEmergencyPlayByPlay);
+  if (needsThreeQuarterFallback(game, segment)) {
     const fullGame = await recoverMissingLivePlayByPlay(
       await requestJson(`${API_BASE}/games/${gameId}`, { timeoutMs: 8000 }),
       loadEmergencyPlayByPlay
     );
     assertNonEmptyLiveFeed(fullGame);
-    game = rebuildThreeQuarterFeed(segmentGame, fullGame);
+    game = rebuildThreeQuarterFeed(game, fullGame);
   }
-  game = await recoverMissingLivePlayByPlay(game, loadEmergencyPlayByPlay);
   if (!segment || segment === "all") assertNonEmptyLiveFeed(game);
   const liveOfficials = Array.isArray(liveBoxscore?.game?.officials)
     ? liveBoxscore.game.officials

@@ -741,6 +741,7 @@ export default function Game({ variant = "full" }) {
     data: game,
     dataUpdatedAt: gameDataUpdatedAt,
     isFetching: isGameFetching,
+    isRefetchError: isGameRefetchError,
     isLoading,
     error,
   } = useGame(gameId, {
@@ -757,13 +758,14 @@ export default function Game({ variant = "full" }) {
   });
 
   const isSummerLeagueMatch = isSummerLeagueGame(gameId);
-  const shouldShowFreshness = isGameDayPollingGame(game || gameId);
+  const shouldShowFreshness = Number(game?.gameStatus || 0) === 2 || isGameDayPollingGame(game || gameId);
   const shouldRefreshFreshnessClock = shouldShowFreshness && Number(game?.gameStatus || 0) === 2;
   const freshness = buildFreshnessSummary({
     dataUpdatedAt: gameDataUpdatedAt,
     actions: game?.playByPlayActions || [],
     now: freshnessNowMs,
     isFetching: isGameFetching,
+    refreshFailed: isGameRefetchError,
   });
 
   useEffect(() => {
