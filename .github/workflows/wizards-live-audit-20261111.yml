@@ -1,0 +1,1048 @@
+name: Wizards Pacers live API audit 20261111
+on:
+  push:
+    branches: ["audit/wizards-live-20261111"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  collector_a:
+    runs-on: ubuntu-latest
+    timeout-minutes: 260
+    env:
+      NBA_API_KEY: ${{ secrets.NBA_API_KEY }}
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install 'requests>=2.31,<3'
+      - name: Collect checkpoint 01
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-a-01
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 01
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-a-01-${{ github.run_id }}
+          path: output/wizards-a-01/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 02
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-a-02
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 02
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-a-02-${{ github.run_id }}
+          path: output/wizards-a-02/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 03
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-a-03
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 03
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-a-03-${{ github.run_id }}
+          path: output/wizards-a-03/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 04
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-a-04
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 04
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-a-04-${{ github.run_id }}
+          path: output/wizards-a-04/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 05
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-a-05
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 05
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-a-05-${{ github.run_id }}
+          path: output/wizards-a-05/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 06
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-a-06
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 06
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-a-06-${{ github.run_id }}
+          path: output/wizards-a-06/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 07
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-a-07
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 07
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-a-07-${{ github.run_id }}
+          path: output/wizards-a-07/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 08
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-a-08
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 08
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-a-08-${{ github.run_id }}
+          path: output/wizards-a-08/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 09
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-a-09
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 09
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-a-09-${{ github.run_id }}
+          path: output/wizards-a-09/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 10
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-a-10
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 10
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-a-10-${{ github.run_id }}
+          path: output/wizards-a-10/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 11
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-a-11
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 11
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-a-11-${{ github.run_id }}
+          path: output/wizards-a-11/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 12
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-a-12
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 12
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-a-12-${{ github.run_id }}
+          path: output/wizards-a-12/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 13
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-a-13
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 13
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-a-13-${{ github.run_id }}
+          path: output/wizards-a-13/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 14
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-a-14
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 14
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-a-14-${{ github.run_id }}
+          path: output/wizards-a-14/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 15
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-a-15
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 15
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-a-15-${{ github.run_id }}
+          path: output/wizards-a-15/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 16
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-a-16
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 16
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-a-16-${{ github.run_id }}
+          path: output/wizards-a-16/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 17
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-a-17
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 17
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-a-17-${{ github.run_id }}
+          path: output/wizards-a-17/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 18
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-a-18
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 18
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-a-18-${{ github.run_id }}
+          path: output/wizards-a-18/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 19
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-a-19
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 19
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-a-19-${{ github.run_id }}
+          path: output/wizards-a-19/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 20
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-a-20
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 20
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-a-20-${{ github.run_id }}
+          path: output/wizards-a-20/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 21
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-a-21
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 21
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-a-21-${{ github.run_id }}
+          path: output/wizards-a-21/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 22
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-a-22
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 22
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-a-22-${{ github.run_id }}
+          path: output/wizards-a-22/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 23
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-a-23
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 23
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-a-23-${{ github.run_id }}
+          path: output/wizards-a-23/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 24
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-a-24
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 24
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-a-24-${{ github.run_id }}
+          path: output/wizards-a-24/
+          retention-days: 14
+          if-no-files-found: warn
+  collector_b:
+    runs-on: ubuntu-latest
+    timeout-minutes: 260
+    env:
+      NBA_API_KEY: ${{ secrets.NBA_API_KEY }}
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install 'requests>=2.31,<3'
+      - name: Collect checkpoint 01
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-b-01
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 01
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-b-01-${{ github.run_id }}
+          path: output/wizards-b-01/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 02
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-b-02
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 02
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-b-02-${{ github.run_id }}
+          path: output/wizards-b-02/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 03
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-b-03
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 03
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-b-03-${{ github.run_id }}
+          path: output/wizards-b-03/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 04
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-b-04
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 04
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-b-04-${{ github.run_id }}
+          path: output/wizards-b-04/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 05
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-b-05
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 05
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-b-05-${{ github.run_id }}
+          path: output/wizards-b-05/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 06
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-b-06
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 06
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-b-06-${{ github.run_id }}
+          path: output/wizards-b-06/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 07
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-b-07
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 07
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-b-07-${{ github.run_id }}
+          path: output/wizards-b-07/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 08
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-b-08
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 08
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-b-08-${{ github.run_id }}
+          path: output/wizards-b-08/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 09
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-b-09
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 09
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-b-09-${{ github.run_id }}
+          path: output/wizards-b-09/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 10
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-b-10
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 10
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-b-10-${{ github.run_id }}
+          path: output/wizards-b-10/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 11
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-b-11
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 11
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-b-11-${{ github.run_id }}
+          path: output/wizards-b-11/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 12
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-b-12
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 12
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-b-12-${{ github.run_id }}
+          path: output/wizards-b-12/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 13
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-b-13
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 13
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-b-13-${{ github.run_id }}
+          path: output/wizards-b-13/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 14
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-b-14
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 14
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-b-14-${{ github.run_id }}
+          path: output/wizards-b-14/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 15
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-b-15
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 15
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-b-15-${{ github.run_id }}
+          path: output/wizards-b-15/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 16
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-b-16
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 16
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-b-16-${{ github.run_id }}
+          path: output/wizards-b-16/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 17
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-b-17
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 17
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-b-17-${{ github.run_id }}
+          path: output/wizards-b-17/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 18
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-b-18
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 18
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-b-18-${{ github.run_id }}
+          path: output/wizards-b-18/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 19
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-b-19
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 19
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-b-19-${{ github.run_id }}
+          path: output/wizards-b-19/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 20
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-b-20
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 20
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-b-20-${{ github.run_id }}
+          path: output/wizards-b-20/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 21
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-b-21
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 21
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-b-21-${{ github.run_id }}
+          path: output/wizards-b-21/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 22
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-b-22
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 22
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-b-22-${{ github.run_id }}
+          path: output/wizards-b-22/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 23
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-b-23
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 23
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-b-23-${{ github.run_id }}
+          path: output/wizards-b-23/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 24
+        if: always()
+        timeout-minutes: 12
+        env:
+          AUDIT_OUTPUT: output/wizards-b-24
+        run: |
+          end=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/wizards-live-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 24
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizards-0022600217-b-24-${{ github.run_id }}
+          path: output/wizards-b-24/
+          retention-days: 14
+          if-no-files-found: warn
