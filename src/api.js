@@ -38,6 +38,7 @@ const SUMMER_LEAGUE_PAGE_CACHE = new Map();
 const SUMMER_LEAGUE_GAME_URL_CACHE = new Map();
 const NBA_TEAM_BY_TRICODE = new Map(NBA_TEAMS.map((team) => [team.tricode, team]));
 const apiEnv = import.meta.env || {};
+const LOCAL_TRAILBLAZE_AUDIT = apiEnv.DEV && apiEnv.VITE_TRAILBLAZE_LOCAL_AUDIT === "1";
 const SUPABASE_URL = apiEnv.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = apiEnv.VITE_SUPABASE_ANON_KEY;
 const SUPABASE_FUNCTIONS_BASE = SUPABASE_URL
@@ -47,6 +48,11 @@ const APP_BASE_PATH = apiEnv.BASE_URL || "/nbadash/";
 const ROSTER_CACHE_PREFIX = "nba-dashboard:roster-feed:v1:";
 const LIVE_BOXSCORE_BASE = "https://cdn.nba.com/static/json/liveData/boxscore";
 const loadEmergencyPlayByPlay = async id => {
+  if (LOCAL_TRAILBLAZE_AUDIT) {
+    const pbp = await requestJson(`/local-live-feed/games/${encodeURIComponent(id)}/playbyplay`, { timeoutMs: 15000 });
+    if (String(pbp?.gameId) !== String(id)) throw new Error("Local play-by-play identity mismatch");
+    return { game: { gameId: id, actions: pbp.playByPlayActions } };
+  }
   try {
     return await requestJson(`${SUPABASE_FUNCTIONS_BASE}/game-metadata`, {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -1538,6 +1544,7 @@ async function fetchSummerLeagueGame(gameId, dateStr = null) {
 }
 
 async function requestScoreboard(date) {
+  if (LOCAL_TRAILBLAZE_AUDIT) return requestJson(`/local-live-feed/games/byDate?date=${encodeURIComponent(date)}`, { timeoutMs: 15000 });
   return requestJson(`${SUPABASE_FUNCTIONS_BASE}/scoreboard`, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ date }), timeoutMs: 20000,
@@ -1825,6 +1832,13 @@ export async function fetchTeamSeasonGames(teamId, opponentTeamId = "", season =
 }
 
 export async function fetchGame(gameId, segment = null, options = {}) {
+  if (LOCAL_TRAILBLAZE_AUDIT) {
+    const segmentParam = segment && segment !== "all" ? `?segment=${encodeURIComponent(segment)}` : "";
+    const game = await requestJson(`/local-live-feed/games/${encodeURIComponent(gameId)}${segmentParam}`, { timeoutMs: 15000 });
+    const recovered = await recoverMissingLivePlayByPlay(game, loadEmergencyPlayByPlay);
+    if (!segment || segment === "all") assertNonEmptyLiveFeed(recovered);
+    return normalizeGameMidrangeStats(normalizeSummerLeagueGameMetadata(recovered));
+  }
   const requestPrimaryGame = () => requestJson(`${SUPABASE_FUNCTIONS_BASE}/game-metadata`, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ primaryGameId: String(gameId), ...(segment && segment !== "all" ? { segment } : {}) }), timeoutMs: 45000,
@@ -1915,6 +1929,11 @@ export async function fetchGame(gameId, segment = null, options = {}) {
 
 export async function fetchMinutes(gameId, options = {}) {
   try {
+    if (LOCAL_TRAILBLAZE_AUDIT) {
+      const raw = await requestJson(`/local-live-feed/games/${encodeURIComponent(gameId)}/minutes`, { timeoutMs: 15000 });
+      const data = normalizeSummerLeagueMinutesData(gameId, raw);
+      return normalizeOpeningMinutesData(data, options.game || null);
+    }
     const response = await requestJson(`${SUPABASE_FUNCTIONS_BASE}/game-metadata`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ minutesGameId: String(gameId) }), timeoutMs: 45000,

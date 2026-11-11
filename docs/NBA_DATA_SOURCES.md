@@ -1,5 +1,16 @@
 # NBA data sources and API migration
 
+## Local Trailblaze audit
+
+For a local-only comparison against Trailblaze, start the development server with
+`VITE_TRAILBLAZE_LOCAL_AUDIT=1 npm run dev`. This routes the local browser's game
+list, game, play-by-play, and minutes requests through the Vite development
+server to Trailblaze's undocumented server functions. It does not configure a
+production fallback and does not replace the keyed NBA API. Trailblaze's
+server-function identifiers and payloads can change without notice; pregame
+minutes may be unavailable. The G League audit records raw source responses and
+dashboard-calculated totals separately for later reconciliation.
+
 This guide describes the code in this checkout, including changes that may not yet be deployed. Check the deployed revision and secrets before assuming production behaves the same way. The old CloudFront game-feed hostname is no longer referenced by application or job code in this checkout; historical documents and regression tests may still mention it.
 
 ## Keyed NBA API

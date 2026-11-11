@@ -1,8 +1,9 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { trailblazeDevProxy } from "./scripts/trailblaze-dev-proxy.js";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), trailblazeDevProxy()],
   base: "/nbadash/",
   build: {
     rollupOptions: {
