@@ -129,5 +129,9 @@ def main():
     with (ROOT/'timeline.jsonl').open('a') as f: f.write(json.dumps(batch,default=str)+'\n')
     (ROOT/'latest.json').write_text(json.dumps(batch,indent=2,default=str)+'\n')
     print(now.isoformat(), ' '.join(x['source']+':'+str(x.get('status','network'))+('/error' if x.get('error') else '') for x in results),flush=True)
+    for result in results:
+        if result['source'] in ('trail_game','trail_pbp','trail_minutes','gleague_pbp','gleague_box','gleague_rotation','espn_scoreboard'):
+            fields=('source','status','error','game_status','period','clock','away','home','actions','periods','stints','home_box_players','away_box_players','competitors')
+            print('LIVE',json.dumps({k:result[k] for k in fields if k in result},default=str),flush=True)
 
 if __name__=='__main__': main()
