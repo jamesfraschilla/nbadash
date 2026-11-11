@@ -1,0 +1,598 @@
+name: G League emergency live-feed audit 2052600033
+on:
+  push:
+    branches: ["audit/gleague-2052600033"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  arm_a:
+    runs-on: ubuntu-latest
+    timeout-minutes: 220
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install 'requests>=2.31,<3'
+      - name: Record initial cloud sample
+        env:
+          AUDIT_OUTPUT: output/arm-a
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: python scripts/gleague-feed-audit.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gleague-2052600033-arm-a-${{ github.run_id }}
+          path: output/arm-a/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Hold independently until 12.10 p.m. Eastern
+        run: |
+          python - <<'PYARM'
+          import datetime, time
+          target=datetime.datetime(2026,11,11,17,10,tzinfo=datetime.timezone.utc).timestamp()
+          print('Armed for 2026-11-11 17:10 UTC',flush=True)
+          while time.time()<target: time.sleep(min(60,max(0,target-time.time())))
+          PYARM
+  arm_b:
+    runs-on: ubuntu-latest
+    timeout-minutes: 220
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install 'requests>=2.31,<3'
+      - name: Record initial cloud sample
+        env:
+          AUDIT_OUTPUT: output/arm-b
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: python scripts/gleague-feed-audit.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gleague-2052600033-arm-b-${{ github.run_id }}
+          path: output/arm-b/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Hold independently until 12.10 p.m. Eastern
+        run: |
+          python - <<'PYARM'
+          import datetime, time
+          target=datetime.datetime(2026,11,11,17,10,tzinfo=datetime.timezone.utc).timestamp()
+          print('Armed for 2026-11-11 17:10 UTC',flush=True)
+          while time.time()<target: time.sleep(min(60,max(0,target-time.time())))
+          PYARM
+  collect_a:
+    needs: arm_a
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    env:
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install 'requests>=2.31,<3'
+      - name: Collect checkpoint 01
+        if: always()
+        timeout-minutes: 27
+        env:
+          AUDIT_OUTPUT: output/a-01
+        run: |
+          end=$(( $(date +%s) + 1500 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/gleague-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 01
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gleague-2052600033-a-01-${{ github.run_id }}
+          path: output/a-01/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 02
+        if: always()
+        timeout-minutes: 27
+        env:
+          AUDIT_OUTPUT: output/a-02
+        run: |
+          end=$(( $(date +%s) + 1500 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/gleague-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 02
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gleague-2052600033-a-02-${{ github.run_id }}
+          path: output/a-02/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 03
+        if: always()
+        timeout-minutes: 27
+        env:
+          AUDIT_OUTPUT: output/a-03
+        run: |
+          end=$(( $(date +%s) + 1500 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/gleague-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 03
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gleague-2052600033-a-03-${{ github.run_id }}
+          path: output/a-03/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 04
+        if: always()
+        timeout-minutes: 27
+        env:
+          AUDIT_OUTPUT: output/a-04
+        run: |
+          end=$(( $(date +%s) + 1500 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/gleague-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 04
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gleague-2052600033-a-04-${{ github.run_id }}
+          path: output/a-04/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 05
+        if: always()
+        timeout-minutes: 27
+        env:
+          AUDIT_OUTPUT: output/a-05
+        run: |
+          end=$(( $(date +%s) + 1500 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/gleague-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 05
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gleague-2052600033-a-05-${{ github.run_id }}
+          path: output/a-05/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 06
+        if: always()
+        timeout-minutes: 27
+        env:
+          AUDIT_OUTPUT: output/a-06
+        run: |
+          end=$(( $(date +%s) + 1500 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/gleague-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 06
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gleague-2052600033-a-06-${{ github.run_id }}
+          path: output/a-06/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 07
+        if: always()
+        timeout-minutes: 27
+        env:
+          AUDIT_OUTPUT: output/a-07
+        run: |
+          end=$(( $(date +%s) + 1500 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/gleague-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 07
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gleague-2052600033-a-07-${{ github.run_id }}
+          path: output/a-07/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 08
+        if: always()
+        timeout-minutes: 27
+        env:
+          AUDIT_OUTPUT: output/a-08
+        run: |
+          end=$(( $(date +%s) + 1500 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/gleague-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 08
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gleague-2052600033-a-08-${{ github.run_id }}
+          path: output/a-08/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 09
+        if: always()
+        timeout-minutes: 27
+        env:
+          AUDIT_OUTPUT: output/a-09
+        run: |
+          end=$(( $(date +%s) + 1500 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/gleague-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 09
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gleague-2052600033-a-09-${{ github.run_id }}
+          path: output/a-09/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 10
+        if: always()
+        timeout-minutes: 27
+        env:
+          AUDIT_OUTPUT: output/a-10
+        run: |
+          end=$(( $(date +%s) + 1500 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/gleague-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 10
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gleague-2052600033-a-10-${{ github.run_id }}
+          path: output/a-10/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 11
+        if: always()
+        timeout-minutes: 27
+        env:
+          AUDIT_OUTPUT: output/a-11
+        run: |
+          end=$(( $(date +%s) + 1500 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/gleague-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 11
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gleague-2052600033-a-11-${{ github.run_id }}
+          path: output/a-11/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 12
+        if: always()
+        timeout-minutes: 27
+        env:
+          AUDIT_OUTPUT: output/a-12
+        run: |
+          end=$(( $(date +%s) + 1500 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/gleague-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 12
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gleague-2052600033-a-12-${{ github.run_id }}
+          path: output/a-12/
+          retention-days: 14
+          if-no-files-found: warn
+  collect_b:
+    needs: arm_b
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    env:
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install 'requests>=2.31,<3'
+      - name: Collect checkpoint 01
+        if: always()
+        timeout-minutes: 27
+        env:
+          AUDIT_OUTPUT: output/b-01
+        run: |
+          end=$(( $(date +%s) + 1500 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/gleague-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 01
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gleague-2052600033-b-01-${{ github.run_id }}
+          path: output/b-01/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 02
+        if: always()
+        timeout-minutes: 27
+        env:
+          AUDIT_OUTPUT: output/b-02
+        run: |
+          end=$(( $(date +%s) + 1500 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/gleague-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 02
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gleague-2052600033-b-02-${{ github.run_id }}
+          path: output/b-02/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 03
+        if: always()
+        timeout-minutes: 27
+        env:
+          AUDIT_OUTPUT: output/b-03
+        run: |
+          end=$(( $(date +%s) + 1500 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/gleague-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 03
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gleague-2052600033-b-03-${{ github.run_id }}
+          path: output/b-03/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 04
+        if: always()
+        timeout-minutes: 27
+        env:
+          AUDIT_OUTPUT: output/b-04
+        run: |
+          end=$(( $(date +%s) + 1500 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/gleague-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 04
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gleague-2052600033-b-04-${{ github.run_id }}
+          path: output/b-04/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 05
+        if: always()
+        timeout-minutes: 27
+        env:
+          AUDIT_OUTPUT: output/b-05
+        run: |
+          end=$(( $(date +%s) + 1500 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/gleague-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 05
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gleague-2052600033-b-05-${{ github.run_id }}
+          path: output/b-05/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 06
+        if: always()
+        timeout-minutes: 27
+        env:
+          AUDIT_OUTPUT: output/b-06
+        run: |
+          end=$(( $(date +%s) + 1500 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/gleague-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 06
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gleague-2052600033-b-06-${{ github.run_id }}
+          path: output/b-06/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 07
+        if: always()
+        timeout-minutes: 27
+        env:
+          AUDIT_OUTPUT: output/b-07
+        run: |
+          end=$(( $(date +%s) + 1500 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/gleague-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 07
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gleague-2052600033-b-07-${{ github.run_id }}
+          path: output/b-07/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 08
+        if: always()
+        timeout-minutes: 27
+        env:
+          AUDIT_OUTPUT: output/b-08
+        run: |
+          end=$(( $(date +%s) + 1500 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/gleague-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 08
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gleague-2052600033-b-08-${{ github.run_id }}
+          path: output/b-08/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 09
+        if: always()
+        timeout-minutes: 27
+        env:
+          AUDIT_OUTPUT: output/b-09
+        run: |
+          end=$(( $(date +%s) + 1500 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/gleague-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 09
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gleague-2052600033-b-09-${{ github.run_id }}
+          path: output/b-09/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 10
+        if: always()
+        timeout-minutes: 27
+        env:
+          AUDIT_OUTPUT: output/b-10
+        run: |
+          end=$(( $(date +%s) + 1500 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/gleague-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 10
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gleague-2052600033-b-10-${{ github.run_id }}
+          path: output/b-10/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 11
+        if: always()
+        timeout-minutes: 27
+        env:
+          AUDIT_OUTPUT: output/b-11
+        run: |
+          end=$(( $(date +%s) + 1500 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/gleague-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 11
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gleague-2052600033-b-11-${{ github.run_id }}
+          path: output/b-11/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Collect checkpoint 12
+        if: always()
+        timeout-minutes: 27
+        env:
+          AUDIT_OUTPUT: output/b-12
+        run: |
+          end=$(( $(date +%s) + 1500 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            started=$(date +%s)
+            python scripts/gleague-feed-audit.py || true
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -lt 60 ]; then sleep $((60 - elapsed)); fi
+          done
+      - name: Save checkpoint 12
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gleague-2052600033-b-12-${{ github.run_id }}
+          path: output/b-12/
+          retention-days: 14
+          if-no-files-found: warn
