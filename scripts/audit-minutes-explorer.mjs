@@ -1,3 +1,5 @@
+import { fetchNbaMinutes } from "../supabase/functions/_shared/nbaMinutes.js";
+import { fetchNbaGame } from "../supabase/functions/_shared/nbaGame.js";
 // Read-only audit against the currently published game and NBA PBP feeds.
 import fs from "node:fs";
 import path from "node:path";
@@ -24,9 +26,9 @@ const get = async (url, options = {}) => {
 };
 for (const gameId of args.length ? args : ["0022600015"]) {
   if (!/^\d{10}$/.test(gameId)) throw new Error("Expected a ten-digit game ID.");
-  const base = `https://d1rjt2wyntx8o7.cloudfront.net/api/games/${gameId}`;
-  const [minutes, game, pbp, nba] = await Promise.all([
-    get(`${base}/minutes`), get(base),
+  const game = await fetchNbaGame(gameId, process.env.NBA_API_KEY || env.NBA_API_KEY);
+  const [minutes, pbp, nba] = await Promise.all([
+    fetchNbaMinutes(game, process.env.NBA_API_KEY || env.NBA_API_KEY),
     get(`${env.VITE_SUPABASE_URL}/functions/v1/game-metadata`, { method: "POST",
       headers: { "Content-Type": "application/json", apikey: env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${env.VITE_SUPABASE_ANON_KEY}` },
       body: JSON.stringify({ playByPlayGameId: gameId }) }),

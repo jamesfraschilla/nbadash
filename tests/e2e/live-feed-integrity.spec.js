@@ -6,16 +6,12 @@ test("an empty live refetch retains cached game data and the next valid response
     homeTeam: { teamId: 1, score: 80 }, awayTeam: { teamId: 2, score: 68 },
     boxScore: { home: { players: [] }, away: { players: [] } },
     playByPlayActions: [{ period: 4, actionType: "2pt", scoreHome: "80", scoreAway: "68" }] };
-  await page.route("**/api/games/0022600119", (route) => route.fulfill({ json: empty ? { ...game, playByPlayActions: [] } : game }));
   await page.route("**/boxscore_*.json", (route) => route.fulfill({ json: {} }));
-  // This case intentionally tests ALL sources being empty. Never let a
-  // recovery endpoint read a real game while the primary feed is a fixture.
-  await page.route("**/api/games/0022600119/playbyplay", (route) => route.fulfill({
-    json: { gameId: game.gameId, playByPlayActions: [] },
-  }));
-  await page.route("**/game-metadata", (route) => route.fulfill({
-    json: { game: { gameId: game.gameId, actions: [] } },
-  }));
+  await page.route("**/game-metadata", (route) => {
+    const body = route.request().postDataJSON();
+    if ((body.primaryPlayByPlayGameId || body.playByPlayGameId)) return route.fulfill({ json: { game: { gameId: game.gameId, actions: [] } } });
+    return route.fulfill({ json: { game: empty ? { ...game, playByPlayActions: [] } : game } });
+  });
   await page.goto("visual-test.html");
   await page.evaluate(async () => {
     const { QueryClient } = await import("/nbadash/node_modules/.vite/deps/@tanstack_react-query.js");
@@ -43,13 +39,11 @@ test("an empty live refetch retains cached game data and the next valid response
 test("G League game recovers split play-by-play for live and final snapshots", async ({ page }) => {
   let status = 2;
   const gameId = "2052600011";
-  await page.route(`**/api/games/${gameId}`, (route) => route.fulfill({ json: {
-    gameId, gameStatus: status, homeTeam: { teamId: 1, score: 12 }, awayTeam: { teamId: 2, score: 10 },
-    boxScore: { home: { players: [], totals: {} }, away: { players: [], totals: {} } },
-  } }));
-  await page.route(`**/api/games/${gameId}/playbyplay`, (route) => route.fulfill({ json: {
-    gameId, playByPlayActions: [{ actionNumber: 12, period: 1, actionType: "2pt" }],
-  } }));
+  await page.route("**/game-metadata", route => {
+    const body = route.request().postDataJSON();
+    if ((body.primaryPlayByPlayGameId || body.playByPlayGameId)) return route.fulfill({ json: { game: { gameId, actions: [{ actionNumber: 12, period: 1, actionType: "2pt" }] } } });
+    return route.fulfill({ json: { game: { gameId, gameStatus: status, homeTeam: { teamId: 1, score: 12 }, awayTeam: { teamId: 2, score: 10 }, boxScore: { home: { players: [], totals: {} }, away: { players: [], totals: {} } } } } });
+  });
   await page.route("**/boxscore_*.json", (route) => route.fulfill({ json: {} }));
   await page.goto("visual-test.html");
   for (const gameStatus of [2, 3]) {
@@ -73,14 +67,12 @@ test("a split feed repairs an empty three-quarter segment without including the 
   const game = { gameId, gameStatus: 3, period: 4, gameClock: "PT00M00.00S",
     homeTeam: { teamId: 1, score: 4 }, awayTeam: { teamId: 2, score: 3 },
     boxScore: { home: { players: [{ personId: 10 }], totals: { points: 4 } }, away: { players: [{ personId: 20 }], totals: { points: 3 } } } };
-  await page.route(`**/api/games/${gameId}**`, (route) => {
-    const url = new URL(route.request().url());
-    if (url.pathname.endsWith("/playbyplay")) return route.fulfill({ json: { gameId, playByPlayActions: actions } });
-    if (url.searchParams.has("segment")) return route.fulfill({ json: { ...game, boxScore: {
-      home: { players: [{ personId: 10 }], totals: { points: 0 } },
-      away: { players: [{ personId: 20 }], totals: { points: 0 } },
-    } } });
-    return route.fulfill({ json: game });
+  await page.route("**/game-metadata", (route) => {
+    const body = route.request().postDataJSON();
+    if ((body.primaryPlayByPlayGameId || body.playByPlayGameId)) return route.fulfill({ json: { game: { gameId, actions } } });
+    return route.fulfill({ json: { game: body.segment ? { ...game, playByPlayActions: actions, segmentDataQuality: { source: "nba-period-boxscore" }, boxScore: {
+      home: { players: [{ personId: 10 }], totals: { points: 0 } }, away: { players: [{ personId: 20 }], totals: { points: 0 } },
+    } } : { ...game, playByPlayActions: actions } } });
   });
   await page.route("**/boxscore_*.json", (route) => route.fulfill({ json: {} }));
   await page.goto("visual-test.html");

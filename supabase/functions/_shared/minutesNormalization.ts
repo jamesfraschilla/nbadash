@@ -257,6 +257,7 @@ function repairOpeningQuarter(data: Row | null, game: Row | null, rebuild = fals
 // scores are rebased to the real period's opening score, so Q2/OT points
 // cannot accidentally include earlier quarters.
 export function normalizeOpeningMinutesData(data: Row | null, game: Row | null): Row | null {
+  if (data?.source === "nba-rosterlineup-pbp") return data;
   data = repairOpeningQuarter(data, game);
   if (!data || !game?.playByPlayActions?.length) return data;
   let changed = false;

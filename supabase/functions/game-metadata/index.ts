@@ -1,5 +1,6 @@
+import { fetchNbaMinutes } from "../_shared/nbaMinutes.js";
+import { fetchNbaGame, fetchNbaSegmentBox, fetchNbaPlayByPlay } from "../_shared/nbaGame.js";
 import { fetchNbaLiveRecovery } from "../_shared/nbaLiveRecovery.ts";
-const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const MAX_GAME_IDS = 200;
 const REQUEST_DEADLINE_MS = 15_000;
 
@@ -38,12 +39,49 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return jsonResponse(405, { error: "Method not allowed" });
   try {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+    if (body.minutesGameId != null) {
+      const gameId = String(body.minutesGameId);
+      if (!/^\d{10}$/.test(gameId)) return jsonResponse(400, { error: "Invalid game ID" });
+      try {
+        const key = Deno.env.get("NBA_API_KEY") || "";
+        const game = await fetchNbaGame(gameId, key);
+        const minutes = await fetchNbaMinutes(game, key);
+        return new Response(JSON.stringify({ minutes }), { headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "private, max-age=10" } });
+      } catch (error) {
+        console.error("Minutes reconstruction unavailable", error instanceof Error ? error.message : "unknown error");
+        return jsonResponse(503, { error: "Minutes data could not be verified; please retry" });
+      }
+    }
     if (body.liveGameId != null) {
       const gameId = String(body.liveGameId);
       if (!/^\d{10}$/.test(gameId)) return jsonResponse(400, { error: "Invalid game ID" });
       const game = await fetchNbaLiveRecovery(gameId);
       return new Response(JSON.stringify({ game }), { headers: { ...corsHeaders,
         "Content-Type": "application/json", "Cache-Control": "private, max-age=10" } });
+    }
+    if (body.primaryGameId != null) {
+      const gameId = String(body.primaryGameId);
+      if (!/^\d{10}$/.test(gameId)) return jsonResponse(400, { error: "Invalid game ID" });
+      const key = Deno.env.get("NBA_API_KEY") || "";
+      let game = await fetchNbaGame(gameId, key);
+      if (body.segment && Number(game.gameStatus) === 3) {
+        game = await fetchNbaSegmentBox(game, String(body.segment), key);
+      }
+      return new Response(JSON.stringify({ game }), { headers: { ...corsHeaders,
+        "Content-Type": "application/json", "Cache-Control": "private, max-age=10" } });
+    }
+    if (body.primaryPlayByPlayGameId != null) {
+      const gameId = String(body.primaryPlayByPlayGameId);
+      if (!/^\d{10}$/.test(gameId)) return jsonResponse(400, { error: "Invalid game ID" });
+      try {
+        const payload = await fetchNbaPlayByPlay(gameId, Deno.env.get("NBA_API_KEY") || "");
+        return new Response(JSON.stringify(payload), { headers: {
+          ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "private, max-age=10",
+        } });
+      } catch (error) {
+        console.error("Play-by-play recovery unavailable", error instanceof Error ? error.message : "unknown error");
+        return jsonResponse(503, { error: "NBA play-by-play temporarily unavailable; please retry" });
+      }
     }
     if (body.playByPlayGameId != null) {
       const gameId = String(body.playByPlayGameId);
@@ -74,12 +112,8 @@ Deno.serve(async (req) => {
     try {
       results = await mapSettledWithConcurrency(gameIds, async (gameId) => {
         if (globalController.signal.aborted) throw new Error("Batch deadline reached");
-        const response = await fetch(`${API_BASE}/games/${encodeURIComponent(gameId)}`, {
-          headers: { Accept: "application/json" },
-          signal: globalController.signal,
-        });
-        if (!response.ok) throw new Error(`Game request failed (${response.status})`);
-        return { gameId, game: await response.json() };
+        const game = await fetchNbaGame(gameId, Deno.env.get("NBA_API_KEY") || "");
+        return { gameId, game };
       }, 8);
     } finally {
       clearTimeout(deadlineId);

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { fetchNbaGame } from "../supabase/functions/_shared/nbaGame.js";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -10,7 +11,6 @@ import { enrichChallengeEventsWithOfficials } from "../src/officiatingChallengeM
 import { detectCoachChallengeActions, extractOfficialCallEvents } from "../src/officiatingParser.js";
 import { recoverOfficialReviewMarkers } from "../src/officiatingSourceRecovery.js";
 
-const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const STATS_API_URL = "https://stats.nba.com/stats/leaguegamefinder";
 const WIZARDS_TEAM_ID = "1610612764";
 const DEFAULT_SEASON = "2025-26";
@@ -280,10 +280,7 @@ async function discoverLeagueGameIds({ season, seasonTypes, teamIds, maxGames, c
 async function fetchGame(gameId, options = {}) {
   try {
     const [game, liveBoxscore, statsActions] = await Promise.all([
-      fetchJson(`${API_BASE}/games/${encodeURIComponent(gameId)}`, {
-        timeoutMs: 12_000,
-        retries: 1,
-      }),
+      fetchNbaGame(gameId, process.env.NBA_API_KEY),
       fetchJson(`https://cdn.nba.com/static/json/liveData/boxscore/boxscore_${encodeURIComponent(gameId)}.json`, {
         headers: NBA_REQUEST_HEADERS,
         timeoutMs: 12_000,
@@ -298,7 +295,7 @@ async function fetchGame(gameId, options = {}) {
       playByPlayActions: statsActions.length
         ? mergeChallengeActions(statsActions, game.playByPlayActions)
         : game.playByPlayActions,
-      source: statsActions.length ? `${game.source || "cloudfront"}+stats_playbyplayv3` : game.source,
+      source: statsActions.length ? `${game.source || "nba-api"}+stats_playbyplayv3` : game.source,
     };
     if (!extractOfficialCallEvents(resolved).length) {
       const live = await fetchJson(`https://cdn.nba.com/static/json/liveData/playbyplay/playbyplay_${encodeURIComponent(gameId)}.json`, {
@@ -317,8 +314,8 @@ async function fetchGame(gameId, options = {}) {
       resolved.playByPlayActions = recoverOfficialReviewMarkers(resolved, page.playByPlay?.actions || []);
     }
     return resolved;
-  } catch (cloudfrontError) {
-    const firstMessage = cloudfrontError instanceof Error ? cloudfrontError.message : "CloudFront fetch failed";
+  } catch (gameFeedError) {
+    const firstMessage = gameFeedError instanceof Error ? gameFeedError.message : "NBA game feed failed";
     if (firstMessage.includes("failed (404)")) {
       throw new Error(firstMessage);
     }

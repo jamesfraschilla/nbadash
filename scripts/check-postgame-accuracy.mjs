@@ -1,3 +1,5 @@
+import { fetchNbaMinutes } from "../supabase/functions/_shared/nbaMinutes.js";
+import { fetchScoreboard } from "../supabase/functions/_shared/scoreboard.js";
 // Daily read-only sample: every recent WAS final plus three other NBA finals.
 // No model calls, cache refreshes, original-call guesses, or database writes.
 import {mkdir,writeFile} from "node:fs/promises";
@@ -11,15 +13,13 @@ import {buildMinutesExplorer} from "../src/minutesExplorer.js";
 const runFile=promisify(execFile);
 const db=createClient(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false}});
 const report={checkedAt:new Date().toISOString(),scope:"Recent WAS finals and three other NBA finals; not exhaustive league-wide certification",findings:[],games:[]};
-const api="https://d1rjt2wyntx8o7.cloudfront.net/api";
-async function json(url) {const r=await fetch(url,{signal:AbortSignal.timeout(15000)});if(!r.ok)throw Error(`HTTP ${r.status}`);return r.json();}
 function data(result){if(result.error)throw Error(result.error.message);return result.data;}
 const isWas=game=>[game.homeTeam,game.awayTeam].some(team=>String(team?.teamId)==="1610612764" || team?.teamTricode==="WAS");
 const games=new Map();
 try {
   for(let offset=1;offset<=2;offset++) {
     const date=new Date(Date.now()-offset*86400000).toLocaleDateString("en-CA",{timeZone:"America/New_York"});
-    const list=await json(`${api}/games/byDate?date=${date}`);
+    const list=await fetchScoreboard(date, process.env.NBA_API_KEY);
     if(!Array.isArray(list))throw Error("Invalid scoreboard contract");
     for(const g of list)if(Number(g.gameStatus)===3 && /^002|^004/.test(String(g.gameId)))games.set(String(g.gameId),g);
   }
@@ -55,7 +55,7 @@ for(const [gameId,listed] of selected) {
     const calls=data(await db.from("nba_official_call_events").select("id").eq("game_id",gameId).limit(1));
     if(!calls.length)finding("call-ingestion","No officiating call events were stored for this final game.");
     if(check.wizards) {
-      const minutes=normalizeOpeningMinutesData(await json(`${api}/games/${gameId}/minutes`),game);
+      const minutes=normalizeOpeningMinutesData(await fetchNbaMinutes(game, process.env.NBA_API_KEY),game);
       for(const issue of buildMinutesExplorer(minutes,game).issues)finding("minutes",issue);
       check.checks.push("minutes, lineup and player +/- reconciliation checked");
       const recaps=data(await db.from("game_analysis_segments").select("segment_key,source").eq("game_id",gameId));

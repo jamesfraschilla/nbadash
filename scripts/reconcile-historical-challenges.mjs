@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { fetchNbaGame } from "../supabase/functions/_shared/nbaGame.js";
+import { fetchScoreboard } from "../supabase/functions/_shared/scoreboard.js";
 // Source collection is bounded to four external requests; database writes are
 // sequential, optimistic, backed up, and limited to challenge records.
 import { readFile, writeFile, appendFile, mkdir, mkdtemp, rm } from "node:fs/promises";
@@ -75,9 +77,7 @@ for (const doc of docs) {
     // independently ingested date/matchup assignment, never the clip ID alone.
     let gameId = scheduled.size === 1 ? [...scheduled][0] : candidates.size === 1 ? [...candidates][0] : pdf.game_id;
     if (!gameId) {
-      const response = await fetch(`https://d1rjt2wyntx8o7.cloudfront.net/api/games/byDate?date=${gameDate}`, { signal: AbortSignal.timeout(15000) });
-      if (!response.ok) throw Error(`Unable to resolve missing game ID for ${gameDate}`);
-      const schedule = await response.json();
+      const schedule = await fetchScoreboard(gameDate, process.env.NBA_API_KEY);
       const matches = schedule.filter(g => g.homeTeam?.teamTricode === pdf.home_team && g.awayTeam?.teamTricode === pdf.away_team);
       if (matches.length === 1) gameId = matches[0].gameId;
     }
@@ -160,9 +160,7 @@ async function fetchSources(gameId, challenge) {
   const url = `https://statsdmz.nba.com/pdfs/${day}/${day}_${challenge.away_team}${challenge.home_team}_book.pdf`;
   const pdfPath = path.join(work, `${gameId}.pdf`);
   const [game, book] = await Promise.all([
-    fetch(`https://d1rjt2wyntx8o7.cloudfront.net/api/games/${gameId}`, { signal: AbortSignal.timeout(15000) }).then(async r => {
-      if (!r.ok) throw Error(`Game feed HTTP ${r.status}`);
-      const g = await r.json();
+    fetchNbaGame(gameId, process.env.NBA_API_KEY).then(g => {
       if (String(g.gameId) !== gameId || !g.playByPlayActions?.length) throw Error("Invalid or empty game feed");
       if (g.homeTeam?.teamTricode !== challenge.home_team || g.awayTeam?.teamTricode !== challenge.away_team) throw Error("Feed game ID disagrees with PDF matchup");
       return { gameId, homeTeam: { teamTricode: challenge.home_team }, awayTeam: { teamTricode: challenge.away_team }, officials: g.officials, playByPlayActions: g.playByPlayActions };

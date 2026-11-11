@@ -1,3 +1,5 @@
+import { fetchNbaMinutes } from "../supabase/functions/_shared/nbaMinutes.js";
+import { fetchNbaGame } from "../supabase/functions/_shared/nbaGame.js";
 // Read-only replay of saved recaps through current feature extraction/guards.
 import { __test__ } from "../supabase/functions/game-analysis/index.ts";
 import { normalizeOpeningMinutesData } from "../supabase/functions/_shared/minutesNormalization.ts";
@@ -18,11 +20,11 @@ const request = async (url:string, options:RequestInit={})=>{
   if(!response.ok) throw new Error(`HTTP ${response.status}`);
   return response.json();
 };
-const game=await request(`https://d1rjt2wyntx8o7.cloudfront.net/api/games/${gameId}`);
+const game=await fetchNbaGame(gameId, process.env.NBA_API_KEY);
 const proxy=await request(`${url}/functions/v1/game-metadata`,{method:"POST",headers:{apikey:key,authorization:`Bearer ${key}`,"content-type":"application/json"},body:JSON.stringify({playByPlayGameId:gameId})});
 if(String(game.gameId)!==gameId||String(proxy.game?.gameId)!==gameId||!proxy.game.actions?.length)throw new Error("Invalid game or PBP identity");
 game.playByPlayActions=proxy.game.actions;
-const minutes=normalizeOpeningMinutesData(await request(`https://d1rjt2wyntx8o7.cloudfront.net/api/games/${gameId}/minutes`),game);
+const minutes=normalizeOpeningMinutesData(await fetchNbaMinutes(game, process.env.NBA_API_KEY),game);
 const rows=await request(`${url}/rest/v1/game_analysis_segments?game_id=eq.${gameId}&select=segment_key,result,source`,{headers:{apikey:key,authorization:`Bearer ${key}`}});
 const ranges:Record<string,number[]>={q1:[1,1],q2:[2,2],q3:[3,3],q4:[4,4],"first-half":[1,2],"second-half":[3,4],"q1-q3":[1,3],all:[1,Number(game.period)]};
 for(const row of rows){

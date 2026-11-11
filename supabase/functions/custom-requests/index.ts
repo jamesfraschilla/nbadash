@@ -1,9 +1,11 @@
+import { fetchNbaMinutes } from "../_shared/nbaMinutes.js";
+import { fetchNbaGame } from "../_shared/nbaGame.js";
+import { fetchScoreboard } from "../_shared/scoreboard.js";
 import rosterSnapshotByTeam from "./rosterSnapshotByTeam.json" with { type: "json" };
 import leagueTeamGameKillsBySeason from "./leagueTeamGameKillsBySeason.json" with { type: "json" };
 import { requestBodyTooLarge, requireActiveRateLimitedUser } from "../_shared/requestSecurity.ts";
 import { needsOpeningStintRepair, normalizeOpeningMinutesData } from "../_shared/minutesNormalization.ts";
 
-const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const OPENAI_API_URL = "https://api.openai.com/v1/responses";
 const DEFAULT_OPENAI_MODEL =
   Deno.env.get("OPENAI_SCOUTING_MODEL") ||
@@ -802,7 +804,7 @@ function isPreseasonGame(game: Record<string, unknown>) {
 }
 
 async function fetchGamesByDate(dateStr: string) {
-  return requestJson(`${API_BASE}/games/byDate?date=${dateStr}`).catch(() => []);
+  return fetchScoreboard(dateStr, Deno.env.get("NBA_API_KEY") || "").catch(() => []);
 }
 
 async function hasPreseasonStartedForSeasonStartYear(startYear: number, date = new Date()) {
@@ -942,7 +944,7 @@ async function fetchGameDetailsWithRetry(gameId: string, maxAttempts = 3) {
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      const game = await requestJson(`${API_BASE}/games/${gameId}`) as Record<string, unknown>;
+      const game = await fetchNbaGame(gameId, Deno.env.get("NBA_API_KEY") || "") as Record<string, unknown>;
       if (isSuspiciousGamePayload(game)) {
         throw new Error(`Incomplete game payload for ${gameId}.`);
       }
@@ -999,7 +1001,8 @@ async function fetchMinutesWithRetry(gameId: string, maxAttempts = 3) {
   let lastError: Error | null = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      return await requestJson(`${API_BASE}/games/${gameId}/minutes`) as Record<string, unknown>;
+      const game = await fetchNbaGame(gameId, Deno.env.get("NBA_API_KEY") || "");
+      return await fetchNbaMinutes(game, Deno.env.get("NBA_API_KEY") || "") as Record<string, unknown>;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
       if (attempt < maxAttempts) {

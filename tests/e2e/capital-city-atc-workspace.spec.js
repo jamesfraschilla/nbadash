@@ -4,17 +4,19 @@ async function setup(context, { capitalCity = true } = {}) {
   const saved = new Map();
   const writes = [];
   let failSave = false;
-  await context.route("**/api/games/**", route => {
-    if (route.request().url().includes("byDate")) return route.fulfill({ json: [] });
-    const gameId = new URL(route.request().url()).pathname.split("/").at(-1);
-    return route.fulfill({ json: { gameId, gameStatus: 3, period: 4, gameClock: "PT00M00.00S",
+
+  await context.route("**/functions/v1/**", route => route.fulfill({ json: {} }));
+  await context.route("**/functions/v1/game-metadata", route => {
+    const body = route.request().postDataJSON();
+    if (!(body.primaryGameId || body.liveGameId)) return route.fulfill({ status: 503, json: {} });
+    const gameId = (body.primaryGameId || body.liveGameId);
+    return route.fulfill({ json: { game: { gameId, gameStatus: 3, period: 4, gameClock: "PT00M00.00S",
       homeTeam: { teamId: capitalCity ? "1612709928" : "1610612764", teamName: capitalCity ? "Go-Go" : "Wizards", teamCity: capitalCity ? "Capital City" : "Washington", teamTricode: capitalCity ? "CCG" : "WAS" },
       awayTeam: { teamId: "1612709909", teamName: "Opponent", teamTricode: "OPP" },
       playByPlayActions: [{ actionNumber: 1, actionType: "period", subType: "start", period: 1, clock: "PT12M00.00S" }],
       boxScore: { home: { players: [], totals: {} }, away: { players: [], totals: {} } },
-      officials: [], teamStats: { home: {}, away: {} } } });
+      officials: [], teamStats: { home: {}, away: {} } } } });
   });
-  await context.route("**/functions/v1/**", route => route.fulfill({ json: {} }));
   await context.route("**/boxscore_*.json", route => route.fulfill({ json: {} }));
   await context.route("**/rest/v1/**", route => {
     const request = route.request();

@@ -1,4 +1,5 @@
-const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
+import { fetchNbaGame } from "../supabase/functions/_shared/nbaGame.js";
+import { fetchScoreboard } from "../supabase/functions/_shared/scoreboard.js";
 
 const START_DATE = "2024-10-01";
 const END_DATE = "2026-04-20";
@@ -245,7 +246,7 @@ async function mapWithConcurrency(items, concurrency, worker) {
 async function fetchGamesForDates(dates) {
   const gameLists = await mapWithConcurrency(dates, CONCURRENCY, async (date) => {
     try {
-      const games = await fetchJsonWithRetries(`${API_BASE}/games/byDate?date=${date}`);
+      const games = await fetchScoreboard(date, process.env.NBA_API_KEY);
       return (games || []).filter((game) => isNbaGame(game) && isTrackedSeasonType(game));
     } catch {
       return [];
@@ -349,7 +350,7 @@ async function main() {
       console.error(`Fetching game ${index + 1}/${scheduledGames.length}...`);
     }
     try {
-      return await fetchJsonWithRetries(`${API_BASE}/games/${game.gameId}`);
+      return await fetchNbaGame(String(game.gameId), process.env.NBA_API_KEY);
     } catch (error) {
       failedGames.push({
         gameId: game.gameId,

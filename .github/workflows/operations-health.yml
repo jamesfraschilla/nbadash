@@ -27,6 +27,8 @@ concurrency:
 jobs:
   postgame:
     if: github.event.schedule == '0 6 * * *' || inputs.postgame_audit
+    env:
+      NBA_API_KEY: ${{ secrets.NBA_API_KEY }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -72,6 +74,8 @@ jobs:
         run: node scripts/publish-operations-incident.mjs --workflow-event
 
   health:
+    env:
+      NBA_API_KEY: ${{ secrets.NBA_API_KEY }}
     if: github.event_name != 'workflow_run'
     runs-on: ubuntu-latest
     timeout-minutes: 10

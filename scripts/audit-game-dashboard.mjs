@@ -1,3 +1,5 @@
+import { fetchNbaMinutes } from "../supabase/functions/_shared/nbaMinutes.js";
+import { fetchNbaSegmentBox } from "../supabase/functions/_shared/nbaGame.js";
 import { readFile, writeFile } from "node:fs/promises";
 import { createClient } from "@supabase/supabase-js";
 import { aggregateSegmentStats, computeKills, countPossessionsByTeam } from "../src/segmentStats.js";
@@ -11,22 +13,20 @@ import { threePointOffensiveReboundPercent } from "../src/customStatRates.js";
 
 const gameId = process.argv.find((arg) => arg.startsWith("--game-id="))?.split("=")[1] || "0022600108";
 const output = process.argv.find((arg) => arg.startsWith("--output="))?.split("=")[1] || `/tmp/audit-${gameId}.json`;
-const api = `https://d1rjt2wyntx8o7.cloudfront.net/api/games/${gameId}`;
-async function json(url) {
-  const r = await fetch(url, { headers: { Accept:"application/json", "User-Agent":"Mozilla/5.0", Referer:"https://www.nba.com/" }, signal: AbortSignal.timeout(15000) });
-  if (!r.ok) throw new Error(`${url}: ${r.status}`);
-  return r.json();
-}
 const segments = ["all", "q1", "q2", "q3", "q4", "first-half", "second-half", "q1-q3"];
 const apiSegments = { q1: "Q1", q2: "Q2", q3: "Q3", q4: "Q4", "first-half": "1H", "second-half": "2H", "q1-q3": "Q1-Q3" };
-const [rawGame, rawMinutes, ...rawSegments] = await Promise.all([fetchRecoverableGame(gameId), json(`${api}/minutes`), ...segments.slice(1).map((s) => json(`${api}?segment=${apiSegments[s]}`))]);
+const rawGame = await fetchRecoverableGame(gameId);
+const rawMinutes = await fetchNbaMinutes(rawGame, process.env.NBA_API_KEY);
+const rawSegments = await Promise.all(segments.slice(1).map(s => fetchNbaSegmentBox(rawGame, apiSegments[s], process.env.NBA_API_KEY)));
 if (String(rawGame.gameId) !== gameId || !rawGame.playByPlayActions?.length
   || rawSegments.some(g => String(g.gameId) !== gameId)) throw new Error("Invalid or incomplete game/segment identity");
 const game = normalizeGameMidrangeStats(rawGame);
 const minutes = normalizeOpeningMinutesData(rawMinutes, game);
 const basePlayers = ["away", "home"].flatMap((side) => game.boxScore[side].players.map((p) => ({ ...p, teamId: game[`${side}Team`].teamId })));
 const officialUrl = `https://cdn.nba.com/static/json/liveData/boxscore/boxscore_${gameId}.json`;
-const official = await json(officialUrl);
+const officialResponse = await fetch(officialUrl, { headers: { Accept:"application/json", "User-Agent":"Mozilla/5.0", Referer:"https://www.nba.com/" }, signal: AbortSignal.timeout(15000) });
+if (!officialResponse.ok) throw new Error(`${officialUrl}: ${officialResponse.status}`);
+const official = await officialResponse.json();
 if (String(official.game?.gameId) !== gameId) throw new Error("Official box-score identity mismatch");
 const fields = ["points", "reboundsTotal", "reboundsOffensive", "assists", "blocks", "steals", "turnovers", "foulsPersonal", "fieldGoalsMade", "fieldGoalsAttempted", "threePointersMade", "threePointersAttempted", "freeThrowsMade", "freeThrowsAttempted", "rimFieldGoalsMade", "rimFieldGoalsAttempted", "midFieldGoalsMade", "midFieldGoalsAttempted"];
 function diffs(a, b, keys = fields) {

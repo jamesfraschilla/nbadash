@@ -6,10 +6,16 @@ async function openMinutes(page, { incompletePbp = false, useDefaultVantage = fa
   minutes.awayTeam.teamTricode = washingtonSide === "away" ? "WAS" : "CHA";
   minutes.homeTeam.teamTricode = washingtonSide === "home" ? "WAS" : "NOP";
   if (incompletePbp) game.playByPlayActions = game.playByPlayActions.filter((action) => action.actionType !== "freethrow");
-  await page.route("**/api/games/0022600015", (route) => route.fulfill({ json: game }));
-  await page.route("**/api/games/0022600015/minutes", (route) => route.fulfill({ json: minutes }));
-  await page.route("**/boxscore_*.json", (route) => route.fulfill({ json: {} }));
   await page.route("**/functions/v1/**", (route) => route.fulfill({ status: 503, json: {} }));
+  await page.route("**/functions/v1/scoreboard", (route) => route.fulfill({ json: [] }));
+  await page.route("**/functions/v1/game-metadata", (route) => {
+    const body = route.request().postDataJSON();
+    if (body.minutesGameId) return route.fulfill({ json: { minutes } });
+    if ((body.primaryGameId || body.liveGameId)) return route.fulfill({ json: { game } });
+    if ((body.primaryPlayByPlayGameId || body.playByPlayGameId)) return route.fulfill({ json: { game: { gameId: game.gameId, actions: game.playByPlayActions } } });
+    return route.fulfill({ status: 503, json: {} });
+  });
+  await page.route("**/boxscore_*.json", (route) => route.fulfill({ json: {} }));
   await page.route("**/headshots/**", (route) => route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><circle cx="20" cy="20" r="18" fill="#777"/></svg>' }));
   await page.goto("#/m/0022600015");
   await expect(page.getByRole("button", { name: "Table", exact: true })).toBeVisible();

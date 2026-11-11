@@ -14,13 +14,14 @@ const actions = [event(1, "turnover", OPP), event(2, "turnover", WAS), event(3, 
   event(17, "substitution", WAS, { subType: "in", personId: 43, playerName: "Other Player" })];
 
 async function openGame(page, washington = true, wheel = false) {
-  await page.route("**/api/games/**", (route) => {
-    if (route.request().url().includes("byDate")) return route.fulfill({ json: [] });
-    return route.fulfill({ json: { gameId: "0022600108", seasonYear: "2026-27", gameStatus: 3, period: 4,
+  await page.route("**/functions/v1/game-metadata", (route) => {
+    const body = route.request().postDataJSON();
+    if (!(body.primaryGameId || body.liveGameId)) return route.fulfill({ status: 503, json: {} });
+    return route.fulfill({ json: { game: { gameId: "0022600108", seasonYear: "2026-27", gameStatus: 3, period: 4,
       gameClock: "PT00M00.00S", homeTeam: { teamId: washington ? WAS : 1610612737, teamName: washington ? "Wizards" : "Hawks", teamTricode: washington ? "WAS" : "ATL" },
       awayTeam: { teamId: OPP, teamName: "Pelicans", teamTricode: "NOP" }, playByPlayActions: actions,
       boxScore: { home: { teamId: WAS, players: [], totals: {} }, away: { teamId: OPP, players: [], totals: {} } },
-      teamStats: { home: {}, away: {} }, officials: [] } });
+      teamStats: { home: {}, away: {} }, officials: [] } } });
   });
   await page.route("**/boxscore_*.json", (route) => route.fulfill({ json: {} }));
   await page.goto(wheel ? "#/g/0022600108" : "#/g/0022600108/events");

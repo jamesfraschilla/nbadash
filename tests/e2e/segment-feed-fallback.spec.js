@@ -8,11 +8,11 @@ test("Q1–Q3 empty feed loads the full roster and only the first three quarters
       { actionNumber: 2, orderNumber: 2, period: 4, teamId: 1, personId: 10, actionType: "3pt", shotResult: "Made", scoreHome: 5, scoreAway: 0 },
     ], boxScore: { home: { players: [{ personId: 10, familyName: "Player", points: 5 }], totals: { points: 5 } },
       away: { players: [{ personId: 20, familyName: "Other" }], totals: { points: 0 } } } };
-  await page.route("**/api/games/0022600118**", (route) => {
-    const segment = new URL(route.request().url()).searchParams.has("segment");
+  await page.route("**/game-metadata", (route) => {
+    const segment = Boolean(route.request().postDataJSON().segment);
     if (!segment) fullRequests++;
-    return route.fulfill({ json: segment ? { ...game, boxScore: { home: { players: [], totals: { points: 0 } },
-      away: { players: [], totals: { points: 0 } } } } : game });
+    return route.fulfill({ json: { game: segment ? { ...game, segmentDataQuality: { source: "nba-period-boxscore" }, boxScore: { home: { players: [], totals: { points: 0 } },
+      away: { players: [], totals: { points: 0 } } } } : game } });
   });
   await page.route("**/boxscore_*.json", (route) => route.fulfill({ json: {} }));
   await page.goto("visual-test.html");

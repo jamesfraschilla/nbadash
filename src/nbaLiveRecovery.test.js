@@ -20,16 +20,21 @@ test("NBA recovery maps public player/team stats and never invents advanced stat
   pbp.game.actions = [];
   assert.throws(() => normalizeNbaLiveRecovery(id, box, pbp), /incomplete/);
 });
-test("server reconciler recovers omitted PBP but preserves primary statistics", async () => {
+test("server reconciler uses the keyed NBA API without CloudFront", async () => {
   const { box, pbp } = sources();
-  const primary = { ...box.game, boxScore: { home: {}, away: {} }, teamStats: { home: { possessions: 90 } } };
-  const fetcher = async url => Response.json(url.includes("cloudfront") ? primary : url.includes("/boxscore/") ? box : pbp);
-  const result = await fetchRecoverableGame(id, fetcher);
-  assert.equal(result.playByPlayActions.length, 1);
-  assert.equal(result.teamStats.home.possessions, 90);
-  assert.equal(result.feedAvailability.limited, false);
-  primary.homeTeam.score = 20;
-  await assert.rejects(fetchRecoverableGame(id, fetcher), /scores/);
+  const team = id => ({ teamId: id, players: [{ personId: id, statistics: { points: 2 } }], statistics: { points: 2 } });
+  const calls = [];
+  const fetcher = async (url, options) => {
+    calls.push(String(url));
+    assert.equal(options.headers["X-NBA-Api-Key"], "local-test-key");
+    if (String(url).includes("/scores/")) return Response.json({ scoreboard: { games: [box.game] } });
+    if (String(url).includes("/boxscore")) return Response.json({ gameId: id, homeTeam: team(1), awayTeam: team(2) });
+    return Response.json({ gameId: id, actions: pbp.game.actions });
+  };
+  const game = await fetchRecoverableGame(id, fetcher, "local-test-key");
+  assert.equal(game.playByPlayActions.length, 1);
+  assert.equal(game.feedAvailability.source, "nba-api");
+  assert.equal(calls.some(url => url.includes("cloudfront")), false);
 });
 test("final score verification ignores appended corrections to earlier quarters", () => {
   const { box, pbp } = sources();
@@ -42,22 +47,40 @@ test("final score verification ignores appended corrections to earlier quarters"
   pbp.game.actions[0].scoreHome = "3";
   assert.throws(() => normalizeNbaLiveRecovery(id, box, pbp), /scores/);
 });
-test("final primary and PBP can agree despite a stale CDN box, without weakening validation", async()=>{
-  const {box,pbp}=sources();
-  const primary={...structuredClone(box.game),boxScore:{home:{},away:{}}};
-  box.game.homeTeam.score=1;
-  const fetcher=async url=>Response.json(url.includes("cloudfront")?primary:url.includes("/boxscore/")?box:pbp);
-  assert.equal((await fetchRecoverableGame(id,fetcher)).homeTeam.score,2);
-  pbp.game.actions[0].scoreHome="3";
-  await assert.rejects(fetchRecoverableGame(id,fetcher),/scores/);
-  pbp.game.actions[0].scoreHome="2";
-  box.game.homeTeam.teamId=99;
-  await assert.rejects(fetchRecoverableGame(id,fetcher),/identity/);
-});
-test("server reconciler survives primary HTTP failure and validates alternate identity", async () => {
+test("server reconciler falls back to the verified NBA CDN when the API is unavailable", async () => {
   const { box, pbp } = sources();
-  const fetcher = async url => url.includes("cloudfront") ? new Response("down", { status: 503 }) : Response.json(url.includes("/boxscore/") ? box : pbp);
-  assert.equal((await fetchRecoverableGame(id, fetcher)).feedAvailability.limited, true);
+  const calls = [];
+  const fetcher = async url => {
+    const target = String(url); calls.push(target);
+    if (target.includes("api.nba.com")) return new Response("down", { status: 503 });
+    return Response.json(target.includes("/boxscore/") ? box : pbp);
+  };
+  assert.equal((await fetchRecoverableGame(id, fetcher, "key")).feedAvailability.limited, true);
+  assert.equal(calls.some(url => url.includes("cloudfront")), false);
   box.game.gameId = "0022600016";
-  await assert.rejects(fetchRecoverableGame(id, fetcher), /identity/);
+  await assert.rejects(fetchRecoverableGame(id, fetcher, "key"), /identity/);
+});
+test("server reconciler preserves a primary final and recovers missing play-by-play from CDN", async () => {
+  const { box, pbp } = sources();
+  const team = teamId => ({ teamId, players: [{ personId: teamId, statistics: { points: 2 } }], statistics: { points: 2 } });
+  const fetcher = async url => {
+    const target = String(url);
+    if (target.includes('cdn.nba.com')) return Response.json(target.includes('/boxscore/') ? box : pbp);
+    if (target.includes('/scores/')) return Response.json({ scoreboard: { games: [box.game] } });
+    if (target.includes('/boxscore')) return Response.json({ gameId: id, homeTeam: team(1), awayTeam: team(2) });
+    return Response.json({ gameId: id, actions: [] });
+  };
+  const game = await fetchRecoverableGame(id, fetcher, 'key');
+  assert.equal(game.feedAvailability.source, 'nba-pbp-backup');
+  assert.deepEqual(game.playByPlayActions, pbp.game.actions);
+  pbp.game.actions[0].scoreHome = '1';
+  await assert.rejects(fetchRecoverableGame(id, fetcher, 'key'), /scores/);
+});
+test("server reconciler uses only the NBA CDN when no key is configured", async () => {
+  const { box, pbp } = sources();
+  const calls = [];
+  const fetcher = async url => { const target = String(url); calls.push(target); return Response.json(target.includes("/boxscore/") ? box : pbp); };
+  await fetchRecoverableGame(id, fetcher, "");
+  assert.equal(calls.length, 2);
+  assert.ok(calls.every(url => url.startsWith("https://cdn.nba.com/")));
 });

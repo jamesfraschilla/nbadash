@@ -123,7 +123,7 @@ export function buildMinutesExplorer(data, game) {
         delta.fga = 1; delta.fgm = Number(made); delta.three = Number(made && type === "3pt");
         delta.points = made ? (type === "3pt" ? 3 : 2) : 0;
       }
-      if (type === "freethrow") { delta.fta = 1; delta.points = Number(made); }
+      if (type === "freethrow") { delta.fta = 1; delta.points = made ? Number(action.value ?? action.shotValue ?? String(action.subType || "").match(/^1\s*for\s*([123])$/i)?.[1] ?? 1) : 0; }
       // Dead-ball/team rebound bookkeeping is not a personal offensive rebound.
       if (type === "rebound" && Number(action.personId) > 0 && action.subType === "offensive") delta.oreb = 1;
       if (type === "turnover") delta.tov = 1;

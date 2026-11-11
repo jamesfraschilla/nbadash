@@ -1,15 +1,10 @@
+import { fetchScoreboard } from "../supabase/functions/_shared/scoreboard.js";
 // Bounded availability checks; no model calls, database writes or user content.
 import { mkdir, writeFile } from "node:fs/promises";
 import { fetchRecoverableGame } from "../supabase/functions/_shared/nbaLiveRecovery.ts";
 import { buildCompletedPeriodSnapshots } from "../src/periodSnapshotTotals.js";
-const api = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const site = "https://jamesfraschilla.github.io/nbadash/";
 const nextDay = process.argv.includes("--reconcile");
-async function json(url) {
-  const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
-  if (!response.ok) throw Error(`HTTP ${response.status}`);
-  return response.json();
-}
 const report = { checkedAt: new Date().toISOString(), mode: nextDay ? "recent-final-reconciliation" : "live-availability", games: [], failures: [], warnings: [] };
 try {
   const response = await fetch(site, { signal: AbortSignal.timeout(8000) });
@@ -23,7 +18,7 @@ const games = new Map();
 for (let offset = 0; offset < (nextDay ? 3 : 1); offset++) {
   const date = new Date(Date.now() - offset * 86400000).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
   try {
-    const list = await json(`${api}/games/byDate?date=${date}`);
+    const list = await fetchScoreboard(date, process.env.NBA_API_KEY);
     if (!Array.isArray(list)) throw Error("Invalid scoreboard contract");
     for (const g of list) {
       const tracked = [g.homeTeam, g.awayTeam].some(t => String(t?.teamId) === "1610612764" || ["WAS", "CCG"].includes(t?.teamTricode));

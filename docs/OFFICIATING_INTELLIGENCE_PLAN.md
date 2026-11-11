@@ -1,5 +1,7 @@
 # Officiating Intelligence Implementation Plan
 
+> This plan is historical. For the current local game-feed migration and officiating sources, see [NBA data sources](NBA_DATA_SOURCES.md).
+
 ## Goal
 
 Build a new NBA Dashboard platform section named **Officiating Intelligence**. It should live inside the NBA Dashboard app, not the standalone Coaching Reports app. The header account dropdown should include `Officiating Intelligence` directly below `Graphics`.

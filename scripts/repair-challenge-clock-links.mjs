@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { fetchNbaGame } from "../supabase/functions/_shared/nbaGame.js";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { createClient } from "@supabase/supabase-js";
 import { buildChallengeClockClip, CHALLENGE_CLOCK_LINK_VERSION } from "../src/officiatingChallengeLinks.js";
@@ -29,9 +30,7 @@ const report = { season, mode: apply ? "apply" : "dry-run", sourceRows: rows.len
   gamesChecked: 0, changes: [], failures: [], linkReasons: {} };
 for (const [gameId, group] of Map.groupBy(rows, row => row.game_id)) {
   try {
-    const response = await fetch(`https://d1rjt2wyntx8o7.cloudfront.net/api/games/${gameId}`, { signal: AbortSignal.timeout(15000) });
-    if (!response.ok) throw new Error(`Game feed HTTP ${response.status}`);
-    const game = await response.json();
+    const game = await fetchNbaGame(gameId, process.env.NBA_API_KEY);
     if (game.gameId !== gameId || !game.playByPlayActions?.length) throw new Error("Invalid/empty game feed");
     for (const row of group) {
       const clip = buildChallengeClockClip(row, game);

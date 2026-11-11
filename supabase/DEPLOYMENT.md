@@ -2,6 +2,10 @@
 
 The application changes in this repository depend on database and Edge Function changes that must be deployed to the same Supabase project used by the frontend.
 
+## NBA API credentials
+
+Set `NBA_API_KEY` as a **Supabase Edge Function secret** for the same project used by the frontend. The scoreboard, game, play-by-play, and minutes functions read this value on the server. Set a separate GitHub Actions secret named `NBA_API_KEY` for scheduled and audit jobs that call the NBA API directly. Do not prefix this key with `VITE_` or put it in a frontend build: Vite embeds `VITE_` values in browser-visible assets. The locally ignored root `.env` can hold `NBA_API_KEY` for local development. Verify both secret names are configured before deploying; the deployment workflow does not create them.
+
 ## SQL Editor
 
 `supabase/deployment-manifest.json` is the authoritative, checksummed deployment inventory. Run `npm run supabase:manifest:check` before every deployment. Any added or changed SQL script or Edge Function makes verification fail until `npm run supabase:manifest:update` is run and the updated manifest is reviewed and committed.

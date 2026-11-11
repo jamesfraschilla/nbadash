@@ -4,6 +4,17 @@ for (const tag of ["Playcall", "Officiating"]) {
 test(`saving a custom ${tag} note preserves its clock and stores an NBA Clips URL`, async ({ page }) => {
   let savedNote;
   await page.route("**/functions/v1/**", (route) => route.fulfill({ status: 503, json: {} }));
+  await page.route("**/functions/v1/game-metadata", (route) => {
+    const body = route.request().postDataJSON();
+    if (!(body.primaryGameId || body.liveGameId)) return route.fulfill({ status: 503, json: {} });
+    return route.fulfill({ json: { game: { gameId: "0022600119", seasonYear: "2026-27", gameStatus: 3, period: 4, gameClock: "PT00M00.00S",
+      homeTeam: { teamId: 1610612766, teamName: "Hornets", teamTricode: "CHA" },
+      awayTeam: { teamId: 1610612764, teamName: "Wizards", teamTricode: "WAS" },
+      playByPlayActions: [{ actionNumber: 19, period: 1, clock: "PT04M53.00S", timeActual: "2026-10-26T23:30:10Z",
+        teamId: 1610612766, actionType: "2pt", shotResult: "Made", description: "Test shot" }],
+      boxScore: { home: { players: [], totals: {} }, away: { players: [], totals: {} } },
+      teamStats: { home: {}, away: {} }, officials: [] } } });
+  });
   await page.route("**/rest/v1/**", async (route) => {
     if (route.request().url().includes("rpc/create_user_note_atomic")) {
       savedNote = route.request().postDataJSON().p_note;
@@ -11,16 +22,7 @@ test(`saving a custom ${tag} note preserves its clock and stores an NBA Clips UR
     }
     return route.fulfill({ json: [] });
   });
-  await page.route("**/api/games/**", (route) => {
-    if (route.request().url().includes("byDate")) return route.fulfill({ json: [] });
-    return route.fulfill({ json: { gameId: "0022600119", seasonYear: "2026-27", gameStatus: 3, period: 4, gameClock: "PT00M00.00S",
-      homeTeam: { teamId: 1610612766, teamName: "Hornets", teamTricode: "CHA" },
-      awayTeam: { teamId: 1610612764, teamName: "Wizards", teamTricode: "WAS" },
-      playByPlayActions: [{ actionNumber: 19, period: 1, clock: "PT04M53.00S", timeActual: "2026-10-26T23:30:10Z",
-        teamId: 1610612766, actionType: "2pt", shotResult: "Made", description: "Test shot" }],
-      boxScore: { home: { players: [], totals: {} }, away: { players: [], totals: {} } },
-      teamStats: { home: {}, away: {} }, officials: [] } });
-  });
+
   await page.route("**/boxscore_*.json", (route) => route.fulfill({ json: {} }));
   await page.goto("#/g/0022600119");
   await page.getByRole("button", { name: "Add Note", exact: true }).click();

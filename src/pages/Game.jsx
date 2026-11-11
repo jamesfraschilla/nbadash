@@ -2,7 +2,7 @@ import { Link, useSearchParams, useParams } from "react-router-dom";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toggleNewNoteTag } from "../noteTags.js";
-import { normalizeTeamRebounds, findIncompletePersonalFoulFeed } from "../teamStatNormalization.js";
+import { normalizeTeamRebounds } from "../teamStatNormalization.js";
 import { createNote } from "../accountData.js";
 import { listCachedGameAnalyses, requestGameAnalysis, requestGameAnalysisPrewarm } from "../analysisData.js";
 import { isLiveAuditGame } from "../liveAuditGames.js";
@@ -1864,12 +1864,15 @@ export default function Game({ variant = "full" }) {
             jerseyNum: player.jerseyNum || "",
             position: player.position || "",
           };
-        const safeStats = useDefaults ? { ...SEGMENT_STAT_DEFAULTS, ...stats } : stats;
-        const officialSeconds = segment === "all" ? parseDuration(player.minutes) : null;
+        const computedStats = useDefaults ? { ...SEGMENT_STAT_DEFAULTS, ...stats } : stats;
+        const officialSegment = segment !== "all" && game?.segmentDataQuality?.source === "nba-period-boxscore";
+        const traditionalFields = ["points", "assists", "blocks", "steals", "turnovers", "foulsPersonal", "reboundsTotal", "reboundsOffensive", "reboundsDefensive", "fieldGoalsMade", "fieldGoalsAttempted", "threePointersMade", "threePointersAttempted", "freeThrowsMade", "freeThrowsAttempted"];
+        const safeStats = officialSegment ? { ...computedStats, ...Object.fromEntries(traditionalFields.filter(key => player[key] != null).map(key => [key, player[key]])) } : computedStats;
+        const officialSeconds = segment === "all" || officialSegment ? parseDuration(player.minutes) : null;
         const minutesSeconds =
-          segment === "all" && Number.isFinite(officialSeconds) ? officialSeconds : safeStats.minutes;
+          Number.isFinite(officialSeconds) ? officialSeconds : safeStats.minutes;
         const plusMinusPoints =
-          segment === "all" && player.plusMinusPoints != null ? player.plusMinusPoints : safeStats.plusMinusPoints;
+          (segment === "all" || officialSegment) && player.plusMinusPoints != null ? player.plusMinusPoints : safeStats.plusMinusPoints;
         const offensivePoss = safeStats.possessionsFor || 0;
         const defensivePoss = safeStats.possessionsAgainst || 0;
         const computedOrt = offensivePoss ? (safeStats.pointsFor / offensivePoss) * 100 : null;
@@ -1941,7 +1944,9 @@ export default function Game({ variant = "full" }) {
         computedAwayTotals,
         finalSnapshotTotals?.[awayTeamId]
       )
-      : mergeSegmentTotals(computedAwayTotals, segmentSnapshotTotals?.[awayTeamId])
+      : game?.segmentDataQuality?.source === "nba-period-boxscore"
+        ? { ...computedAwayTotals, ...boxScore.away.totals }
+        : mergeSegmentTotals(computedAwayTotals, segmentSnapshotTotals?.[awayTeamId])
     : {};
   const baseHomeTotals = homeTeamId
     ? segment === "all"
@@ -1950,7 +1955,9 @@ export default function Game({ variant = "full" }) {
         computedHomeTotals,
         finalSnapshotTotals?.[homeTeamId]
       )
-      : mergeSegmentTotals(computedHomeTotals, segmentSnapshotTotals?.[homeTeamId])
+      : game?.segmentDataQuality?.source === "nba-period-boxscore"
+        ? { ...computedHomeTotals, ...boxScore.home.totals }
+        : mergeSegmentTotals(computedHomeTotals, segmentSnapshotTotals?.[homeTeamId])
     : {};
   const useSnapshotTotals = snapshotBounds?.endIsLive;
   const awaySnapshotTotals =
@@ -2036,7 +2043,8 @@ export default function Game({ variant = "full" }) {
 
   const officialAwayPossessions = teamStats?.away?.possessions;
   const officialHomePossessions = teamStats?.home?.possessions;
-  const useOfficialPossessions = officialAwayPossessions && officialHomePossessions;
+  const useOfficialPossessions = segment === "all" && officialAwayPossessions && officialHomePossessions;
+  const showPossessionMetrics = !game?.feedAvailability?.limited || Boolean(useOfficialPossessions);
 
   const awayPossessions = Math.max(
     useOfficialPossessions
@@ -2896,10 +2904,6 @@ export default function Game({ variant = "full" }) {
     <div className={styles.container}>
       {error && <p role="status">Live update delayed. Showing the last valid snapshot while the feed retries.</p>}
       {game._snapshotSavedAt && <p role="status">Saved game snapshot from {new Date(game._snapshotSavedAt).toLocaleString()}. These are not live updates. Reconnecting automatically.</p>}
-      {game.feedAvailability?.limited && <p role="status">Backup NBA feed in use. Some advanced statistics may be unavailable; do not treat missing values as verified zeros.</p>}
-      {game?.gameStatus === 3 && findIncompletePersonalFoulFeed(boxScore, null, game.playByPlayActions).map((warning) => (
-        <p key={warning} role="status">Data note: {warning}</p>
-      ))}
       <div className={styles.backRow}>
         <div className={styles.backRowLeft}>
           <Link className={styles.backButton} to={dateParam ? `/?d=${dateParam}` : "/"}>
@@ -3018,15 +3022,15 @@ export default function Game({ variant = "full" }) {
                 </div>
                 <div className={styles.centerMetricDivider} />
                 <div className={styles.centerMetricRow}>
-                  <span className={styles.statValue}>{game.feedAvailability?.limited ? "Unavailable" : formatChancesValue(displayAwayChances)}</span>
+                  <span className={styles.statValue}>{!showPossessionMetrics ? "Unavailable" : formatChancesValue(displayAwayChances)}</span>
                   <span className={styles.statLabel}>Possesion Game</span>
-                  <span className={styles.statValue}>{game.feedAvailability?.limited ? "Unavailable" : formatChancesValue(displayHomeChances)}</span>
+                  <span className={styles.statValue}>{!showPossessionMetrics ? "Unavailable" : formatChancesValue(displayHomeChances)}</span>
                 </div>
               </div>
             )}
             {showExtras && (
               <div className={styles.paceGroup}>
-                <div className={styles.paceRow}>PACE {game.feedAvailability?.limited ? "Unavailable" : displayPaceValue.toFixed(1)}</div>
+                <div className={styles.paceRow}>PACE {!showPossessionMetrics ? "Unavailable" : displayPaceValue.toFixed(1)}</div>
               </div>
             )}
             {isAtc && !game.feedAvailability?.limited && <div className={styles.headerPossessionTable}>{possessionSummaryTable}</div>}

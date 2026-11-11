@@ -1,7 +1,9 @@
+import { fetchNbaMinutes } from "../_shared/nbaMinutes.js";
+import { fetchNbaGame } from "../_shared/nbaGame.js";
+import { fetchScoreboard } from "../_shared/scoreboard.js";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { normalizeOpeningMinutesData } from "../_shared/minutesNormalization.ts";
 
-const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 const DEFAULT_OPENAI_MODEL =
   Deno.env.get("OPENAI_SCOUTING_MODEL") ||
@@ -282,7 +284,7 @@ function selectTeamPerspective(game: AnyRecord, teamId: string) {
 }
 
 async function fetchGamesByDate(dateKey: string) {
-  const games = await requestJson(`${API_BASE}/games/byDate?date=${dateKey}`).catch(() => []);
+  const games = await fetchScoreboard(dateKey, Deno.env.get("NBA_API_KEY") || "").catch(() => []);
   return Array.isArray(games) ? games as Record<string, unknown>[] : [];
 }
 
@@ -335,10 +337,8 @@ async function collectGamesByDateRange(teamId: string, startDate: string, endDat
 
 async function fetchGameBundle(gameCard: Record<string, unknown>) {
   const gameId = String(gameCard?.gameId || "").trim();
-  const [game, minutesData] = await Promise.all([
-    requestJson(`${API_BASE}/games/${gameId}`),
-    requestJson(`${API_BASE}/games/${gameId}/minutes`).catch(() => null),
-  ]);
+  const game = await fetchNbaGame(gameId, Deno.env.get("NBA_API_KEY") || "");
+  const minutesData = await fetchNbaMinutes(game, Deno.env.get("NBA_API_KEY") || "").catch(() => null);
 
   return {
     gameId,

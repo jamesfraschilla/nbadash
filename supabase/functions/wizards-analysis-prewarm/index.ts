@@ -1,8 +1,8 @@
+import { fetchScoreboard } from "../_shared/scoreboard.js";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { segmentFeedSignature } from "../_shared/analysisFreshness.ts";
 import { fetchRecoverableGame } from "../_shared/nbaLiveRecovery.ts";
 
-const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const WIZARDS_TEAM_ID = "1610612764";
 const CACHE_TABLE = "game_analysis_segments";
 const DEFAULT_MAX_SEGMENTS_PER_RUN = 3;
@@ -224,7 +224,7 @@ async function requestJson(url: string, timeoutMs = REQUEST_TIMEOUT_MS) {
 }
 
 async function fetchGamesByDate(dateKey: string) {
-  const games = await requestJson(`${API_BASE}/games/byDate?date=${encodeURIComponent(dateKey)}`);
+  const games = await fetchScoreboard(dateKey, Deno.env.get("NBA_API_KEY") || "");
   return Array.isArray(games) ? games as JsonRecord[] : [];
 }
 

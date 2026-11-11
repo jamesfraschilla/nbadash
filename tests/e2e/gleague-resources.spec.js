@@ -3,9 +3,12 @@ import { test, expect } from "@playwright/test";
 async function openGame(page, { gleague = true, pregame = false, used = false } = {}) {
   const homeId = gleague ? "1612709928" : "1610612764";
   const awayId = gleague ? "1612709909" : "1610612766";
-  await page.route("**/api/games/**", route => {
-    if (route.request().url().includes("byDate")) return route.fulfill({ json: [] });
-    return route.fulfill({ json: { gameId: "2022600001", gameStatus: pregame ? 1 : 3, period: pregame ? 0 : 2,
+
+  await page.route("**/functions/v1/**", route => route.fulfill({ json: {} }));
+  await page.route("**/functions/v1/game-metadata", route => {
+    const body = route.request().postDataJSON();
+    if (!(body.primaryGameId || body.liveGameId)) return route.fulfill({ status: 503, json: {} });
+    return route.fulfill({ json: { game: { gameId: "2022600001", gameStatus: pregame ? 1 : 3, period: pregame ? 0 : 2,
       homeTeam: { teamId: homeId, teamName: "Go-Go", teamTricode: "CCG", score: 30 },
       awayTeam: { teamId: awayId, teamName: "Opponent", teamTricode: "OPP", score: 29 },
       // Deliberately misleading NBA-style count: G League must not use it.
@@ -16,9 +19,8 @@ async function openGame(page, { gleague = true, pregame = false, used = false } 
         { actionNumber: 3, period: 1, actionType: "timeout", subType: "regular", teamId: homeId },
       ] : [],
       boxScore: { home: { teamId: homeId, players: [], totals: {} }, away: { teamId: awayId, players: [], totals: {} } },
-      teamStats: { home: {}, away: {} }, officials: [] } });
+      teamStats: { home: {}, away: {} }, officials: [] } } });
   });
-  await page.route("**/functions/v1/**", route => route.fulfill({ json: {} }));
   await page.route("**/boxscore_*.json", route => route.fulfill({ json: {} }));
   await page.goto("#/g/2022600001");
 }

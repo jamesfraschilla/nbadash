@@ -1,3 +1,5 @@
+import { fetchNbaMinutes } from "../supabase/functions/_shared/nbaMinutes.js";
+import { fetchNbaGame, fetchNbaSegmentBox } from "../supabase/functions/_shared/nbaGame.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -14,7 +16,6 @@ import { assertNonEmptyLiveFeed } from "../supabase/functions/_shared/liveFeedIn
 import { AnalysisRetryPolicy } from "../src/analysisRetryPolicy.js";
 
 setDefaultResultOrder("ipv4first");
-const API = "https://d1rjt2wyntx8o7.cloudfront.net/api/games";
 const API_SEGMENTS = { q1: "Q1", q2: "Q2", q3: "Q3", q4: "Q4", "first-half": "1H", "second-half": "2H", "q1-q3": "Q1-Q3" };
 const MAX_BYTES = 100 * 1024 * 1024;
 const POST_FINAL_MS = 15 * 60_000;
@@ -158,7 +159,14 @@ export async function runAudit({ gameId, dryRun = false, outputRoot = "output/li
   const checkpoint = async (game, keys) => {
     const segmentFeeds = {};
     await Promise.all(keys.filter((key) => API_SEGMENTS[key]).map(async (key) => {
-      try { segmentFeeds[key] = await requestJson(`${API}/${gameId}?segment=${API_SEGMENTS[key]}`); }
+      try {
+        if (Number(game.gameStatus) === 3) segmentFeeds[key] = await fetchNbaSegmentBox(game, API_SEGMENTS[key], process.env.NBA_API_KEY);
+        else {
+          const basePlayers = ["home", "away"].flatMap(side => (game.boxScore?.[side]?.players || []).map(player => ({ ...player, teamId: game[`${side}Team`].teamId })));
+          const stats = aggregateSegmentStats({ gameId, actions: game.playByPlayActions, segment: key, homeTeam: game.homeTeam, awayTeam: game.awayTeam, basePlayers, minutesData: null, currentPeriod: game.period, currentClock: game.gameClock, isLive: true });
+          segmentFeeds[key] = { ...game, segmentDataQuality: { source: "play-by-play" }, boxScore: Object.fromEntries(["home", "away"].map(side => [side, { ...game.boxScore[side], totals: stats.teamTotals[game[`${side}Team`].teamId] }])) };
+        }
+      }
       catch (error) { errorRecord(`segment-feed:${key}`, error); }
     }));
     let official = null;
@@ -181,7 +189,7 @@ export async function runAudit({ gameId, dryRun = false, outputRoot = "output/li
       const tickStart = Date.now();
       summary.ticks++;
       try {
-        const game = await requestJson(`${API}/${gameId}`);
+        const game = await fetchNbaGame(gameId, process.env.NBA_API_KEY);
         if (String(game.gameId) !== gameId || !game.homeTeam?.teamId || !game.awayTeam?.teamId) throw new Error("Game feed identity/teams invalid");
         assertNonEmptyLiveFeed(game);
         lastAcceptedGame = game;
@@ -189,7 +197,7 @@ export async function runAudit({ gameId, dryRun = false, outputRoot = "output/li
         if (Number(game.gameStatus) === 2 && Number(game.period) > 0) livePeriods.add(Number(game.period));
         finalPeriod = Math.max(finalPeriod, Number(game.period) || 0);
         if (!minutesData || tickStart - minutesAt >= 5 * 60_000 || Number(game.period) !== lastPeriod) {
-          try { minutesData = normalizeOpeningMinutesData(await requestJson(`${API}/${gameId}/minutes`), game); minutesAt = tickStart; }
+          try { minutesData = normalizeOpeningMinutesData(await fetchNbaMinutes(game, process.env.NBA_API_KEY), game); minutesAt = tickStart; }
           catch (error) { errorRecord("minutes", error); }
         }
         lastPeriod = Number(game.period);

@@ -60,7 +60,7 @@ export async function runOperationalHealthChecks(userId) {
       if (!data?.session?.access_token) throw new Error("No active access token.");
       return ok("Access token available.");
     }),
-    runCheck("date-feed", "CloudFront game feed", async () => {
+    runCheck("date-feed", "NBA scoreboard feed", async () => {
       const games = await fetchGamesByDate(todayEt);
       return ok(`${Array.isArray(games) ? games.length : 0} games returned for ${todayEt}.`);
     }),

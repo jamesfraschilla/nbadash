@@ -108,7 +108,7 @@ export default function Minutes() {
     refetchIntervalInBackground: routeShouldTrackPolling,
   });
   const shouldTrackPolling = isGameDayPollingGame(game || gameId);
-  const { data, isLoading, error } = useMinutes(gameId, {
+  const { data, dataUpdatedAt, isLoading, error } = useMinutes(gameId, {
     refetchInterval: () => getGamePollingInterval(game, { gameId }),
     refetchIntervalInBackground: shouldTrackPolling,
   });
@@ -125,7 +125,7 @@ export default function Minutes() {
     return <div className={styles.stateMessage}>Loading minutes data...</div>;
   }
 
-  if (error || !data) {
+  if (!data) {
     return <div className={styles.stateMessage}>Failed to load minutes data.</div>;
   }
 
@@ -133,6 +133,7 @@ export default function Minutes() {
 
   return (
     <div className={styles.container}>
+      {error && <small role="status">Minutes last verified at {new Date(dataUpdatedAt).toLocaleTimeString()}; updating.</small>}
       <div className={styles.backRow}>
         <Link className={styles.backButton} to={dateParam ? `/g/${gameId}?d=${dateParam}` : `/g/${gameId}`}>
           Back

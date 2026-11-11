@@ -1,6 +1,7 @@
+import { fetchNbaMinutes } from "../_shared/nbaMinutes.js";
+import { fetchNbaGame } from "../_shared/nbaGame.js";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const TABLE = "game_live_state";
 const REQUEST_TIMEOUT_MS = 10_000;
 const READ_TIMEOUT_MS = 2_500;
@@ -275,22 +276,13 @@ function rowToSnapshot(row: JsonRecord | null) {
   };
 }
 
-async function fetchJson(url: string) {
-  const response = await fetch(url, {
-    headers: { Accept: "application/json" },
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
-  if (!response.ok) throw new Error(`Request failed (${response.status})`);
-  return response.json();
-}
-
 async function fetchGameBundle(gameId: string, includeMinutes: boolean) {
-  const game = await fetchJson(`${API_BASE}/games/${encodeURIComponent(gameId)}`);
+  const game = await fetchNbaGame(gameId, Deno.env.get("NBA_API_KEY") || "");
   let minutesData: unknown = null;
   let minutesError = "";
   if (includeMinutes) {
     try {
-      minutesData = await fetchJson(`${API_BASE}/games/${encodeURIComponent(gameId)}/minutes`);
+      minutesData = await fetchNbaMinutes(game, Deno.env.get("NBA_API_KEY") || "");
     } catch (error) {
       minutesError = error instanceof Error ? error.message : "Unable to load minutes.";
     }

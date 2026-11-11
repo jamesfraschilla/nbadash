@@ -6,18 +6,20 @@ async function openGame(page, variant) {
       ["rayacosta", "johnbutler", "phenizeeransom"].map(name => [name, { scale: 1.51, scaleX: 1, scaleY: 1, offsetX: 0, offsetY: 80 }])
     )));
   });
-  await page.route("**/api/games/**", route => {
-    if (route.request().url().includes("byDate")) return route.fulfill({ json: [] });
-    return route.fulfill({ json: { gameId: "0022600015", gameStatus: 3, period: 4, gameClock: "PT00M00.00S",
+
+  await page.route("**/functions/v1/**", route => route.fulfill({ json: {} }));
+  await page.route("**/functions/v1/game-metadata", route => {
+    const body = route.request().postDataJSON();
+    if (!(body.primaryGameId || body.liveGameId)) return route.fulfill({ status: 503, json: {} });
+    return route.fulfill({ json: { game: { gameId: "0022600015", gameStatus: 3, period: 4, gameClock: "PT00M00.00S",
       homeTeam: { teamId: "1610612753", teamName: "Magic", teamTricode: "ORL", score: 94 },
       awayTeam: { teamId: "1610612764", teamName: "Wizards", teamTricode: "WAS", score: 103 },
       playByPlayActions: [{ actionNumber: 1, period: 1, clock: "PT12M00.00S", actionType: "jumpball", teamId: "1610612764", jumpBallWonTeamId: "1610612764" }],
       boxScore: { home: { players: [], totals: {} }, away: { players: [], totals: {} } }, teamStats: { home: {}, away: {} },
       officials: [{ personId: "1", name: "Ray Acosta", jerseyNum: "54", role: "crewChief" },
         { personId: "2", name: "John Butler", jerseyNum: "30", role: "referee" },
-        { personId: "3", name: "Phenizee Ransom", jerseyNum: "70", role: "umpire" }] } });
+        { personId: "3", name: "Phenizee Ransom", jerseyNum: "70", role: "umpire" }] } } });
   });
-  await page.route("**/functions/v1/**", route => route.fulfill({ json: {} }));
   await page.route("**/rest/v1/**", route => route.fulfill({ json: [] }));
   await page.route("**/boxscore_*.json", route => route.fulfill({ json: {} }));
   await page.goto(`#/g/0022600015${variant === "atc" ? "/atc" : ""}`);

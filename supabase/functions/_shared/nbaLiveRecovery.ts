@@ -1,3 +1,4 @@
+import { fetchNbaGame } from "./nbaGame.js";
 type RecordValue = Record<string, any>;
 function verifyFinalScore(game: RecordValue, actions: RecordValue[]) {
   if (Number(game.gameStatus) !== 3) return;
@@ -53,28 +54,24 @@ export async function fetchNbaLiveRecovery(gameId: string, fetcher: typeof fetch
   return normalizeNbaLiveRecovery(gameId, box, pbp);
 }
 
-// Server-side reconciliation uses the same alternate source as the dashboard.
-// Preserve primary derived fields when only PBP was omitted. A backup-only game
-// remains explicitly limited and must not be represented as primary coverage.
-export async function fetchRecoverableGame(gameId: string, fetcher: typeof fetch = fetch) {
+// Preserve primary game data when CDN play-by-play can recover an incomplete
+// primary, and keep the stricter validation for a CDN-only fallback.
+export async function fetchRecoverableGame(gameId: string, fetcher: typeof fetch = fetch, apiKey?: string) {
   if (!/^\d{10}$/.test(gameId)) throw new Error("Invalid game ID");
+  const key = apiKey ?? (typeof Deno !== "undefined" ? Deno.env.get("NBA_API_KEY") : (globalThis as any).process?.env?.NBA_API_KEY);
   let primary: RecordValue | null = null;
-  try {
-    const response = await fetcher(`https://d1rjt2wyntx8o7.cloudfront.net/api/games/${gameId}`, { signal: AbortSignal.timeout(8000) });
-    if (!response.ok) throw new Error(`Primary unavailable (${response.status})`);
-    primary = await response.json();
-    if (String(primary?.gameId) !== gameId || !primary?.homeTeam?.teamId || !primary?.awayTeam?.teamId || !primary?.boxScore) throw new Error("Primary identity incomplete");
-    if (Number(primary.gameStatus) === 1) return primary;
-    if (Array.isArray(primary.playByPlayActions) && primary.playByPlayActions.length) {
-      verifyFinalScore(primary, primary.playByPlayActions);
-      return primary;
-    }
-  } catch { primary = null; }
+  if (key) {
+    try {
+      primary = await fetchNbaGame(gameId, key, fetcher, { allowMissingPbp: true });
+      if (Number(primary.gameStatus) === 1) return primary;
+      if (Array.isArray(primary.playByPlayActions) && primary.playByPlayActions.length) {
+        verifyFinalScore(primary, primary.playByPlayActions);
+        return primary;
+      }
+    } catch { primary = null; }
+  }
   const {box,pbp}=await fetchNbaLiveSources(gameId,fetcher);
   if (!primary) return normalizeNbaLiveRecovery(gameId,box,pbp);
-  // CDN box snapshots can lag a final score correction while primary box and
-  // CDN PBP agree. Validate PBP against the primary we will actually preserve;
-  // never relax the backup-only final-score guard or mix different teams.
   if (String(box?.game?.gameId)!==gameId || String(pbp?.game?.gameId)!==gameId
     || ["homeTeam","awayTeam"].some(side=>String(primary![side].teamId)!==String(box?.game?.[side]?.teamId)))
     throw new Error("Backup game identity mismatch");

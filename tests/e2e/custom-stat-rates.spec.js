@@ -16,7 +16,8 @@ test("dashboard 3P-OR% renders recovered missed threes, not offensive-rebound sh
     homeTeam: { teamId: 1610612739, teamTricode: "CLE", teamName: "Cavaliers", score: 0 },
     playByPlayActions: actions, officials: [], boxScore: { home: { players: [], totals: {} }, away: { players: [], totals: {} } },
     teamStats: { home: {}, away: {} } };
-  await page.route("**/api/games/**", (route) => route.fulfill({ json: route.request().url().includes("byDate") ? [] : game }));
+  await page.route("**/game-metadata", (route) => route.fulfill({ json: { game } }));
+  await page.route("**/scoreboard", (route) => route.fulfill({ json: [] }));
   await page.route("**/boxscore_*.json", (route) => route.fulfill({ json: {} }));
   await page.goto("#/g/0022600133");
   const misc = page.locator("section").filter({ has: page.getByRole("heading", { name: "Misc", exact: true }) });

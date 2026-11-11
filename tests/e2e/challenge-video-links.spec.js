@@ -19,7 +19,7 @@ test("Challenge Log keeps official Video and timestamp Clock links separate", as
   await page.route("**/rest/v1/**", route => route.fulfill({ json:
     route.request().url().includes("nba_authoritative_coach_challenge_events") ? [row, unpublished, toronto] : [] }));
   await page.route("**/functions/v1/**", route => route.fulfill({ json: {} }));
-  await page.route("**/api/games/**", route => route.fulfill({ json: [] }));
+  await page.route("**/functions/v1/scoreboard", route => route.fulfill({ json: [] }));
   await page.goto("#/officiating?tab=challenge-log&season=2026-27");
   await expect(page.getByRole("link", { name: "07:26", exact: true })).toHaveAttribute("href", clock);
   const publishedRow = page.getByRole("row").filter({ has: page.getByRole("link", { name: "07:26", exact: true }) });

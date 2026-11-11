@@ -9,6 +9,8 @@ on:
 
 jobs:
   capture:
+    env:
+      NBA_API_KEY: ${{ secrets.NBA_API_KEY }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

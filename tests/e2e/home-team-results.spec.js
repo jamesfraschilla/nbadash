@@ -14,8 +14,8 @@ test("team view repairs legacy cached fixtures with finals and retains results a
     if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ updatedAt: Date.now(), games }));
   }, fixtures);
   const dates = [];
-  await page.route("**/api/games/byDate?**", (route) => {
-    const date = new URL(route.request().url()).searchParams.get("date");
+  await page.route("**/functions/v1/scoreboard", (route) => {
+    const date = route.request().postDataJSON().date;
     dates.push(date);
     const games = fixtures.filter((game) => game.gameDate === date).map((game) => ({ ...game,
       gameStatus: 3, gameStatusText: "Final", homeTeam: { ...game.homeTeam, score: 128 }, awayTeam: { ...game.awayTeam, score: 116 } }));

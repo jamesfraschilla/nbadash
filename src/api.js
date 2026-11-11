@@ -32,7 +32,6 @@ import { needsOpeningStintRepair, normalizeOpeningMinutesData } from "../supabas
 import { assertNonEmptyLiveFeed } from "../supabase/functions/_shared/liveFeedIntegrity.ts";
 import { recoverMissingLivePlayByPlay } from "./livePlayByPlayFallback.js";
 
-const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const ALL_ORIGINS_RAW_URL = "https://api.allorigins.win/raw?url=";
 const SUMMER_LEAGUE_IDS = new Set(["13", "14", "15", "16"]);
 const SUMMER_LEAGUE_PAGE_CACHE = new Map();
@@ -48,13 +47,11 @@ const APP_BASE_PATH = apiEnv.BASE_URL || "/nbadash/";
 const ROSTER_CACHE_PREFIX = "nba-dashboard:roster-feed:v1:";
 const LIVE_BOXSCORE_BASE = "https://cdn.nba.com/static/json/liveData/boxscore";
 const loadEmergencyPlayByPlay = async id => {
-  // The primary API serves G League PBP separately from its box score. Try
-  // that league-aware endpoint before the NBA-only emergency source.
   try {
-    const payload = await requestJson(`${API_BASE}/games/${id}/playbyplay`, { timeoutMs: 8000 });
-    if (String(payload?.gameId) !== String(id)) throw new Error("Primary play-by-play identity mismatch");
-    assertNonEmptyLiveFeed({ gameStatus: 2, playByPlayActions: payload.playByPlayActions });
-    return { game: { gameId: id, actions: payload.playByPlayActions } };
+    return await requestJson(`${SUPABASE_FUNCTIONS_BASE}/game-metadata`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ primaryPlayByPlayGameId: id }), timeoutMs: 20000,
+    });
   } catch {
     return requestJson(`${SUPABASE_FUNCTIONS_BASE}/game-metadata`, {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -1154,7 +1151,7 @@ async function findSummerLeagueGameUrlById(gameId, dateStr = null) {
 
   const datesToCheck = [];
   if (dateStr && isJulyDate(dateStr)) {
-    const sameDateGames = await requestJson(`${API_BASE}/games/byDate?date=${dateStr}`).catch(() => []);
+    const sameDateGames = await requestScoreboard(dateStr).catch(() => []);
     const sameDateMatch = (Array.isArray(sameDateGames) ? sameDateGames : [])
       .find((game) => String(game?.gameId || "") === safeGameId);
     const directShareUrl = buildSummerLeagueShareUrlFromGame(sameDateMatch);
@@ -1540,10 +1537,16 @@ async function fetchSummerLeagueGame(gameId, dateStr = null) {
   };
 }
 
+async function requestScoreboard(date) {
+  return requestJson(`${SUPABASE_FUNCTIONS_BASE}/scoreboard`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ date }), timeoutMs: 20000,
+  });
+}
+
 export async function fetchGamesByDate(dateStr) {
-  const url = `${API_BASE}/games/byDate?date=${dateStr}`;
   const [baseGames, summerGames] = await Promise.all([
-    requestJson(url),
+    requestScoreboard(dateStr),
     isJulyDate(dateStr) ? fetchSummerLeagueGamesByDate(dateStr).catch(() => []) : Promise.resolve([]),
   ]);
   const filteredBaseGames = (Array.isArray(baseGames) ? baseGames : []).filter(isNbaDashboardGame);
@@ -1568,9 +1571,7 @@ const SEASON_GAMES_CACHE = new Map();
 const SEASON_GAMES_PROMISES = new Map();
 const TEAM_SEASON_GAMES_CACHE = new Map();
 const TEAM_SEASON_GAMES_PROMISES = new Map();
-const refreshTeamScheduleResults = createTeamScheduleResultsLoader((date) => requestJson(
-  `${API_BASE}/games/byDate?date=${encodeURIComponent(date)}`, { timeoutMs: 8000 }
-));
+const refreshTeamScheduleResults = createTeamScheduleResultsLoader((date) => requestScoreboard(date));
 const SEASON_GAMES_STORAGE_PREFIX = "nba-dashboard-season-games:v2:";
 const TEAM_SEASON_GAMES_STORAGE_PREFIX = "nba-dashboard-team-season-games:v2:";
 const SEASON_GAMES_STORAGE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -1824,17 +1825,17 @@ export async function fetchTeamSeasonGames(teamId, opponentTeamId = "", season =
 }
 
 export async function fetchGame(gameId, segment = null, options = {}) {
+  const requestPrimaryGame = () => requestJson(`${SUPABASE_FUNCTIONS_BASE}/game-metadata`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ primaryGameId: String(gameId), ...(segment && segment !== "all" ? { segment } : {}) }), timeoutMs: 45000,
+  });
   if (isSummerLeagueGameId(gameId)) {
-    const segmentParam = segment ? `?segment=${segment}` : "";
-    const directUrl = `${API_BASE}/games/${gameId}${segmentParam}`;
     let directGame = null;
     try {
-      directGame = await requestJson(directUrl);
-      if (shouldUseDirectSummerLeagueGame(directGame)) {
-        return normalizeSummerLeagueGameMetadata(directGame);
-      }
+      directGame = (await requestPrimaryGame())?.game;
+      if (shouldUseDirectSummerLeagueGame(directGame)) return normalizeSummerLeagueGameMetadata(directGame);
     } catch {
-      // Fall back to the Summer League markdown parser when the direct API payload is unavailable.
+      // Preserve the existing Summer League page fallback.
     }
     try {
       return await fetchSummerLeagueGame(gameId, options?.dateStr || null);
@@ -1843,16 +1844,16 @@ export async function fetchGame(gameId, segment = null, options = {}) {
       throw error;
     }
   }
-  const segmentParam = segment ? `?segment=${segment}` : "";
-  const url = `${API_BASE}/games/${gameId}${segmentParam}`;
   const backupGame = async () => {
-    const result = await requestJson(`${SUPABASE_FUNCTIONS_BASE}/game-metadata`, {
+    const loadGame = (body, timeoutMs) => requestJson(`${SUPABASE_FUNCTIONS_BASE}/game-metadata`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ liveGameId: String(gameId) }), timeoutMs: 12000,
+      body: JSON.stringify(body), timeoutMs,
     });
+    const result = await requestPrimaryGame()
+      .catch(() => loadGame({ liveGameId: String(gameId) }, 12000));
     if (String(result?.game?.gameId) !== String(gameId)) throw new Error("Backup game identity mismatch");
     const full = result.game;
-    if (!segment || segment === "all") return full;
+    if (!segment || segment === "all" || full.segmentDataQuality?.source === "nba-period-boxscore") return full;
     const mapping = { Q1: "q1", Q2: "q2", Q3: "q3", Q4: "q4", "1H": "first-half", "2H": "second-half", "Q1-Q3": "q1-q3" };
     const selected = mapping[String(segment).toUpperCase()];
     if (!selected) throw new Error("Unsupported backup segment");
@@ -1860,22 +1861,32 @@ export async function fetchGame(gameId, segment = null, options = {}) {
     const derived = aggregateSegmentStats({ gameId, actions: full.playByPlayActions, segment: selected,
       homeTeam: full.homeTeam, awayTeam: full.awayTeam, basePlayers, minutesData: null,
       currentPeriod: full.period, currentClock: full.gameClock, isLive: Number(full.gameStatus) === 2 });
-    return { ...full, boxScore: Object.fromEntries(["home", "away"].map(side => [side, {
-      totals: derived.teamTotals[full[`${side}Team`].teamId],
+    const range = { q1: [1, 1], q2: [2, 2], q3: [3, 3], q4: [4, 4], "first-half": [1, 2], "second-half": [3, 4], "q1-q3": [1, 3] }[selected];
+    for (const side of ["home", "away"]) {
+      const periods = full[`${side}Team`]?.periods;
+      const played = Math.min(range[1], Number(full.period || 0));
+      const relevant = Array.isArray(periods) ? periods.filter(p => Number(p.period) >= range[0] && Number(p.period) <= played) : [];
+      if (played >= range[0] && relevant.length === played - range[0] + 1 && relevant.every(p => p.score != null && Number.isFinite(Number(p.score)))) {
+        const expected = relevant.reduce((sum, p) => sum + Number(p.score), 0);
+        if (Number(derived.teamTotals[full[`${side}Team`].teamId]?.points) !== expected) throw new Error("Segment play-by-play does not match scoreboard");
+      }
+    }
+    return { ...full, teamStats: { home: {}, away: {} }, segmentDataQuality: { source: "play-by-play" }, boxScore: Object.fromEntries(["home", "away"].map(side => [side, {
+      ...full.boxScore[side], totals: derived.teamTotals[full[`${side}Team`].teamId],
       players: full.boxScore[side].players.map(p => ({ ...p, ...(derived.playerMap.get(p.personId) || {}) })),
     }])) };
   };
-  const segmentGame = await requestJson(url, { timeoutMs: 8000 }).then(game => {
+  const segmentGame = await backupGame().then(game => {
     if (String(game?.gameId) !== String(gameId) || !game?.homeTeam?.teamId || !game?.awayTeam?.teamId || !game?.boxScore) throw new Error("Primary game contract incomplete");
     return game;
-  }).catch(backupGame);
+  });
   // Optional officials enrichment must never hold up a usable game. Roles from
   // the primary/backup remain available if this short request fails.
   const liveBoxscore = await requestJson(`${LIVE_BOXSCORE_BASE}/boxscore_${gameId}.json`, { timeoutMs: 1500 }).catch(() => null);
   let game = await recoverMissingLivePlayByPlay(segmentGame, loadEmergencyPlayByPlay);
   if (needsThreeQuarterFallback(game, segment)) {
     const fullGame = await recoverMissingLivePlayByPlay(
-      await requestJson(`${API_BASE}/games/${gameId}`, { timeoutMs: 8000 }),
+      await fetchGame(gameId, null, options),
       loadEmergencyPlayByPlay
     );
     assertNonEmptyLiveFeed(fullGame);
@@ -1899,15 +1910,19 @@ export async function fetchGame(gameId, segment = null, options = {}) {
       isAlternate: String(official?.assignment || "").toUpperCase() === "ALTERNATE",
     }))
     : game?.officials;
-  return normalizeGameMidrangeStats({ ...game, officials });
+  return normalizeGameMidrangeStats(normalizeSummerLeagueGameMetadata({ ...game, officials }));
 }
 
 export async function fetchMinutes(gameId, options = {}) {
-  const url = `${API_BASE}/games/${gameId}/minutes`;
   try {
-    const minutesData = normalizeOpeningMinutesData(normalizeSummerLeagueMinutesData(gameId, await requestJson(url)), null);
+    const response = await requestJson(`${SUPABASE_FUNCTIONS_BASE}/game-metadata`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ minutesGameId: String(gameId) }), timeoutMs: 45000,
+    });
+    if (String(response?.minutes?.gameId) !== String(gameId)) throw new Error("Minutes game identity mismatch");
+    const minutesData = normalizeOpeningMinutesData(normalizeSummerLeagueMinutesData(gameId, response.minutes), null);
     if (!options.game && !needsOpeningStintRepair(minutesData) && minutesData?.gameStatus !== 3) return minutesData;
-    const game = options.game || await requestJson(`${API_BASE}/games/${gameId}`).catch(() => null);
+    const game = options.game || await fetchGame(gameId).catch(() => null);
     return normalizeOpeningMinutesData(minutesData, game);
   } catch (error) {
     if (options.optional && error?.status === 404) {

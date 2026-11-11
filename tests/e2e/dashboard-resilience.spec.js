@@ -2,9 +2,8 @@ import { expect, test } from "@playwright/test";
 const game = { gameId: "0022600015", gameStatus: 2, period: 3, homeTeam: { teamId: 1, score: 51 }, awayTeam: { teamId: 2, score: 46 }, boxScore: { home: { players: [] }, away: { players: [] } }, playByPlayActions: [{ actionNumber: 1 }] };
 test("reload during outage immediately restores labeled public data and retains it after failed refresh", async ({ page }) => {
   let down = false;
-  await page.route("**/api/games/0022600015", route => route.fulfill(down ? { status: 503, json: {} } : { json: game }));
   await page.route("**/boxscore_*.json", route => route.fulfill({ json: {} }));
-  await page.route("**/game-metadata", route => route.fulfill({ status: 503, json: { error: "down" } }));
+  await page.route("**/game-metadata", route => route.fulfill(down ? { status: 503, json: { error: "down" } } : { json: { game } }));
   await page.goto("visual-test.html");
   await page.evaluate(async () => {
     const { gameQueryOptions } = await import("/nbadash/src/queries.js");
@@ -27,7 +26,6 @@ test("reload during outage immediately restores labeled public data and retains 
   expect(result.otherSegment).toBeUndefined();
 });
 test("primary HTTP outage recovers core game through backend rather than browser CDN", async ({ page }) => {
-  await page.route("**/api/games/0022600015", route => route.fulfill({ status: 503, json: {} }));
   await page.route("**/boxscore_*.json", route => route.fulfill({ json: {} }));
   await page.route("**/game-metadata", route => route.fulfill({ json: { game: { ...game, feedAvailability: { limited: true, source: "nba-live-backup" } } } }));
   await page.goto("visual-test.html");
@@ -36,7 +34,7 @@ test("primary HTTP outage recovers core game through backend rather than browser
   expect(result.feedAvailability.limited).toBe(true);
 });
 test("a hanging optional boxscore request has a deadline", async ({ page }) => {
-  await page.route("**/api/games/0022600015", route => route.fulfill({ json: game }));
+  await page.route("**/game-metadata", route => route.fulfill({ json: { game } }));
   await page.route("**/boxscore_*.json", () => {});
   await page.goto("visual-test.html");
   const result = await page.evaluate(async () => {

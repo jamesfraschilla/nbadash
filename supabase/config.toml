@@ -48,3 +48,6 @@ verify_jwt = true
 
 [functions.referee-assignments]
 verify_jwt = false
+
+[functions.scoreboard]
+verify_jwt = false

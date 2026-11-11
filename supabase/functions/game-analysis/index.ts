@@ -1,3 +1,4 @@
+import { fetchNbaMinutes } from "../_shared/nbaMinutes.js";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { requestBodyTooLarge, requireActiveRateLimitedUser } from "../_shared/requestSecurity.ts";
 import { normalizeOpeningMinutesData } from "../_shared/minutesNormalization.ts";
@@ -7,7 +8,6 @@ import { classifyShotZone as classifyShot } from "../_shared/shotZone.ts";
 import { hasEmptyLivePlayByPlay } from "../_shared/liveFeedIntegrity.ts";
 import { fetchRecoverableGame } from "../_shared/nbaLiveRecovery.ts";
 
-const API_BASE = "https://d1rjt2wyntx8o7.cloudfront.net/api";
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 const DEFAULT_OPENAI_MODEL = Deno.env.get("OPENAI_ANALYSIS_MODEL") || "gpt-4.1-mini";
 const CACHE_TABLE = "game_analysis_segments";
@@ -2713,7 +2713,7 @@ export async function handleRequest(req: Request) {
       return response;
     }
     if (!minutesData) {
-      minutesData = await requestJson(`${API_BASE}/games/${gameId}/minutes`).catch(() => null);
+      minutesData = await fetchNbaMinutes(game, Deno.env.get("NBA_API_KEY") || "").catch(() => null);
     }
 
     minutesData = normalizeOpeningMinutesData(minutesData, game);

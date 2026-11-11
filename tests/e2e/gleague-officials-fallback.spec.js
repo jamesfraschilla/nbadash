@@ -10,9 +10,12 @@ const html = `<h1>NBA Referee Assignments</h1><table>
 
 for (const variant of ["regular", "atc"]) {
   test(`G League ${variant} dashboard uses the second assignment table when proxies fail`, async ({ page }) => {
-    await page.route("**/api/games/**", route => {
-      if (route.request().url().includes("byDate")) return route.fulfill({ json: [] });
-      return route.fulfill({ json: {
+
+    await page.route("**/functions/v1/**", route => route.fulfill({ json: {} }));
+    await page.route("**/functions/v1/game-metadata", route => {
+      const body = route.request().postDataJSON();
+      if (!(body.primaryGameId || body.liveGameId)) return route.fulfill({ status: 503, json: {} });
+      return route.fulfill({ json: { game: {
         gameId: "2052600002", gameStatus: 1, period: 0,
         gameEt: new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date()) + "T19:00:00",
         awayTeam: { teamId: "1612709928", teamCity: "Capital City", teamName: "Go-Go", teamTricode: "CCG", score: 0 },
@@ -20,9 +23,8 @@ for (const variant of ["regular", "atc"]) {
         officials: [], callsAgainst: null, playByPlayActions: [],
         boxScore: { away: { players: [], totals: {} }, home: { players: [], totals: {} } },
         teamStats: { away: {}, home: {} },
-      } });
+      } } });
     });
-    await page.route("**/functions/v1/**", route => route.fulfill({ json: {} }));
     await page.route("**/rest/v1/**", route => route.fulfill({ json: [] }));
     await page.route("**/boxscore_*.json", route => route.fulfill({ json: {} }));
     // All assignment proxies fail; only the official page is available.

@@ -1,5 +1,7 @@
 # NBA Dash Developer Handoff
 
+> This handoff is a historical snapshot. Its CloudFront descriptions do not reflect the current local migration. See [NBA data sources](NBA_DATA_SOURCES.md) for the current code and deployment caveats.
+
 Last updated: 2026-08-23
 
 Repository inspected: `nba_dashboard`

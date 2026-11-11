@@ -3,12 +3,12 @@ import { expect, test } from "@playwright/test";
 test("visible legacy notes share one read-only feed lookup and never rewrite stored notes", async ({ page }) => {
   let gameRequests = 0;
   const noteWrites = [];
-  await page.route("**/api/games/0022600119", (route) => {
+  await page.route("**/functions/v1/game-metadata", (route) => {
     gameRequests++;
-    return route.fulfill({ json: { gameId: "0022600119", gameStatus: 3, period: 4,
+    return route.fulfill({ json: { game: { gameId: "0022600119", gameStatus: 3, period: 4,
       homeTeam: { teamId: 1610612766 }, awayTeam: { teamId: 1610612764 },
       boxScore: { home: { players: [] }, away: { players: [] } },
-      playByPlayActions: [{ actionNumber: 19, period: 1, clock: "PT04M53.00S", actionType: "2pt", timeActual: "2026-10-26T23:30:10Z" }] } });
+      playByPlayActions: [{ actionNumber: 19, period: 1, clock: "PT04M53.00S", actionType: "2pt", timeActual: "2026-10-26T23:30:10Z" }] } } });
   });
   await page.route("**/boxscore_*.json", (route) => route.fulfill({ json: {} }));
   page.on("request", (request) => {
