@@ -128,6 +128,12 @@ def main():
     batch={'sampled_at':now.isoformat(),'game_id':GAME,'results':results}
     with (ROOT/'timeline.jsonl').open('a') as f: f.write(json.dumps(batch,default=str)+'\n')
     (ROOT/'latest.json').write_text(json.dumps(batch,indent=2,default=str)+'\n')
+    # Run the dashboard's real G League calculations independently of source
+    # collection. A calculation failure is recorded and never aborts capture.
+    try:
+        processing=subprocess.run(['node',str(pathlib.Path(__file__).with_name('gleague-processing-audit.mjs'))],env={**os.environ,'AUDIT_OUTPUT':str(ROOT)},capture_output=True,text=True,timeout=20)
+        print(processing.stdout.strip() or ('DASHBOARD_PROCESSING error '+processing.stderr.strip()[:300]),flush=True)
+    except Exception as e: print('DASHBOARD_PROCESSING error',type(e).__name__,str(e)[:200],flush=True)
     print(now.isoformat(), ' '.join(x['source']+':'+str(x.get('status','network'))+('/error' if x.get('error') else '') for x in results),flush=True)
     for result in results:
         if result['source'] in ('trail_game','trail_pbp','trail_minutes','gleague_pbp','gleague_box','gleague_rotation','espn_scoreboard'):
