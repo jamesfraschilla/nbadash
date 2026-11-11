@@ -1,6 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { aggregateSegmentStats, computeKills, countPossessionsByTeam } from "./segmentStats.js";
+import { aggregateSegmentStats, computeKills, countPossessionsByTeam, countOutcomePossessionsByTeam } from "./segmentStats.js";
+
+test("outcome-based trial ignores empty changes and counts actual shots, turnovers and free throws", () => {
+  const actions = [
+    { period: 1, clock: "PT12M00S", possession: 1, teamId: 1, actionType: "substitution" },
+    { period: 1, clock: "PT11M30S", possession: 2, teamId: 2, actionType: "2pt" },
+    { period: 1, clock: "PT11M00S", possession: 1, teamId: 1, actionType: "turnover" },
+    { period: 1, clock: "PT10M30S", possession: 2, teamId: 2, actionType: "freethrow" },
+  ];
+  assert.deepEqual(countOutcomePossessionsByTeam(actions, "all", 2, 1), { homePossessions: 2, awayPossessions: 1 });
+});
 
 const AWAY = {
   teamId: 1,

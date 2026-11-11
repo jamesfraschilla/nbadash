@@ -865,3 +865,31 @@ export function countPossessionsByTeam(actions, segment, homeTeamId, awayTeamId)
 
   return { homePossessions, awayPossessions };
 }
+
+// One-game live trial: reproduce the previous feed's completed-outcome counts.
+// This remains an estimate, especially for the currently incomplete possession.
+export function countOutcomePossessionsByTeam(actions, segment, homeTeamId, awayTeamId) {
+  const predicate = segmentPeriods(segment);
+  const homeId = Number(homeTeamId), awayId = Number(awayTeamId);
+  let current = null;
+  const result = { homePossessions: 0, awayPossessions: 0 };
+  const finish = () => {
+    if (!current?.hasOutcome) return;
+    if (current.team === homeId) result.homePossessions += 1;
+    if (current.team === awayId) result.awayPossessions += 1;
+  };
+  for (const action of orderActions(actions.filter((entry) => predicate(entry.period)))) {
+    const team = Number(action.possession);
+    if (team !== homeId && team !== awayId) continue;
+    if (!current || current.team !== team || current.period !== action.period) {
+      finish();
+      current = { team, period: action.period, hasOutcome: false };
+    }
+    const type = String(action.actionType || "").toLowerCase();
+    if (Number(action.teamId) === team && ["2pt", "3pt", "freethrow", "turnover"].includes(type)) {
+      current.hasOutcome = true;
+    }
+  }
+  finish();
+  return result;
+}

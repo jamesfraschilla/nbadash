@@ -115,6 +115,7 @@ import {
   aggregateSegmentStats,
   computeKills,
   countPossessionsByTeam,
+  countOutcomePossessionsByTeam,
   segmentPeriods,
 } from "../segmentStats.js";
 import { supabase } from "../supabaseClient.js";
@@ -2044,11 +2045,17 @@ export default function Game({ variant = "full" }) {
   const officialAwayPossessions = teamStats?.away?.possessions;
   const officialHomePossessions = teamStats?.home?.possessions;
   const useOfficialPossessions = segment === "all" && officialAwayPossessions && officialHomePossessions;
-  const showPossessionMetrics = !game?.feedAvailability?.limited || Boolean(useOfficialPossessions);
+  const trialPossessions = gameId === "0022600217" && game?.feedAvailability?.source === "nba-api"
+    ? countOutcomePossessionsByTeam(game?.playByPlayActions || [], segment, homeTeamId, awayTeamId)
+    : null;
+  const useTrialPossessions = !useOfficialPossessions && trialPossessions?.homePossessions > 0 && trialPossessions?.awayPossessions > 0;
+  const showPossessionMetrics = !game?.feedAvailability?.limited || Boolean(useOfficialPossessions) || useTrialPossessions;
 
   const awayPossessions = Math.max(
     useOfficialPossessions
       ? officialAwayPossessions
+      : useTrialPossessions
+        ? trialPossessions.awayPossessions
       : hasPossessionCounts
         ? possessionCounts.awayPossessions
         : possessions(advancedAwayTotals, advancedHomeTotals),
@@ -2057,6 +2064,8 @@ export default function Game({ variant = "full" }) {
   const homePossessions = Math.max(
     useOfficialPossessions
       ? officialHomePossessions
+      : useTrialPossessions
+        ? trialPossessions.homePossessions
       : hasPossessionCounts
         ? possessionCounts.homePossessions
         : possessions(advancedHomeTotals, advancedAwayTotals),
@@ -3023,14 +3032,14 @@ export default function Game({ variant = "full" }) {
                 <div className={styles.centerMetricDivider} />
                 <div className={styles.centerMetricRow}>
                   <span className={styles.statValue}>{!showPossessionMetrics ? "Unavailable" : formatChancesValue(displayAwayChances)}</span>
-                  <span className={styles.statLabel}>Possesion Game</span>
+                  <span className={styles.statLabel}>{useTrialPossessions ? "Possession Game (trial)" : "Possesion Game"}</span>
                   <span className={styles.statValue}>{!showPossessionMetrics ? "Unavailable" : formatChancesValue(displayHomeChances)}</span>
                 </div>
               </div>
             )}
             {showExtras && (
               <div className={styles.paceGroup}>
-                <div className={styles.paceRow}>PACE {!showPossessionMetrics ? "Unavailable" : displayPaceValue.toFixed(1)}</div>
+                <div className={styles.paceRow}>PACE {useTrialPossessions ? "(trial) " : ""}{!showPossessionMetrics ? "Unavailable" : displayPaceValue.toFixed(1)}</div>
               </div>
             )}
             {isAtc && !game.feedAvailability?.limited && <div className={styles.headerPossessionTable}>{possessionSummaryTable}</div>}
