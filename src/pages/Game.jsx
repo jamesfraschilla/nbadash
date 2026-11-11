@@ -3433,7 +3433,34 @@ export default function Game({ variant = "full" }) {
               homeForcedTurnovers={homeForcedTurnovers}
             />
           </div>
-          </>)} /> : <p role="status">Advanced statistics are unavailable on the backup feed.</p>}
+          </>)} /> : game.feedAvailability?.source === "nba-api" && Number(game.gameStatus) >= 2 ? (
+            <SectionErrorBoundary name="Shooting and rebounding" key={`box-indicators:${gameId}`}>
+              <StatBars
+                title="Shooting & Rebounding"
+                awayTeam={awayTeam}
+                homeTeam={homeTeam}
+                rows={[
+                  ...fourFactorRows.filter((row) => row.label !== "TOV%"),
+                  shotProfileRows.find((row) => row.label === "3P Rate"),
+                  shotEffRows.find((row) => row.label === "3P FG%"),
+                ].filter(Boolean)}
+              />
+              {["pointsSecondChance", "pointsFromTurnovers", "pointsInThePaint"].every((key) =>
+                Number.isFinite(boxScore?.away?.totals?.[key]) && Number.isFinite(boxScore?.home?.totals?.[key])) && (
+                <StatBars
+                  title="Scoring Breakdown"
+                  awayTeam={awayTeam}
+                  homeTeam={homeTeam}
+                  rows={[
+                    ["2nd Chance", "pointsSecondChance"],
+                    ["Pts Off TO", "pointsFromTurnovers"],
+                    ["Paint Pts", "pointsInThePaint"],
+                  ].map(([label, key]) => ({ label, awayValue: boxScore.away.totals[key], homeValue: boxScore.home.totals[key] }))}
+                />
+              )}
+              <p role="status">Possession-based and other advanced statistics are still being verified.</p>
+            </SectionErrorBoundary>
+          ) : <p role="status">Advanced statistics are not available yet.</p>}
 
           <div className={styles.navRow} ref={boxScoreNavRef}>
             <SegmentSelector value={segment} onChange={handleSegmentChange} />
