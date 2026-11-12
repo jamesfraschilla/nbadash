@@ -140,3 +140,21 @@ test('infers at the current live clock only when no substitution shares it', () 
   game.playByPlayActions.push({ period: 1, clock: game.gameClock, actionNumber: 2, teamId: 1, actionType: 'substitution', subType: 'out', personId: 100 }, { period: 1, clock: game.gameClock, actionNumber: 3, teamId: 1, actionType: 'substitution', subType: 'in', personId: 105 });
   assert.throws(() => buildNbaMinutes(game, roster, []), { code: 'POC_PENDING' });
 });
+
+test('resolves a delayed substitution-boundary lineup only with a unique reconciled result', async () => {
+  const { game, roster } = fixture();
+  game.gameStatus = 2;
+  roster.push({ Game_Id: game.gameId, Person_id: 105, Team_id: 1, Period: 0, Person_Type: 'Player', First_Name: 'B', Last_Name: 'Five' });
+  game.boxScore.home.players[0].minutes = 'PT06M00.00S';
+  game.boxScore.home.players[0].plusMinusPoints = 0;
+  game.boxScore.home.players.push({ personId: 105, minutes: 'PT06M00.00S', plusMinusPoints: 2 });
+  game.playByPlayActions[0].clock = 'PT06M00.00S';
+  game.playByPlayActions.push({ period: 1, clock: 'PT06M00.00S', actionNumber: 2, teamId: 1, actionType: 'substitution', subType: 'out', personId: 100 }, { period: 1, clock: 'PT06M00.00S', actionNumber: 3, teamId: 1, actionType: 'substitution', subType: 'in', personId: 105 });
+  const { fetchNbaMinutes } = await import('./nbaMinutes.js');
+  const fetcher = async url => url.pathname.endsWith('/rosterlineup') ? { ok: true, status: 200, json: async () => roster } : { ok: true, status: 204 };
+  const result = await fetchNbaMinutes(game, 'key', fetcher);
+  assert.deepEqual(result.inferredScoringEvents, [1]);
+  assert.equal(result.periods[0].stints[1].homeScore, 2);
+  game.boxScore.home.players[0].plusMinusPoints = null;
+  await assert.rejects(fetchNbaMinutes(game, 'key', fetcher), { code: 'POC_PENDING' });
+});

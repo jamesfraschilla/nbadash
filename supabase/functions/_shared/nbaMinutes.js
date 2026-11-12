@@ -11,6 +11,40 @@ const label = seconds => {
 const id = value => String(value);
 const periodLength = (gameId, period) => period > 4 ? 300 : /^1[3456]/.test(gameId) ? 600 : 720;
 
+// Enumerate every five-player intermediate lineup between two substitution
+// stints. Missing/overlapping substitution records are deliberately rejected.
+function boundaryCandidates(game, actions, stints, clock) {
+  const adjacent = stints.filter(s => clockSeconds(s.startClock) > clockSeconds(s.endClock)
+    && (clockSeconds(s.startClock) === clock || clockSeconds(s.endClock) === clock));
+  if (adjacent.length !== 2) return [];
+  const choices = {};
+  for (const side of ['home', 'away']) {
+    const key = side === 'home' ? 'playersHome' : 'playersAway';
+    const before = adjacent[0][key].map(p => id(p.personId));
+    const after = adjacent[1][key].map(p => id(p.personId));
+    const removed = before.filter(p => !after.includes(p)), added = after.filter(p => !before.includes(p));
+    const subs = actions.filter(a => a.actionType === 'substitution' && clockSeconds(a.clock) === clock && id(a.teamId) === id(game[`${side}Team`].teamId));
+    const outs = subs.filter(a => a.subType === 'out').map(a => id(a.personId));
+    const ins = subs.filter(a => a.subType === 'in').map(a => id(a.personId));
+    const same = (a, b) => a.length === b.length && [...a].sort().join(',') === [...b].sort().join(',');
+    if (!same(removed, outs) || !same(added, ins) || removed.length !== added.length) return [];
+    const playerRows = game.boxScore?.[side]?.players || [];
+    if ([...new Set([...before, ...after])].some(personId => !playerRows.some(p => id(p.personId) === personId && p.plusMinusPoints != null && Number.isFinite(Number(p.plusMinusPoints))))) return [];
+    choices[side] = [];
+    for (let outMask = 0; outMask < 2 ** removed.length; outMask++) for (let inMask = 0; inMask < 2 ** added.length; inMask++) {
+      const out = removed.filter((_, i) => outMask & (1 << i));
+      const incoming = added.filter((_, i) => inMask & (1 << i));
+      if (out.length === incoming.length) choices[side].push([...before.filter(p => !out.includes(p)), ...incoming]);
+      if (choices[side].length > 128) return [];
+    }
+  }
+  if (choices.home.length * choices.away.length > 128) return [];
+  return choices.home.flatMap(home => choices.away.map(away => [
+    ...home.map(personId => ({ Team_id: game.homeTeam.teamId, Person_id: personId })),
+    ...away.map(personId => ({ Team_id: game.awayTeam.teamId, Person_id: personId })),
+  ]));
+}
+
 export function buildNbaMinutes(game, roster, playersOnCourt = []) {
   const gameId = String(game?.gameId || '');
   if (!/^\d{10}$/.test(gameId) || !Array.isArray(roster) || !Array.isArray(game?.playByPlayActions)) throw new Error('Invalid minutes source');
@@ -94,11 +128,15 @@ export function buildNbaMinutes(game, roster, playersOnCourt = []) {
         const matches = Number(game.gameStatus) === 2 ? stints.filter(item =>
           clockSeconds(item.startClock) > eventClock && (clockSeconds(item.endClock) < eventClock
             || (currentClockWithoutSub && clockSeconds(item.endClock) === eventClock))) : [];
-        if (matches.length !== 1) throw Object.assign(new Error(`Scoring action ${action.actionNumber} has no players-on-court data`), { code: 'POC_PENDING' });
+        if (matches.length !== 1) throw Object.assign(new Error(`Scoring action ${action.actionNumber} has no players-on-court data`), {
+          code: 'POC_PENDING', actionNumber: Number(action.actionNumber),
+          boundaryChoices: Number(game.gameStatus) === 2 ? boundaryCandidates(game, actions, stints, eventClock) : [],
+        });
         eventLineups.home = matches[0].playersHome;
         eventLineups.away = matches[0].playersAway;
         inferredScoringEvents.push(Number(action.actionNumber));
       } else {
+        if (row.inferredByReconciliation) inferredScoringEvents.push(Number(action.actionNumber));
         for (const side of ['home', 'away']) {
           const members = row.PlayersPlusMinus.filter(p => id(p.Team_id) === id(game[`${side}Team`].teamId));
           if (members.length !== 5 || new Set(members.map(p => id(p.Person_id))).size !== 5) throw new Error('Scoring action lineup is incomplete');
@@ -193,6 +231,23 @@ export async function fetchNbaMinutes(game, apiKey, fetcher = fetch) {
     await new Promise(resolve => setTimeout(resolve, 300));
     const refreshed = await load('poc');
     if (!Array.isArray(refreshed)) throw new Error('Players-on-court feed invalid');
-    return buildNbaMinutes(game, roster, refreshed);
+    try { return buildNbaMinutes(game, roster, refreshed); } catch (pending) {
+      if (pending?.code !== 'POC_PENDING' || !pending.boundaryChoices?.length) throw pending;
+      // Accept only a unique solution that reconciles every available period
+      // score, player margin and minute total. Bound search and reject ties.
+      const solutions = []; let attempts = 0; let exhausted = false;
+      const search = (rows, issue) => {
+        for (const members of issue.boundaryChoices || []) {
+          if (++attempts > 128) { exhausted = true; return; }
+          const next = [...rows, { Game_id: String(game.gameId), Event_Num: issue.actionNumber, PlayersPlusMinus: members, inferredByReconciliation: true }];
+          try { solutions.push(buildNbaMinutes(game, roster, next)); }
+          catch (nested) { if (nested?.code === 'POC_PENDING' && nested.boundaryChoices?.length) search(next, nested); }
+          if (solutions.length > 1 || exhausted) return;
+        }
+      };
+      search(refreshed, pending);
+      if (!exhausted && solutions.length === 1) return solutions[0];
+      throw pending;
+    }
   }
 }
