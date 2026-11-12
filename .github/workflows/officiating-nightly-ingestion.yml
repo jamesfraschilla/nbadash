@@ -62,6 +62,9 @@ jobs:
         run: npm run officiating:backfill:insight-facts -- --season=2026-27 --lookback-days="${LOOKBACK_DAYS}" --concurrency=2 --replace --apply
       - name: Audit NBA feed schema contract
         id: feed-contract
+        # Publish schema regressions as a separate feed incident without marking
+        # a successful officiating import as failed.
+        continue-on-error: true
         run: npm run nba-feed:audit
       - name: Publish NBA feed degradation and schema findings
         if: ${{ !cancelled() }}
