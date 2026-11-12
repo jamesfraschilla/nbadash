@@ -39,6 +39,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NBA_API_KEY: ${{ secrets.NBA_API_KEY }}
           LOOKBACK_DAYS: ${{ inputs.lookback_days || '3' }}
         run: |
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
