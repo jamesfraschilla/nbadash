@@ -236,9 +236,10 @@ export async function fetchNbaMinutes(game, apiKey, fetcher = fetch) {
       // Accept only a unique solution that reconciles every available period
       // score, player margin and minute total. Bound search and reject ties.
       const solutions = []; let attempts = 0; let exhausted = false;
+      const deadline = Date.now() + 1500;
       const search = (rows, issue) => {
         for (const members of issue.boundaryChoices || []) {
-          if (++attempts > 128) { exhausted = true; return; }
+          if (++attempts > 1024 || Date.now() > deadline) { exhausted = true; return; }
           const next = [...rows, { Game_id: String(game.gameId), Event_Num: issue.actionNumber, PlayersPlusMinus: members, inferredByReconciliation: true }];
           try { solutions.push(buildNbaMinutes(game, roster, next)); }
           catch (nested) { if (nested?.code === 'POC_PENDING' && nested.boundaryChoices?.length) search(next, nested); }
