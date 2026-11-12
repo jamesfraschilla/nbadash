@@ -12,6 +12,19 @@ test("outcome-based trial ignores empty changes and counts actual shots, turnove
   assert.deepEqual(countOutcomePossessionsByTeam(actions, "all", 2, 1), { homePossessions: 2, awayPossessions: 1 });
 });
 
+test("outcome possession count excludes heaves and held balls at a completed period", () => {
+  const actions = [
+    { period: 3, clock: "PT00M06S", possession: 2, teamId: 2, actionType: "rebound", subType: "defensive" },
+    { period: 3, clock: "PT00M00.4S", possession: 2, teamId: 2, actionType: "heave" },
+    { period: 3, clock: "PT00M00S", possession: 2, actionType: "period", subType: "end" },
+    { period: 4, clock: "PT12M00S", possession: 1, teamId: 1, actionType: "substitution" },
+    { period: 4, clock: "PT00M25S", possession: 1, teamId: 1, actionType: "rebound", subType: "defensive" },
+    { period: 4, clock: "PT00M00S", possession: 1, actionType: "period", subType: "end" },
+  ];
+  assert.deepEqual(countOutcomePossessionsByTeam(actions, "all", 1, 2), { homePossessions: 0, awayPossessions: 0 });
+  assert.deepEqual(countOutcomePossessionsByTeam(actions.slice(0, -1), "q4", 1, 2), { homePossessions: 0, awayPossessions: 0 });
+});
+
 const AWAY = {
   teamId: 1,
   teamTricode: "AWY",

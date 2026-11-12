@@ -37,7 +37,7 @@ const disruptionColumns = [
   {
     key: "disruptions",
     label: "Disruptions",
-    format: (_, value) => value ?? 0,
+    format: (_, value) => value == null ? "—" : value,
     isDerived: true,
   },
   {

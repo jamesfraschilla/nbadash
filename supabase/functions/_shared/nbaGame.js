@@ -54,7 +54,9 @@ export async function fetchNbaGame(gameId, apiKey, fetcher = fetch, { allowMissi
     const stats = advancedTeam?.statistics || {};
     const finite = value => value != null && Number.isFinite(Number(value)) ? Number(value) : undefined;
     teamStats[side] = { offensiveRating: finite(stats.offRating), defensiveRating: finite(stats.defRating),
-      netRating: finite(stats.netRating), possessions: finite(stats.poss) };
+      netRating: finite(stats.netRating), possessions: finite(stats.poss),
+      effectiveFieldGoalPercentage: finite(stats.efgPct), offensiveReboundPercentage: finite(stats.orebPct),
+      turnoverPercentage: finite(stats.tmTovPct) };
     boxScore[side] = { teamId: cardTeam.teamId, teamName: team.teamName || cardTeam.teamName, teamTricode: team.teamTricode || cardTeam.teamTricode,
       totals: line(team.statistics), players: team.players.map(p => {
         const a = playersById.get(String(p.personId)) || {};
@@ -76,13 +78,28 @@ export async function fetchNbaSegmentBox(game, segment, apiKey, fetcher = fetch)
   if (!range) throw new Error('Unsupported game segment');
   if (Number(game?.gameStatus) !== 3) throw new Error('Official segment box score is only available after the game');
   if (!apiKey) throw new Error('NBA_API_KEY is not configured');
-  const url = new URL(`${BASE}/stats/boxscore`);
-  for (const [key, value] of Object.entries({ gameId: game.gameId, measureType: 'Traditional', rangeType: '1', startPeriod: String(range[0]), endPeriod: String(range[1]) })) url.searchParams.set(key, value);
-  const response = await fetcher(url, { headers: { 'X-NBA-Api-Key': apiKey, Accept: 'application/json' }, signal: AbortSignal.timeout(15000) });
+  const urlFor = measureType => {
+    const url = new URL(`${BASE}/stats/boxscore`);
+    for (const [key, value] of Object.entries({ gameId: game.gameId, measureType, rangeType: '1', startPeriod: String(range[0]), endPeriod: String(range[1]) })) url.searchParams.set(key, value);
+    return url;
+  };
+  const headers = { 'X-NBA-Api-Key': apiKey, Accept: 'application/json' };
+  const response = await fetcher(urlFor('Traditional'), { headers, signal: AbortSignal.timeout(15000) });
   if (!response.ok) throw new Error(`NBA segment unavailable (${response.status})`);
   const box = await response.json();
   if (String(box?.gameId) !== String(game.gameId)) throw new Error('Segment game identity mismatch');
+  let advanced = null;
+  try {
+    const advancedResponse = await fetcher(urlFor('Advanced'), { headers, signal: AbortSignal.timeout(5000) });
+    if (advancedResponse.ok) {
+      const candidate = await advancedResponse.json();
+      if (String(candidate?.gameId) === String(game.gameId) && ['home', 'away'].every(side =>
+        String(candidate[`${side}Team`]?.teamId) === String(game[`${side}Team`]?.teamId))) advanced = candidate;
+    }
+  } catch { /* Period advanced data can arrive later than the traditional box. */ }
   const result = {};
+  const teamStats = {};
+  const finite = value => value != null && Number.isFinite(Number(value)) ? Number(value) : undefined;
   for (const side of ['home', 'away']) {
     const team = box[`${side}Team`];
     if (!team || String(team.teamId) !== String(game[`${side}Team`]?.teamId) || !Array.isArray(team.players) || !team.statistics) throw new Error('Segment box score incomplete');
@@ -90,10 +107,21 @@ export async function fetchNbaSegmentBox(game, segment, apiKey, fetcher = fetch)
     const expected = game[`${side}Team`]?.periods;
     const periods = Array.isArray(expected) ? expected.filter(p => Number(p.period) >= range[0] && Number(p.period) <= range[1]) : [];
     if (periods.length === range[1] - range[0] + 1 && periods.every(p => p.score != null && Number.isFinite(Number(p.score))) && Number(team.statistics.points) !== periods.reduce((sum, p) => sum + Number(p.score), 0)) throw new Error('Segment score does not reconcile');
+    const advancedTeam = advanced?.[`${side}Team`];
+    const advancedPlayers = new Map((advancedTeam?.players || []).map(player => [String(player.personId), player.statistics || {}]));
+    const advancedStats = advancedTeam?.statistics || {};
+    teamStats[side] = { offensiveRating: finite(advancedStats.offRating), defensiveRating: finite(advancedStats.defRating),
+      netRating: finite(advancedStats.netRating), possessions: finite(advancedStats.poss),
+      effectiveFieldGoalPercentage: finite(advancedStats.efgPct), offensiveReboundPercentage: finite(advancedStats.orebPct),
+      turnoverPercentage: finite(advancedStats.tmTovPct) };
     result[side] = { teamId: team.teamId, teamName: team.teamName, teamTricode: team.teamTricode,
-      totals: line(team.statistics), players: team.players.map(player => ({ ...player, ...line(player.statistics || {}) })) };
+      totals: line(team.statistics), players: team.players.map(player => {
+        const playerAdvanced = advancedPlayers.get(String(player.personId)) || {};
+        return { ...player, ...line(player.statistics || {}), offensiveRating: finite(playerAdvanced.offRating),
+          defensiveRating: finite(playerAdvanced.defRating), netRating: finite(playerAdvanced.netRating) };
+      }) };
   }
-  return { ...game, boxScore: result, teamStats: { home: {}, away: {} }, segmentDataQuality: { source: 'nba-period-boxscore' } };
+  return { ...game, boxScore: result, teamStats, segmentDataQuality: { source: 'nba-period-boxscore', officialPossessions: ['home', 'away'].every(side => Number.isFinite(teamStats[side].possessions) && teamStats[side].possessions > 0) } };
 }
 
 export async function fetchNbaPlayByPlay(gameId, apiKey, fetcher = fetch) {
