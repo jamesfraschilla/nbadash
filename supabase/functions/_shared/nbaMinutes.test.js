@@ -185,3 +185,19 @@ test('does not apply NBA live inference or box-clock tolerance to G League games
   for (const side of ['home', 'away']) for (const player of game.boxScore[side].players) player.minutes = 'PT11M40.00S';
   assert.throws(() => buildNbaMinutes(game, roster, poc), /minutes do not reconcile/);
 });
+
+test('uses a zero-duration post-substitution lineup only when current on-court flags confirm it', async () => {
+  const { game, roster } = fixture();
+  game.gameStatus = 2; game.gameClock = 'PT06M00.00S';
+  roster.push({ Game_Id: game.gameId, Person_id: 105, Team_id: 1, Period: 0, Person_Type: 'Player', First_Name: 'B', Last_Name: 'Five' });
+  for (const side of ['home', 'away']) for (const player of game.boxScore[side].players) { player.minutes = 'PT06M00.00S'; player.oncourt = '1'; }
+  game.boxScore.home.players[0].oncourt = '0';
+  game.boxScore.home.players.push({ personId: 105, minutes: 'PT00M00.00S', plusMinusPoints: 0, oncourt: '1' });
+  game.playByPlayActions[0].clock = game.gameClock;
+  game.playByPlayActions.push({ period: 1, clock: game.gameClock, actionNumber: 2, teamId: 1, actionType: 'substitution', subType: 'out', personId: 100 }, { period: 1, clock: game.gameClock, actionNumber: 3, teamId: 1, actionType: 'substitution', subType: 'in', personId: 105 });
+  const { fetchNbaMinutes } = await import('./nbaMinutes.js');
+  const fetcher = async url => url.pathname.endsWith('/rosterlineup') ? { ok: true, status: 200, json: async () => roster } : { ok: true, status: 204 };
+  assert.deepEqual((await fetchNbaMinutes(game, 'key', fetcher)).inferredScoringEvents, [1]);
+  game.boxScore.home.players[0].oncourt = '1';
+  await assert.rejects(fetchNbaMinutes(game, 'key', fetcher), { code: 'POC_PENDING' });
+});

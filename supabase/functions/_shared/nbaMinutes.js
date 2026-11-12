@@ -13,9 +13,20 @@ const periodLength = (gameId, period) => period > 4 ? 300 : /^1[3456]/.test(game
 
 // Enumerate every five-player intermediate lineup between two substitution
 // stints. Missing/overlapping substitution records are deliberately rejected.
-function boundaryCandidates(game, actions, stints, clock) {
+function boundaryCandidates(game, actions, stints, clock, lineups, end, isCurrentPeriod) {
   const adjacent = stints.filter(s => clockSeconds(s.startClock) > clockSeconds(s.endClock)
     && (clockSeconds(s.startClock) === clock || clockSeconds(s.endClock) === clock));
+  if (adjacent.length === 1 && clock === end && isCurrentPeriod && Number(game.gameStatus) === 2) {
+    // At a stopped live clock the post-substitution stint has zero duration.
+    // Use it only when the independently supplied box-score on-court flags
+    // identify exactly the same five players on each team.
+    const confirmed = ['home', 'away'].every(side => {
+      const onCourt = (game.boxScore?.[side]?.players || []).filter(p => String(p.oncourt) === '1').map(p => id(p.personId)).sort();
+      const reconstructed = lineups[side].map(p => id(p.personId)).sort();
+      return onCourt.length === 5 && new Set(onCourt).size === 5 && onCourt.join(',') === reconstructed.join(',');
+    });
+    if (confirmed) adjacent.push({ playersHome: lineups.home, playersAway: lineups.away });
+  }
   if (adjacent.length !== 2) return [];
   const choices = {};
   for (const side of ['home', 'away']) {
@@ -131,7 +142,7 @@ export function buildNbaMinutes(game, roster, playersOnCourt = [], options = {})
             || (currentClockWithoutSub && clockSeconds(item.endClock) === eventClock))) : [];
         if (matches.length !== 1) throw Object.assign(new Error(`Scoring action ${action.actionNumber} has no players-on-court data`), {
           code: 'POC_PENDING', actionNumber: Number(action.actionNumber),
-          boundaryChoices: liveNba ? boundaryCandidates(game, actions, stints, eventClock) : [],
+          boundaryChoices: liveNba ? boundaryCandidates(game, actions, stints, eventClock, lineups, end, period === playedPeriods) : [],
         });
         eventLineups.home = matches[0].playersHome;
         eventLineups.away = matches[0].playersAway;
