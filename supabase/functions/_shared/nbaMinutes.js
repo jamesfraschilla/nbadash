@@ -85,11 +85,15 @@ export function buildNbaMinutes(game, roster, playersOnCourt = []) {
       const eventLineups = {};
       if (!row || !Array.isArray(row.PlayersPlusMinus)) {
         // During live games the NBA POC stream can lag PBP for an entire
-        // period. Infer only strictly inside a unique substitution stint;
-        // events at a substitution boundary must await the official lineup.
+        // period. Infer within a unique substitution stint, including the
+        // current live clock when no substitution is recorded at that clock.
+        // Actual substitution boundaries must await the official lineup.
         const eventClock = clockSeconds(action.clock);
+        const currentClockWithoutSub = period === playedPeriods && eventClock === end
+          && !actions.some(item => item.actionType === 'substitution' && clockSeconds(item.clock) === eventClock);
         const matches = Number(game.gameStatus) === 2 ? stints.filter(item =>
-          clockSeconds(item.startClock) > eventClock && clockSeconds(item.endClock) < eventClock) : [];
+          clockSeconds(item.startClock) > eventClock && (clockSeconds(item.endClock) < eventClock
+            || (currentClockWithoutSub && clockSeconds(item.endClock) === eventClock))) : [];
         if (matches.length !== 1) throw Object.assign(new Error(`Scoring action ${action.actionNumber} has no players-on-court data`), { code: 'POC_PENDING' });
         eventLineups.home = matches[0].playersHome;
         eventLineups.away = matches[0].playersAway;

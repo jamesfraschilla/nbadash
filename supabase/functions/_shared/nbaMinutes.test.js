@@ -129,3 +129,14 @@ test('treats NBA POC HTTP 204 as temporarily empty during a live game', async ()
   const result = await fetchNbaMinutes(game, 'key', fetcher);
   assert.deepEqual(result.inferredScoringEvents, [1]);
 });
+
+test('infers at the current live clock only when no substitution shares it', () => {
+  const { game, roster } = fixture();
+  game.gameStatus = 2;
+  game.gameClock = 'PT09M00.00S';
+  for (const side of ['home', 'away']) for (const player of game.boxScore[side].players) player.minutes = 'PT03M00.00S';
+  assert.deepEqual(buildNbaMinutes(game, roster, []).inferredScoringEvents, [1]);
+  roster.push({ Game_Id: game.gameId, Person_id: 105, Team_id: 1, Period: 0, Person_Type: 'Player', First_Name: 'B', Last_Name: 'Five' });
+  game.playByPlayActions.push({ period: 1, clock: game.gameClock, actionNumber: 2, teamId: 1, actionType: 'substitution', subType: 'out', personId: 100 }, { period: 1, clock: game.gameClock, actionNumber: 3, teamId: 1, actionType: 'substitution', subType: 'in', personId: 105 });
+  assert.throws(() => buildNbaMinutes(game, roster, []), { code: 'POC_PENDING' });
+});
