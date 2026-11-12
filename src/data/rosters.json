@@ -1509,6 +1509,14 @@
       "position": "G"
     },
     {
+      "personId": "1643721",
+      "firstName": "Carson",
+      "familyName": "Cooper",
+      "fullName": "Carson Cooper",
+      "jerseyNum": "20",
+      "position": "F"
+    },
+    {
       "personId": "1643024",
       "firstName": "Chris",
       "familyName": "Mañon",
@@ -3073,6 +3081,14 @@
       "fullName": "Maxime Raynaud",
       "jerseyNum": "42",
       "position": "C"
+    },
+    {
+      "personId": "203486",
+      "firstName": "Mason",
+      "familyName": "Plumlee",
+      "fullName": "Mason Plumlee",
+      "jerseyNum": "45",
+      "position": "F-C"
     }
   ],
   "1610612759": [
