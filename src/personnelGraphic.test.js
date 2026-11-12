@@ -14,6 +14,7 @@ import {
   createPersonnelRow,
   formatPersonnelStatValue,
   getCurrentPersonnelSeason,
+  normalizePersonnelStatsSeasonType,
   getPersonnelThreePointColorForPercentage,
   getPreviousPersonnelSeason,
   hasExactlyFourPersonnelStats,
@@ -149,7 +150,7 @@ test("Lefty is preserved as a personnel export tag", () => {
 test("createPersonnelDraft produces 25 independent rows with the exact draft shape", () => {
   const draft = createPersonnelDraft({ teamId: 1610612764, season: "2025-26" });
 
-  assert.deepEqual(Object.keys(draft), ["league", "nbaCup", "teamId", "season", "statOrder", "rows"]);
+  assert.deepEqual(Object.keys(draft), ["league", "nbaCup", "teamId", "season", "statsSeasonType", "statOrder", "rows"]);
   assert.equal(draft.nbaCup, false);
   assert.equal(draft.teamId, "1610612764");
   assert.equal(draft.season, "2025-26");
@@ -182,6 +183,15 @@ test("createPersonnelDraft produces 25 independent rows with the exact draft sha
   draft.rows[0].tags.push("fire");
   assert.equal(draft.rows[1].selectedStats.length, 4);
   assert.deepEqual(draft.rows[1].tags, []);
+});
+
+test("G League stats season type persists while older drafts default to full season", () => {
+  assert.equal(normalizePersonnelStatsSeasonType("showcase", "gleague"), "showcase");
+  assert.equal(hydratePersonnelDraft({ league: "gleague", season: "2025-26" }).statsSeasonType, "full");
+  assert.equal(hydratePersonnelDraft({ league: "gleague", season: "2026-27", statsSeasonType: "regular" }).statsSeasonType, "regular");
+  assert.equal(hydratePersonnelDraft({ league: "nba", statsSeasonType: "showcase" }).statsSeasonType, "regular");
+  const selected = createPersonnelDraft({ league: "gleague", season: "2026-27", statsSeasonType: "showcase" });
+  assert.equal(populatePersonnelDraftFromRoster(selected, [], { league: "gleague", teamId: "1612709928" }).statsSeasonType, "showcase");
 });
 
 test("NBA Cup mode defaults off for old personnel drafts and survives hydration", () => {

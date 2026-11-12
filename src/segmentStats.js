@@ -84,7 +84,11 @@ function scoringPoints(action, homeTeamId, awayTeamId) {
     : teamId === Number(awayTeamId)
       ? action.__scoreDeltaAway
       : null;
-  return Number.isFinite(delta) && delta > 0 ? delta : fallbackScoringPoints(action);
+  const expected = fallbackScoringPoints(action);
+  // Corrected and finalbox events can reset or jump the cumulative score.
+  // A single made shot cannot score more than its recorded shot value.
+  const maximum = action.actionType === "freethrow" ? 2 : expected;
+  return Number.isFinite(delta) && delta > 0 && delta <= maximum ? delta : expected;
 }
 
 function isSummerLeagueGameId(gameId) {
@@ -596,6 +600,9 @@ export function aggregateSegmentStats({
       const opponentId = isHome ? awayTeam.teamId : isAway ? homeTeam.teamId : null;
       if (opponentId && teamTotals[opponentId]) {
         teamTotals[opponentId].offensiveFoulsDrawn = (teamTotals[opponentId].offensiveFoulsDrawn || 0) + 1;
+        if (/\bcharg(?:e|ing)\b/i.test(String(action.description || ""))) {
+          teamTotals[opponentId].chargesDrawn = (teamTotals[opponentId].chargesDrawn || 0) + 1;
+        }
       }
     }
   });

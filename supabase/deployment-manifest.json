@@ -238,7 +238,7 @@
     {
       "name": "game-analysis",
       "entrypoint": "supabase/functions/game-analysis/index.ts",
-      "sha256": "35e8ea2557200c293884ee64cfe2179b1eca07be9fdb9851204db117177dec23",
+      "sha256": "93777cc46fc27d6a0fd429511f5317138396d9756308c346ee85afa8fbee34d0",
       "sourceFiles": [
         "supabase/functions/_shared/analysisClaimValidation.ts",
         "supabase/functions/_shared/analysisFreshness.ts",
@@ -376,7 +376,7 @@
     {
       "name": "nba-player-stats",
       "entrypoint": "supabase/functions/nba-player-stats/index.ts",
-      "sha256": "50ca1c60168965e3f910f38114b91f9a0e8fba9b5a11ee86e67c3e48e930910e",
+      "sha256": "9a93e3f76bc09d71153e07a7ff78b47668a85164310e8a5d6a1a79415119f157",
       "sourceFiles": [
         "supabase/functions/_shared/analysisClaimValidation.ts",
         "supabase/functions/_shared/analysisFreshness.ts",
@@ -393,6 +393,7 @@
         "supabase/functions/_shared/scoreboard.js",
         "supabase/functions/_shared/scoreboard.test.js",
         "supabase/functions/_shared/shotZone.ts",
+        "supabase/functions/nba-player-stats/gleagueStats.ts",
         "supabase/functions/nba-player-stats/index.ts",
         "supabase/functions/nba-player-stats/normalizers.ts"
       ]

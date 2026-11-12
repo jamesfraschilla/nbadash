@@ -759,7 +759,7 @@ export default function Game({ variant = "full" }) {
   });
 
   const isSummerLeagueMatch = isSummerLeagueGame(gameId);
-  const hasKeyedNbaEvents = String(gameId || '').startsWith('00')
+  const hasKeyedNbaEvents = /^(00|20)/.test(String(gameId || ''))
     && game?.feedAvailability?.source === 'nba-api' && game?.feedAvailability?.playByPlay;
   const nbaTwoPointShots = hasKeyedNbaEvents
     ? (game?.playByPlayActions || []).filter((action) => action.actionType === '2pt') : [];
@@ -788,7 +788,7 @@ export default function Game({ variant = "full" }) {
   }, []);
 
   useEffect(() => {
-    if (!gameId || !game || game._snapshotSavedAt || game.feedAvailability?.limited) return undefined;
+    if (!gameId || !game || game._snapshotSavedAt) return undefined;
     const shadowKey = buildGameLiveStateShadowKey(game, minutesData);
     if (!shadowKey || gameLiveStateShadowRef.current.key === shadowKey) return undefined;
 
@@ -976,7 +976,7 @@ export default function Game({ variant = "full" }) {
   const analysisPrewarmAttemptRef = useRef(new Map());
 
   useEffect(() => {
-    if (!gameId || !user?.id || !isWashingtonGame || !hasAnalysisData || !shouldUseSharedAnalysisRecaps || game?._snapshotSavedAt || game?.feedAvailability?.limited) return;
+    if (!gameId || !user?.id || !isWashingtonGame || !hasAnalysisData || !shouldUseSharedAnalysisRecaps || game?._snapshotSavedAt) return;
     const cachedKeys = new Set(cachedAnalysisSegments.map((record) => String(record?.segmentKey || "").trim()));
     const missingKeys = completedAnalysisSegments
       .map((record) => record.key)
@@ -1627,8 +1627,8 @@ export default function Game({ variant = "full" }) {
 
   const generateAnalysis = async () => {
     if (!gameId || analysisLoading) return;
-    if (game?._snapshotSavedAt || game?.feedAvailability?.limited) {
-      setAnalysisError("Recap generation is paused until a complete current feed is available. Saved recaps remain accessible.");
+    if (game?._snapshotSavedAt) {
+      setAnalysisError("Recap generation is unavailable for a saved snapshot.");
       return;
     }
     if (analysisValidation.error) {
@@ -2021,10 +2021,10 @@ export default function Game({ variant = "full" }) {
   const trialPossessions = hasKeyedNbaEvents
     ? countOutcomePossessionsByTeam(game?.playByPlayActions || [], segment, homeTeamId, awayTeamId)
     : null;
-  const useTrialPossessions = hasKeyedNbaEvents && trialPossessions?.homePossessions > 0 && trialPossessions?.awayPossessions > 0;
-  const useOfficialPossessions = !useTrialPossessions
-    && (segment === "all" || game?.segmentDataQuality?.source === "nba-period-boxscore")
+  const useOfficialPossessions = (segment === "all" || game?.segmentDataQuality?.source === "nba-period-boxscore")
     && officialAwayPossessions > 0 && officialHomePossessions > 0;
+  const useTrialPossessions = !useOfficialPossessions && hasKeyedNbaEvents
+    && trialPossessions?.homePossessions > 0 && trialPossessions?.awayPossessions > 0;
   const showPossessionMetrics = !game?.feedAvailability?.limited || Boolean(useOfficialPossessions) || useTrialPossessions;
 
   const awayPossessions = Math.max(
@@ -2254,6 +2254,7 @@ export default function Game({ variant = "full" }) {
     secondChance3FGMade: teamTotals.secondChance3FGMade ?? fallback?.secondChance3FGMade ?? 0,
     secondChance3FGAttempted: teamTotals.secondChance3FGAttempted ?? fallback?.secondChance3FGAttempted ?? 0,
     offensiveFoulsDrawn: teamTotals.offensiveFoulsDrawn ?? fallback?.offensiveFoulsDrawn ?? 0,
+    chargesDrawn: teamTotals.chargesDrawn ?? fallback?.chargesDrawn ?? 0,
     steals: teamTotals.steals ?? fallback?.steals ?? 0,
     turnovers: teamTotals.turnovers ?? fallback?.turnovers ?? 0,
   });
@@ -3012,26 +3013,26 @@ export default function Game({ variant = "full" }) {
               <div className={styles.centerMetrics}>
                 <div className={styles.centerMetricRow}>
                   <span className={styles.statValue}>{ortgAway}</span>
-                  <span className={styles.statLabel}>ORTG</span>
+                  <span className={styles.statLabel}>ORTG{useTrialPossessions ? "*" : ""}</span>
                   <span className={styles.statValue}>{ortgHome}</span>
                 </div>
                 <div className={styles.centerMetricDivider} />
                 <div className={styles.centerMetricRow}>
                   <span className={styles.statValue}>{netAway >= 0 ? "+" : ""}{netAway}</span>
-                  <span className={styles.statLabel}>NET</span>
+                  <span className={styles.statLabel}>NET{useTrialPossessions ? "*" : ""}</span>
                   <span className={styles.statValue}>{netHome >= 0 ? "+" : ""}{netHome}</span>
                 </div>
                 <div className={styles.centerMetricDivider} />
                 <div className={styles.centerMetricRow}>
                   <span className={styles.statValue}>{!showPossessionMetrics ? "Unavailable" : formatChancesValue(displayAwayChances)}</span>
-                  <span className={styles.statLabel}>{useTrialPossessions ? "Possession Game (est.)" : "Possession Game"}</span>
+                  <span className={styles.statLabel}>Possession Game{useTrialPossessions ? "*" : ""}</span>
                   <span className={styles.statValue}>{!showPossessionMetrics ? "Unavailable" : formatChancesValue(displayHomeChances)}</span>
                 </div>
               </div>
             )}
             {showExtras && (
               <div className={styles.paceGroup}>
-                <div className={styles.paceRow}>PACE {useTrialPossessions ? "(est.) " : ""}{!showPossessionMetrics ? "Unavailable" : displayPaceValue.toFixed(1)}</div>
+                <div className={styles.paceRow}>PACE{useTrialPossessions ? "*" : ""} {!showPossessionMetrics ? "Unavailable" : displayPaceValue.toFixed(1)}</div>
               </div>
             )}
             {isAtc && showEventSections && <div className={styles.headerPossessionTable}>{possessionSummaryTable}</div>}
@@ -3385,9 +3386,6 @@ export default function Game({ variant = "full" }) {
           {isWashingtonGame ? <GameKpiTables gameId={gameId} /> : null}
 
           {showAdvancedLayout ? <SectionErrorBoundary name="Advanced statistics" key={`advanced:${gameId}`} render={() => (<>
-          {useTrialPossessions && <p role="status">Possession-based rates use play-by-play outcomes (est.). {officialAwayPossessions > 0 && officialHomePossessions > 0
-            ? `NBA Advanced counts ${officialAwayPossessions} ${awayTeam?.teamTricode} and ${officialHomePossessions} ${homeTeam?.teamTricode} possessions under its official convention.`
-            : 'NBA Advanced counts will appear after they are published.'}</p>}
           <StatBars
             title="Four Factors"
             awayTeam={awayTeam}
@@ -3911,6 +3909,7 @@ export default function Game({ variant = "full" }) {
           variant={variant}
           minuteCapsByPersonId={awayMinuteCapsByPersonId}
           limitedFeed={Boolean(game.feedAvailability?.limited && !showAdvancedLayout)}
+          estimatedPossessions={useTrialPossessions}
         />
         <BoxScoreTable
           teamLabel={homeTeam.teamTricode}
@@ -3923,6 +3922,7 @@ export default function Game({ variant = "full" }) {
           variant={variant}
           minuteCapsByPersonId={homeMinuteCapsByPersonId}
           limitedFeed={Boolean(game.feedAvailability?.limited && !showAdvancedLayout)}
+          estimatedPossessions={useTrialPossessions}
         />
         </SectionErrorBoundary>
       </section>
@@ -3953,6 +3953,7 @@ export default function Game({ variant = "full" }) {
           <CapitalCityAtcWorkspace gameId={gameId} />
         </SectionErrorBoundary>
       ) : null}
+      {useTrialPossessions && <p>* Possession counts, pace, and possession-based ratings are estimates from play-by-play outcomes until official advanced counts are available.</p>}
       </div>
     </div>
   );

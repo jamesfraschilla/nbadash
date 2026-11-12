@@ -60,7 +60,7 @@ export function selectCompletedScheduleGames(payload, {
   if (season && sourceSeason && sourceSeason !== season) return [];
 
   return scheduleGames(payload)
-    .filter((game) => String(game?.gameId || ""))
+    .filter((game) => /^00[124]\d{7}$/.test(String(game?.gameId || "")))
     .filter((game) => wantedDates.has(gameDate(game)))
     .filter((game) => Number(game?.gameStatus || 0) === 3)
     .map((game) => ({

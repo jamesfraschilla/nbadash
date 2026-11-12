@@ -25,6 +25,7 @@ import {
   clearPersonnelStatOverridesForSeason,
   formatPersonnelStatValue,
   getCurrentPersonnelSeason,
+  normalizePersonnelStatsSeasonType,
   getPersonnelThreePointColorForPercentage,
   getPreviousPersonnelSeason,
   hasExactlyFourPersonnelStats,
@@ -246,6 +247,7 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
   const teamId = String(draft.teamId || "").trim();
   const season = String(draft.season || "").trim();
   const league = draft.league === "gleague" ? "gleague" : "nba";
+  const statsSeasonType = normalizePersonnelStatsSeasonType(draft.statsSeasonType, league);
   const leagueLabel = league === "gleague" ? "G League" : "NBA";
   const teams = league === "gleague" ? GLEAGUE_TEAMS : NBA_TEAMS;
   const rosterMap = rosterSources?.[league] || {};
@@ -257,9 +259,17 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
     () => getPreviousPersonnelSeason(currentStatsSeason),
     [currentStatsSeason]
   );
-  const seasonOptions = useMemo(() => (
-    [...new Set([currentStatsSeason, previousStatsSeason, season].filter(Boolean))]
-  ), [currentStatsSeason, previousStatsSeason, season]);
+  const seasonOptions = useMemo(() => league === "gleague"
+    ? [
+      { value: "2026-27|full", label: "2026-27 (Full Season)" },
+      { value: "2026-27|showcase", label: "2026-27 (Showcase)" },
+      { value: "2026-27|regular", label: "2026-27 (Regular Season)" },
+      { value: "2025-26|full", label: "2025-26 (Full Season)" },
+    ]
+    : [...new Set([currentStatsSeason, previousStatsSeason, season].filter(Boolean))]
+      .map((value) => ({ value, label: `${value}${value === currentStatsSeason ? " (Current)" : value === previousStatsSeason ? " (Previous)" : ""}` })),
+  [currentStatsSeason, previousStatsSeason, season, league]);
+  const statsSeasonSelection = league === "gleague" ? `${season}|${statsSeasonType}` : season;
   const selectedTeam = getLeagueTeam(teamId, league);
   const roster = useMemo(() => (
     Array.isArray(rosterMap?.[teamId]) ? rosterMap[teamId] : []
@@ -279,10 +289,11 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
     isSuccess: statsLoaded,
     error: statsError,
   } = useQuery({
-    queryKey: ["personnel-player-stats", league, season, teamId, statsPlayerKey],
+    queryKey: ["personnel-player-stats", league, season, statsSeasonType, teamId, statsPlayerKey],
     queryFn: ({ signal }) => fetchNbaPlayerStats({
       league,
       season,
+      seasonType: statsSeasonType,
       teamId,
       players: statsPlayers,
       signal,
@@ -584,7 +595,7 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
   const handleTeamChange = async (nextTeamId) => {
     await flushPendingAutoSave().catch(() => undefined);
     const nextRoster = Array.isArray(rosterMap?.[nextTeamId]) ? rosterMap[nextTeamId] : [];
-    const emptyDraft = createPersonnelDraft({ league, teamId: nextTeamId, season, nbaCup: draftRef.current.nbaCup });
+    const emptyDraft = createPersonnelDraft({ league, teamId: nextTeamId, season, statsSeasonType, nbaCup: draftRef.current.nbaCup });
     const nextDraft = populatePersonnelDraftFromRoster(emptyDraft, nextRoster, { league, teamId: nextTeamId });
     draftRef.current = nextDraft;
     setDraft(nextDraft);
@@ -600,9 +611,13 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
     setParams(nextParams, { replace: true });
   };
 
-  const handleSeasonChange = async (nextSeason) => {
+  const handleSeasonChange = async (nextSelection) => {
     await flushPendingAutoSave().catch(() => undefined);
-    const nextDraft = clearPersonnelStatOverridesForSeason(draftRef.current, nextSeason);
+    const [nextSeason, nextType] = nextSelection.split("|");
+    const nextDraft = {
+      ...clearPersonnelStatOverridesForSeason(draftRef.current, nextSeason),
+      statsSeasonType: normalizePersonnelStatsSeasonType(nextType, league),
+    };
     draftRef.current = nextDraft;
     setDraft(nextDraft);
     setAutoSaveStatus("");
@@ -1005,10 +1020,10 @@ export default function PersonnelGraphicAdmin({ rosterSources, rosterMetadata })
           </label>
           <label className={styles.field}>
             <span className={styles.fieldLabel}>Stats Season</span>
-            <select className={styles.select} value={season} onChange={(event) => handleSeasonChange(event.target.value)}>
+            <select className={styles.select} value={statsSeasonSelection} onChange={(event) => handleSeasonChange(event.target.value)}>
               {seasonOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}{option === currentStatsSeason ? " (Current)" : option === previousStatsSeason ? " (Previous)" : ""}
+                <option key={option.value} value={option.value}>
+                  {option.label}
                 </option>
               ))}
             </select>

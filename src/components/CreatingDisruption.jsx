@@ -30,6 +30,11 @@ const creatingColumns = [
 
 const disruptionColumns = [
   {
+    key: "charges",
+    label: "Charges Drawn",
+    format: (stats) => stats.chargesDrawn ?? 0,
+  },
+  {
     key: "offFouls",
     label: "Offensive FD",
     format: (stats) => stats.offensiveFoulsDrawn ?? 0,

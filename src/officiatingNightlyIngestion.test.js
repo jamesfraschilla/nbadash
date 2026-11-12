@@ -26,6 +26,7 @@ test("selects final recent games, including preseason validation games", () => {
         { gameId: "0022600002", gameDateEst: "2026-10-28", gameStatus: 2 },
         { gameId: "0012600003", gameDateEst: "2026-10-28", gameStatus: 3 },
         { gameId: "0022600004", gameDateEst: "2026-10-27", gameStatus: 3 },
+        { gameId: "2052600005", gameDateEst: "2026-10-28", gameStatus: 3 },
       ] }],
     },
   };

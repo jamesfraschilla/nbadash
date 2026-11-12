@@ -16,14 +16,25 @@ const report={checkedAt:new Date().toISOString(),scope:"Recent WAS finals and th
 function data(result){if(result.error)throw Error(result.error.message);return result.data;}
 const isWas=game=>[game.homeTeam,game.awayTeam].some(team=>String(team?.teamId)==="1610612764" || team?.teamTricode==="WAS");
 const games=new Map();
-try {
-  for(let offset=1;offset<=2;offset++) {
+for(let offset=1;offset<=2;offset++) {
+  try {
     const date=new Date(Date.now()-offset*86400000).toLocaleDateString("en-CA",{timeZone:"America/New_York"});
-    const list=await fetchScoreboard(date, process.env.NBA_API_KEY);
+    // This audit samples NBA finals. A transient or unavailable G League
+    // scoreboard must not prevent NBA games from being enumerated.
+    let list;
+    for (let attempt=0; attempt<3; attempt++) {
+      try { list=await fetchScoreboard(date, process.env.NBA_API_KEY, ["00"]); break; }
+      catch (error) {
+        if (attempt===2) throw new Error(`NBA scoreboard ${date}: ${error.message}`);
+        await new Promise(resolve=>setTimeout(resolve, 500*(attempt+1)));
+      }
+    }
     if(!Array.isArray(list))throw Error("Invalid scoreboard contract");
-    for(const g of list)if(Number(g.gameStatus)===3 && /^002|^004/.test(String(g.gameId)))games.set(String(g.gameId),g);
+    for(const g of list)if(Number(g.gameStatus)===3 && /^00[24]/.test(String(g.gameId)))games.set(String(g.gameId),g);
+  } catch(error) {
+    report.findings.push({key:`postgame-scoreboard-${offset}`,severity:"error",message:`Cannot enumerate recent completed NBA games: ${error.message}`});
   }
-} catch(error){report.findings.push({key:"postgame-scoreboard",severity:"error",message:`Cannot enumerate recent completed games: ${error.message}`});}
+}
 const selected=[...games].filter(([,g])=>isWas(g)).concat([...games].filter(([,g])=>!isWas(g)).slice(0,3));
 for(const [gameId,listed] of selected) {
   const check={gameId,wizards:isWas(listed),checks:[],complete:false};report.games.push(check);

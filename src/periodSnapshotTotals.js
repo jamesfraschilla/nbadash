@@ -1,5 +1,5 @@
 import { aggregateSegmentStats } from "./segmentStats.js";
-export const PERIOD_SNAPSHOT_CAPTURE_VERSION = 3;
+export const PERIOD_SNAPSHOT_CAPTURE_VERSION = 4;
 
 export function buildCompletedPeriodSnapshots(game) {
   const actions = game?.playByPlayActions || [];

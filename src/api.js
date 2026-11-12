@@ -2070,6 +2070,8 @@ export async function fetchNbaPlayerStats(options = {}) {
     ? String(safeOptions.teamId).trim()
     : "";
   const safeSeason = typeof safeOptions.season === "string" ? safeOptions.season.trim() : "";
+  const safeSeasonType = safeLeague === "gleague" && ["full", "showcase", "regular"].includes(safeOptions.seasonType)
+    ? safeOptions.seasonType : safeLeague === "gleague" ? "full" : "regular";
   const safePlayers = Array.isArray(safeOptions.players) ? safeOptions.players : [];
   const signal = safeOptions.signal || null;
   if (!safeSeason) throw new Error("A stats season is required.");
@@ -2081,6 +2083,7 @@ export async function fetchNbaPlayerStats(options = {}) {
       if (safeTeamId) url.searchParams.set("teamId", safeTeamId);
       url.searchParams.set("season", safeSeason);
       url.searchParams.set("league", safeLeague);
+      if (safeLeague === "gleague") url.searchParams.set("seasonType", safeSeasonType);
       return requestJson(url.toString(), { timeoutMs: 15000, signal }).then((payload) => {
         if (payload?.season && payload.season !== safeSeason) {
           throw new Error(`Stats service returned ${payload.season} instead of ${safeSeason}.`);

@@ -35,6 +35,32 @@ const HOME = {
   teamTricode: "HME",
 };
 
+test("score resets and misplaced cumulative scores cannot inflate a made shot", () => {
+  const actions = [
+    { period: 1, clock: "PT12M00S", actionType: "period", subType: "start", scoreHome: "0", scoreAway: "0" },
+    { period: 1, clock: "PT11M00S", teamId: 2, actionType: "2pt", shotResult: "Made", scoreHome: "2", scoreAway: "0" },
+    { period: 1, clock: "PT10M00S", teamId: 1, actionType: "freethrow", shotResult: "Made", scoreHome: "21", scoreAway: "26" },
+    { period: 1, clock: "PT09M00S", teamId: 2, actionType: "3pt", shotResult: "Made", scoreHome: "5", scoreAway: "0" },
+    { period: 1, clock: "PT00M00S", actionType: "status", subType: "finalbox", scoreHome: "0", scoreAway: "0" },
+    { period: 1, clock: "PT00M00S", actionType: "period", subType: "end", scoreHome: "5", scoreAway: "1" },
+  ];
+  const result = aggregateSegmentStats({ actions, segment: "all", homeTeam: HOME, awayTeam: AWAY,
+    basePlayers: [], minutesData: null, currentPeriod: 1, currentClock: "0:00", isLive: false });
+  assert.equal(result.teamTotals[2].points, 5);
+  assert.equal(result.teamTotals[1].points, 1);
+});
+
+test("explicit charging fouls count as live charges drawn within offensive fouls drawn", () => {
+  const actions = [
+    { period: 1, clock: "PT11M00S", teamId: 1, actionType: "foul", subType: "offensive", description: "Offensive Charge Foul" },
+    { period: 1, clock: "PT10M00S", teamId: 1, actionType: "foul", subType: "offensive", description: "OFF.Foul" },
+  ];
+  const result = aggregateSegmentStats({ actions, segment: "all", homeTeam: HOME, awayTeam: AWAY,
+    basePlayers: [], minutesData: null, currentPeriod: 1, currentClock: "0:00", isLive: true });
+  assert.equal(result.teamTotals[2].chargesDrawn, 1);
+  assert.equal(result.teamTotals[2].offensiveFoulsDrawn, 2);
+});
+
 test("late-numbered corrections retain game chronology for points, possessions and Kills", () => {
   const actions = [
     { period: 1, clock: "11:00", orderNumber: 900, possession: 1, teamId: 1, actionType: "2pt", shotResult: "Made", scoreHome: "0", scoreAway: "2" },

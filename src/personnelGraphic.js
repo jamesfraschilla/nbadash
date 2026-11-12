@@ -74,6 +74,11 @@ export function normalizePersonnelSeason(value, fallback = getCurrentPersonnelSe
   return match[2] === expectedEndYear ? normalized : fallback;
 }
 
+export function normalizePersonnelStatsSeasonType(value, league = "nba") {
+  if (normalizePersonnelLeague(league) !== "gleague") return "regular";
+  return ["full", "showcase", "regular"].includes(value) ? value : "full";
+}
+
 export function getPreviousPersonnelSeason(season) {
   const normalized = normalizePersonnelSeason(season);
   const startYear = Number(normalized.slice(0, 4)) - 1;
@@ -351,6 +356,7 @@ export function createPersonnelDraft(options = {}) {
     nbaCup: normalizeBoolean(safeOptions.nbaCup, false),
     teamId: normalizePlayerId(safeOptions.teamId),
     season: normalizePersonnelSeason(safeOptions.season),
+    statsSeasonType: normalizePersonnelStatsSeasonType(safeOptions.statsSeasonType, safeOptions.league),
     statOrder: normalizePersonnelStatOrder(firstPresentValue(safeOptions, [
       "statOrder",
       "statColumns",
@@ -373,6 +379,7 @@ export function hydratePersonnelDraft(payload) {
     nbaCup: source.nbaCup,
     teamId: normalizePlayerId(source.teamId),
     season: source.season,
+    statsSeasonType: source.statsSeasonType,
     statOrder: firstPresentValue(source, ["statOrder", "statColumns", "columnOrder"]),
     rows: Array.isArray(source) ? source : source.rows,
   });
@@ -436,8 +443,10 @@ export function populatePersonnelDraftFromRoster(draft, roster, options = {}) {
 
   return {
     league: normalizePersonnelLeague(optionLeague || currentDraft.league),
+    nbaCup: currentDraft.nbaCup,
     teamId,
     season: normalizePersonnelSeason(optionSeason, currentDraft.season),
+    statsSeasonType: normalizePersonnelStatsSeasonType(currentDraft.statsSeasonType, optionLeague || currentDraft.league),
     statOrder: normalizePersonnelStatOrder(currentDraft.statOrder),
     rows: Array.from({ length: rosterPlayers.length }, (_, index) => {
       const player = rosterPlayers[index];

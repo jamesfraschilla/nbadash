@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { minutesFixture } from '../fixtures/minutesExplorer.js';
 
-test('NBA API play-by-play restores the detailed dashboard with labeled possession estimates', async ({ page }) => {
+test('NBA API play-by-play restores the detailed dashboard with footnoted possession estimates', async ({ page }) => {
   const { game, minutes } = minutesFixture();
   game.feedAvailability = { source: 'nba-api', limited: true, playByPlay: true };
   game.teamStats = { home: {}, away: {} };
@@ -31,11 +31,12 @@ test('NBA API play-by-play restores the detailed dashboard with labeled possessi
   await expect(page.getByText('3P Rate', { exact: true })).toBeVisible();
   await expect(page.getByText('3P FG%', { exact: true })).toBeVisible();
   await expect(page.getByText('TOV%', { exact: true })).toBeVisible();
-  await expect(page.getByText('Possession Game (est.)', { exact: true })).toBeVisible();
-  await expect(page.getByText(/^PACE \(est\.\)/)).toBeVisible();
+  await expect(page.getByText('Possession Game*', { exact: true })).toBeVisible();
+  await expect(page.getByText(/^PACE\*/)).toBeVisible();
+  await expect(page.getByText(/^\* Possession counts, pace/)).toBeVisible();
 });
 
-test('postgame outcome rates remain distinct from official NBA possessions', async ({ page }) => {
+test('postgame official NBA possessions replace estimates', async ({ page }) => {
   const { game, minutes } = minutesFixture();
   game.gameId = '0022600217';
   minutes.gameId = game.gameId;
@@ -53,7 +54,27 @@ test('postgame outcome rates remain distinct from official NBA possessions', asy
   await page.route('**/game-metadata', route => route.fulfill({ json: route.request().postDataJSON().minutesGameId ? { minutes } : { game } }));
   await page.route('**/boxscore_*.json', route => route.fulfill({ json: {} }));
   await page.goto(`/#/g/${game.gameId}`);
-  await expect(page.getByText('Possession Game (est.)', { exact: true })).toBeVisible();
-  await expect(page.getByText(/^PACE \(est\.\)/)).toBeVisible();
-  await expect(page.getByText(/NBA Advanced counts 96 CHA and 96 WAS possessions/)).toBeVisible();
+  await expect(page.getByText('Possession Game', { exact: true })).toBeVisible();
+  await expect(page.getByText(/^PACE /)).toBeVisible();
+  await expect(page.getByText(/^\* Possession counts, pace/)).toHaveCount(0);
+});
+
+test('keyed G League play-by-play enables the detailed dashboard', async ({ page }) => {
+  const { game, minutes } = minutesFixture();
+  game.gameId = '2052600033';
+  minutes.gameId = game.gameId;
+  game.feedAvailability = { source: 'nba-api', limited: true, playByPlay: true };
+  game.teamStats = { home: {}, away: {} };
+  game.playByPlayActions = [
+    { actionNumber: 1, period: 1, clock: 'PT11M30S', possession: 1, teamId: 1, actionType: '2pt', shotDistance: 5, shotResult: 'Made', scoreHome: 0, scoreAway: 2 },
+    { actionNumber: 2, period: 1, clock: 'PT11M00S', possession: 2, teamId: 2, actionType: '2pt', shotDistance: 12, shotResult: 'Made', scoreHome: 2, scoreAway: 2 },
+  ];
+  await page.route('**/scoreboard', route => route.fulfill({ json: [game] }));
+  await page.route('**/game-metadata', route => route.fulfill({ json: route.request().postDataJSON().minutesGameId ? { minutes } : { game } }));
+  await page.route('**/boxscore_*.json', route => route.fulfill({ json: {} }));
+  await page.goto(`/#/g/${game.gameId}`);
+  await expect(page.getByRole('heading', { name: 'Four Factors' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Shot Profile' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Creating' })).toBeVisible();
+  await expect(page.getByText('Charges Drawn', { exact: true })).toBeVisible();
 });

@@ -133,6 +133,7 @@ export default function BoxScoreTable({
   variant = "full",
   minuteCapsByPersonId = new Map(),
   limitedFeed = false,
+  estimatedPossessions = false,
 }) {
   if (!boxScore) return null;
 
@@ -184,7 +185,7 @@ export default function BoxScoreTable({
                 key={col}
                 className={`${styles.statHeader} ${shadedColumns.has(col) ? styles.shadedColumn : ""} ${variant === "atc" && col === "PF" ? styles.atcSeparator : ""}`}
               >
-                {col}
+                {estimatedPossessions && ["ORTG", "DRTG"].includes(col) ? `${col}*` : col}
               </th>
             ))}
           </tr>
