@@ -158,3 +158,21 @@ test('resolves a delayed substitution-boundary lineup only with a unique reconci
   game.boxScore.home.players[0].plusMinusPoints = null;
   await assert.rejects(fetchNbaMinutes(game, 'key', fetcher), { code: 'POC_PENDING' });
 });
+
+test('refuses boundary events when multiple lineups produce the same player margins', async () => {
+  const { game, roster } = fixture();
+  game.gameStatus = 2;
+  game.homeTeam.periods[0].score = 4;
+  roster.push({ Game_Id: game.gameId, Person_id: 105, Team_id: 1, Period: 0, Person_Type: 'Player', First_Name: 'B', Last_Name: 'Five' });
+  for (const player of game.boxScore.home.players) player.plusMinusPoints = 4;
+  for (const player of game.boxScore.away.players) player.plusMinusPoints = -4;
+  game.boxScore.home.players[0].minutes = 'PT06M00.00S';
+  game.boxScore.home.players[0].plusMinusPoints = 2;
+  game.boxScore.home.players.push({ personId: 105, minutes: 'PT06M00.00S', plusMinusPoints: 2 });
+  game.playByPlayActions[0].clock = 'PT06M00.00S';
+  game.playByPlayActions.push({ ...game.playByPlayActions[0], actionNumber: 4 });
+  game.playByPlayActions.push({ period: 1, clock: 'PT06M00.00S', actionNumber: 2, teamId: 1, actionType: 'substitution', subType: 'out', personId: 100 }, { period: 1, clock: 'PT06M00.00S', actionNumber: 3, teamId: 1, actionType: 'substitution', subType: 'in', personId: 105 });
+  const { fetchNbaMinutes } = await import('./nbaMinutes.js');
+  const fetcher = async url => url.pathname.endsWith('/rosterlineup') ? { ok: true, status: 200, json: async () => roster } : { ok: true, status: 204 };
+  await assert.rejects(fetchNbaMinutes(game, 'key', fetcher), { code: 'POC_PENDING' });
+});

@@ -45,7 +45,7 @@ function boundaryCandidates(game, actions, stints, clock) {
   ]));
 }
 
-export function buildNbaMinutes(game, roster, playersOnCourt = []) {
+export function buildNbaMinutes(game, roster, playersOnCourt = [], options = {}) {
   const gameId = String(game?.gameId || '');
   if (!/^\d{10}$/.test(gameId) || !Array.isArray(roster) || !Array.isArray(game?.playByPlayActions)) throw new Error('Invalid minutes source');
   if (roster.some(row => row.Game_Id && String(row.Game_Id) !== gameId)) throw new Error('Minutes roster identity mismatch');
@@ -183,7 +183,7 @@ export function buildNbaMinutes(game, roster, playersOnCourt = []) {
   for (const side of ['home', 'away']) for (const player of game.boxScore?.[side]?.players || []) {
     const expected = clockSeconds(player.minutes);
     if (expected != null) minuteDifferences.push({ personId: id(player.personId), delta: (playerSeconds.get(id(player.personId)) || 0) - expected });
-    if (player.plusMinusPoints != null) {
+    if (player.plusMinusPoints != null && !options.skipScoringValidation) {
       const margin = periods.flatMap(p => p.stints).filter(stint => stint[side === 'home' ? 'playersHome' : 'playersAway'].some(p => id(p.personId) === id(player.personId))).reduce((sum, stint) => sum + (side === 'home' ? 1 : -1) * stint.plusMinus, 0);
       if (Number(player.plusMinusPoints) !== margin) {
         if (finalScoreConflict) throw Object.assign(new Error('Final play-by-play score conflicts with scoreboard and player plus/minus'), { code: 'FINAL_SCORE_CONFLICT' });
@@ -211,6 +211,78 @@ export function buildNbaMinutes(game, roster, playersOnCourt = []) {
     source: inferredScoringEvents.length ? 'nba-rosterlineup-pbp-inferred' : 'nba-rosterlineup-pbp', inferredScoringEvents, boxClockLagSeconds };
 }
 
+function reconcilePendingLineups(game, roster, officialRows) {
+  const provisional = [...officialRows], issues = [];
+  let base;
+  while (true) {
+    try { base = buildNbaMinutes(game, roster, provisional, { skipScoringValidation: true }); break; }
+    catch (error) {
+      if (error?.code !== 'POC_PENDING' || !error.boundaryChoices?.length || issues.length >= 12) throw error;
+      issues.push(error);
+      provisional.push({ Game_id: String(game.gameId), Event_Num: error.actionNumber, PlayersPlusMinus: error.boundaryChoices[0], inferredByReconciliation: true });
+    }
+  }
+  const expected = new Map(), current = new Map();
+  for (const side of ['home', 'away']) for (const player of game.boxScore?.[side]?.players || []) {
+    if (player.plusMinusPoints != null) { expected.set(id(player.personId), Number(player.plusMinusPoints)); current.set(id(player.personId), 0); }
+  }
+  for (const period of base.periods) for (const stint of period.stints) for (const [side, key] of [['home', 'playersHome'], ['away', 'playersAway']]) {
+    for (const player of stint[key]) if (current.has(id(player.personId))) {
+      const personId = id(player.personId);
+      current.set(personId, current.get(personId) + (side === 'home' ? 1 : -1) * stint.plusMinus);
+    }
+  }
+  // Each candidate contributes a known scoring margin to its ten players.
+  // Bound the remaining contribution per player to prune impossible paths.
+  const options = issues.map(issue => {
+    const action = game.playByPlayActions.find(item => Number(item.actionNumber) === issue.actionNumber);
+    const points = action.actionType === '3pt' ? 3 : action.actionType === '2pt' ? 2
+      : Number(action.value ?? action.shotValue ?? String(action.subType || '').match(/^1\s*for\s*([123])$/i)?.[1] ?? 1);
+    const sign = id(action.teamId) === id(game.homeTeam.teamId) ? 1 : -1;
+    const values = choice => new Map(choice.map(player => [id(player.Person_id), (id(player.Team_id) === id(game.homeTeam.teamId) ? 1 : -1) * sign * points]));
+    const first = values(issue.boundaryChoices[0]);
+    return issue.boundaryChoices.map(choice => {
+      const next = values(choice), difference = new Map();
+      for (const personId of new Set([...first.keys(), ...next.keys()])) if (expected.has(personId)) {
+        const value = (next.get(personId) || 0) - (first.get(personId) || 0);
+        if (value) difference.set(personId, value);
+      }
+      return difference;
+    });
+  });
+  const keys = [...expected.keys()];
+  const minima = Array.from({ length: issues.length + 1 }, () => new Map());
+  const maxima = Array.from({ length: issues.length + 1 }, () => new Map());
+  for (let i = issues.length - 1; i >= 0; i--) for (const personId of keys) {
+    const values = options[i].map(option => option.get(personId) || 0);
+    minima[i].set(personId, (minima[i + 1].get(personId) || 0) + Math.min(...values));
+    maxima[i].set(personId, (maxima[i + 1].get(personId) || 0) + Math.max(...values));
+  }
+  const solutions = [], path = [], delta = new Map();
+  let visited = 0; const deadline = Date.now() + 1500;
+  const search = index => {
+    if (++visited > 50000 || Date.now() > deadline || solutions.length > 1) return;
+    for (const personId of keys) {
+      const remaining = expected.get(personId) - current.get(personId) - (delta.get(personId) || 0);
+      if (remaining < (minima[index].get(personId) || 0) || remaining > (maxima[index].get(personId) || 0)) return;
+    }
+    if (index === issues.length) { solutions.push([...path]); return; }
+    for (let choice = 0; choice < options[index].length; choice++) {
+      const difference = options[index][choice];
+      for (const [personId, value] of difference) delta.set(personId, (delta.get(personId) || 0) + value);
+      path.push(choice); search(index + 1); path.pop();
+      for (const [personId, value] of difference) delta.set(personId, delta.get(personId) - value);
+      if (solutions.length > 1 || visited > 50000 || Date.now() > deadline) return;
+    }
+  };
+  search(0);
+  if (solutions.length !== 1 || visited > 50000 || Date.now() > deadline) throw new Error('Scoring lineup reconciliation was ambiguous or exceeded its limit');
+  const resolved = [...officialRows];
+  issues.forEach((issue, index) => resolved.push({ Game_id: String(game.gameId), Event_Num: issue.actionNumber,
+    PlayersPlusMinus: issue.boundaryChoices[solutions[0][index]], inferredByReconciliation: true }));
+  return buildNbaMinutes(game, roster, resolved);
+}
+
 export async function fetchNbaMinutes(game, apiKey, fetcher = fetch) {
   if (!apiKey) throw new Error('NBA_API_KEY is not configured');
   const load = async path => {
@@ -233,22 +305,7 @@ export async function fetchNbaMinutes(game, apiKey, fetcher = fetch) {
     if (!Array.isArray(refreshed)) throw new Error('Players-on-court feed invalid');
     try { return buildNbaMinutes(game, roster, refreshed); } catch (pending) {
       if (pending?.code !== 'POC_PENDING' || !pending.boundaryChoices?.length) throw pending;
-      // Accept only a unique solution that reconciles every available period
-      // score, player margin and minute total. Bound search and reject ties.
-      const solutions = []; let attempts = 0; let exhausted = false;
-      const deadline = Date.now() + 1500;
-      const search = (rows, issue) => {
-        for (const members of issue.boundaryChoices || []) {
-          if (++attempts > 1024 || Date.now() > deadline) { exhausted = true; return; }
-          const next = [...rows, { Game_id: String(game.gameId), Event_Num: issue.actionNumber, PlayersPlusMinus: members, inferredByReconciliation: true }];
-          try { solutions.push(buildNbaMinutes(game, roster, next)); }
-          catch (nested) { if (nested?.code === 'POC_PENDING' && nested.boundaryChoices?.length) search(next, nested); }
-          if (solutions.length > 1 || exhausted) return;
-        }
-      };
-      search(refreshed, pending);
-      if (!exhausted && solutions.length === 1) return solutions[0];
-      throw pending;
+      try { return reconcilePendingLineups(game, roster, refreshed); } catch { throw pending; }
     }
   }
 }
