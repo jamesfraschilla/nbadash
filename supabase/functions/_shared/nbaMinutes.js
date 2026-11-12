@@ -20,6 +20,7 @@ export function buildNbaMinutes(game, roster, playersOnCourt = []) {
   const courtByAction = new Map(playersOnCourt.map(row => [Number(row.Event_Num), row]));
   if (playersOnCourt.some(row => String(row.Game_id) !== gameId)) throw new Error('Players-on-court game identity mismatch');
   const playerSeconds = new Map();
+  const inferredScoringEvents = [];
   const ordered = [...game.playByPlayActions].sort((a, b) => Number(a.period) - Number(b.period) || (clockSeconds(b.clock) ?? -1) - (clockSeconds(a.clock) ?? -1) || Number(a.orderNumber ?? a.actionNumber ?? 0) - Number(b.orderNumber ?? b.actionNumber ?? 0));
   for (let period = 1; period <= playedPeriods; period++) {
     const length = periodLength(gameId, period);
@@ -81,13 +82,25 @@ export function buildNbaMinutes(game, roster, playersOnCourt = []) {
       if (!points) continue;
       if (!Number.isFinite(points) || points < 0 || points > 3) throw new Error('Scoring value unavailable');
       const row = courtByAction.get(Number(action.actionNumber));
-      if (!row || !Array.isArray(row.PlayersPlusMinus)) throw Object.assign(new Error(`Scoring action ${action.actionNumber} has no players-on-court data`), { code: 'POC_PENDING' });
       const eventLineups = {};
-      for (const side of ['home', 'away']) {
-        const members = row.PlayersPlusMinus.filter(p => id(p.Team_id) === id(game[`${side}Team`].teamId));
-        if (members.length !== 5 || new Set(members.map(p => id(p.Person_id))).size !== 5) throw new Error('Scoring action lineup is incomplete');
-        eventLineups[side] = members.map(p => playerInfo.get(id(p.Person_id)));
-        if (eventLineups[side].some(p => !p)) throw new Error('Scoring action references an unknown player');
+      if (!row || !Array.isArray(row.PlayersPlusMinus)) {
+        // During live games the NBA POC stream can lag PBP for an entire
+        // period. Infer only strictly inside a unique substitution stint;
+        // events at a substitution boundary must await the official lineup.
+        const eventClock = clockSeconds(action.clock);
+        const matches = Number(game.gameStatus) === 2 ? stints.filter(item =>
+          clockSeconds(item.startClock) > eventClock && clockSeconds(item.endClock) < eventClock) : [];
+        if (matches.length !== 1) throw Object.assign(new Error(`Scoring action ${action.actionNumber} has no players-on-court data`), { code: 'POC_PENDING' });
+        eventLineups.home = matches[0].playersHome;
+        eventLineups.away = matches[0].playersAway;
+        inferredScoringEvents.push(Number(action.actionNumber));
+      } else {
+        for (const side of ['home', 'away']) {
+          const members = row.PlayersPlusMinus.filter(p => id(p.Team_id) === id(game[`${side}Team`].teamId));
+          if (members.length !== 5 || new Set(members.map(p => id(p.Person_id))).size !== 5) throw new Error('Scoring action lineup is incomplete');
+          eventLineups[side] = members.map(p => playerInfo.get(id(p.Person_id)));
+          if (eventLineups[side].some(p => !p)) throw new Error('Scoring action references an unknown player');
+        }
       }
       const clock = clockSeconds(action.clock);
       let stint = stints.find(item => clockSeconds(item.startClock) >= clock && clockSeconds(item.endClock) <= clock
@@ -124,9 +137,10 @@ export function buildNbaMinutes(game, roster, playersOnCourt = []) {
   const scoreboard = [game.homeTeam?.score, game.awayTeam?.score];
   const finalScoreConflict = finalEvent && scoreboard.every(value => value != null && value !== '' && Number.isFinite(Number(value)))
     && (Number(finalEvent.scoreHome) !== Number(scoreboard[0]) || Number(finalEvent.scoreAway) !== Number(scoreboard[1]));
+  const minuteDifferences = [];
   for (const side of ['home', 'away']) for (const player of game.boxScore?.[side]?.players || []) {
     const expected = clockSeconds(player.minutes);
-    if (expected != null && Math.abs((playerSeconds.get(id(player.personId)) || 0) - expected) > 2) throw new Error(`Player ${player.personId} minutes do not reconcile`);
+    if (expected != null) minuteDifferences.push({ personId: id(player.personId), delta: (playerSeconds.get(id(player.personId)) || 0) - expected });
     if (player.plusMinusPoints != null) {
       const margin = periods.flatMap(p => p.stints).filter(stint => stint[side === 'home' ? 'playersHome' : 'playersAway'].some(p => id(p.personId) === id(player.personId))).reduce((sum, stint) => sum + (side === 'home' ? 1 : -1) * stint.plusMinus, 0);
       if (Number(player.plusMinusPoints) !== margin) {
@@ -135,7 +149,24 @@ export function buildNbaMinutes(game, roster, playersOnCourt = []) {
       }
     }
   }
-  return { gameId, gameStatus: game.gameStatus, period: game.period, gameClock: game.gameClock, homeTeam: game.homeTeam, awayTeam: game.awayTeam, periods, source: 'nba-rosterlineup-pbp' };
+  const discrepancies = minuteDifferences.filter(row => Math.abs(row.delta) > 2);
+  let boxClockLagSeconds = 0;
+  if (discrepancies.length) {
+    const lastPeriod = periods.at(-1);
+    const active = [...(lastPeriod?.stints || [])].reverse().find(stint => clockSeconds(stint.startClock) > clockSeconds(stint.endClock));
+    const activeIds = new Set([...(active?.playersHome || []), ...(active?.playersAway || [])].map(player => id(player.personId)));
+    const activeDeltas = minuteDifferences.filter(row => activeIds.has(row.personId)).map(row => row.delta);
+    const min = Math.min(...activeDeltas), max = Math.max(...activeDeltas);
+    // NBA box minutes and game clock can be sampled seconds apart. Accept only
+    // a common positive lag on all ten currently active players; never mask an
+    // inactive-player mismatch, an individual discrepancy, or a final game.
+    const coherentLiveLag = Number(game.gameStatus) === 2 && activeIds.size === 10 && activeDeltas.length === 10
+      && discrepancies.every(row => activeIds.has(row.personId)) && min >= -1 && max <= 30 && max - min <= 2;
+    if (!coherentLiveLag) throw new Error(`Player ${discrepancies[0].personId} minutes do not reconcile`);
+    boxClockLagSeconds = Math.round((min + max) * 50) / 100;
+  }
+  return { gameId, gameStatus: game.gameStatus, period: game.period, gameClock: game.gameClock, homeTeam: game.homeTeam, awayTeam: game.awayTeam, periods,
+    source: inferredScoringEvents.length ? 'nba-rosterlineup-pbp-inferred' : 'nba-rosterlineup-pbp', inferredScoringEvents, boxClockLagSeconds };
 }
 
 export async function fetchNbaMinutes(game, apiKey, fetcher = fetch) {
@@ -144,6 +175,7 @@ export async function fetchNbaMinutes(game, apiKey, fetcher = fetch) {
     const url = new URL(`https://api.nba.com/v0/api/stats/${path}`); url.searchParams.set('gameId', String(game.gameId));
     const response = await fetcher(url, { headers: { 'X-NBA-Api-Key': apiKey, Accept: 'application/json' }, signal: AbortSignal.timeout(15000) });
     if (!response.ok) throw new Error(`NBA ${path} unavailable (${response.status})`);
+    if (path === 'poc' && response.status === 204) return [];
     return response.json();
   };
   const [roster, playersOnCourt] = await Promise.all([load('rosterlineup'), load('poc')]);

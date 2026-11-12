@@ -93,3 +93,39 @@ test('does not retry independent source conflicts', async () => {
   await assert.rejects(fetchNbaMinutes(game, 'key', fetcher), { code: 'FINAL_SCORE_CONFLICT' });
   assert.equal(pocCalls, 1);
 });
+
+test('accepts a shared live box-clock lag but rejects individual or final discrepancies', () => {
+  const { game, roster, poc } = fixture();
+  game.gameStatus = 2;
+  for (const side of ['home', 'away']) for (const player of game.boxScore[side].players) player.minutes = 'PT11M40.00S';
+  const minutes = buildNbaMinutes(game, roster, poc);
+  assert.equal(minutes.boxClockLagSeconds, 20);
+  game.boxScore.home.players[0].minutes = 'PT11M50.00S';
+  assert.throws(() => buildNbaMinutes(game, roster, poc), /minutes do not reconcile/);
+  game.boxScore.home.players[0].minutes = 'PT11M40.00S';
+  game.gameStatus = 3;
+  assert.throws(() => buildNbaMinutes(game, roster, poc), /minutes do not reconcile/);
+});
+
+test('infers a live scoring lineup only inside a unique substitution stint', () => {
+  const { game, roster } = fixture();
+  game.gameStatus = 2;
+  const result = buildNbaMinutes(game, roster, []);
+  assert.deepEqual(result.inferredScoringEvents, [1]);
+  assert.equal(result.source, 'nba-rosterlineup-pbp-inferred');
+  game.playByPlayActions[0].clock = 'PT12M00.00S';
+  assert.throws(() => buildNbaMinutes(game, roster, []), { code: 'POC_PENDING' });
+  game.gameStatus = 3;
+  assert.throws(() => buildNbaMinutes(game, roster, []), { code: 'POC_PENDING' });
+});
+
+test('treats NBA POC HTTP 204 as temporarily empty during a live game', async () => {
+  const { game, roster } = fixture();
+  game.gameStatus = 2;
+  const { fetchNbaMinutes } = await import('./nbaMinutes.js');
+  const fetcher = async url => url.pathname.endsWith('/rosterlineup')
+    ? { ok: true, status: 200, json: async () => roster }
+    : { ok: true, status: 204 };
+  const result = await fetchNbaMinutes(game, 'key', fetcher);
+  assert.deepEqual(result.inferredScoringEvents, [1]);
+});
