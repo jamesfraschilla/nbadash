@@ -35,7 +35,16 @@ def capture(item):
    if not file.exists():
     with gzip.open(file,'wb') as f:f.write(r.content)
    record['snapshot']=str(file.relative_to(ROOT))
-  r.raise_for_status();j=r.json()
+  r.raise_for_status()
+  if r.status_code == 204:
+   record['pending']=True
+   return record
+  j=r.json()
+  if name in ('nba_poc','nba_rosterlineup'):
+   if not isinstance(j,list):raise ValueError('Expected a list of lineup records')
+   record['rows']=len(j)
+   record['rowFields']=list(j[0].keys()) if j and isinstance(j[0],dict) else []
+   return record
   if name=='nba_game':g=next((x for x in (j.get('scoreboard') or {}).get('games',[]) if str(x.get('gameId'))==GAME),{})
   elif name=='dashboard_scoreboard':g=next((x for x in j if str(x.get('gameId'))==GAME),{}) if isinstance(j,list) else {}
   elif name=='dashboard_game':g=j.get('game') or {}
@@ -49,7 +58,6 @@ def capture(item):
    for side in ('home','away'):
     t=g.get(side+'Team') or {};s=t.get('statistics') or {};record[side+'TeamId']=t.get('teamId');record[side+'Players']=len(t.get('players') or []);record[side+'Points']=s.get('points');record[side+'Possessions']=s.get('poss');record[side+'StatisticFields']=[k for k,v in s.items() if v is not None]
   if name=='dashboard_minutes':record['periods']=len(g.get('periods') or []);record['stints']=[len(x.get('stints') or []) for x in (g.get('periods') or [])]
-  if name in ('nba_poc','nba_rosterlineup'):record['topLevelFields']=list(j.keys()) if isinstance(j,dict) else []
  except Exception as e:
   record['error']=type(e).__name__+': '+str(e).split(' for url:')[0][:180]
  return record
@@ -59,7 +67,7 @@ with (ROOT/'timeline.jsonl').open('a') as f:f.write(json.dumps(batch,default=str
 (ROOT/'latest.json').write_text(json.dumps(batch,indent=2,default=str)+'\n')
 print('SAMPLE',now.isoformat(),flush=True)
 for x in results:
- print('SOURCE',json.dumps({k:x[k] for k in ('source','feedSource','http','error','gameStatus','period','clock','away','home','plays','periods','stints','homePossessions','awayPossessions') if k in x},default=str),flush=True)
+ print('SOURCE',json.dumps({k:x[k] for k in ('source','feedSource','http','error','pending','rows','rowFields','gameStatus','period','clock','away','home','plays','periods','stints','homePossessions','awayPossessions') if k in x},default=str),flush=True)
 try:
  result=subprocess.run(['node',str(pathlib.Path(__file__).with_name('wizards-live-processing.mjs'))],env={**os.environ,'AUDIT_OUTPUT':str(ROOT)},capture_output=True,text=True,timeout=20)
  print(result.stdout.strip() or ('PROCESSING_ERROR '+result.stderr.strip()[:300]),flush=True)
