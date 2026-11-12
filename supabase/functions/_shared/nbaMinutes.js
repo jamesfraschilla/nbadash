@@ -48,6 +48,7 @@ function boundaryCandidates(game, actions, stints, clock) {
 export function buildNbaMinutes(game, roster, playersOnCourt = [], options = {}) {
   const gameId = String(game?.gameId || '');
   if (!/^\d{10}$/.test(gameId) || !Array.isArray(roster) || !Array.isArray(game?.playByPlayActions)) throw new Error('Invalid minutes source');
+  const liveNba = /^00/.test(gameId) && Number(game.gameStatus) === 2;
   if (roster.some(row => row.Game_Id && String(row.Game_Id) !== gameId)) throw new Error('Minutes roster identity mismatch');
   const playedPeriods = Math.max(0, Number(game.period || 0));
   const periods = [];
@@ -125,12 +126,12 @@ export function buildNbaMinutes(game, roster, playersOnCourt = [], options = {})
         const eventClock = clockSeconds(action.clock);
         const currentClockWithoutSub = period === playedPeriods && eventClock === end
           && !actions.some(item => item.actionType === 'substitution' && clockSeconds(item.clock) === eventClock);
-        const matches = Number(game.gameStatus) === 2 ? stints.filter(item =>
+        const matches = liveNba ? stints.filter(item =>
           clockSeconds(item.startClock) > eventClock && (clockSeconds(item.endClock) < eventClock
             || (currentClockWithoutSub && clockSeconds(item.endClock) === eventClock))) : [];
         if (matches.length !== 1) throw Object.assign(new Error(`Scoring action ${action.actionNumber} has no players-on-court data`), {
           code: 'POC_PENDING', actionNumber: Number(action.actionNumber),
-          boundaryChoices: Number(game.gameStatus) === 2 ? boundaryCandidates(game, actions, stints, eventClock) : [],
+          boundaryChoices: liveNba ? boundaryCandidates(game, actions, stints, eventClock) : [],
         });
         eventLineups.home = matches[0].playersHome;
         eventLineups.away = matches[0].playersAway;
@@ -202,7 +203,7 @@ export function buildNbaMinutes(game, roster, playersOnCourt = [], options = {})
     // NBA box minutes and game clock can be sampled seconds apart. Accept only
     // a common positive lag on all ten currently active players; never mask an
     // inactive-player mismatch, an individual discrepancy, or a final game.
-    const coherentLiveLag = Number(game.gameStatus) === 2 && activeIds.size === 10 && activeDeltas.length === 10
+    const coherentLiveLag = liveNba && activeIds.size === 10 && activeDeltas.length === 10
       && discrepancies.every(row => activeIds.has(row.personId)) && min >= -1 && max <= 30 && max - min <= 2;
     if (!coherentLiveLag) throw new Error(`Player ${discrepancies[0].personId} minutes do not reconcile`);
     boxClockLagSeconds = Math.round((min + max) * 50) / 100;
@@ -289,7 +290,7 @@ export async function fetchNbaMinutes(game, apiKey, fetcher = fetch) {
     const url = new URL(`https://api.nba.com/v0/api/stats/${path}`); url.searchParams.set('gameId', String(game.gameId));
     const response = await fetcher(url, { headers: { 'X-NBA-Api-Key': apiKey, Accept: 'application/json' }, signal: AbortSignal.timeout(15000) });
     if (!response.ok) throw new Error(`NBA ${path} unavailable (${response.status})`);
-    if (path === 'poc' && response.status === 204) return [];
+    if (path === 'poc' && response.status === 204 && /^00/.test(String(game.gameId))) return [];
     return response.json();
   };
   const [roster, playersOnCourt] = await Promise.all([load('rosterlineup'), load('poc')]);

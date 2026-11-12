@@ -176,3 +176,12 @@ test('refuses boundary events when multiple lineups produce the same player marg
   const fetcher = async url => url.pathname.endsWith('/rosterlineup') ? { ok: true, status: 200, json: async () => roster } : { ok: true, status: 204 };
   await assert.rejects(fetchNbaMinutes(game, 'key', fetcher), { code: 'POC_PENDING' });
 });
+
+test('does not apply NBA live inference or box-clock tolerance to G League games', () => {
+  const { game, roster, poc } = fixture();
+  game.gameId = '2022200155'; game.gameStatus = 2;
+  roster.forEach(row => { row.Game_Id = game.gameId; }); poc[0].Game_id = game.gameId;
+  assert.throws(() => buildNbaMinutes(game, roster, []), { code: 'POC_PENDING' });
+  for (const side of ['home', 'away']) for (const player of game.boxScore[side].players) player.minutes = 'PT11M40.00S';
+  assert.throws(() => buildNbaMinutes(game, roster, poc), /minutes do not reconcile/);
+});
