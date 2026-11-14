@@ -8,6 +8,8 @@ test('NBA API play-by-play restores the detailed dashboard with footnoted posses
   game.playByPlayActions = [
     { actionNumber: 1, orderNumber: 1, period: 1, clock: 'PT11M30S', possession: 1, teamId: 1, actionType: '2pt', shotDistance: 5, shotResult: 'Made', scoreHome: 0, scoreAway: 2 },
     { actionNumber: 2, orderNumber: 2, period: 1, clock: 'PT11M00S', possession: 2, teamId: 2, actionType: '2pt', shotDistance: 12, shotResult: 'Made', scoreHome: 2, scoreAway: 2 },
+    { actionNumber: 3, orderNumber: 3, period: 1, clock: 'PT10M00S', possession: 1, teamId: 1, actionType: 'foul', subType: 'offensive', description: 'Offensive Charge Foul' },
+    { actionNumber: 4, orderNumber: 4, period: 1, clock: 'PT09M00S', possession: 1, teamId: 1, actionType: 'foul', subType: 'offensive', description: 'OFF.Foul' },
   ];
   for (const side of ['home', 'away']) game.boxScore[side].totals = {
     points: side === 'home' ? 2 : 4, fieldGoalsMade: 1, fieldGoalsAttempted: 2,
@@ -34,6 +36,10 @@ test('NBA API play-by-play restores the detailed dashboard with footnoted posses
   await expect(page.getByText('Possession Game*', { exact: true })).toBeVisible();
   await expect(page.getByText(/^PACE\*/)).toBeVisible();
   await expect(page.getByText(/^\* Possession counts, pace/)).toBeVisible();
+  await expect(page.getByText('Offensive Fouls Drawn', { exact: true }).locator('..')).toContainText('2');
+  await expect(page.getByText('Charges Drawn', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('≥2', { exact: true })).toBeVisible();
+  await expect(page.getByText('≥ is the minimum; deflections are unavailable from this feed.')).toBeVisible();
 });
 
 test('postgame official NBA possessions replace estimates', async ({ page }) => {
@@ -76,5 +82,5 @@ test('keyed G League play-by-play enables the detailed dashboard', async ({ page
   await expect(page.getByRole('heading', { name: 'Four Factors' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Shot Profile' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Creating' })).toBeVisible();
-  await expect(page.getByText('Charges Drawn', { exact: true })).toBeVisible();
+  await expect(page.getByText('Offensive Fouls Drawn', { exact: true })).toBeVisible();
 });

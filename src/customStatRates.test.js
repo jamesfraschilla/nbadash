@@ -1,6 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { threePointOffensiveReboundPercent, reconcileShotZoneTotals, mergeSegmentSnapshotTotals } from "./customStatRates.js";
+import { threePointOffensiveReboundPercent, reconcileShotZoneTotals, mergeEventDerivedTotals, mergeSegmentSnapshotTotals } from "./customStatRates.js";
+
+test("full-game box totals retain creating and drawn-foul counts from play-by-play", () => {
+  const merged = mergeEventDerivedTotals({ points: 140, steals: 6, blocks: 6 },
+    { points: 0, drivingFGMade: 6, drivingFGAttempted: 9,
+      cuttingFGMade: 2, cuttingFGAttempted: 3,
+      catchAndShoot3FGMade: 12, catchAndShoot3FGAttempted: 29,
+      offensiveFoulsDrawn: 4, chargesDrawn: 2 });
+  assert.deepEqual(merged, { points: 140, steals: 6, blocks: 6,
+    drivingFGMade: 6, drivingFGAttempted: 9, cuttingFGMade: 2, cuttingFGAttempted: 3,
+    catchAndShoot3FGMade: 12, catchAndShoot3FGAttempted: 29,
+    offensiveFoulsDrawn: 4, chargesDrawn: 2 });
+});
 
 test("WAS–CLE halftime 3P-OR% uses 4 of 9 missed threes, not 4 of 4 OReb", () => {
   assert.equal(threePointOffensiveReboundPercent({ threePointOReb: 4, reboundsOffensive: 4,

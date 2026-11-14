@@ -17,7 +17,7 @@ import {
 } from "../api.js";
 import { useGame, useMinutes } from "../queries.js";
 import { buildCustomPlaycallClipMeta, buildTimedNoteClipMeta } from "../noteClipLinks.js";
-import { threePointOffensiveReboundPercent, reconcileShotZoneTotals, mergeSegmentSnapshotTotals as mergeSegmentTotals } from "../customStatRates.js";
+import { threePointOffensiveReboundPercent, reconcileShotZoneTotals, mergeEventDerivedTotals, mergeSegmentSnapshotTotals as mergeSegmentTotals } from "../customStatRates.js";
 import { PERIOD_SNAPSHOT_CAPTURE_VERSION } from "../periodSnapshotTotals.js";
 import { useAuth } from "../auth/useAuth.js";
 import {
@@ -1937,7 +1937,7 @@ export default function Game({ variant = "full" }) {
       pickValue(computed?.secondChance3FGAttempted, base?.secondChance3FGAttempted)
     );
     return {
-      ...reconcileShotZoneTotals(base, computed),
+      ...mergeEventDerivedTotals(reconcileShotZoneTotals(base, computed), computed),
       pointsOffTurnovers,
       paintPoints,
       secondChance3FGMade,
@@ -2226,18 +2226,18 @@ export default function Game({ variant = "full" }) {
     },
   ];
 
-  const awayDeflections = teamStats?.away?.advancedStats?.deflections ?? 0;
-  const homeDeflections = teamStats?.home?.advancedStats?.deflections ?? 0;
+  const awayDeflections = teamStats?.away?.advancedStats?.deflections;
+  const homeDeflections = teamStats?.home?.advancedStats?.deflections;
   const awayDisruptions =
     (advancedAwayTotals.steals || 0) +
     (advancedAwayTotals.blocks || 0) +
     (advancedAwayTotals.offensiveFoulsDrawn || 0) +
-    awayDeflections;
+    (awayDeflections ?? 0);
   const homeDisruptions =
     (advancedHomeTotals.steals || 0) +
     (advancedHomeTotals.blocks || 0) +
     (advancedHomeTotals.offensiveFoulsDrawn || 0) +
-    homeDeflections;
+    (homeDeflections ?? 0);
   const awayForcedTurnovers =
     (advancedAwayTotals.steals || 0) +
     (advancedAwayTotals.offensiveFoulsDrawn || 0);
@@ -3427,8 +3427,10 @@ export default function Game({ variant = "full" }) {
               homeTeam={homeTeam}
               awayStats={awayCreating}
               homeStats={homeCreating}
-              awayDisruptions={hasKeyedNbaEvents && teamStats?.away?.advancedStats?.deflections == null ? null : awayDisruptions}
-              homeDisruptions={hasKeyedNbaEvents && teamStats?.home?.advancedStats?.deflections == null ? null : homeDisruptions}
+              creatingInferred={hasKeyedNbaEvents}
+              awayDisruptions={hasKeyedNbaEvents && awayDeflections == null ? `≥${awayDisruptions}` : awayDisruptions}
+              homeDisruptions={hasKeyedNbaEvents && homeDeflections == null ? `≥${homeDisruptions}` : homeDisruptions}
+              disruptionsMissingDeflections={hasKeyedNbaEvents && (awayDeflections == null || homeDeflections == null)}
               awayKills={killStats.awayKills}
               homeKills={killStats.homeKills}
               awayForcedTurnovers={awayForcedTurnovers}
