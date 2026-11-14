@@ -349,14 +349,6 @@
       "position": "G"
     },
     {
-      "personId": "1641807",
-      "firstName": "Norchad",
-      "familyName": "Omier",
-      "fullName": "Norchad Omier",
-      "jerseyNum": "15",
-      "position": "F"
-    },
-    {
       "personId": "1631215",
       "firstName": "Khalifa",
       "familyName": "Diop",
@@ -411,6 +403,14 @@
       "fullName": "Donovan Mitchell",
       "jerseyNum": "45",
       "position": "G"
+    },
+    {
+      "personId": "1641807",
+      "firstName": "Norchad",
+      "familyName": "Omier",
+      "fullName": "Norchad Omier",
+      "jerseyNum": "77",
+      "position": "F"
     },
     {
       "personId": "1643640",
@@ -568,6 +568,14 @@
     }
   ],
   "1610612741": [
+    {
+      "personId": "1631115",
+      "firstName": "Orlando",
+      "familyName": "Robinson",
+      "fullName": "Orlando Robinson",
+      "jerseyNum": "00",
+      "position": "C"
+    },
     {
       "personId": "1642855",
       "firstName": "Noa",
@@ -2151,6 +2159,14 @@
       "position": "G"
     },
     {
+      "personId": "1642261",
+      "firstName": "Dalton",
+      "familyName": "Knecht",
+      "fullName": "Dalton Knecht",
+      "jerseyNum": "1",
+      "position": "F"
+    },
+    {
       "personId": "1630540",
       "firstName": "Miles",
       "familyName": "McBride",
@@ -2260,14 +2276,6 @@
       "familyName": "Nickel",
       "fullName": "Tyler Nickel",
       "jerseyNum": "55",
-      "position": "F"
-    },
-    {
-      "personId": "1642261",
-      "firstName": "Dalton",
-      "familyName": "Knecht",
-      "fullName": "Dalton Knecht",
-      "jerseyNum": "99",
       "position": "F"
     }
   ],
@@ -3531,6 +3539,14 @@
       "position": "F"
     },
     {
+      "personId": "1641723",
+      "firstName": "Kobe",
+      "familyName": "Bufkin",
+      "fullName": "Kobe Bufkin",
+      "jerseyNum": "0",
+      "position": "G"
+    },
+    {
       "personId": "1642271",
       "firstName": "Kyle",
       "familyName": "Filipowski",
@@ -3544,14 +3560,6 @@
       "familyName": "George",
       "fullName": "Keyonte George",
       "jerseyNum": "3",
-      "position": "G"
-    },
-    {
-      "personId": "1641723",
-      "firstName": "Kobe",
-      "familyName": "Bufkin",
-      "fullName": "Kobe Bufkin",
-      "jerseyNum": "4",
       "position": "G"
     },
     {
