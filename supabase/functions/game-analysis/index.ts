@@ -2691,8 +2691,8 @@ export async function handleRequest(req: Request) {
     if (!game) {
       game = await fetchRecoverableGame(gameId);
     }
-    if (game?._snapshotSavedAt || (game?.feedAvailability as Record<string, unknown>)?.limited) {
-      return jsonResponse(503, { error: "A complete current feed is required to generate analysis. Saved analysis remains available.", code: "LIMITED_GAME_FEED", retryable: true });
+    if (game?._snapshotSavedAt) {
+      return jsonResponse(503, { error: "A current game feed is required to generate analysis. Saved analysis remains available.", code: "SAVED_GAME_SNAPSHOT", retryable: true });
     }
     if (hasEmptyLivePlayByPlay(game)) {
       const response = jsonResponse(503, { error: "Live play-by-play is temporarily unavailable. Analysis will retry with a complete feed.",

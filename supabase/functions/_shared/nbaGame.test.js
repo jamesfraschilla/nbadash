@@ -50,9 +50,26 @@ test('period box score uses the requested range and rejects score mismatches', a
   const result = await fetchNbaSegmentBox(game, 'Q1', 'key', fetcher);
   assert.equal(result.boxScore.home.totals.points, 7);
   assert.equal(result.segmentDataQuality.source, 'nba-period-boxscore');
+  assert.equal(result.teamStats.home.possessions, undefined);
   game.homeTeam.periods[0].score = 8;
   await assert.rejects(fetchNbaSegmentBox(game, 'Q1', 'key', fetcher), /does not reconcile/);
   await assert.rejects(fetchNbaSegmentBox(game, 'bogus', 'key', fetcher), /Unsupported/);
+});
+
+test('period box score uses verified period advanced possessions when available', async () => {
+  const { fetchNbaSegmentBox } = await import('./nbaGame.js');
+  const game = { gameId: id, gameStatus: 3, homeTeam: { teamId: 1, periods: [{ period: 1, score: 7 }] }, awayTeam: { teamId: 2, periods: [{ period: 1, score: 7 }] } };
+  const fetcher = async url => ({ ok: true, json: async () => url.searchParams.get('measureType') === 'Advanced'
+    ? { gameId: id, homeTeam: team(1, true), awayTeam: team(2, true) }
+    : { gameId: id, homeTeam: team(1), awayTeam: team(2) } });
+  const result = await fetchNbaSegmentBox(game, 'Q1', 'key', fetcher);
+  assert.equal(result.teamStats.home.possessions, 90);
+  assert.equal(result.boxScore.home.players[0].offensiveRating, 110);
+  assert.equal(result.segmentDataQuality.officialPossessions, true);
+  const mismatched = await fetchNbaSegmentBox(game, 'Q1', 'key', async url => ({ ok: true, json: async () => url.searchParams.get('measureType') === 'Advanced'
+    ? { gameId: id, homeTeam: team(3, true), awayTeam: team(2, true) }
+    : { gameId: id, homeTeam: team(1), awayTeam: team(2) } }));
+  assert.equal(mismatched.segmentDataQuality.officialPossessions, false);
 });
 
 test('play-by-play recovery validates identity, content and upstream failures', async () => {

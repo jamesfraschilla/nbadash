@@ -1,4 +1,5 @@
-import { normalizeFractionPercentage, toNullableNumber } from "./normalizers.ts";
+import { combineGLeaguePlayerRows, normalizeNbaPlayerRow } from "./gleagueStats.ts";
+import { toNullableNumber } from "./normalizers.ts";
 
 const NBA_PLAYER_STATS_URL =
   "https://stats.nba.com/stats/leaguedashplayerstats";
@@ -87,29 +88,7 @@ function mapRows(resultSet: Record<string, unknown> | undefined): StatsRow[] {
     );
 }
 
-function normalizeNbaPlayerRow(row: StatsRow) {
-  const personId = String(row.PLAYER_ID || "").trim();
-  if (!personId) return null;
-
-  return {
-    personId,
-    fullName: String(row.PLAYER_NAME || "").trim(),
-    teamId: String(row.TEAM_ID || "").trim(),
-    teamAbbreviation: String(row.TEAM_ABBREVIATION || "").trim(),
-    gamesPlayed: toNullableNumber(row.GP),
-    pointsPerGame: toNullableNumber(row.PTS),
-    reboundsPerGame: toNullableNumber(row.REB),
-    threePointPercentage: normalizeFractionPercentage(row.FG3_PCT),
-    assistsPerGame: toNullableNumber(row.AST),
-    blocksPerGame: toNullableNumber(row.BLK),
-    stealsPerGame: toNullableNumber(row.STL),
-    freeThrowAttemptsPerGame: toNullableNumber(row.FTA),
-    fieldGoalAttemptsPerGame: toNullableNumber(row.FGA),
-    threePointAttemptsPerGame: toNullableNumber(row.FG3A),
-  };
-}
-
-function buildLeagueStatsUrl(season: string, teamId: string, league: string) {
+function buildLeagueStatsUrl(season: string, teamId: string, league: string, seasonType = "Regular Season") {
   const isGLeague = league === "gleague";
   const url = new URL(isGLeague ? GLEAGUE_PLAYER_STATS_URL : NBA_PLAYER_STATS_URL);
   const params: Record<string, string> = {
@@ -133,7 +112,7 @@ function buildLeagueStatsUrl(season: string, teamId: string, league: string) {
     Outcome: "",
     PORound: "0",
     PaceAdjust: "N",
-    PerMode: "PerGame",
+    PerMode: isGLeague ? "Totals" : "PerGame",
     Period: "0",
     PlayerExperience: "",
     PlayerPosition: "",
@@ -141,7 +120,7 @@ function buildLeagueStatsUrl(season: string, teamId: string, league: string) {
     Rank: "N",
     Season: season,
     SeasonSegment: "",
-    SeasonType: "Regular Season",
+    SeasonType: seasonType,
     ShotClockRange: "",
     StarterBench: "",
     TeamID: teamId || "0",
@@ -160,9 +139,10 @@ async function fetchNbaPlayerStats(
   season: string,
   teamId: string,
   league = "nba",
+  seasonType = "Regular Season",
 ) {
   const isGLeague = league === "gleague";
-  const url = buildLeagueStatsUrl(season, teamId, league);
+  const url = buildLeagueStatsUrl(season, teamId, league, seasonType);
   const response = await fetch(url.toString(), {
     headers: {
       Accept: "application/json, text/plain, */*",
@@ -185,9 +165,7 @@ async function fetchNbaPlayerStats(
   }
 
   const payload = await response.json() as Record<string, unknown>;
-  return mapRows(findPlayerStatsResultSet(payload))
-    .map(normalizeNbaPlayerRow)
-    .filter(Boolean) as StatsRow[];
+  return mapRows(findPlayerStatsResultSet(payload));
 }
 
 function buildEspnStatsUrl(season: string, page: number) {
@@ -337,13 +315,25 @@ Deno.serve(async (req) => {
     });
   }
   const requestedSeason = seasonParam || currentSeasonString();
+  const requestedSeasonType = String(url.searchParams.get("seasonType") || (league === "gleague" ? "full" : "regular")).trim().toLowerCase();
+  if (league === "gleague" && !["full", "showcase", "regular"].includes(requestedSeasonType)) {
+    return jsonResponse(400, { error: "seasonType must be full, showcase, or regular" });
+  }
 
   let rows: StatsRow[] = [];
   let source = league;
   let nbaError = "";
 
   try {
-    rows = await fetchNbaPlayerStats(requestedSeason, teamId, league);
+    if (league === "gleague") {
+      const seasonTypes = requestedSeasonType === "full" ? ["Showcase", "Regular Season", "Playoffs"]
+        : [requestedSeasonType === "showcase" ? "Showcase" : "Regular Season"];
+      rows = combineGLeaguePlayerRows((await Promise.all(seasonTypes.map((type) =>
+        fetchNbaPlayerStats(requestedSeason, teamId, league, type)
+      ))).flat());
+    } else {
+      rows = (await fetchNbaPlayerStats(requestedSeason, teamId, league)).map(normalizeNbaPlayerRow).filter(Boolean) as StatsRow[];
+    }
   } catch (error) {
     nbaError = errorMessage(error);
   }
@@ -384,7 +374,7 @@ Deno.serve(async (req) => {
     requestedSeason,
     season: requestedSeason,
     league,
-    seasonType: "Regular Season",
+    seasonType: league === "gleague" ? requestedSeasonType : "Regular Season",
     perMode: "PerGame",
     teamId: teamId || null,
     source,

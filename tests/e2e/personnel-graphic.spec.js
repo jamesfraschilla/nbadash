@@ -263,6 +263,19 @@ test("season changes clear overrides without losing a G League roster selection"
   });
 });
 
+test("G League personnel exposes the four requested stats seasons", async ({ page }) => {
+  await page.route("**/functions/v1/**", route => route.fulfill({ json: { teams: {}, players: {} } }));
+  await page.goto("http://127.0.0.1:4174/nbadash/#/tools?tab=graphics&graphic=personnel");
+  await page.getByRole("combobox", { name: "League" }).selectOption("gleague");
+  const season = page.getByRole("combobox", { name: "Stats Season" });
+  await expect(season.locator("option")).toHaveText([
+    "2026-27 (Full Season)", "2026-27 (Showcase)",
+    "2026-27 (Regular Season)", "2025-26 (Full Season)",
+  ]);
+  await season.selectOption("2026-27|showcase");
+  await expect(season).toHaveValue("2026-27|showcase");
+});
+
 test("autosaves finish in the order they were queued", async ({ page }) => {
   expect(await page.evaluate(() => window.runAutosaveOrderRegression())).toEqual(["first", "second"]);
 });

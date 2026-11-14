@@ -17,7 +17,7 @@ import {
 } from "../api.js";
 import { useGame, useMinutes } from "../queries.js";
 import { buildCustomPlaycallClipMeta, buildTimedNoteClipMeta } from "../noteClipLinks.js";
-import { threePointOffensiveReboundPercent, reconcileShotZoneTotals, mergeSegmentSnapshotTotals as mergeSegmentTotals } from "../customStatRates.js";
+import { threePointOffensiveReboundPercent, reconcileShotZoneTotals, mergeEventDerivedTotals, mergeSegmentSnapshotTotals as mergeSegmentTotals } from "../customStatRates.js";
 import { PERIOD_SNAPSHOT_CAPTURE_VERSION } from "../periodSnapshotTotals.js";
 import { useAuth } from "../auth/useAuth.js";
 import {
@@ -115,6 +115,7 @@ import {
   aggregateSegmentStats,
   computeKills,
   countPossessionsByTeam,
+  countOutcomePossessionsByTeam,
   segmentPeriods,
 } from "../segmentStats.js";
 import { supabase } from "../supabaseClient.js";
@@ -758,6 +759,14 @@ export default function Game({ variant = "full" }) {
   });
 
   const isSummerLeagueMatch = isSummerLeagueGame(gameId);
+  const hasKeyedNbaEvents = /^(00|20)/.test(String(gameId || ''))
+    && game?.feedAvailability?.source === 'nba-api' && game?.feedAvailability?.playByPlay;
+  const nbaTwoPointShots = hasKeyedNbaEvents
+    ? (game?.playByPlayActions || []).filter((action) => action.actionType === '2pt') : [];
+  const hasNbaShotLocations = nbaTwoPointShots.length > 0
+    && nbaTwoPointShots.filter((action) => action.shotDistance != null && Number.isFinite(Number(action.shotDistance))).length / nbaTwoPointShots.length >= 0.95;
+  const showEventSections = !game?.feedAvailability?.limited || hasKeyedNbaEvents;
+  const showAdvancedLayout = !game?.feedAvailability?.limited || hasNbaShotLocations;
   const shouldShowFreshness = Number(game?.gameStatus || 0) === 2 || isGameDayPollingGame(game || gameId);
   const shouldRefreshFreshnessClock = shouldShowFreshness && Number(game?.gameStatus || 0) === 2;
   const freshness = buildFreshnessSummary({
@@ -779,7 +788,7 @@ export default function Game({ variant = "full" }) {
   }, []);
 
   useEffect(() => {
-    if (!gameId || !game || game._snapshotSavedAt || game.feedAvailability?.limited) return undefined;
+    if (!gameId || !game || game._snapshotSavedAt) return undefined;
     const shadowKey = buildGameLiveStateShadowKey(game, minutesData);
     if (!shadowKey || gameLiveStateShadowRef.current.key === shadowKey) return undefined;
 
@@ -967,7 +976,7 @@ export default function Game({ variant = "full" }) {
   const analysisPrewarmAttemptRef = useRef(new Map());
 
   useEffect(() => {
-    if (!gameId || !user?.id || !isWashingtonGame || !hasAnalysisData || !shouldUseSharedAnalysisRecaps || game?._snapshotSavedAt || game?.feedAvailability?.limited) return;
+    if (!gameId || !user?.id || !isWashingtonGame || !hasAnalysisData || !shouldUseSharedAnalysisRecaps || game?._snapshotSavedAt) return;
     const cachedKeys = new Set(cachedAnalysisSegments.map((record) => String(record?.segmentKey || "").trim()));
     const missingKeys = completedAnalysisSegments
       .map((record) => record.key)
@@ -1618,8 +1627,8 @@ export default function Game({ variant = "full" }) {
 
   const generateAnalysis = async () => {
     if (!gameId || analysisLoading) return;
-    if (game?._snapshotSavedAt || game?.feedAvailability?.limited) {
-      setAnalysisError("Recap generation is paused until a complete current feed is available. Saved recaps remain accessible.");
+    if (game?._snapshotSavedAt) {
+      setAnalysisError("Recap generation is unavailable for a saved snapshot.");
       return;
     }
     if (analysisValidation.error) {
@@ -1877,10 +1886,10 @@ export default function Game({ variant = "full" }) {
         const defensivePoss = safeStats.possessionsAgainst || 0;
         const computedOrt = offensivePoss ? (safeStats.pointsFor / offensivePoss) * 100 : null;
         const computedDrt = defensivePoss ? (safeStats.pointsAgainst / defensivePoss) * 100 : null;
-        const ortg = segment === "all" && Number.isFinite(player.offensiveRating)
+        const ortg = (segment === "all" || officialSegment) && Number.isFinite(player.offensiveRating)
           ? player.offensiveRating
           : computedOrt;
-        const drtg = segment === "all" && Number.isFinite(player.defensiveRating)
+        const drtg = (segment === "all" || officialSegment) && Number.isFinite(player.defensiveRating)
           ? player.defensiveRating
           : computedDrt;
         return {
@@ -1928,7 +1937,7 @@ export default function Game({ variant = "full" }) {
       pickValue(computed?.secondChance3FGAttempted, base?.secondChance3FGAttempted)
     );
     return {
-      ...reconcileShotZoneTotals(base, computed),
+      ...mergeEventDerivedTotals(reconcileShotZoneTotals(base, computed), computed),
       pointsOffTurnovers,
       paintPoints,
       secondChance3FGMade,
@@ -2007,48 +2016,22 @@ export default function Game({ variant = "full" }) {
     possessionCounts
     && possessionCounts.homePossessions > 0
     && possessionCounts.awayPossessions > 0;
-  const useOfficialRatings = teamStats?.away?.offensiveRating && teamStats?.home?.offensiveRating;
-
-  const ortgAway = useOfficialRatings
-    ? Math.round(teamStats.away.offensiveRating)
-    : Math.round(
-      (advancedAwayTotals.points || 0) /
-        Math.max(possessions(advancedAwayTotals, advancedHomeTotals), 1) *
-        100
-    );
-  const ortgHome = useOfficialRatings
-    ? Math.round(teamStats.home.offensiveRating)
-    : Math.round(
-      (advancedHomeTotals.points || 0) /
-        Math.max(possessions(advancedHomeTotals, advancedAwayTotals), 1) *
-        100
-    );
-  const useOfficialDefensive = teamStats?.away?.defensiveRating && teamStats?.home?.defensiveRating;
-  const drtgAway = useOfficialDefensive
-    ? Math.round(teamStats.away.defensiveRating)
-    : Math.round(
-      (advancedHomeTotals.points || 0) /
-        Math.max(possessions(advancedHomeTotals, advancedAwayTotals), 1) *
-        100
-    );
-  const drtgHome = useOfficialDefensive
-    ? Math.round(teamStats.home.defensiveRating)
-    : Math.round(
-      (advancedAwayTotals.points || 0) /
-        Math.max(possessions(advancedAwayTotals, advancedHomeTotals), 1) *
-        100
-    );
-  const netAway = ortgAway - drtgAway;
-  const netHome = ortgHome - drtgHome;
-
   const officialAwayPossessions = teamStats?.away?.possessions;
   const officialHomePossessions = teamStats?.home?.possessions;
-  const useOfficialPossessions = segment === "all" && officialAwayPossessions && officialHomePossessions;
-  const showPossessionMetrics = !game?.feedAvailability?.limited || Boolean(useOfficialPossessions);
+  const trialPossessions = hasKeyedNbaEvents
+    ? countOutcomePossessionsByTeam(game?.playByPlayActions || [], segment, homeTeamId, awayTeamId)
+    : null;
+  const useOfficialPossessions = (segment === "all" || game?.segmentDataQuality?.source === "nba-period-boxscore")
+    && officialAwayPossessions > 0 && officialHomePossessions > 0;
+  const useTrialPossessions = !useOfficialPossessions && hasKeyedNbaEvents
+    && trialPossessions?.homePossessions > 0 && trialPossessions?.awayPossessions > 0;
+  const showPossessionMetrics = !game?.feedAvailability?.limited || Boolean(useOfficialPossessions) || useTrialPossessions;
 
   const awayPossessions = Math.max(
     useOfficialPossessions
       ? officialAwayPossessions
+      : useTrialPossessions
+        ? trialPossessions.awayPossessions
       : hasPossessionCounts
         ? possessionCounts.awayPossessions
         : possessions(advancedAwayTotals, advancedHomeTotals),
@@ -2057,11 +2040,29 @@ export default function Game({ variant = "full" }) {
   const homePossessions = Math.max(
     useOfficialPossessions
       ? officialHomePossessions
+      : useTrialPossessions
+        ? trialPossessions.homePossessions
       : hasPossessionCounts
         ? possessionCounts.homePossessions
         : possessions(advancedHomeTotals, advancedAwayTotals),
     1
   );
+  const useOfficialRatings = !useTrialPossessions && teamStats?.away?.offensiveRating && teamStats?.home?.offensiveRating;
+  const ortgAway = useOfficialRatings
+    ? Math.round(teamStats.away.offensiveRating)
+    : Math.round((advancedAwayTotals.points || 0) / awayPossessions * 100);
+  const ortgHome = useOfficialRatings
+    ? Math.round(teamStats.home.offensiveRating)
+    : Math.round((advancedHomeTotals.points || 0) / homePossessions * 100);
+  const useOfficialDefensive = !useTrialPossessions && teamStats?.away?.defensiveRating && teamStats?.home?.defensiveRating;
+  const drtgAway = useOfficialDefensive
+    ? Math.round(teamStats.away.defensiveRating)
+    : Math.round((advancedHomeTotals.points || 0) / homePossessions * 100);
+  const drtgHome = useOfficialDefensive
+    ? Math.round(teamStats.home.defensiveRating)
+    : Math.round((advancedAwayTotals.points || 0) / awayPossessions * 100);
+  const netAway = ortgAway - drtgAway;
+  const netHome = ortgHome - drtgHome;
   const formatChancesValue = (value) => {
     if (!Number.isFinite(value)) return "0";
     return Number.isInteger(value) ? String(value) : value.toFixed(1);
@@ -2132,20 +2133,20 @@ export default function Game({ variant = "full" }) {
   const fourFactorRows = [
     {
       label: "eFG%",
-      awayValue: efg(advancedAwayTotals.fieldGoalsMade, advancedAwayTotals.fieldGoalsAttempted, advancedAwayTotals.threePointersMade),
-      homeValue: efg(advancedHomeTotals.fieldGoalsMade, advancedHomeTotals.fieldGoalsAttempted, advancedHomeTotals.threePointersMade),
+      awayValue: Number.isFinite(teamStats?.away?.effectiveFieldGoalPercentage) ? teamStats.away.effectiveFieldGoalPercentage * 100 : efg(advancedAwayTotals.fieldGoalsMade, advancedAwayTotals.fieldGoalsAttempted, advancedAwayTotals.threePointersMade),
+      homeValue: Number.isFinite(teamStats?.home?.effectiveFieldGoalPercentage) ? teamStats.home.effectiveFieldGoalPercentage * 100 : efg(advancedHomeTotals.fieldGoalsMade, advancedHomeTotals.fieldGoalsAttempted, advancedHomeTotals.threePointersMade),
       format: (v) => `${v.toFixed(1)}%`,
     },
     {
       label: "TOV%",
-      awayValue: tov(advancedAwayTotals.turnovers, advancedAwayTotals.fieldGoalsAttempted, advancedAwayTotals.freeThrowsAttempted),
-      homeValue: tov(advancedHomeTotals.turnovers, advancedHomeTotals.fieldGoalsAttempted, advancedHomeTotals.freeThrowsAttempted),
+      awayValue: Number.isFinite(teamStats?.away?.turnoverPercentage) ? teamStats.away.turnoverPercentage : tov(advancedAwayTotals.turnovers, advancedAwayTotals.fieldGoalsAttempted, advancedAwayTotals.freeThrowsAttempted),
+      homeValue: Number.isFinite(teamStats?.home?.turnoverPercentage) ? teamStats.home.turnoverPercentage : tov(advancedHomeTotals.turnovers, advancedHomeTotals.fieldGoalsAttempted, advancedHomeTotals.freeThrowsAttempted),
       format: (v) => `${v.toFixed(1)}%`,
     },
     {
       label: "ORB%",
-      awayValue: orb(advancedAwayTotals.reboundsOffensive, homeDefReb),
-      homeValue: orb(advancedHomeTotals.reboundsOffensive, awayDefReb),
+      awayValue: Number.isFinite(teamStats?.away?.offensiveReboundPercentage) ? teamStats.away.offensiveReboundPercentage * 100 : orb(advancedAwayTotals.reboundsOffensive, homeDefReb),
+      homeValue: Number.isFinite(teamStats?.home?.offensiveReboundPercentage) ? teamStats.home.offensiveReboundPercentage * 100 : orb(advancedHomeTotals.reboundsOffensive, awayDefReb),
       format: (v) => `${v.toFixed(1)}%`,
     },
     {
@@ -2225,18 +2226,18 @@ export default function Game({ variant = "full" }) {
     },
   ];
 
-  const awayDeflections = teamStats?.away?.advancedStats?.deflections ?? 0;
-  const homeDeflections = teamStats?.home?.advancedStats?.deflections ?? 0;
+  const awayDeflections = teamStats?.away?.advancedStats?.deflections;
+  const homeDeflections = teamStats?.home?.advancedStats?.deflections;
   const awayDisruptions =
     (advancedAwayTotals.steals || 0) +
     (advancedAwayTotals.blocks || 0) +
     (advancedAwayTotals.offensiveFoulsDrawn || 0) +
-    awayDeflections;
+    (awayDeflections ?? 0);
   const homeDisruptions =
     (advancedHomeTotals.steals || 0) +
     (advancedHomeTotals.blocks || 0) +
     (advancedHomeTotals.offensiveFoulsDrawn || 0) +
-    homeDeflections;
+    (homeDeflections ?? 0);
   const awayForcedTurnovers =
     (advancedAwayTotals.steals || 0) +
     (advancedAwayTotals.offensiveFoulsDrawn || 0);
@@ -2253,6 +2254,7 @@ export default function Game({ variant = "full" }) {
     secondChance3FGMade: teamTotals.secondChance3FGMade ?? fallback?.secondChance3FGMade ?? 0,
     secondChance3FGAttempted: teamTotals.secondChance3FGAttempted ?? fallback?.secondChance3FGAttempted ?? 0,
     offensiveFoulsDrawn: teamTotals.offensiveFoulsDrawn ?? fallback?.offensiveFoulsDrawn ?? 0,
+    chargesDrawn: teamTotals.chargesDrawn ?? fallback?.chargesDrawn ?? 0,
     steals: teamTotals.steals ?? fallback?.steals ?? 0,
     turnovers: teamTotals.turnovers ?? fallback?.turnovers ?? 0,
   });
@@ -3011,29 +3013,29 @@ export default function Game({ variant = "full" }) {
               <div className={styles.centerMetrics}>
                 <div className={styles.centerMetricRow}>
                   <span className={styles.statValue}>{ortgAway}</span>
-                  <span className={styles.statLabel}>ORTG</span>
+                  <span className={styles.statLabel}>ORTG{useTrialPossessions ? "*" : ""}</span>
                   <span className={styles.statValue}>{ortgHome}</span>
                 </div>
                 <div className={styles.centerMetricDivider} />
                 <div className={styles.centerMetricRow}>
                   <span className={styles.statValue}>{netAway >= 0 ? "+" : ""}{netAway}</span>
-                  <span className={styles.statLabel}>NET</span>
+                  <span className={styles.statLabel}>NET{useTrialPossessions ? "*" : ""}</span>
                   <span className={styles.statValue}>{netHome >= 0 ? "+" : ""}{netHome}</span>
                 </div>
                 <div className={styles.centerMetricDivider} />
                 <div className={styles.centerMetricRow}>
                   <span className={styles.statValue}>{!showPossessionMetrics ? "Unavailable" : formatChancesValue(displayAwayChances)}</span>
-                  <span className={styles.statLabel}>Possesion Game</span>
+                  <span className={styles.statLabel}>Possession Game{useTrialPossessions ? "*" : ""}</span>
                   <span className={styles.statValue}>{!showPossessionMetrics ? "Unavailable" : formatChancesValue(displayHomeChances)}</span>
                 </div>
               </div>
             )}
             {showExtras && (
               <div className={styles.paceGroup}>
-                <div className={styles.paceRow}>PACE {!showPossessionMetrics ? "Unavailable" : displayPaceValue.toFixed(1)}</div>
+                <div className={styles.paceRow}>PACE{useTrialPossessions ? "*" : ""} {!showPossessionMetrics ? "Unavailable" : displayPaceValue.toFixed(1)}</div>
               </div>
             )}
-            {isAtc && !game.feedAvailability?.limited && <div className={styles.headerPossessionTable}>{possessionSummaryTable}</div>}
+            {isAtc && showEventSections && <div className={styles.headerPossessionTable}>{possessionSummaryTable}</div>}
 	            <div className={`${styles.status} ${isLive ? styles.statusLive : ""}`}>
 	              {status || game.gameStatusText}
 	            </div>
@@ -3232,7 +3234,7 @@ export default function Game({ variant = "full" }) {
           ) : null}
 
           <SectionErrorBoundary name="Alerts" key={`alerts:${gameId}`}>
-          {!game.feedAvailability?.limited ? <DashboardAlerts
+          {showEventSections ? <DashboardAlerts
             game={game}
             basePlayers={basePlayers}
             minutesData={minutesData}
@@ -3325,7 +3327,7 @@ export default function Game({ variant = "full" }) {
 
       {showExtras && (
         <>
-          {!game.feedAvailability?.limited ? <SectionErrorBoundary name="Game situation matrix" key={`matrix:${gameId}`}><LateGameMatrixPanel
+          {showEventSections ? <SectionErrorBoundary name="Game situation matrix" key={`matrix:${gameId}`}><LateGameMatrixPanel
             title="Live Game Situation Matrix"
             collapsed={strategyPanelCollapsed}
             onToggleCollapsed={toggleStrategyPanel}
@@ -3383,7 +3385,7 @@ export default function Game({ variant = "full" }) {
 
           {isWashingtonGame ? <GameKpiTables gameId={gameId} /> : null}
 
-          {!game.feedAvailability?.limited ? <SectionErrorBoundary name="Advanced statistics" key={`advanced:${gameId}`} render={() => (<>
+          {showAdvancedLayout ? <SectionErrorBoundary name="Advanced statistics" key={`advanced:${gameId}`} render={() => (<>
           <StatBars
             title="Four Factors"
             awayTeam={awayTeam}
@@ -3425,15 +3427,44 @@ export default function Game({ variant = "full" }) {
               homeTeam={homeTeam}
               awayStats={awayCreating}
               homeStats={homeCreating}
-              awayDisruptions={awayDisruptions}
-              homeDisruptions={homeDisruptions}
+              creatingInferred={hasKeyedNbaEvents}
+              awayDisruptions={hasKeyedNbaEvents && awayDeflections == null ? `≥${awayDisruptions}` : awayDisruptions}
+              homeDisruptions={hasKeyedNbaEvents && homeDeflections == null ? `≥${homeDisruptions}` : homeDisruptions}
+              disruptionsMissingDeflections={hasKeyedNbaEvents && (awayDeflections == null || homeDeflections == null)}
               awayKills={killStats.awayKills}
               homeKills={killStats.homeKills}
               awayForcedTurnovers={awayForcedTurnovers}
               homeForcedTurnovers={homeForcedTurnovers}
             />
           </div>
-          </>)} /> : <p role="status">Advanced statistics are unavailable on the backup feed.</p>}
+          </>)} /> : game.feedAvailability?.source === "nba-api" && Number(game.gameStatus) >= 2 ? (
+            <SectionErrorBoundary name="Shooting and rebounding" key={`box-indicators:${gameId}`}>
+              <StatBars
+                title="Shooting & Rebounding"
+                awayTeam={awayTeam}
+                homeTeam={homeTeam}
+                rows={[
+                  ...fourFactorRows.filter((row) => row.label !== "TOV%"),
+                  shotProfileRows.find((row) => row.label === "3P Rate"),
+                  shotEffRows.find((row) => row.label === "3P FG%"),
+                ].filter(Boolean)}
+              />
+              {["pointsSecondChance", "pointsFromTurnovers", "pointsInThePaint"].every((key) =>
+                Number.isFinite(boxScore?.away?.totals?.[key]) && Number.isFinite(boxScore?.home?.totals?.[key])) && (
+                <StatBars
+                  title="Scoring Breakdown"
+                  awayTeam={awayTeam}
+                  homeTeam={homeTeam}
+                  rows={[
+                    ["2nd Chance", "pointsSecondChance"],
+                    ["Pts Off TO", "pointsFromTurnovers"],
+                    ["Paint Pts", "pointsInThePaint"],
+                  ].map(([label, key]) => ({ label, awayValue: boxScore.away.totals[key], homeValue: boxScore.home.totals[key] }))}
+                />
+              )}
+              <p role="status">Possession-based and other advanced statistics are still being verified.</p>
+            </SectionErrorBoundary>
+          ) : <p role="status">Advanced statistics are not available yet.</p>}
 
           <div className={styles.navRow} ref={boxScoreNavRef}>
             <SegmentSelector value={segment} onChange={handleSegmentChange} />
@@ -3879,7 +3910,8 @@ export default function Game({ variant = "full" }) {
           currentPeriod={game.period}
           variant={variant}
           minuteCapsByPersonId={awayMinuteCapsByPersonId}
-          limitedFeed={Boolean(game.feedAvailability?.limited)}
+          limitedFeed={Boolean(game.feedAvailability?.limited && !showAdvancedLayout)}
+          estimatedPossessions={useTrialPossessions}
         />
         <BoxScoreTable
           teamLabel={homeTeam.teamTricode}
@@ -3891,11 +3923,12 @@ export default function Game({ variant = "full" }) {
           currentPeriod={game.period}
           variant={variant}
           minuteCapsByPersonId={homeMinuteCapsByPersonId}
-          limitedFeed={Boolean(game.feedAvailability?.limited)}
+          limitedFeed={Boolean(game.feedAvailability?.limited && !showAdvancedLayout)}
+          estimatedPossessions={useTrialPossessions}
         />
         </SectionErrorBoundary>
       </section>
-      {!isAtc && !game.feedAvailability?.limited && (
+      {!isAtc && showEventSections && (
         <section className={styles.possessionSummarySection}>
           {possessionSummaryTable}
         </section>
@@ -3922,6 +3955,7 @@ export default function Game({ variant = "full" }) {
           <CapitalCityAtcWorkspace gameId={gameId} />
         </SectionErrorBoundary>
       ) : null}
+      {useTrialPossessions && <p>* Possession counts, pace, and possession-based ratings are estimates from play-by-play outcomes until official advanced counts are available.</p>}
       </div>
     </div>
   );

@@ -25,7 +25,7 @@ for (const pregame of [false, true]) {
     await page.route(/referee-assignments/, route => route.fulfill({ status: 503, json: {} }));
     await page.route("**/boxscore_*.json", route => route.fulfill({ json: {} }));
     await page.goto("#/g/0022600015");
-    const row = page.locator('[class*="centerMetricRow"]').filter({ hasText: "Possesion Game" });
+    const row = page.locator('[class*="centerMetricRow"]').filter({ hasText: "Possession Game" });
     await expect(row.locator('[class*="statValue"]')).toHaveText(pregame ? ["0", "0"] : ["97", "88"]);
     await expect(page.getByText("CHANCES", { exact: true })).toHaveCount(0);
     if (!pregame) {

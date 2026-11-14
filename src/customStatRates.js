@@ -17,6 +17,17 @@ export function reconcileShotZoneTotals(base = {}, derived = {}) {
   return { ...base, ...Object.fromEntries(zones.map((key) => [key, derived[key]])) };
 }
 
+// The keyed Traditional box omits these event-derived fields. Retain any
+// source-supplied values; otherwise use the play-by-play reconstruction.
+export function mergeEventDerivedTotals(base = {}, derived = {}) {
+  const fields = [
+    "drivingFGMade", "drivingFGAttempted", "cuttingFGMade", "cuttingFGAttempted",
+    "catchAndShoot3FGMade", "catchAndShoot3FGAttempted",
+    "offensiveFoulsDrawn", "chargesDrawn",
+  ];
+  return { ...base, ...Object.fromEntries(fields.map((field) => [field, base[field] ?? derived[field] ?? 0])) };
+}
+
 export function mergeSegmentSnapshotTotals(computed = {}, snapshot) {
   return snapshot ? reconcileShotZoneTotals({ ...computed, ...snapshot }, computed) : computed;
 }

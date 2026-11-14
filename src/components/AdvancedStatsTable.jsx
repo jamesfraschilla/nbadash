@@ -5,8 +5,7 @@ const rows = [
   { key: "drivingFGPercent", label: "Driving FG%", format: (v) => `${v || 0}%` },
   { key: "cuttingFGPercent", label: "Cutting FG%", format: (v) => `${v || 0}%` },
   { key: "catchAndShoot3FGPercent", label: "C&S 3P%", format: (v) => `${v || 0}%` },
-  { key: "chargesDrawn", label: "Charges Drawn" },
-  { key: "offensiveFoulsDrawn", label: "Off Fouls Drawn" },
+  { key: "offensiveFoulsDrawn", label: "Offensive Fouls Drawn" },
 ];
 
 export default function AdvancedStatsTable({ homeTeam, awayTeam, homeStats, awayStats }) {

@@ -13,7 +13,7 @@ test("delayed snapshots use historical period data, not the current box score", 
   assert.equal(snapshots.length, 2);
   assert.equal(snapshots[0].totals.points, 2);
   assert.equal(snapshots[1].totals.points, 0);
-  assert.equal(snapshots[0].totals._captureVersion, 3);
+  assert.equal(snapshots[0].totals._captureVersion, 4);
 });
 test("unverifiable quarter snapshots are rejected instead of persisting incorrect totals", () => {
   const game = fixture(); game.playByPlayActions[2].scoreHome = "5";

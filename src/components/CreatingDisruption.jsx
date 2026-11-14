@@ -31,13 +31,13 @@ const creatingColumns = [
 const disruptionColumns = [
   {
     key: "offFouls",
-    label: "Offensive FD",
+    label: "Offensive Fouls Drawn",
     format: (stats) => stats.offensiveFoulsDrawn ?? 0,
   },
   {
     key: "disruptions",
     label: "Disruptions",
-    format: (_, value) => value ?? 0,
+    format: (_, value) => value == null ? "—" : value,
     isDerived: true,
   },
   {
@@ -59,12 +59,14 @@ export default function CreatingDisruption({
   homeTeam,
   awayStats,
   homeStats,
+  creatingInferred = false,
   awayDisruptions,
   homeDisruptions,
   awayKills,
   homeKills,
   awayForcedTurnovers,
   homeForcedTurnovers,
+  disruptionsMissingDeflections = false,
 }) {
   if (!awayStats || !homeStats) return null;
 
@@ -114,6 +116,12 @@ export default function CreatingDisruption({
           );
         })}
       </div>
+      {title === "Disruption" && disruptionsMissingDeflections && (
+        <p className={styles.note}>≥ is the minimum; deflections are unavailable from this feed.</p>
+      )}
+      {title === "Creating" && creatingInferred && (
+        <p className={styles.note}>Driving, cutting, and C&amp;S 3s are inferred from play-by-play descriptions.</p>
+      )}
     </section>
   );
 

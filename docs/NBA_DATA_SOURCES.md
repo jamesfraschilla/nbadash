@@ -2,6 +2,17 @@
 
 For the broader endpoint and parameter catalog, see [NBA API reference](NBA_API_REFERENCE.md).
 
+## Local Trailblaze audit
+
+For a local-only comparison against Trailblaze, start the development server with
+`VITE_TRAILBLAZE_LOCAL_AUDIT=1 npm run dev`. This routes the local browser's game
+list, game, play-by-play, and minutes requests through the Vite development
+server to Trailblaze's undocumented server functions. It does not configure a
+production fallback and does not replace the keyed NBA API. Trailblaze's
+server-function identifiers and payloads can change without notice; pregame
+minutes may be unavailable. The G League audit records raw source responses and
+dashboard-calculated totals separately for later reconciliation.
+
 This guide describes the code in this checkout, including changes that may not yet be deployed. Check the deployed revision and secrets before assuming production behaves the same way. The old CloudFront game-feed hostname is no longer referenced by application or job code in this checkout; historical documents and regression tests may still mention it.
 
 ## Keyed NBA API
@@ -30,11 +41,11 @@ The migration targeted the old CloudFront feed. The other sources below have not
 | --- | --- | --- |
 | Period snapshot capture | Keyed date scoreboard and game adapter, with CDN game fallback; writes verified snapshots to Supabase | CloudFront calls migrated locally; the workflow passes `NBA_API_KEY`. |
 | Live audit and operations checks | Keyed scoreboard/game adapters and other independent NBA/Supabase checks | CloudFront calls migrated locally; relevant jobs pass `NBA_API_KEY`. |
-| Nightly officiating ingestion | NBA CDN season schedule; game backfill uses keyed game data when available and CDN box score/play-by-play for enrichment or fallback; sometimes NBA game pages and Stats API | Partially migrated. The nightly workflow currently does **not** pass `NBA_API_KEY`, so the keyed game request in the backfill cannot run there and it falls back to CDN. The schedule and enrichment are separate CDN sources. |
+| Nightly officiating ingestion | NBA CDN season schedule; game backfill uses keyed game data when available and CDN box score/play-by-play for enrichment or fallback; sometimes NBA game pages and Stats API | The nightly ingestion step passes `NBA_API_KEY`; the schedule and enrichment remain separate CDN sources. Verify that the GitHub Actions secret is configured. |
 | Daily challenge sync and reconciliation | Official NBA challenge review pages/PDFs, NBA gamebook PDFs, and game data via the shared recovery adapter | The workflow currently does **not** pass `NBA_API_KEY`, so shared game recovery uses CDN. Official documents remain distinct sources for review outcomes and whistle evidence. |
 | Referee assignments | `https://official.nba.com/referee-assignments/` parsed by [`referee-assignments`](../supabase/functions/referee-assignments/index.ts) | Separate official page; not CloudFront. |
 | Officiating insight facts and call enrichment | CDN box scores/play-by-play; stored Supabase records; other official evidence | Separate data sources, not fully rewritten to the keyed API. |
-| Rosters and player analytics | NBA Stats API, G League Stats API, ESPN fallback, and cached snapshots | Separate sources; see `nba-rosters`, `gleague-rosters`, and `nba-player-stats` Edge Functions. |
+| Rosters and player analytics | NBA Stats API, G League Stats API, ESPN fallback, and cached snapshots | Separate sources; see `nba-rosters`, `gleague-rosters`, and `nba-player-stats` Edge Functions. G League personnel stats use Showcase, Regular Season, or a full-season combination of Showcase, Regular Season, and Playoffs; counting totals are combined before per-game rates are calculated. |
 | Schedule refresh and game-window guard | NBA CDN season schedule and today's scoreboard | Separate CDN feeds; see `update-nba-schedule.mjs` and `scripts/lib/game-window-guard.mjs`. |
 
 The nightly and daily workflows also perform production database writes. Do not change their source precedence or enable a different path in production without validating official identities, completeness, challenge outcomes, and preserved annotations. Follow [`ops/runbook.json`](../ops/runbook.json), current operations reports, and the project instructions before investigating or repairing production data. The current source inventory is not a claim that production jobs are healthy.

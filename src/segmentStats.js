@@ -84,7 +84,11 @@ function scoringPoints(action, homeTeamId, awayTeamId) {
     : teamId === Number(awayTeamId)
       ? action.__scoreDeltaAway
       : null;
-  return Number.isFinite(delta) && delta > 0 ? delta : fallbackScoringPoints(action);
+  const expected = fallbackScoringPoints(action);
+  // Corrected and finalbox events can reset or jump the cumulative score.
+  // A single made shot cannot score more than its recorded shot value.
+  const maximum = action.actionType === "freethrow" ? 2 : expected;
+  return Number.isFinite(delta) && delta > 0 && delta <= maximum ? delta : expected;
 }
 
 function isSummerLeagueGameId(gameId) {
@@ -596,6 +600,9 @@ export function aggregateSegmentStats({
       const opponentId = isHome ? awayTeam.teamId : isAway ? homeTeam.teamId : null;
       if (opponentId && teamTotals[opponentId]) {
         teamTotals[opponentId].offensiveFoulsDrawn = (teamTotals[opponentId].offensiveFoulsDrawn || 0) + 1;
+        if (/\bcharg(?:e|ing)\b/i.test(String(action.description || ""))) {
+          teamTotals[opponentId].chargesDrawn = (teamTotals[opponentId].chargesDrawn || 0) + 1;
+        }
       }
     }
   });
@@ -864,4 +871,32 @@ export function countPossessionsByTeam(actions, segment, homeTeamId, awayTeamId)
   });
 
   return { homePossessions, awayPossessions };
+}
+
+// One-game live trial: reproduce the previous feed's completed-outcome counts.
+// This remains an estimate, especially for the currently incomplete possession.
+export function countOutcomePossessionsByTeam(actions, segment, homeTeamId, awayTeamId) {
+  const predicate = segmentPeriods(segment);
+  const homeId = Number(homeTeamId), awayId = Number(awayTeamId);
+  let current = null;
+  const result = { homePossessions: 0, awayPossessions: 0 };
+  const finish = () => {
+    if (!current?.hasOutcome) return;
+    if (current.team === homeId) result.homePossessions += 1;
+    if (current.team === awayId) result.awayPossessions += 1;
+  };
+  for (const action of orderActions(actions.filter((entry) => predicate(entry.period)))) {
+    const team = Number(action.possession);
+    if (team !== homeId && team !== awayId) continue;
+    if (!current || current.team !== team || current.period !== action.period) {
+      finish();
+      current = { team, period: action.period, hasOutcome: false };
+    }
+    const type = String(action.actionType || "").toLowerCase();
+    if (Number(action.teamId) === team && ["2pt", "3pt", "freethrow", "turnover"].includes(type)) {
+      current.hasOutcome = true;
+    }
+  }
+  finish();
+  return result;
 }

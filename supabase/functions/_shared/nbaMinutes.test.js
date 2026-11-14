@@ -93,3 +93,111 @@ test('does not retry independent source conflicts', async () => {
   await assert.rejects(fetchNbaMinutes(game, 'key', fetcher), { code: 'FINAL_SCORE_CONFLICT' });
   assert.equal(pocCalls, 1);
 });
+
+test('accepts a shared live box-clock lag but rejects individual or final discrepancies', () => {
+  const { game, roster, poc } = fixture();
+  game.gameStatus = 2;
+  for (const side of ['home', 'away']) for (const player of game.boxScore[side].players) player.minutes = 'PT11M40.00S';
+  const minutes = buildNbaMinutes(game, roster, poc);
+  assert.equal(minutes.boxClockLagSeconds, 20);
+  game.boxScore.home.players[0].minutes = 'PT11M50.00S';
+  assert.throws(() => buildNbaMinutes(game, roster, poc), /minutes do not reconcile/);
+  game.boxScore.home.players[0].minutes = 'PT11M40.00S';
+  game.gameStatus = 3;
+  assert.throws(() => buildNbaMinutes(game, roster, poc), /minutes do not reconcile/);
+});
+
+test('infers a live scoring lineup only inside a unique substitution stint', () => {
+  const { game, roster } = fixture();
+  game.gameStatus = 2;
+  const result = buildNbaMinutes(game, roster, []);
+  assert.deepEqual(result.inferredScoringEvents, [1]);
+  assert.equal(result.source, 'nba-rosterlineup-pbp-inferred');
+  game.playByPlayActions[0].clock = 'PT12M00.00S';
+  assert.throws(() => buildNbaMinutes(game, roster, []), { code: 'POC_PENDING' });
+  game.gameStatus = 3;
+  assert.throws(() => buildNbaMinutes(game, roster, []), { code: 'POC_PENDING' });
+});
+
+test('treats NBA POC HTTP 204 as temporarily empty during a live game', async () => {
+  const { game, roster } = fixture();
+  game.gameStatus = 2;
+  const { fetchNbaMinutes } = await import('./nbaMinutes.js');
+  const fetcher = async url => url.pathname.endsWith('/rosterlineup')
+    ? { ok: true, status: 200, json: async () => roster }
+    : { ok: true, status: 204 };
+  const result = await fetchNbaMinutes(game, 'key', fetcher);
+  assert.deepEqual(result.inferredScoringEvents, [1]);
+});
+
+test('infers at the current live clock only when no substitution shares it', () => {
+  const { game, roster } = fixture();
+  game.gameStatus = 2;
+  game.gameClock = 'PT09M00.00S';
+  for (const side of ['home', 'away']) for (const player of game.boxScore[side].players) player.minutes = 'PT03M00.00S';
+  assert.deepEqual(buildNbaMinutes(game, roster, []).inferredScoringEvents, [1]);
+  roster.push({ Game_Id: game.gameId, Person_id: 105, Team_id: 1, Period: 0, Person_Type: 'Player', First_Name: 'B', Last_Name: 'Five' });
+  game.playByPlayActions.push({ period: 1, clock: game.gameClock, actionNumber: 2, teamId: 1, actionType: 'substitution', subType: 'out', personId: 100 }, { period: 1, clock: game.gameClock, actionNumber: 3, teamId: 1, actionType: 'substitution', subType: 'in', personId: 105 });
+  assert.throws(() => buildNbaMinutes(game, roster, []), { code: 'POC_PENDING' });
+});
+
+test('resolves a delayed substitution-boundary lineup only with a unique reconciled result', async () => {
+  const { game, roster } = fixture();
+  game.gameStatus = 2;
+  roster.push({ Game_Id: game.gameId, Person_id: 105, Team_id: 1, Period: 0, Person_Type: 'Player', First_Name: 'B', Last_Name: 'Five' });
+  game.boxScore.home.players[0].minutes = 'PT06M00.00S';
+  game.boxScore.home.players[0].plusMinusPoints = 0;
+  game.boxScore.home.players.push({ personId: 105, minutes: 'PT06M00.00S', plusMinusPoints: 2 });
+  game.playByPlayActions[0].clock = 'PT06M00.00S';
+  game.playByPlayActions.push({ period: 1, clock: 'PT06M00.00S', actionNumber: 2, teamId: 1, actionType: 'substitution', subType: 'out', personId: 100 }, { period: 1, clock: 'PT06M00.00S', actionNumber: 3, teamId: 1, actionType: 'substitution', subType: 'in', personId: 105 });
+  const { fetchNbaMinutes } = await import('./nbaMinutes.js');
+  const fetcher = async url => url.pathname.endsWith('/rosterlineup') ? { ok: true, status: 200, json: async () => roster } : { ok: true, status: 204 };
+  const result = await fetchNbaMinutes(game, 'key', fetcher);
+  assert.deepEqual(result.inferredScoringEvents, [1]);
+  assert.equal(result.periods[0].stints[1].homeScore, 2);
+  game.boxScore.home.players[0].plusMinusPoints = null;
+  await assert.rejects(fetchNbaMinutes(game, 'key', fetcher), { code: 'POC_PENDING' });
+});
+
+test('refuses boundary events when multiple lineups produce the same player margins', async () => {
+  const { game, roster } = fixture();
+  game.gameStatus = 2;
+  game.homeTeam.periods[0].score = 4;
+  roster.push({ Game_Id: game.gameId, Person_id: 105, Team_id: 1, Period: 0, Person_Type: 'Player', First_Name: 'B', Last_Name: 'Five' });
+  for (const player of game.boxScore.home.players) player.plusMinusPoints = 4;
+  for (const player of game.boxScore.away.players) player.plusMinusPoints = -4;
+  game.boxScore.home.players[0].minutes = 'PT06M00.00S';
+  game.boxScore.home.players[0].plusMinusPoints = 2;
+  game.boxScore.home.players.push({ personId: 105, minutes: 'PT06M00.00S', plusMinusPoints: 2 });
+  game.playByPlayActions[0].clock = 'PT06M00.00S';
+  game.playByPlayActions.push({ ...game.playByPlayActions[0], actionNumber: 4 });
+  game.playByPlayActions.push({ period: 1, clock: 'PT06M00.00S', actionNumber: 2, teamId: 1, actionType: 'substitution', subType: 'out', personId: 100 }, { period: 1, clock: 'PT06M00.00S', actionNumber: 3, teamId: 1, actionType: 'substitution', subType: 'in', personId: 105 });
+  const { fetchNbaMinutes } = await import('./nbaMinutes.js');
+  const fetcher = async url => url.pathname.endsWith('/rosterlineup') ? { ok: true, status: 200, json: async () => roster } : { ok: true, status: 204 };
+  await assert.rejects(fetchNbaMinutes(game, 'key', fetcher), { code: 'POC_PENDING' });
+});
+
+test('does not apply NBA live inference or box-clock tolerance to G League games', () => {
+  const { game, roster, poc } = fixture();
+  game.gameId = '2022200155'; game.gameStatus = 2;
+  roster.forEach(row => { row.Game_Id = game.gameId; }); poc[0].Game_id = game.gameId;
+  assert.throws(() => buildNbaMinutes(game, roster, []), { code: 'POC_PENDING' });
+  for (const side of ['home', 'away']) for (const player of game.boxScore[side].players) player.minutes = 'PT11M40.00S';
+  assert.throws(() => buildNbaMinutes(game, roster, poc), /minutes do not reconcile/);
+});
+
+test('uses a zero-duration post-substitution lineup only when current on-court flags confirm it', async () => {
+  const { game, roster } = fixture();
+  game.gameStatus = 2; game.gameClock = 'PT06M00.00S';
+  roster.push({ Game_Id: game.gameId, Person_id: 105, Team_id: 1, Period: 0, Person_Type: 'Player', First_Name: 'B', Last_Name: 'Five' });
+  for (const side of ['home', 'away']) for (const player of game.boxScore[side].players) { player.minutes = 'PT06M00.00S'; player.oncourt = '1'; }
+  game.boxScore.home.players[0].oncourt = '0';
+  game.boxScore.home.players.push({ personId: 105, minutes: 'PT00M00.00S', plusMinusPoints: 0, oncourt: '1' });
+  game.playByPlayActions[0].clock = game.gameClock;
+  game.playByPlayActions.push({ period: 1, clock: game.gameClock, actionNumber: 2, teamId: 1, actionType: 'substitution', subType: 'out', personId: 100 }, { period: 1, clock: game.gameClock, actionNumber: 3, teamId: 1, actionType: 'substitution', subType: 'in', personId: 105 });
+  const { fetchNbaMinutes } = await import('./nbaMinutes.js');
+  const fetcher = async url => url.pathname.endsWith('/rosterlineup') ? { ok: true, status: 200, json: async () => roster } : { ok: true, status: 204 };
+  assert.deepEqual((await fetchNbaMinutes(game, 'key', fetcher)).inferredScoringEvents, [1]);
+  game.boxScore.home.players[0].oncourt = '1';
+  await assert.rejects(fetchNbaMinutes(game, 'key', fetcher), { code: 'POC_PENDING' });
+});
