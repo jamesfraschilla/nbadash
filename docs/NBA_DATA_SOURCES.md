@@ -1,5 +1,7 @@
 # NBA data sources and API migration
 
+For the broader endpoint and parameter catalog, see [NBA API reference](NBA_API_REFERENCE.md).
+
 This guide describes the code in this checkout, including changes that may not yet be deployed. Check the deployed revision and secrets before assuming production behaves the same way. The old CloudFront game-feed hostname is no longer referenced by application or job code in this checkout; historical documents and regression tests may still mention it.
 
 ## Keyed NBA API
