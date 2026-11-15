@@ -1,7 +1,50 @@
 export const TEAM_FOUL_DISPLAY_LIMIT = 5;
 export const TEAM_FOUL_WARNING_DISPLAY = 4;
 
+export function deriveGameChallenges(game = {}) {
+  const teams = { home: game.homeTeam, away: game.awayTeam };
+  const markers = { home: new Map(), away: new Map() };
+  for (const action of game.playByPlayActions || []) {
+    const subType = String(action?.subType || "").toLowerCase();
+    const description = String(action?.description || "").toLowerCase();
+    if (subType !== "challenge" && !subType.includes("coach challenge") && !description.includes("coach challenge")) continue;
+
+    const side = ["home", "away"].find((candidate) =>
+      (action.teamId != null && String(action.teamId) === String(teams[candidate]?.teamId))
+      || (action.teamTricode && String(action.teamTricode).toUpperCase() === String(teams[candidate]?.teamTricode || "").toUpperCase()));
+    if (!side) continue;
+
+    const text = [action.descriptor, action.subType, action.description].join(" ").toLowerCase();
+    const state = /overturn|successful|reversed/.test(text) && !/unsuccessful/.test(text)
+      ? "won"
+      : /support|stands|upheld|unsuccessful|confirmed/.test(text)
+        ? "lost"
+        : "pending";
+    const key = `${action.period}|${action.clock}|${side}`;
+    const previous = markers[side].get(key);
+    if (!previous || (previous === "pending" && state !== "pending")) markers[side].set(key, state);
+  }
+
+  return Object.fromEntries(["home", "away"].map((side) => {
+    const states = [...markers[side].values()];
+    const direct = game.challenges?.[side];
+    if (Number(game.gameStatus) === 3 && direct && states.length && states.every((state) => state === "pending")
+      && Number(direct.challengesTotal) >= states.length) return [side, direct];
+    return [side, states.length ? {
+      challengesTotal: states.length,
+      challengesWon: states.filter((state) => state === "won").length,
+      challengeStates: states,
+    } : direct || { challengesTotal: 0, challengesWon: 0 }];
+  }));
+}
+
 export function buildChallengeCircles(challenges, independent = false) {
+  const states = challenges?.challengeStates;
+  if (Array.isArray(states) && states.length) {
+    if (independent) return Array.from({ length: 2 }, (_, index) => ({ state: states[index] || "available" }));
+    if (states.length > 1) return states.map((state) => ({ state }));
+    return [{ state: states[0] }, ...(states[0] === "won" ? [{ state: "available" }] : [])];
+  }
   const total = challenges?.challengesTotal ?? 0;
   const won = challenges?.challengesWon ?? 0;
   if (independent) {

@@ -54,6 +54,7 @@ import {
   getSummerLeagueTimeoutDisplay,
   getGLeagueTimeoutDisplay,
   buildChallengeCircles,
+  deriveGameChallenges,
 } from "../gameRules.js";
 import { buildFreshnessSummary } from "../dataFreshness.js";
 import { recordClientError } from "../errorDiagnostics.js";
@@ -910,7 +911,7 @@ export default function Game({ variant = "full" }) {
   );
   const timeouts = game?.timeouts;
   const isPregame = game?.gameStatus === 1;
-  const challenges = game?.challenges;
+  const challenges = useMemo(() => game ? deriveGameChallenges(game) : null, [game]);
   const defaultChallenges = { challengesTotal: 0, challengesWon: 0 };
   const awayChallenges = challenges?.away || defaultChallenges;
   const homeChallenges = challenges?.home || defaultChallenges;

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildChallengeCircles,
+  deriveGameChallenges,
   getGLeagueTimeoutDisplay,
   buildTeamFoulInfo,
   getSummerLeagueTimeoutDisplay,
@@ -21,6 +22,41 @@ test("G League always has two independent challenges, even after a loss or with 
   assert.deepEqual(buildChallengeCircles({ challengesTotal: 1, challengesWon: 0 }), [{ state: "lost" }]);
   assert.deepEqual(buildChallengeCircles({ challengesTotal: 1, challengesWon: 1 }), [{ state: "won" }, { state: "available" }]);
   assert.deepEqual(buildChallengeCircles(), [{ state: "available" }]);
+});
+
+test("NBA challenge icons follow play-by-play team and outcome, including a pending review", () => {
+  const game = {
+    homeTeam: { teamId: 1, teamTricode: "WAS" },
+    awayTeam: { teamId: 2, teamTricode: "DET" },
+    playByPlayActions: [
+      { actionType: "timeout", subType: "challenge", teamId: 2, period: 3, clock: "PT01M00.00S" },
+      { actionType: "instantreplay", subType: "challenge", descriptor: "support", teamTricode: "DET", period: 3, clock: "PT01M00.00S" },
+      { actionType: "instantreplay", subType: "challenge", descriptor: "overturned", teamId: 1, period: 4, clock: "PT02M00.00S" },
+      { actionType: "instantreplay", subType: "challenge", teamId: 1, period: 4, clock: "PT00M30.00S" },
+      { actionType: "instantreplay", subType: "request", descriptor: "overturned", period: 4, clock: "PT00M10.00S" },
+    ],
+  };
+  const challenges = deriveGameChallenges(game);
+  assert.deepEqual(buildChallengeCircles(challenges.away).map((circle) => circle.state), ["lost"]);
+  assert.deepEqual(buildChallengeCircles(challenges.home).map((circle) => circle.state), ["won", "pending"]);
+  assert.equal(challenges.away.challengesTotal, 1);
+  assert.equal(challenges.home.challengesWon, 1);
+});
+
+test("G League challenge icons update independently from play-by-play", () => {
+  const game = {
+    homeTeam: { teamId: 1, teamTricode: "SLC" },
+    awayTeam: { teamId: 2, teamTricode: "RCR" },
+    playByPlayActions: [
+      { actionType: "instantreplay", subType: "challenge", descriptor: "overturned", teamTricode: "RCR", period: 2, clock: "PT08M53.00S" },
+      { actionType: "instantreplay", subType: "challenge", descriptor: "overturned", teamTricode: "SLC", period: 4, clock: "PT11M35.00S" },
+    ],
+  };
+  const challenges = deriveGameChallenges(game);
+  assert.deepEqual(buildChallengeCircles(challenges.away, true).map((circle) => circle.state), ["won", "available"]);
+  assert.deepEqual(buildChallengeCircles(challenges.home, true).map((circle) => circle.state), ["won", "available"]);
+  assert.deepEqual(deriveGameChallenges({ ...game, playByPlayActions: [], challenges: { home: { challengesTotal: 1, challengesWon: 0 } } }).home,
+    { challengesTotal: 1, challengesWon: 0 });
 });
 
 test("G League counts five regular timeouts and a single separate Reset without charging challenges", () => {

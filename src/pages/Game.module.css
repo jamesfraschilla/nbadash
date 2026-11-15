@@ -1042,6 +1042,11 @@ html:not([data-theme="dark"]) .mandatoryActive {
   border-color: #c94a3f;
 }
 
+.challengePending {
+  background-color: #d99b28;
+  border-color: #d99b28;
+}
+
 html:not([data-theme="dark"]) .challengeDot.challengeAvailable {
   border-color: #111827;
 }
