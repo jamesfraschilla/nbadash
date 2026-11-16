@@ -3051,6 +3051,14 @@
       "position": "F"
     },
     {
+      "personId": "203486",
+      "firstName": "Mason",
+      "familyName": "Plumlee",
+      "fullName": "Mason Plumlee",
+      "jerseyNum": "24",
+      "position": "F-C"
+    },
+    {
       "personId": "1627732",
       "firstName": "Ben",
       "familyName": "Simmons",
@@ -3097,14 +3105,6 @@
       "fullName": "Maxime Raynaud",
       "jerseyNum": "42",
       "position": "C"
-    },
-    {
-      "personId": "203486",
-      "firstName": "Mason",
-      "familyName": "Plumlee",
-      "fullName": "Mason Plumlee",
-      "jerseyNum": "45",
-      "position": "F-C"
     }
   ],
   "1610612759": [
