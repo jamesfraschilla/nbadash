@@ -1,14 +1,6 @@
 {
   "1610612737": [
     {
-      "personId": "1642933",
-      "firstName": "Keshon",
-      "familyName": "Gilbert",
-      "fullName": "Keshon Gilbert",
-      "jerseyNum": "00",
-      "position": "G"
-    },
-    {
       "personId": "1629652",
       "firstName": "Luguentz",
       "familyName": "Dort",
@@ -3601,14 +3593,6 @@
       "fullName": "Tony Bradley",
       "jerseyNum": "13",
       "position": "C-F"
-    },
-    {
-      "personId": "1641725",
-      "firstName": "Trey",
-      "familyName": "Alexander",
-      "fullName": "Trey Alexander",
-      "jerseyNum": "15",
-      "position": "G"
     },
     {
       "personId": "1642846",
