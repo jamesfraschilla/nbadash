@@ -135,6 +135,14 @@
       "fullName": "Jock Landale",
       "jerseyNum": "31",
       "position": "C"
+    },
+    {
+      "personId": "1643572",
+      "firstName": "Rafael",
+      "familyName": "Castro",
+      "fullName": "Rafael Castro",
+      "jerseyNum": "",
+      "position": "C"
     }
   ],
   "1610612738": [
@@ -397,6 +405,14 @@
       "position": "G"
     },
     {
+      "personId": "1643113",
+      "firstName": "Zack",
+      "familyName": "Austin",
+      "fullName": "Zack Austin",
+      "jerseyNum": "55",
+      "position": "G"
+    },
+    {
       "personId": "1641807",
       "firstName": "Norchad",
       "familyName": "Omier",
@@ -407,8 +423,8 @@
     {
       "personId": "1643640",
       "firstName": "Ernest",
-      "familyName": "Udeh, Jr.",
-      "fullName": "Ernest Udeh, Jr.",
+      "familyName": "Udeh Jr.",
+      "fullName": "Ernest Udeh Jr.",
       "jerseyNum": "88",
       "position": "C"
     }
@@ -3585,6 +3601,14 @@
       "fullName": "Jaxson Hayes",
       "jerseyNum": "11",
       "position": "C-F"
+    },
+    {
+      "personId": "1643265",
+      "firstName": "Jonas",
+      "familyName": "Aidoo",
+      "fullName": "Jonas Aidoo",
+      "jerseyNum": "13",
+      "position": "C"
     },
     {
       "personId": "1628396",
