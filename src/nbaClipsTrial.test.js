@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { nbaClipsUrl, washingtonEventClipUrl } from "./nbaClipsTrial.js";
+import { nbaClipsUrl, eventClipUrl, washingtonEventClipUrl } from "./nbaClipsTrial.js";
 
 test("WAS–CHA event timestamps produce Eastern timecoded twenty-second clips", () => {
   const url = new URL(nbaClipsUrl("0022600119", { timeActual: "2026-10-26T23:11:58Z" }));
@@ -27,4 +27,12 @@ test("unavailable or ambiguous timestamps never generate invented video links", 
   for (const timeActual of [undefined, "", "invalid", "2026-10-26T23:11:58", "2026-99-99T00:00:00Z"]) {
     assert.equal(nbaClipsUrl("0022600119", { timeActual }), null);
   }
+});
+
+ test("non-Washington games use the same timestamp and same-clock fallback", () => {
+  const event = { period: 2, clock: "PT05M00.00S", timeActual: "2026-10-26T23:11:58Z" };
+  const game = { gameId: "0022600108", homeTeam: { teamTricode: "ATL" }, playByPlayActions: [event] };
+  assert.equal(eventClipUrl(game, event), nbaClipsUrl(game.gameId, event));
+  assert.equal(eventClipUrl(game, { period: 2, clock: event.clock }), nbaClipsUrl(game.gameId, event));
+  assert.equal(eventClipUrl(game, { period: 3, clock: event.clock }), null);
 });

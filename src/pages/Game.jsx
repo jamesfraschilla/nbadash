@@ -17,6 +17,7 @@ import {
 } from "../api.js";
 import { useGame, useMinutes } from "../queries.js";
 import { buildCustomPlaycallClipMeta, buildTimedNoteClipMeta } from "../noteClipLinks.js";
+import { eventClipUrl } from "../nbaClipsTrial.js";
 import { threePointOffensiveReboundPercent, reconcileShotZoneTotals, mergeEventDerivedTotals, mergeSegmentSnapshotTotals as mergeSegmentTotals } from "../customStatRates.js";
 import { PERIOD_SNAPSHOT_CAPTURE_VERSION } from "../periodSnapshotTotals.js";
 import { useAuth } from "../auth/useAuth.js";
@@ -3270,6 +3271,7 @@ export default function Game({ variant = "full" }) {
                 const scoreText = action.scoreHome && action.scoreAway
                   ? `${action.scoreAway}-${action.scoreHome}`
                   : "";
+                const clipUrl = eventClipUrl(game, action);
                 return (
                   <div
                     key={action.actionNumber || `${action.period}-${action.clock}-${descriptor}`}
@@ -3317,6 +3319,9 @@ export default function Game({ variant = "full" }) {
                     <div className={styles.pbpFooter}>
                       <span>{periodText}</span>
                       <span className={styles.pbpScore}>{scoreText}</span>
+                      {clipUrl && <a href={clipUrl} target="_blank" rel="noreferrer" aria-label="Open play clip"
+                        title="NBA Clips" onMouseDown={(event) => event.stopPropagation()}
+                        onTouchStart={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>▶ Clip</a>}
                     </div>
                   </div>
                 );

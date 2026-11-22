@@ -28,12 +28,16 @@ export function nbaClipsUrl(gameId, action) {
   return `https://clips.nba.com/?${params}`;
 }
 
-export function washingtonEventClipUrl(game, action) {
-  if (!isWashingtonGame(game)) return null;
+export function eventClipUrl(game, action) {
+  if (!game) return null;
   const direct = nbaClipsUrl(game.gameId, action);
   if (direct) return direct;
   if (!action?.clock || !action?.period) return null;
   const matching = (game.playByPlayActions || []).find((event) => Number(event.period) === Number(action.period)
     && event.clock === action.clock && nbaClipsUrl(game.gameId, event));
   return matching ? nbaClipsUrl(game.gameId, matching) : null;
+}
+
+export function washingtonEventClipUrl(game, action) {
+  return isWashingtonGame(game) ? eventClipUrl(game, action) : null;
 }

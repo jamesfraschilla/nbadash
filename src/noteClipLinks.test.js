@@ -78,3 +78,9 @@ test("legacy Washington notes resolve new URLs on read without changing saved no
   assert.equal(new URL(resolveNoteClipUrl(pbp, game)).searchParams.get("inTime"), "19300000");
   assert.equal(resolveNoteClipUrl({ ...legacy, minutes: null, seconds: null, source_meta: {}, created_at: "2026-10-28T00:00:00Z" }, game), null);
 });
+
+test("legacy non-Washington play-by-play notes resolve timestamp clips", () => {
+  const game = { gameId: note.gameId, homeTeam: { teamId: 1610612737 }, playByPlayActions: [action()] };
+  const pbp = { game_id: note.gameId, source_meta: { type: "pbp", action_number: 1, clip_url: "https://www.nba.com/stats/events?GameEventID=1" } };
+  assert.equal(new URL(resolveNoteClipUrl(pbp, game)).origin, "https://clips.nba.com");
+});

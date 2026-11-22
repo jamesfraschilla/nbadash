@@ -1,4 +1,4 @@
-import { isWashingtonGame, nbaClipsUrl, washingtonEventClipUrl } from "./nbaClipsTrial.js";
+import { isWashingtonGame, nbaClipsUrl, eventClipUrl } from "./nbaClipsTrial.js";
 
 const LIVE_ACTIONS = new Set(["2pt", "3pt", "rebound", "turnover", "foul", "jumpball"]);
 
@@ -60,13 +60,13 @@ export function buildCustomPlaycallClipMeta(options) {
 export function resolveNoteClipUrl(note, game) {
   const stored = String(note?.source_meta?.clip_url || "");
   if (!game) return /^https:\/\/clips\.nba\.com\//.test(stored) ? stored : null;
-  if (!isWashingtonGame(game)) return stored || null;
+  if (!isWashingtonGame(game) && note?.source_meta?.type !== "pbp") return stored || null;
   const gameId = String(note.game_id || game.gameId || "");
   if (String(game.gameId) !== gameId) return null;
   const source = note.source_meta || {};
   if (source.type === "pbp") {
     const action = (game.playByPlayActions || []).find((event) => String(event.actionNumber) === String(source.action_number));
-    const direct = washingtonEventClipUrl(game, action);
+    const direct = eventClipUrl(game, action);
     if (direct) return direct;
   }
   const timed = buildTimedNoteClipMeta({ gameId, periodLabel: note.period_label, minutes: note.minutes,

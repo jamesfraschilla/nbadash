@@ -9,7 +9,7 @@ export default function NoteClipLink({ note, className, isWashington, allowLooku
   const [visible, setVisible] = useState(false);
   const stored = String(note?.source_meta?.clip_url || "");
   const newLink = /^https:\/\/clips\.nba\.com\//.test(stored);
-  const needsFeed = isWashington !== false && allowLookup && !newLink && /^00\d{8}$/.test(String(note.game_id));
+  const needsFeed = (isWashington !== false || note?.source_meta?.type === "pbp") && allowLookup && !newLink && /^00\d{8}$/.test(String(note.game_id));
   useEffect(() => {
     if (!needsFeed) return undefined;
     if (typeof IntersectionObserver === "undefined") { setVisible(true); return undefined; }
@@ -23,7 +23,7 @@ export default function NoteClipLink({ note, className, isWashington, allowLooku
     enabled: needsFeed && visible, staleTime: 5 * 60_000, gcTime: 5 * 60_000,
     retry: 1, refetchOnWindowFocus: false,
   });
-  const url = game ? resolveNoteClipUrl(note, game) : newLink || isWashington === false ? stored : null;
+  const url = game ? resolveNoteClipUrl(note, game) : newLink || (isWashington === false && note?.source_meta?.type !== "pbp") ? stored : null;
   if (!needsFeed && !url && isWashington === false) return null;
   return <span ref={ref} style={{ display: "inline-flex" }}>
     {url ? <a href={url} target="_blank" rel="noreferrer" className={className}

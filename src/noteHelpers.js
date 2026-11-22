@@ -1,6 +1,5 @@
-import { nbaEventVideoUrl } from "./api.js";
 import { normalizeClock } from "./utils.js";
-import { isWashingtonGame, washingtonEventClipUrl } from "./nbaClipsTrial.js";
+import { eventClipUrl } from "./nbaClipsTrial.js";
 
 export const NOTE_PERIOD_OPTIONS = ["--", "Q1", "Q2", "Q3", "Q4", "OT"];
 export const NOTE_MINUTE_OPTIONS = ["--", ...Array.from({ length: 12 }, (_, idx) => String(idx))];
@@ -112,11 +111,6 @@ export function buildPlayByPlaySourceMeta({ gameId, seasonYear, action, videoEve
     type: "pbp",
     action_number: actionNumber,
     video_event_id: resolvedVideoEventId,
-    clip_url: isWashingtonGame(game) ? washingtonEventClipUrl(game, action) : nbaEventVideoUrl({
-      gameId,
-      actionNumber: resolvedVideoEventId,
-      seasonYear,
-      title: describePlayByPlayAction(action),
-    }),
+    clip_url: eventClipUrl(game, action),
   };
 }

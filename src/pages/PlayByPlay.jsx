@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { createNote } from "../accountData.js";
 import PlayerHeadshot from "../components/PlayerHeadshot.jsx";
-import { nbaEventVideoUrl, teamLogoUrl } from "../api.js";
+import { teamLogoUrl } from "../api.js";
 import { useAuth } from "../auth/useAuth.js";
 import { getGamePollingInterval, isGameDayPollingGame } from "../gamePolling.js";
 import { useGame } from "../queries.js";
@@ -24,31 +24,7 @@ import {
 import { normalizeClock } from "../utils.js";
 import { buildWashingtonKillHighlights, playByPlayActionKey } from "../playByPlayKillHighlights.js";
 import styles from "./PlayByPlay.module.css";
-import { washingtonEventClipUrl } from "../nbaClipsTrial.js";
-
-function shouldShowClip(action) {
-  const actionText = [
-    action?.actionType,
-    action?.foulType,
-    action?.subType,
-    action?.descriptor,
-    action?.description,
-    action?.officialDescription,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-  const isBasketAttempt =
-    (action.actionType === "2pt" || action.actionType === "3pt") &&
-    (action.shotResult === "Made" || action.shotResult === "Missed");
-  if (isBasketAttempt) return true;
-  if (action.actionType === "turnover") return true;
-  if (actionText.includes("goaltend")) return true;
-  if (actionText.includes("flagrant 1") || actionText.includes("flagrant 2")) return true;
-
-  if (action.actionType !== "foul") return false;
-  return actionText.includes("shooting");
-}
+import { eventClipUrl } from "../nbaClipsTrial.js";
 
 export default function PlayByPlay() {
   const { gameId } = useParams();
@@ -303,18 +279,8 @@ export default function PlayByPlay() {
           const actionDescription = getActionDescription(action, describePlayByPlayAction);
           const displayPersonId = action.displayPersonId || action.personId;
           const displayPlayerName = action.displayPlayerNameI || action.playerNameI || action.playerName || "player";
-          const videoEventId =
-            actionNumber != null ? (videoEventIdByActionNumber.get(actionNumber) ?? actionNumber) : null;
           const rowKey = action.displayKey ?? actionNumber ?? `${action.period}-${index}`;
-          const originalClipUrl = nbaEventVideoUrl({
-            gameId,
-            actionNumber: videoEventId,
-            seasonYear: game.seasonYear,
-            title: actionDescription,
-          });
-          const washingtonClipUrl = washingtonEventClipUrl(game, action);
-          const clipUrl = isWizardsGame ? washingtonClipUrl : originalClipUrl;
-          const showClip = isWizardsGame || shouldShowClip(action);
+          const clipUrl = eventClipUrl(game, action);
           return (
             <div
               key={rowKey}
@@ -354,21 +320,21 @@ export default function PlayByPlay() {
                 <div className={styles.score}>
                   {action.currentAwayScore} - {action.currentHomeScore}
                 </div>
-                {showClip && clipUrl ? (
+                {clipUrl ? (
                   <a
                     className={styles.clipLink}
                     href={clipUrl}
                     target="_blank"
                     rel="noreferrer"
                     aria-label="Play clip"
-                    title={washingtonClipUrl ? "NBA Clips: event timestamp ±10 seconds" : "Play clip"}
+                    title="NBA Clips: event timestamp ±10 seconds"
                     onPointerDown={(event) => event.stopPropagation()}
                     onClick={(event) => event.stopPropagation()}
                   >
                     <span className={styles.playIcon} aria-hidden="true" />
                   </a>
-                ) : showClip && isWizardsGame ? <button type="button" className={styles.clipLink} disabled
-                  aria-label="Video unavailable" title="This event has no usable video timestamp.">▶</button> : null}
+                ) : <button type="button" className={styles.clipLink} disabled
+                  aria-label="Video unavailable" title="This event has no usable video timestamp.">▶</button>}
               </div>
               <div className={styles.homeColumn}>
                 {isHome && (
