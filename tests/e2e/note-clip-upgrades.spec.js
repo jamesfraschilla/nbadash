@@ -45,7 +45,7 @@ test("visible legacy notes share one read-only feed lookup and never rewrite sto
   expect(await page.evaluate(() => JSON.stringify(window.notesBeingUpgraded) === window.notesBeforeUpgrade)).toBe(true);
 });
 
-test("notes created from Washington events persist NBA Clips rather than obsolete event pages", async ({ page }) => {
+test("notes created from events for any team persist NBA Clips", async ({ page }) => {
   await page.goto("visual-test.html");
   const result = await page.evaluate(async () => {
     const { buildPlayByPlaySourceMeta } = await import("/nbadash/src/noteHelpers.js");
@@ -57,5 +57,5 @@ test("notes created from Washington events persist NBA Clips rather than obsolet
     };
   });
   expect(result.washington.clip_url).toContain("https://clips.nba.com/?gameNo=0022600108");
-  expect(result.other.clip_url).toContain("https://www.nba.com/stats/events?");
+  expect(result.other.clip_url).toBe(result.washington.clip_url);
 });

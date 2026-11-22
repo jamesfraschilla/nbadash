@@ -47,22 +47,24 @@ test("ATC wheel keeps long-press Add Note from Play", async ({ page }) => {
   await page.mouse.up();
 });
 
-test("other teams keep original video links", async ({ page }) => {
+test("other teams use timestamp-based NBA Clips links", async ({ page }) => {
   await openGame(page, "0022600108", false);
   await expect(page.getByRole("checkbox", { name: "NBA Clips (test)" })).toHaveCount(0);
-  await expect(page.locator('a[href^="https://clips.nba.com/"]')).toHaveCount(0);
-  await expect(page.locator('a[href^="https://www.nba.com/stats/events"]')).toHaveCount(2);
+  await expect(page.locator('a[href^="https://clips.nba.com/"]')).toHaveCount(7);
+  await expect(page.locator('a[href*="gameNo=0022600108&inTime=19114800"]')).toHaveCount(1);
+  await expect(page.locator('a[href^="https://www.nba.com/stats/events"]')).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Video unavailable" })).toBeDisabled();
 });
 
-test("regular and ATC dashboard wheels show events without clip icons or links", async ({ page }) => {
+test("regular and ATC dashboard wheels link events with timestamps to NBA Clips", async ({ page }) => {
   await openGame(page, "0022600108", true, true);
   for (const suffix of ["", "/atc", ""]) {
     await page.goto(`#/g/0022600108${suffix}`);
     const wheel = page.getByRole("region", { name: "Play-by-play wheel" });
     await expect(wheel).toBeVisible();
     await expect(wheel.locator('[class*="pbpCard"]')).toHaveCount(8);
-    await expect(wheel.locator("a")).toHaveCount(0);
-    await expect(wheel.getByText(/▶|Clip/)).toHaveCount(0);
+    await expect(wheel.getByRole("link", { name: "Open play clip" })).toHaveCount(7);
+    await expect(wheel.locator('a[href*="gameNo=0022600108&inTime=19114800"]')).toHaveCount(1);
     await expect.poll(() => wheel.evaluate(element => Math.abs(element.scrollWidth - element.clientWidth - element.scrollLeft))).toBeLessThan(3);
     if (suffix) {
       await expect(page.getByRole("button", { name: "Analysis", exact: true })).toHaveCount(0);
