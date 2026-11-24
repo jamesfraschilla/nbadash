@@ -3603,14 +3603,6 @@
       "position": "C-F"
     },
     {
-      "personId": "1643265",
-      "firstName": "Jonas",
-      "familyName": "Aidoo",
-      "fullName": "Jonas Aidoo",
-      "jerseyNum": "13",
-      "position": "C"
-    },
-    {
       "personId": "1628396",
       "firstName": "Tony",
       "familyName": "Bradley",
@@ -3657,6 +3649,14 @@
       "fullName": "Lauri Markkanen",
       "jerseyNum": "23",
       "position": "F-C"
+    },
+    {
+      "personId": "1643265",
+      "firstName": "Jonas",
+      "familyName": "Aidoo",
+      "fullName": "Jonas Aidoo",
+      "jerseyNum": "25",
+      "position": "C"
     },
     {
       "personId": "1641729",
